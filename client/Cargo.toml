@@ -1,0 +1,10 @@
+[package]
+name = "seihai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Placeholder for future networking / serialization
+# tokio = { version = "1", features = ["full"] }
+# bytes = "1"

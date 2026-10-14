@@ -1,0 +1,266 @@
+//! Protocol definitions.
+//!
+//! Layouts are provisional where noted, and concrete where taken from
+//! GServer-v2 / OpenGS1 / captures.
+
+mod board;
+mod props;
+
+pub use board::BoardModify;
+pub use props::{decode_pos_precise, encode_pos_classic, encode_pos_precise};
+
+use std::io::{self, Write};
+
+/// Packet type identifiers (provisional).
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PacketId {
+    Login = 0x01,
+    LoginResponse = 0x02,
+    LevelRequest = 0x10,
+    LevelData = 0x11,
+    PlayerUpdate = 0x20,
+    // Extend as more are recovered
+}
+
+/// Logical client→server type for a walk frame.
+/// Wire byte is `logical + 0x20`, so 0x02 appears as `"`.
+pub const WALK_LOGICAL: u8 = 0x02;
+pub const WALK_WIRE: u8 = WALK_LOGICAL + 0x20;
+
+/// Initial login / handshake.
+///
+/// Classic shape (v2.05 and captures):
+/// ```text
+/// Chr((rand & 0x7F) + 0x20) + GNW##### + length-biased account + length-biased password
+/// ```
+/// Length bias: `nbytes + 0x20`.
+#[derive(Debug, Clone)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+    /// Eight-character version token, e.g. "GNW07080".
+    pub version: String,
+    /// Optional fixed prefix for tests. If None, a random printable is used.
+    pub prefix: Option<u8>,
+}
+
+impl LoginRequest {
+    pub fn new(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            password: password.into(),
+            version: "GNW07080".into(),
+            prefix: None,
+        }
+    }
+
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.version = version.into();
+        self
+    }
+
+    pub fn with_prefix(mut self, prefix: u8) -> Self {
+        self.prefix = Some(prefix);
+        self
+    }
+
+    /// Write the classic login line (no packet id, no framing).
+    pub fn write_classic<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        let prefix = self.prefix.unwrap_or_else(|| {
+            // (rand & 0x7F) + 0x20 — printable ASCII.
+            // Fixed seed-free: use a mid-range printable when not testing.
+            0x41
+        });
+        w.write_all(&[prefix])?;
+
+        let ver = self.version.as_bytes();
+        if ver.len() != 8 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "version token must be 8 characters",
+            ));
+        }
+        w.write_all(ver)?;
+
+        write_length_biased(w, self.username.as_bytes())?;
+        write_length_biased(w, self.password.as_bytes())?;
+        Ok(())
+    }
+
+    /// Provisional length-prefixed form. Prefer `write_classic` for real servers.
+    pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        let user = self.username.as_bytes();
+        let pass = self.password.as_bytes();
+        let ver = self.version.as_bytes();
+
+        w.write_all(&[PacketId::Login as u8])?;
+        w.write_all(&(user.len() as u16).to_le_bytes())?;
+        w.write_all(user)?;
+        w.write_all(&(pass.len() as u16).to_le_bytes())?;
+        w.write_all(pass)?;
+        w.write_all(&(ver.len() as u16).to_le_bytes())?;
+        w.write_all(ver)?;
+        Ok(())
+    }
+}
+
+fn write_length_biased<W: Write>(w: &mut W, bytes: &[u8]) -> io::Result<()> {
+    let len = bytes.len();
+    if len > 0x5F {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "length-biased field exceeds 95 bytes",
+        ));
+    }
+    w.write_all(&[(len as u8) + 0x20])?;
+    w.write_all(bytes)?;
+    Ok(())
+}
+
+/// Request a level by name.
+#[derive(Debug, Clone)]
+pub struct LevelRequest {
+    pub name: String,
+}
+
+impl LevelRequest {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+
+    pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        let name = self.name.as_bytes();
+        w.write_all(&[PacketId::LevelRequest as u8])?;
+        w.write_all(&(name.len() as u16).to_le_bytes())?;
+        w.write_all(name)?;
+        Ok(())
+    }
+}
+
+/// Simple player position update (provisional packet id).
+/// Position fields use the documented codecs when written with
+/// `write_classic` / `write_precise`. The raw `write_to` path stays
+/// provisional until a client→server capture confirms the framing.
+#[derive(Debug, Clone)]
+pub struct PlayerUpdate {
+    pub x: f32,
+    pub y: f32,
+    pub dir: u8,
+}
+
+impl PlayerUpdate {
+    /// Provisional: raw f32 x/y + dir. Do not use against a real server.
+    pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        w.write_all(&[PacketId::PlayerUpdate as u8])?;
+        w.write_all(&self.x.to_le_bytes())?;
+        w.write_all(&self.y.to_le_bytes())?;
+        w.write_all(&[self.dir])?;
+        Ok(())
+    }
+
+    /// Classic encoding: PLPROP-style (pos * 2) as u8. Packet id still provisional.
+    pub fn write_classic<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        w.write_all(&[PacketId::PlayerUpdate as u8])?;
+        w.write_all(&[encode_pos_classic(self.x)])?;
+        w.write_all(&[encode_pos_classic(self.y)])?;
+        w.write_all(&[self.dir])?;
+        Ok(())
+    }
+
+    /// Precise encoding: PLPROP_X2/Y2 style u16. Packet id still provisional.
+    pub fn write_precise<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        w.write_all(&[PacketId::PlayerUpdate as u8])?;
+        w.write_all(&encode_pos_precise(self.x).to_le_bytes())?;
+        w.write_all(&encode_pos_precise(self.y).to_le_bytes())?;
+        w.write_all(&[self.dir])?;
+        Ok(())
+    }
+
+    /// Short walk frame: wire type `"` (logical 0x02), then char-biased x/y/dir, newline.
+    ///
+    /// Provisional field split. Matches the captured shape `"..\n`.
+    /// Bias is `+ 0x20` on each field byte.
+    pub fn write_walk<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        w.write_all(&[WALK_WIRE])?;
+        w.write_all(&[encode_pos_classic(self.x).wrapping_add(0x20)])?;
+        w.write_all(&[encode_pos_classic(self.y).wrapping_add(0x20)])?;
+        w.write_all(&[self.dir.wrapping_add(0x20)])?;
+        w.write_all(&[b'\n'])?;
+        Ok(())
+    }
+}
+
+/// Decode a short walk frame.
+///
+/// Expected: `"` + x_char + y_char + dir_char + `\n`.
+/// Returns `(x, y, dir)` in the classic scale (unbiased, not yet /2).
+/// Provisional until a side-by-side with a known position confirms the split.
+pub fn decode_walk(frame: &[u8]) -> Option<(u8, u8, u8)> {
+    if frame.len() < 5 {
+        return None;
+    }
+    if frame[0] != WALK_WIRE {
+        return None;
+    }
+    if *frame.last()? != b'\n' {
+        return None;
+    }
+    let x = frame[1].wrapping_sub(0x20);
+    let y = frame[2].wrapping_sub(0x20);
+    let dir = frame[3].wrapping_sub(0x20);
+    Some((x, y, dir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_classic_shape() {
+        let req = LoginRequest::new("user", "pass")
+            .with_version("GNW07080")
+            .with_prefix(0x41);
+        let mut buf = Vec::new();
+        req.write_classic(&mut buf).unwrap();
+
+        // prefix + GNW07080 + len('user')+0x20 + "user" + len('pass')+0x20 + "pass"
+        assert_eq!(buf[0], 0x41);
+        assert_eq!(&buf[1..9], b"GNW07080");
+        assert_eq!(buf[9], 4 + 0x20);
+        assert_eq!(&buf[10..14], b"user");
+        assert_eq!(buf[14], 4 + 0x20);
+        assert_eq!(&buf[15..19], b"pass");
+    }
+
+    #[test]
+    fn login_rejects_bad_token() {
+        let req = LoginRequest::new("u", "p").with_version("GNW");
+        let mut buf = Vec::new();
+        assert!(req.write_classic(&mut buf).is_err());
+    }
+
+    #[test]
+    fn walk_roundtrip() {
+        let upd = PlayerUpdate {
+            x: 30.0,
+            y: 30.0,
+            dir: 2,
+        };
+        let mut buf = Vec::new();
+        upd.write_walk(&mut buf).unwrap();
+        assert_eq!(buf[0], WALK_WIRE);
+        assert_eq!(*buf.last().unwrap(), b'\n');
+
+        let (x, y, dir) = decode_walk(&buf).unwrap();
+        assert_eq!(x, encode_pos_classic(30.0));
+        assert_eq!(y, encode_pos_classic(30.0));
+        assert_eq!(dir, 2);
+    }
+
+    #[test]
+    fn walk_rejects_non_walk() {
+        assert!(decode_walk(b"1-\n").is_none());
+        assert!(decode_walk(b"\"1-\n").is_some());
+    }
+}
