@@ -183,7 +183,8 @@ impl Framebuffer {
             self.blit_sprite(sheet, sheet_w as usize, 16, sx as usize, 0, 4 + i * 18, 4, 16, 16);
         }
     }
-}
+
+    /// Draw a short nickname tag under a player box.
     ///
     /// Uses a simple 4×6 block font for ASCII. `dx`/`dy` is the
     /// top-left of the 48×48 player box.
