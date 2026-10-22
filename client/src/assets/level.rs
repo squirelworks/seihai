@@ -224,10 +224,121 @@ pub struct Level {
 }
 
 impl Level {
-    /// Parse a .nw file from disk.
+    /// Load a .nw or .graal file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        Self::parse(&text)
+        let path = path.as_ref();
+        let data = fs::read(path).map_err(|e| e.to_string())?;
+        if data.len() >= 8 && &data[0..8] == b"GLEVNW01" {
+            let text = String::from_utf8_lossy(&data);
+            return Self::parse(&text);
+        }
+        if data.len() >= 8 && (data[0..8].starts_with(b"GR-V1") || data[0..8].starts_with(b"Z3-V1")) {
+            return Self::parse_binary(&data);
+        }
+        Err(format!("unrecognised level header in {}", path.display()))
+    }
+
+    /// Parse a binary .graal (GR-V1) bitstream into a Level.
+    fn parse_binary(data: &[u8]) -> Result<Self, String> {
+        if data.len() < 8 {
+            return Err("binary level too short".into());
+        }
+        let magic = &data[0..8];
+        let codebits = if magic == b"GR-V1.02" || magic == b"GR-V1.03" { 13 } else { 12 };
+        let mut tiles = vec![0u16; 4096];
+        let mut boardindex = 0usize;
+        let mut bitsread = 0u32;
+        let mut buffer = 0u32;
+        let mut count = 1u32;
+        let mut firstcode = -1i32;
+        let mut twicerepeat = false;
+        let mut pos = 8usize;
+
+        while boardindex < 4096 && pos < data.len() {
+            while bitsread < codebits && pos < data.len() {
+                buffer |= (data[pos] as u32) << bitsread;
+                bitsread += 8;
+                pos += 1;
+            }
+            if bitsread < codebits {
+                break;
+            }
+            let mask = (1u32 << codebits) - 1;
+            let code = buffer & mask;
+            buffer >>= codebits;
+            bitsread -= codebits;
+
+            if code & (1 << (codebits - 1)) != 0 {
+                twicerepeat = (code & 0x100) != 0;
+                count = code & 0xFF;
+            } else if count == 1 {
+                tiles[boardindex] = code as u16;
+                boardindex += 1;
+            } else if twicerepeat {
+                if firstcode < 0 {
+                    firstcode = code as i32;
+                } else {
+                    for _ in 1..=count {
+                        if boardindex >= 4095 {
+                            break;
+                        }
+                        tiles[boardindex] = firstcode as u16;
+                        tiles[boardindex + 1] = code as u16;
+                        boardindex += 2;
+                    }
+                    firstcode = -1;
+                    twicerepeat = false;
+                    count = 1;
+                }
+            } else {
+                for _ in 1..=count {
+                    if boardindex >= 4096 {
+                        break;
+                    }
+                    tiles[boardindex] = code as u16;
+                    boardindex += 1;
+                }
+                count = 1;
+            }
+        }
+
+        // Convert the flat tile array into row runs for layer 0.
+        let mut boards = Vec::new();
+        for y in 0..64 {
+            let mut run_start = 0;
+            let mut run_tiles = Vec::new();
+            for x in 0..64 {
+                let t = tiles[y * 64 + x];
+                if t != 0 || !run_tiles.is_empty() {
+                    if run_tiles.is_empty() {
+                        run_start = x;
+                    }
+                    run_tiles.push([((t >> 6) & 0x3F) as u8, (t & 0x3F) as u8]);
+                }
+                if (t == 0 || x == 63) && !run_tiles.is_empty() {
+                    boards.push(BoardRun {
+                        x: run_start as i32,
+                        y: y as i32,
+                        width: run_tiles.len() as i32,
+                        layer: 0,
+                        tiles: run_tiles.clone(),
+                    });
+                    run_tiles.clear();
+                }
+            }
+        }
+
+        // The trailing bytes after the bitstream are text sections.
+        // We do not parse them here; the binary form embeds NPC scripts
+        // differently. Return the boards for now.
+        Ok(Level {
+            boards,
+            npcs: Vec::new(),
+            links: Vec::new(),
+            signs: Vec::new(),
+            baddies: Vec::new(),
+            chests: Vec::new(),
+        })
     }
 
     /// Parse .nw content.

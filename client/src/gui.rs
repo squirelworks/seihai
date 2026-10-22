@@ -18,7 +18,7 @@ pub fn pick_level(start: &std::path::Path) -> Option<std::path::PathBuf> {
                     let name = e.file_name().to_string_lossy().into_owned();
                     if e.path().is_dir() {
                         dirs.push(format!("{name}/"));
-                    } else if name.ends_with(".nw") {
+                    } else if name.ends_with(".nw") || name.ends_with(".graal") {
                         files.push(name);
                     }
                 }
