@@ -32,6 +32,17 @@ impl Gen3 {
         }
     }
 
+    /// Resume from a known iterator state (for replaying captures that
+    /// start mid-session).
+    pub fn with_state(it: u32, key: u8) -> Self {
+        Self { it, key }
+    }
+
+    /// Current iterator state.
+    pub fn state(&self) -> u32 {
+        self.it
+    }
+
     /// Step the iterator and return `(junk_byte, insert_pos)`.
     /// `len` is the message length including the trailing newline.
     /// `insert_pos` is 0-based (so 0 means "before the first byte").

@@ -3,8 +3,9 @@
 //! Composites a level board into an RGB buffer by blitting 16×16 tiles
 //! from a 2048×512 sheet (`pics1.png` layout). No SDL2 required.
 //!
-//! Sheet layout (cleaned): 128 columns × 32 rows of 16 px tiles.
-//! Tile id `n` lives at column `n % 128`, row `n / 128`.
+//! Sheet layout: 128 columns × 32 rows of 16 px tiles, stored as eight
+//! 16-column blocks of 512 tiles. Tile id `n` lives at column
+//! `n % 16 + (n / 512) * 16`, row `(n / 16) % 32`.
 
 use crate::assets::{tile_id, Level};
 use crate::offline::OfflineSession;
@@ -44,8 +45,9 @@ impl Framebuffer {
         dx: i32,
         dy: i32,
     ) {
-        let col = (tile as u32) % SHEET_COLS;
-        let row = (tile as u32) / SHEET_COLS;
+        let t = tile as u32;
+        let col = t % 16 + (t / 512) * 16;
+        let row = (t / 16) % SHEET_ROWS;
         let sx = col * TILE_PX;
         let sy = row * TILE_PX;
         if sx + TILE_PX > sheet_w || sy + TILE_PX > sheet_h {

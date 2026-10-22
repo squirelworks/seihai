@@ -111,8 +111,8 @@ impl TileTypes {
                 continue;
             }
             let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-            // index,x,y,type,name
-            if parts.len() >= 4 && parts[0].parse::<u16>().is_ok() {
+            // index,x,y,type[,name]; longer lines are flat lists
+            if (4..=5).contains(&parts.len()) && parts[0].parse::<u16>().is_ok() {
                 if let Ok(idx) = parts[0].parse::<usize>() {
                     if idx < 4096 {
                         types[idx] = parts[3].parse().unwrap_or(0);

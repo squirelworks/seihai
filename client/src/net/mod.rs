@@ -5,7 +5,11 @@
 
 mod udp;
 
-pub use udp::{encode_udp_pos, PeerChannel, UDP_ID_BOARD, UDP_ID_POS, UDP_ID_PROPS, UDP_PORT};
+pub use udp::{
+    decode_udp, encode_udp, encode_udp_move, udp_key, PeerChannel, UDP_ID_BOMBADD, UDP_ID_CHAT,
+    UDP_ID_ENTERLEVEL, UDP_ID_HIT, UDP_ID_ITEMDEL, UDP_ID_LEVELNAME, UDP_ID_MOVE, UDP_ID_SHOWIMG,
+    UDP_ID_TRIGGER, UDP_PORT,
+};
 
 use crate::protocol::{
     read_zlib_frame, write_login, write_zlib_frame, ClientVersion, LevelRequest, LoginRequest,

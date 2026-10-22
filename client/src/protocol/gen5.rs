@@ -42,6 +42,17 @@ impl Gen5 {
         }
     }
 
+    /// Resume from a known iterator state (for replaying captures that
+    /// start mid-session).
+    pub fn with_state(it: u32, key: u8) -> Self {
+        Self { it, key }
+    }
+
+    /// Current iterator state.
+    pub fn state(&self) -> u32 {
+        self.it
+    }
+
     /// XOR `body` in place. `comp` selects the group limit.
     pub fn xor_body(&mut self, body: &mut [u8], comp: Gen5Comp) {
         let limit = match comp {
