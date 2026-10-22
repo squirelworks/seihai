@@ -98,6 +98,18 @@ fn main() {
             password = p.clone();
         }
     }
+    // Use the version saved by the GUI if no CLI --version was given.
+    if version == ClientVersion::V205 {
+        if let Some(v) = &settings.version {
+            version = match v.as_str() {
+                "2.22" => ClientVersion::V222,
+                "2.31" => ClientVersion::V231,
+                "2.17" => ClientVersion::V217,
+                "1.39" => ClientVersion::V139,
+                _ => ClientVersion::V205,
+            };
+        }
+    }
     // Do not auto-fill online from settings. The GUI is the waiting area.
     // Settings only pre-fill the form.
 
