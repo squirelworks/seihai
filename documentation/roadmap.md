@@ -1,20 +1,21 @@
 ## Phase 1 — Protocol & Minimal Client
 - [x] Packet framing notes + classic login line
-- [x] Provisional packet types (login, level request, player update, board modify)
-- [ ] Listserver login against a real server
-- [ ] Gserver connection + version handshake
-- [ ] Level name / basic tile data reception
+- [x] Packet ids locked against lab captures
+- [x] Listserver login against a real server
+- [x] Gserver connection + version handshake
+- [x] Level name / basic tile data reception
 - [x] Player position codecs (classic ×2, precise ×16)
-- [ ] Simple chat
+- [x] Simple chat
 
 ## Phase 2 — Assets & Rendering
 - [x] Text level loader (GLEVNW01)
+- [x] Binary loaders (.graal, .zelda)
 - [x] Tile-type table (text or arrays.dat)
 - [x] ASCII / PPM board view
-- [ ] Sprite sheet / tileset loading
-- [ ] Basic tile renderer (SDL2)
-- [ ] 8-direction player sprite compositing
-- [x] Camera follow (ASCII)
+- [x] Sprite sheet / tileset loading
+- [x] Tile renderer (software, minifb window)
+- [x] Player sprite compositing (4 directions)
+- [x] Camera follow
 
 ## Phase 3 — Seihaiscript GS1 Subset
 - [x] Bytecode parser + walker
@@ -28,7 +29,7 @@
 - [x] Gani parser + stepper
 - [ ] Sound
 - [ ] Smooth movement flags (`gr.x` / `gr.y`)
-- [ ] GUI controls (basic)
+- [x] GUI controls (basic)
 - [ ] Broader packet coverage
 
 ## Phase 5 — Tooling
