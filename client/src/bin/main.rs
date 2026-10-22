@@ -370,8 +370,11 @@ fn main() {
                         match session.load_level(root.level(&file)) {
                             Ok(()) => eprintln!("level {file}"),
                             Err(e) => {
-                                eprintln!("level {file} not loaded ({e}); empty board");
+                                eprintln!("level {file} not loaded ({e}); requesting");
                                 session.current_level = None;
+                                if let Some(c) = conn.as_mut() {
+                                    let _ = c.send_wantfile(&file);
+                                }
                             }
                         }
                         loaded_level = Some(name.clone());

@@ -235,7 +235,14 @@ impl Connection {
         self.send_raw(&msg)
     }
 
-    /// Send a private message as `PLI_PRIVATEMESSAGE` (id 28).
+    /// Request a file from the server (`PLI_WANTFILE`, id 23).
+    pub fn send_wantfile(&mut self, name: &str) -> io::Result<()> {
+        let mut msg = Vec::new();
+        msg.push(23u8.wrapping_add(0x20));
+        msg.extend_from_slice(name.as_bytes());
+        msg.push(b'\n');
+        self.send_messages(&[msg])
+    }
     ///
     /// Wire: `GCHAR(28)` + target + `:` + text + `\n`.
     /// Layout is provisional; the id is documented.
