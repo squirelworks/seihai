@@ -46,4 +46,4 @@ Reverse-engineering notes and Ghidra/IDR work belong in `../shdecompiling/` and 
 
 ## Status
 
-Scaffold created 2026-10-14. Offline `.nw` play, ASCII/PPM render, provisional protocol types, and a minimal GS1 interpreter are in place. See `implementation.md` for the current slice.
+As of 2026-10-22: offline and online play work against GServer-RS. The client loads `.nw`, `.graal`, and `.zelda` levels, draws the player and tiles, opens chests, and shows a permanent chat bar. Protocol codecs are locked against lab captures. See `implementation.md` for the current slice.
