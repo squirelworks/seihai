@@ -1,7 +1,7 @@
 //! Settings and connect window.
 
 use crate::net::Connection;
-use crate::protocol::{parse_list_reply, ClientVersion, SessionState};
+use crate::protocol::ClientVersion;
 use crate::settings::Settings;
 use eframe::egui;
 
@@ -74,36 +74,29 @@ impl Launcher {
             self.version_enum()
         };
         let addr = format!("{}:{}", self.list_host, self.list_port);
-        match Connection::connect(&addr) {
-            Ok(mut c) => {
-                let key = 0x40u8;
-                if c.login_versioned(list_version, key, &self.account, &self.password)
-                    .is_ok()
-                {
-                    let mut state = SessionState::default();
-                    if let Ok(body) = c.read_frame_into(&mut state) {
-                        let reply = parse_list_reply(&body);
-                        self.servers = reply
-                            .servers
-                            .into_iter()
-                            .map(|s| (s.name, s.host, s.port))
-                            .collect();
-                        self.status = format!("{} servers", self.servers.len());
-                        let mut settings = Settings::load();
-                        settings.listserver = Some(addr);
-                        settings.account = Some(self.account.clone());
-                        settings.password = Some(self.password.clone());
-                        settings.version = Some(self.version.clone());
-                        settings.assets = Some(self.assets.clone().into());
-                        settings.save();
-                    } else {
-                        self.status = "no reply".into();
-                    }
-                } else {
-                    self.status = "login failed".into();
+        match Connection::fetch_server_list(&addr, list_version, &self.account, &self.password) {
+            Ok(reply) => {
+                self.servers = reply
+                    .servers
+                    .into_iter()
+                    .map(|s| (s.name, s.host, s.port))
+                    .collect();
+                self.status = match reply.error {
+                    Some(err) => format!("listserver: {err}"),
+                    None if self.servers.is_empty() => "no servers in reply".into(),
+                    None => format!("{} servers", self.servers.len()),
+                };
+                if !self.servers.is_empty() {
+                    let mut settings = Settings::load();
+                    settings.listserver = Some(addr);
+                    settings.account = Some(self.account.clone());
+                    settings.password = Some(self.password.clone());
+                    settings.version = Some(self.version.clone());
+                    settings.assets = Some(self.assets.clone().into());
+                    settings.save();
                 }
             }
-            Err(e) => self.status = format!("connect failed: {e}"),
+            Err(e) => self.status = format!("listserver failed: {e}"),
         }
     }
 }

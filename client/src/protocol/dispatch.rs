@@ -4,7 +4,7 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
-use super::props::parse_player_props;
+use super::props::parse_player_props_with;
 use std::collections::HashMap;
 
 /// A single logical message after frame decompression.
@@ -18,47 +18,103 @@ pub struct Message {
 
 /// Split a decompressed body into messages.
 ///
-/// Each message is `GCHAR(id)` + payload + `\n`.
+/// Each message is `GCHAR(id)` + payload + `\n`. `PLO_RAWDATA` (100) is
+/// `GCHAR(100)` + `GINT3 n` + `\n`, and the next `n` bytes are one message
+/// (id + payload) that may contain any byte. A trailing `\n` inside those
+/// `n` bytes is part of the payload; `PLO_FILE` for 2.1+ clients ends in one.
+///
+/// This works on one body. [`SessionState::apply_body`] keeps a partial
+/// message across bodies instead.
 pub fn split_messages(body: &[u8]) -> Vec<Message> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < body.len() {
-        let id = body[i].wrapping_sub(0x20);
-        i += 1;
-        if id == 100 {
-            // PLO_RAWDATA: GINT3 length, then that many bytes as one message.
-            if i + 3 > body.len() {
+    let mut sp = Splitter::default();
+    let mut out = sp.push(body);
+    out.extend(sp.finish());
+    out
+}
+
+/// Read a GINT3: three GCHARs, high 7 bits first.
+pub fn read_gint3(b: &[u8]) -> Option<usize> {
+    if b.len() < 3 {
+        return None;
+    }
+    Some(
+        ((b[0].wrapping_sub(0x20) as usize & 0x7F) << 14)
+            | ((b[1].wrapping_sub(0x20) as usize & 0x7F) << 7)
+            | (b[2].wrapping_sub(0x20) as usize & 0x7F),
+    )
+}
+
+/// Message splitter that carries a partial message from one body to the
+/// next.
+#[derive(Debug, Default)]
+pub struct Splitter {
+    /// Bytes of an unfinished line or raw block.
+    buf: Vec<u8>,
+    /// Length of the raw block that starts at `buf[0]`, once its
+    /// `PLO_RAWDATA` header has been read.
+    raw_len: Option<usize>,
+}
+
+impl Splitter {
+    /// Add a body and return every message it completes.
+    pub fn push(&mut self, body: &[u8]) -> Vec<Message> {
+        self.buf.extend_from_slice(body);
+        let mut out = Vec::new();
+        let mut i = 0;
+        loop {
+            if let Some(n) = self.raw_len {
+                if self.buf.len() - i < n {
+                    break;
+                }
+                if n > 0 {
+                    out.push(Message {
+                        id: self.buf[i].wrapping_sub(0x20),
+                        payload: self.buf[i + 1..i + n].to_vec(),
+                    });
+                }
+                i += n;
+                self.raw_len = None;
+                continue;
+            }
+            let Some(nl) = self.buf[i..].iter().position(|&b| b == b'\n') else {
                 break;
-            }
-            let n = (body[i] as usize)
-                | ((body[i + 1] as usize) << 8)
-                | ((body[i + 2] as usize) << 16);
-            i += 3;
-            let end = (i + n).min(body.len());
-            if i < end {
-                let inner_id = body[i].wrapping_sub(0x20);
-                out.push(Message {
-                    id: inner_id,
-                    payload: body[i + 1..end].to_vec(),
-                });
-            }
-            i = end;
-        } else {
-            // Normal: rest of the line until \n.
-            let start = i;
-            while i < body.len() && body[i] != b'\n' {
-                i += 1;
+            };
+            let line = &self.buf[i..i + nl];
+            i += nl + 1;
+            let Some((&id, payload)) = line.split_first() else {
+                continue;
+            };
+            let id = id.wrapping_sub(0x20);
+            if id == 100 {
+                if let Some(n) = read_gint3(payload) {
+                    self.raw_len = Some(n);
+                }
+                continue;
             }
             out.push(Message {
                 id,
-                payload: body[start..i].to_vec(),
+                payload: payload.to_vec(),
             });
-            if i < body.len() {
-                i += 1;
-            }
+        }
+        self.buf.drain(..i);
+        out
+    }
+
+    /// Flush a final line that had no `\n`.
+    pub fn finish(&mut self) -> Vec<Message> {
+        let rest = std::mem::take(&mut self.buf);
+        if self.raw_len.take().is_some() {
+            // A cut-off raw block (a partial file) is not a message.
+            return Vec::new();
+        }
+        match rest.split_first() {
+            Some((&id, payload)) => vec![Message {
+                id: id.wrapping_sub(0x20),
+                payload: payload.to_vec(),
+            }],
+            None => Vec::new(),
         }
     }
-    out
 }
 
 /// Another player seen via `PLO_OTHERPLPROPS`.
@@ -98,7 +154,17 @@ pub struct SessionState {
     pub incoming_files: Vec<(String, Vec<u8>)>,
     /// In-progress large file: (name, accumulated bytes).
     pub large_file: Option<(String, Vec<u8>)>,
+    /// Size the server announced for the large file (`PLO_LARGEFILESIZE`).
+    pub large_file_size: Option<u64>,
+    /// `PLO_FILE` carries a 5-byte modtime for 2.1+ clients. 2.05 and
+    /// older get the name and data only. Set this from the version.
+    pub file_has_modtime: bool,
+    /// Read prop 10 as the pre-2.1 bow slot (1.33–1.39 logins).
+    pub bow_prop10: bool,
+    /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
+    pub disconnect_message: Option<String>,
     pub unhandled: HashMap<u8, usize>,
+    splitter: Splitter,
 }
 
 impl SessionState {
@@ -195,36 +261,50 @@ impl SessionState {
                     self.others.retain(|o| o.id != id as u16);
                 }
             }
-            45 => {
-                // PLO_FILE: modTime(5) + name_len(1) + name + data + \n
-                if let Some((name, data)) = parse_file_packet(&msg.payload) {
+            16 => {
+                // PLO_DISCMESSAGE: rest = text, `\r` = line break.
+                let text = String::from_utf8_lossy(&msg.payload).replace('\r', "\n");
+                self.disconnect_message = Some(text);
+            }
+            102 => {
+                // PLO_FILE, always behind PLO_RAWDATA.
+                let parsed = parse_file_packet(&msg.payload, self.file_has_modtime)
+                    .or_else(|| parse_file_packet(&msg.payload, !self.file_has_modtime));
+                if let Some((name, data)) = parsed {
                     self.file_requests.push(format!("FILE:{name}"));
-                    if let Some((ref n, ref mut buf)) = self.large_file {
-                        if n == &name {
-                            buf.extend_from_slice(&data);
-                        }
-                    } else {
-                        self.incoming_files.push((name, data));
+                    match self.large_file {
+                        Some((ref n, ref mut buf)) if n == &name => buf.extend_from_slice(&data),
+                        _ => self.incoming_files.push((name, data)),
                     }
                 }
             }
-            84 => {
-                // PLO_LARGEFILESTART — begin accumulation.
-                if let Ok(name) = String::from_utf8(msg.payload.clone()) {
-                    self.large_file = Some((name, Vec::new()));
-                }
+            68 => {
+                // PLO_LARGEFILESTART: rest = name. PLO_FILE chunks follow.
+                let name = String::from_utf8_lossy(&msg.payload).into_owned();
+                self.large_file = Some((name, Vec::new()));
+                self.large_file_size = None;
             }
-            86 => {
-                // PLO_LARGEFILEEND — finish and store.
+            84 => {
+                // PLO_LARGEFILESIZE: GINT5 size.
+                self.large_file_size = read_gint5(&msg.payload);
+            }
+            69 => {
+                // PLO_LARGEFILEEND: rest = name.
                 if let Some((name, data)) = self.large_file.take() {
                     self.incoming_files.push((name, data));
                 }
+                self.large_file_size = None;
             }
-            68 => {
-                // PLO_FILESENDFAILED
-                if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.file_requests.push(format!("FAIL:{s}"));
-                }
+            30 => {
+                // PLO_FILESENDFAILED: rest = name. Before 2.1 the server
+                // also uses it for "already up to date".
+                let name = String::from_utf8_lossy(&msg.payload);
+                self.file_requests.push(format!("FAIL:{name}"));
+            }
+            45 => {
+                // PLO_FILEUPTODATE: rest = name (2.1+).
+                let name = String::from_utf8_lossy(&msg.payload);
+                self.file_requests.push(format!("UPTODATE:{name}"));
             }
             _ => {
                 *self.unhandled.entry(msg.id).or_insert(0) += 1;
@@ -233,8 +313,11 @@ impl SessionState {
     }
 
     /// Apply every message in a decompressed body.
+    ///
+    /// A message cut off at the end of the body (a raw block or a line
+    /// without its `\n`) is kept and finished by the next body.
     pub fn apply_body(&mut self, body: &[u8]) {
-        for msg in split_messages(body) {
+        for msg in self.splitter.push(body) {
             self.apply(&msg);
         }
     }
@@ -244,7 +327,7 @@ impl SessionState {
     /// X/Y are props 15/16 (GCHAR, half-tiles); direction is SPRITE
     /// (17) mod 4.
     fn apply_player_props(&mut self, payload: &[u8]) {
-        for prop in parse_player_props(payload) {
+        for prop in parse_player_props_with(payload, self.bow_prop10) {
             match (prop.id, prop.gchar()) {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
@@ -284,7 +367,7 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
     let mut y = 0.0f32;
     let mut dir = 2u8;
     let mut nick = None;
-    for prop in parse_player_props(&payload[2..]) {
+    for prop in parse_player_props_with(&payload[2..], false) {
         match prop.id {
             0 => {
                 // GSTRING nickname.
@@ -319,19 +402,43 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
     })
 }
 
-/// Parse a `PLO_FILE` payload: modTime(5) + name_len(1) + name + data.
-fn parse_file_packet(payload: &[u8]) -> Option<(String, Vec<u8>)> {
-    if payload.len() < 7 {
+/// Read a GINT5: five GCHARs, high 7 bits first.
+fn read_gint5(b: &[u8]) -> Option<u64> {
+    if b.len() < 5 {
         return None;
     }
-    // Skip 5-byte modTime.
-    let name_len = payload[5] as usize;
-    if payload.len() < 6 + name_len {
+    Some(
+        b[..5]
+            .iter()
+            .fold(0u64, |acc, &c| (acc << 7) | (c.wrapping_sub(0x20) as u64 & 0x7F)),
+    )
+}
+
+/// Parse a `PLO_FILE` payload (the bytes after the id).
+///
+/// - 2.1+: `GINT5 modtime` + `GCHAR name_len` + name + data + `\n`
+/// - before 2.1 (2.05): `GCHAR name_len` + name + data, with no `\n`
+fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u8>)> {
+    let p = if has_modtime { payload.get(5..)? } else { payload };
+    let (&len, rest) = p.split_first()?;
+    let name_len = len.wrapping_sub(0x20) as usize;
+    if rest.len() < name_len {
         return None;
     }
-    let name = String::from_utf8_lossy(&payload[6..6 + name_len]).into_owned();
-    let data = payload[6 + name_len..].to_vec();
-    Some((name, data))
+    // GServer decides by its own version table whether the modtime is
+    // there, so a name that is not a plain file name means the other
+    // layout.
+    let name_bytes = &rest[..name_len];
+    let plain = |b: &u8| b.is_ascii_graphic() || *b == b' ';
+    if name_len == 0 || !name_bytes.iter().all(plain) || !name_bytes.contains(&b'.') {
+        return None;
+    }
+    let name = String::from_utf8_lossy(name_bytes).into_owned();
+    let mut data = &rest[name_len..];
+    if has_modtime {
+        data = data.strip_suffix(b"\n").unwrap_or(data);
+    }
+    Some((name, data.to_vec()))
 }
 
 #[cfg(test)]
@@ -352,6 +459,108 @@ mod tests {
         state.apply_body(body);
         assert_eq!(state.level_name.as_deref(), Some("start"));
         assert_eq!(state.board_lines.len(), 1);
+    }
+
+    /// GServer's 2.05 file reply: `PLO_RAWDATA` + GINT3 length + `\n`,
+    /// then `PLO_FILE` + GCHAR name length + name + data, with no `\n`.
+    fn raw_file_205(name: &str, data: &[u8]) -> Vec<u8> {
+        let n = 1 + 1 + name.len() + data.len();
+        let mut out = vec![100 + 0x20];
+        out.extend([((n >> 14) & 0x7F) as u8 + 0x20, ((n >> 7) & 0x7F) as u8 + 0x20, (n & 0x7F) as u8 + 0x20]);
+        out.push(b'\n');
+        out.push(102 + 0x20);
+        out.push(name.len() as u8 + 0x20);
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(data);
+        out
+    }
+
+    #[test]
+    fn gint3_matches_lab_board_header() {
+        // Lab 2.22 board packet: RAWDATA length 8194 = 1 + 64*64*2 + 1.
+        assert_eq!(read_gint3(b" `\""), Some(8194));
+    }
+
+    #[test]
+    fn rawdata_file_205() {
+        // Data holds a \n and ends without one; the next message follows.
+        let data = b"GLEVNW01\nBOARD 0 0 64 0 aa";
+        let mut body = raw_file_205("new1.nw", data);
+        body.extend_from_slice(b"&new1.nw\n");
+        let msgs = split_messages(&body);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].id, 102);
+        assert_eq!(msgs[1].id, 6);
+
+        let mut state = SessionState::default();
+        state.apply_body(&body);
+        assert_eq!(state.incoming_files, vec![("new1.nw".to_string(), data.to_vec())]);
+        assert_eq!(state.level_name.as_deref(), Some("new1.nw"));
+    }
+
+    #[test]
+    fn rawdata_file_with_modtime_split_across_frames() {
+        // 2.1+ layout: GINT5 modtime, GCHAR name length, name, data, \n.
+        let name = "a.png";
+        let data: Vec<u8> = (0..=255u8).collect();
+        let mut file = vec![102 + 0x20];
+        file.extend_from_slice(b"  !\"#");
+        file.push(name.len() as u8 + 0x20);
+        file.extend_from_slice(name.as_bytes());
+        file.extend_from_slice(&data);
+        file.push(b'\n');
+        let n = file.len();
+        let mut body = vec![100 + 0x20, ((n >> 14) as u8) + 0x20, ((n >> 7) & 0x7F) as u8 + 0x20, (n & 0x7F) as u8 + 0x20, b'\n'];
+        body.extend_from_slice(&file);
+        body.extend_from_slice(b"&a\n");
+
+        let mut state = SessionState::default();
+        state.file_has_modtime = true;
+        let (one, two) = body.split_at(40);
+        state.apply_body(one);
+        assert!(state.incoming_files.is_empty());
+        state.apply_body(two);
+        assert_eq!(state.incoming_files, vec![(name.to_string(), data)]);
+        assert_eq!(state.level_name.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn file_layout_follows_the_server() {
+        // A 2.1+ reply while the client expected the 2.05 layout.
+        let name = "new1.nw";
+        let mut file = vec![102 + 0x20];
+        file.extend_from_slice(b"  !\"#");
+        file.push(name.len() as u8 + 0x20);
+        file.extend_from_slice(name.as_bytes());
+        file.extend_from_slice(b"GLEVNW01\n");
+        file.push(b'\n');
+        let n = file.len();
+        let mut body = vec![100 + 0x20, 0x20, (n >> 7) as u8 + 0x20, (n & 0x7F) as u8 + 0x20, b'\n'];
+        body.extend_from_slice(&file);
+        let mut st = SessionState::default();
+        st.apply_body(&body);
+        assert_eq!(st.incoming_files, vec![(name.to_string(), b"GLEVNW01\n".to_vec())]);
+    }
+
+    #[test]
+    fn large_file_chunks_join() {
+        let mut body = b"dbig.nw\n".to_vec();
+        body.extend_from_slice(&raw_file_205("big.nw", b"one,"));
+        body.extend_from_slice(&raw_file_205("big.nw", b"two"));
+        body.extend_from_slice(b"ebig.nw\n");
+        let mut state = SessionState::default();
+        state.apply_body(&body);
+        assert_eq!(state.incoming_files, vec![("big.nw".to_string(), b"one,two".to_vec())]);
+    }
+
+    #[test]
+    fn disconnect_message_is_kept() {
+        let mut state = SessionState::default();
+        state.apply_body(b"0Your client version is not allowed.\rAllowed: 2.22\n");
+        assert_eq!(
+            state.disconnect_message.as_deref(),
+            Some("Your client version is not allowed.\nAllowed: 2.22")
+        );
     }
 
     #[test]

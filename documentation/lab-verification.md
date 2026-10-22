@@ -81,3 +81,18 @@ Result next to the real 2.05 screenshot (`screens/client205-onlinestartlocal.png
 - **Fallback:** without `body.png`/`head0.png` the player falls back to a coloured marker, with no crash.
 
 Not drawn yet: shield, hat, sword, the nickname tag, and gani animation.
+
+## 8. Gen-5 wire and file reply (1bbcb13)
+`1bbcb13` was checked against the lab 2.22 frames (`run1`, `run6`) and the GServer-v2 source. Three of its changes do not match the wire, and the file reply used the wrong ids.
+
+- **Gserver login:** in the 2.22 capture the client sends exactly one frame before the first ciphered one, and that frame's successor starts with the iterator at the seed. So the login line itself is the plain zlib frame. The id 7 `GNW30123newmain` handshake is the listserver's first packet, not the gserver's. GServer reads the first frame as the login, so a handshake there is taken as a login of client type 7. Seihai now sends the plain zlib login to the gserver, and `login_listserver` sends id 7 then a gen-5 id 1 (account, password) to the listserver.
+- **XOR group count:** the iterator steps once per 4-byte group the body really has, capped at 12 (`0x02`) or 4 (`0x04`/`0x06`). Stepping a fixed 12 or 4 times breaks the chain after the first short uncompressed frame. Over 610 lab gen-5 frames the per-group count decodes all of them, and the fixed count decodes 14.
+- **`PLO_RAWDATA`:** the header is `GCHAR 100` + `GINT3` (three GCHARs, high bits first) + `\n`, and the next *n* bytes are one message. The lab board header reads 8194 = 1 + 64·64·2 + 1. `1bbcb13` read three raw little-endian bytes and kept the `\n`. A raw block cut at a frame boundary is now finished by the next frame.
+- **File reply:** `PLO_FILE` is id 102 and always sits behind `PLO_RAWDATA`. For 2.1+ it is `GINT5 modtime` + `GCHAR name length` + name + data + `\n`; for 2.05 there is no modtime and no `\n`. The other ids are 30 `FILESENDFAILED`, 45 `FILEUPTODATE`, 68/69 `LARGEFILESTART`/`END` and 84 `LARGEFILESIZE`. Seihai had 45 as the file and 84/86 as start/end.
+- **1.39 login:** GServer picks gen 2 when the token follows the client type directly, so the gen-2 login has no key byte.
+- **Old-client props:** GServer sends prop 10 as the pre-2.1 bow slot (`c(10 + len)` + image, or `c(power)`) to clients it counts as older than 2.1. In the lab, 1.39 got that form and 2.05 got a gani name, so 1.39 now reads prop 10 as the bow slot. Before, its prop stream stopped after prop 10, so no direction came through. The same version table decides whether `PLO_FILE` carries a modtime, so the file parser tries the other layout when the name it reads is not a plain file name.
+- **Disconnect text:** `PLO_DISCMESSAGE` (16) is kept, and the "connection closed" error shows the server's reason when it sent one. A public server that refuses a login (version not allowed, login server offline, bad account) says why in this message before it closes, which a bare "failed to fill whole buffer" hides.
+
+Checks: unit tests replay lab 2.22 frames (client frame 1 from the seed; server frames 2–4 across a 7-byte uncompressed frame), and loopback tests cover the gen-5 login, both listserver logins and the gen-2 login. A loopback gserver that follows GServer-v2's framing logged Seihai in as 2.22, sent a missing `new1.nw` through `PLO_RAWDATA`/`PLO_FILE` (byte-identical on disk), and decoded every walk frame.
+
+Still open: a public gserver run. `session_probe` now takes a version (`... session_probe -- <host:port> 10 2.22`) and prints frame sizes, ids, the level name and the disconnect text.

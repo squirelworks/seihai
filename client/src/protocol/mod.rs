@@ -22,7 +22,7 @@ pub use gen3::Gen3;
 pub use gen5::{choose_comp, read_frame, write_frame, Gen5, Gen5Comp};
 pub use list::{parse_list_reply, parse_svrlist, ListReply, ServerEntry};
 pub use props::{
-    decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, PlayerProp,
+    decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_with, PlayerProp,
 };
 pub use version::{ClientVersion, EncryptionGen};
 
@@ -131,6 +131,11 @@ impl LoginRequest {
     }
 }
 
+/// Write a GSTRING: GCHAR length + bytes (at most 95 bytes).
+pub fn write_gstring<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
+    write_length_biased(w, s.as_bytes())
+}
+
 fn write_length_biased<W: Write>(w: &mut W, bytes: &[u8]) -> io::Result<()> {
     let len = bytes.len();
     if len > 0x5F {
@@ -155,9 +160,13 @@ pub fn write_login<W: Write>(
     account: &str,
     password: &str,
 ) -> io::Result<()> {
-    // Both are GCHARs: type 0 goes out as 0x20, then the key.
+    // Both are GCHARs: type 0 goes out as 0x20, then the key. Gen 2
+    // (1.33–1.39) has no key: GServer picks gen 2 when the token follows
+    // the type directly.
     w.write_all(&[version.client_type() + 0x20])?;
-    w.write_all(&[(key & 0x7F) + 0x20])?;
+    if version.encryption() != EncryptionGen::Gen2 {
+        w.write_all(&[(key & 0x7F) + 0x20])?;
+    }
     w.write_all(version.token().as_bytes())?;
     write_length_biased(w, account.as_bytes())?;
     write_length_biased(w, password.as_bytes())?;
