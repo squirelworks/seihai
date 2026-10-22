@@ -189,6 +189,10 @@ pub fn run_with_error(error: String) -> Option<String> {
 }
 
 fn run_inner(error: Option<String>) -> Option<String> {
+    // Clear any previous choice so closing the window does not reconnect.
+    let mut s = Settings::load();
+    s.last_server = None;
+    s.save();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 520.0]),
         ..Default::default()
