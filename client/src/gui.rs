@@ -52,6 +52,7 @@ impl Launcher {
             servers: Vec::new(),
             selected: None,
             error,
+            show_advanced: false,
         }
     }
 
