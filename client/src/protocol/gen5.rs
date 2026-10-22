@@ -116,6 +116,39 @@ pub fn write_frame(comp: Gen5Comp, body: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Read one gen-5 frame: `u16be (1+body)` + comp byte + XORed body.
+///
+/// Returns the decompressed body. `cipher` is advanced.
+pub fn read_frame<R: std::io::Read>(
+    r: &mut R,
+    cipher: &mut Gen5,
+) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut len_buf = [0u8; 2];
+    r.read_exact(&mut len_buf)?;
+    let total = u16::from_be_bytes(len_buf) as usize;
+    if total == 0 {
+        return Ok(Vec::new());
+    }
+    let mut raw = vec![0u8; total];
+    r.read_exact(&mut raw)?;
+    let comp = match raw[0] {
+        0x02 => Gen5Comp::None,
+        0x04 => Gen5Comp::Zlib,
+        0x06 => Gen5Comp::Bz2,
+        _ => Gen5Comp::None,
+    };
+    let mut body = raw[1..].to_vec();
+    cipher.xor_body(&mut body, comp);
+    match comp {
+        Gen5Comp::None => Ok(body),
+        Gen5Comp::Zlib => super::zlib_decompress(&body)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+        Gen5Comp::Bz2 => super::bz2_decompress(&body)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

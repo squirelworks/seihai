@@ -199,7 +199,7 @@ fn main() {
                     }
                 } else {
                     eprintln!("logged in to {addr} as {account}");
-                    match c.spawn_reader() {
+                    match c.spawn_reader(version.encryption() == EncryptionGen::Gen5, key) {
                         Ok(rx) => frames = Some(rx),
                         Err(e) => eprintln!("reader failed: {e}"),
                     }

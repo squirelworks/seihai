@@ -19,7 +19,7 @@ pub use compress::{bz2_compress, bz2_decompress};
 pub use dispatch::{split_messages, Message, OtherPlayer, SessionState};
 pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
 pub use gen3::Gen3;
-pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};
+pub use gen5::{choose_comp, read_frame, write_frame, Gen5, Gen5Comp};
 pub use list::{parse_list_reply, parse_svrlist, ListReply, ServerEntry};
 pub use props::{
     decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, PlayerProp,

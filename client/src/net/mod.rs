@@ -101,18 +101,24 @@ impl Connection {
 
     /// Read server frames on a background thread.
     ///
-    /// Each zlib frame body is sent down the channel; the channel closes
-    /// (after an `Err`) when the connection drops. Gen-3 server→client
-    /// traffic is plain zlib, so this suits 2.05-style logins.
-    pub fn spawn_reader(&self) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
+    /// `gen5` selects the gen-5 frame reader (ctype + XOR + decompress).
+    /// Otherwise plain zlib is used (2.05).
+    pub fn spawn_reader(&self, gen5: bool, key: u8) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
         let mut stream = self.stream.try_clone()?;
         stream.set_read_timeout(None)?;
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || loop {
-            let frame = read_zlib_frame(&mut stream);
-            let stop = frame.is_err();
-            if tx.send(frame).is_err() || stop {
-                break;
+        std::thread::spawn(move || {
+            let mut cipher = crate::protocol::Gen5::new(key);
+            loop {
+                let frame = if gen5 {
+                    crate::protocol::gen5::read_frame(&mut stream, &mut cipher)
+                } else {
+                    read_zlib_frame(&mut stream)
+                };
+                let stop = frame.is_err();
+                if tx.send(frame).is_err() || stop {
+                    break;
+                }
             }
         });
         Ok(rx)

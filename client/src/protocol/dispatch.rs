@@ -65,6 +65,8 @@ pub struct SessionState {
     pub other_props: Vec<(u8, Vec<u8>)>,
     /// Other players parsed from `PLO_OTHERPLPROPS`.
     pub others: Vec<OtherPlayer>,
+    /// File names the server asked for or sent.
+    pub file_requests: Vec<String>,
     pub unhandled: HashMap<u8, usize>,
 }
 
@@ -160,6 +162,12 @@ impl SessionState {
                 // PLO_DELPLAYER — remove by id (first byte).
                 if let Some(&id) = msg.payload.first() {
                     self.others.retain(|o| o.id != id as u16);
+                }
+            }
+            45 | 67 => {
+                // File request / file data. Record the name for later fetch.
+                if let Ok(s) = String::from_utf8(msg.payload.clone()) {
+                    self.file_requests.push(s);
                 }
             }
             _ => {
