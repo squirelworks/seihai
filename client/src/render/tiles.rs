@@ -136,6 +136,29 @@ impl Framebuffer {
         self.fill_rect(110, 4, ru / 2, 8, [0x20, 0xC0, 0x20]);
     }
 
+    /// Draw a 64×64 minimap of the level in the top-right corner.
+    pub fn draw_minimap(&mut self, level: &crate::assets::Level, px: f32, py: f32) {
+        let ox = self.width as i32 - 68;
+        let oy = 4;
+        self.fill_rect(ox, oy, 64, 64, [0x20, 0x20, 0x20]);
+        for run in &level.boards {
+            if run.layer != 0 {
+                continue;
+            }
+            for (i, _) in run.tiles.iter().enumerate() {
+                let tx = run.x + i as i32;
+                let ty = run.y;
+                if (0..64).contains(&tx) && (0..64).contains(&ty) {
+                    self.fill_rect(ox + tx, oy + ty, 1, 1, [0x30, 0x60, 0x30]);
+                }
+            }
+        }
+        let (mx, my) = (px as i32, py as i32);
+        if (0..64).contains(&mx) && (0..64).contains(&my) {
+            self.fill_rect(ox + mx, oy + my, 2, 2, [0xFF, 0xFF, 0x40]);
+        }
+    }
+
     /// Draw a short nickname tag under a player box.
     ///
     /// Uses a simple 4×6 block font for ASCII. `dx`/`dy` is the
