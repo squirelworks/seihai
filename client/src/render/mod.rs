@@ -7,7 +7,9 @@
 
 mod tiles;
 
-pub use tiles::{draw_player_sprites, render_view, Framebuffer, TILE_PX};
+pub use tiles::{
+    draw_player_marker, draw_player_sprites, player_box_origin, render_view, Framebuffer, TILE_PX,
+};
 
 use crate::assets::{read_png_rgb, tile_id, Level};
 use crate::offline::OfflineSession;
@@ -95,10 +97,10 @@ pub fn ascii_camera(session: &OfflineSession, view_w: usize, view_h: usize) -> S
 fn player_char(session: &OfflineSession) -> char {
     if session.in_water {
         match session.player_dir {
-            0 => 'V',
+            0 => 'A',
             1 => '{',
-            2 => '}',
-            3 => 'A',
+            2 => 'V',
+            3 => '}',
             _ => 'W',
         }
     } else {
@@ -108,10 +110,10 @@ fn player_char(session: &OfflineSession) -> char {
 
 fn dir_char(dir: u8) -> char {
     match dir {
-        0 => 'v', // south
-        1 => '<', // west
-        2 => '>', // east
-        3 => '^', // north
+        0 => '^', // up
+        1 => '<', // left
+        2 => 'v', // down
+        3 => '>', // right
         _ => 'P',
     }
 }

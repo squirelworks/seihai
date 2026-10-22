@@ -20,7 +20,7 @@ Date: 2026-10-14
 13. Place stamps onto the board via `Level::place_stamp` or `place_named_stamp` (from an `ObjectSet`).
 14. Detect when the player enters a `LINK` rectangle and record the destination in `pending_link`.
 
-Directions are fixed: 0 south, 1 west, 2 east, 3 north.
+Directions are fixed, in Graal order: 0 up, 1 left, 2 down, 3 right.
 
 ## Render
 

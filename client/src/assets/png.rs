@@ -111,10 +111,11 @@ fn zlib_rows(data: &[u8], stride: usize) -> io::Result<Vec<u8>> {
 
 /// Minimal PNG reader.
 ///
-/// Handles 8-bit grayscale, RGB, palette, gray+alpha and RGBA images
-/// (alpha dropped) with no interlace, and all five row filters.
-/// Returns `(width, height, pixels)` where `pixels` is row-major RGB.
-pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
+/// Handles non-interlaced grayscale, RGB, palette (1/2/4/8-bit, with
+/// `tRNS`), gray+alpha and RGBA images at 8 bits per channel, and all
+/// five row filters. Returns `(width, height, pixels)` where `pixels`
+/// is row-major RGBA.
+pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, m.to_string());
     if data.len() < 8 || &data[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         return Err(bad("not a PNG"));
@@ -126,6 +127,7 @@ pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
     let mut color_type = 0u8;
     let mut interlace = 0u8;
     let mut palette = Vec::new();
+    let mut trns = Vec::new();
     let mut idat = Vec::new();
     while pos + 8 <= data.len() {
         let len = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
@@ -139,6 +141,8 @@ pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
             interlace = chunk[12];
         } else if tag == b"PLTE" {
             palette = chunk.to_vec();
+        } else if tag == b"tRNS" {
+            trns = chunk.to_vec();
         } else if tag == b"IDAT" {
             idat.extend_from_slice(chunk);
         } else if tag == b"IEND" {
@@ -154,8 +158,12 @@ pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
         6 => 4,
         _ => return Err(bad("unknown PNG color type")),
     };
-    if bit_depth != 8 || interlace != 0 {
-        return Err(bad("only 8-bit, non-interlaced PNGs are supported"));
+    let depth_ok = match color_type {
+        3 => matches!(bit_depth, 1 | 2 | 4 | 8),
+        _ => bit_depth == 8,
+    };
+    if !depth_ok || interlace != 0 {
+        return Err(bad("unsupported PNG bit depth or interlace"));
     }
     if color_type == 3 && palette.is_empty() {
         return Err(bad("palette PNG without PLTE"));
@@ -164,9 +172,10 @@ pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
     let mut raw = Vec::new();
     dec.read_to_end(&mut raw)?;
 
-    let bpp = channels;
-    let stride = width as usize * bpp;
-    let mut pixels = Vec::with_capacity(width as usize * height as usize * 3);
+    // Filters work on whole bytes; sub-byte pixels use a 1-byte step.
+    let bpp = (channels * bit_depth as usize).div_ceil(8);
+    let stride = (width as usize * channels * bit_depth as usize).div_ceil(8);
+    let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
     let mut prev = vec![0u8; stride];
     let mut row = vec![0u8; stride];
     let mut i = 0;
@@ -188,19 +197,37 @@ pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
                 _ => return Err(bad("unknown PNG filter")),
             };
         }
-        for px in row.chunks(bpp) {
-            match color_type {
-                0 | 4 => pixels.extend_from_slice(&[px[0], px[0], px[0]]),
-                2 | 6 => pixels.extend_from_slice(&px[..3]),
-                _ => {
-                    let p = px[0] as usize * 3;
-                    pixels.extend_from_slice(palette.get(p..p + 3).unwrap_or(&[0, 0, 0]));
+        if color_type == 3 {
+            let per_byte = 8 / bit_depth as usize;
+            let mask = ((1u16 << bit_depth) - 1) as u8;
+            for x in 0..width as usize {
+                let byte = row[x / per_byte];
+                let shift = 8 - bit_depth as usize * (x % per_byte + 1);
+                let idx = ((byte >> shift) & mask) as usize;
+                let rgb = palette.get(idx * 3..idx * 3 + 3).unwrap_or(&[0, 0, 0]);
+                pixels.extend_from_slice(rgb);
+                pixels.push(trns.get(idx).copied().unwrap_or(255));
+            }
+        } else {
+            for px in row.chunks(channels) {
+                match color_type {
+                    0 => pixels.extend_from_slice(&[px[0], px[0], px[0], 255]),
+                    4 => pixels.extend_from_slice(&[px[0], px[0], px[0], px[1]]),
+                    2 => pixels.extend_from_slice(&[px[0], px[1], px[2], 255]),
+                    _ => pixels.extend_from_slice(px),
                 }
             }
         }
         std::mem::swap(&mut prev, &mut row);
     }
     Ok((width, height, pixels))
+}
+
+/// Like [`read_png_rgba`], with alpha dropped. Returns row-major RGB.
+pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
+    let (w, h, rgba) = read_png_rgba(data)?;
+    let rgb = rgba.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+    Ok((w, h, rgb))
 }
 
 fn paeth(a: u8, b: u8, c: u8) -> u8 {
@@ -232,5 +259,24 @@ mod tests {
         let (w, h, back) = read_png_rgb(&buf).unwrap();
         assert_eq!((w, h), (2, 2));
         assert_eq!(back, pixels);
+    }
+
+    #[test]
+    fn indexed_4bit_with_trns() {
+        // 3x1, 4-bit palette: indices 0, 1, 2; index 0 transparent.
+        let mut ihdr = Vec::new();
+        ihdr.extend_from_slice(&3u32.to_be_bytes());
+        ihdr.extend_from_slice(&1u32.to_be_bytes());
+        ihdr.extend_from_slice(&[4, 3, 0, 0, 0]);
+        let mut buf = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        write_chunk(&mut buf, b"IHDR", &ihdr).unwrap();
+        write_chunk(&mut buf, b"PLTE", &[0, 0, 0, 255, 0, 0, 0, 255, 0]).unwrap();
+        write_chunk(&mut buf, b"tRNS", &[0]).unwrap();
+        let idat = zlib_rows(&[0x01, 0x20], 2).unwrap();
+        write_chunk(&mut buf, b"IDAT", &idat).unwrap();
+        write_chunk(&mut buf, b"IEND", &[]).unwrap();
+        let (w, h, px) = read_png_rgba(&buf).unwrap();
+        assert_eq!((w, h), (3, 1));
+        assert_eq!(px, vec![0, 0, 0, 0, 255, 0, 0, 255, 0, 255, 0, 255]);
     }
 }
