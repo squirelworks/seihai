@@ -41,6 +41,18 @@ The player sprite is shifted down 12 px so the feet sit on the collision tile.
 
 `pics1.png` tile mapping: eight 16-column blocks of 512 tiles. Tile `n` is at column `n % 16 + (n / 512) * 16`, row `(n / 16) % 32`.
 
+## Chat and overlays
+
+From the merged chat/HUD PRs:
+- Permanent chat bar at the bottom. Enter opens it, Enter again sends.
+- F2 opens a PM to the nearest player.
+- F3 toggles the debug overlay (fps, position, level, frames, players).
+- F4 toggles the player list.
+- F12 saves a PNG to `screenshots/`.
+- Chests open with A or Space when facing them. The terminal prints the item.
+- Signs open a reading panel.
+- Nickname tags and chat bubbles draw over other players.
+
 ## Protocol
 
 | Piece | Status |
