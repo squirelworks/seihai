@@ -5,8 +5,8 @@ Date: 2026-10-22
 ## Offline slice
 
 `OfflineSession` can:
-1. Load a `GLEVNW01` `.nw` via `Level::load`.
-2. Decode tile ids from the 2-char base64 board encoding.
+1. Load a `GLEVNW01` `.nw`, a binary `GR-V1` `.graal`, or a `Z3-V1` `.zelda` via `Level::load`.
+2. Decode tile ids from the 2-char base64 board encoding (text) or the RLE bitstream (binary).
 3. Apply `BoardModify` updates.
 4. Reject moves that land on wall tiles (`collision >= 20`).
 5. Track water (`== 11`) in `in_water` without blocking.
@@ -31,8 +31,13 @@ No system SDL2. The `render` module provides:
 - `blit_sprite` — RGB/RGBA blit, skips alpha 0 or magenta
 - `draw_player_sprites` — body and head by direction
 - `draw_hud` — health and rupee bars
+- permanent chat bar at the bottom
 - chest/sign/NPC markers
 - windowed binary via `minifb` (`cargo run -p seihai`)
+- F5 opens a file picker for `.nw` / `.graal` / `.zelda`
+- Play offline button in the GUI skips the connection
+
+The player sprite is shifted down 12 px so the feet sit on the collision tile.
 
 `pics1.png` tile mapping: eight 16-column blocks of 512 tiles. Tile `n` is at column `n % 16 + (n / 512) * 16`, row `(n / 16) % 32`.
 
