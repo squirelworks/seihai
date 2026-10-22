@@ -6,6 +6,7 @@ pub mod offline;
 pub mod protocol;
 pub mod render;
 pub mod scripting;
+pub mod settings;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

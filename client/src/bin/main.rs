@@ -79,8 +79,22 @@ fn main() {
         i += 1;
     }
 
-    // Menu when no mode is given.
-    if online.is_none() && level_name.is_none() && assets.is_none() {
+    // Load settings and fill defaults.
+    let mut settings = Settings::load();
+    if assets.is_none() {
+        assets = settings.assets.clone();
+    }
+    if account == "player" {
+        if let Some(a) = &settings.account {
+            account = a.clone();
+        }
+    }
+    if online.is_none() {
+        online = settings.listserver.clone();
+    }
+
+    // Menu when still no mode.
+    if online.is_none() && level_name.is_none() {
         println!("Seihai");
         println!("1) Offline  2) Online  q) Quit");
         let mut choice = String::new();
@@ -160,6 +174,42 @@ fn main() {
     let mut conn: Option<Connection> = None;
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
+
+    if let Some(addr) = &online {
+        // If this looks like a listserver, fetch the list and pick a gserver.
+        if addr.contains("14921") || addr.contains("14922") || addr.contains("listserver") {
+            match Connection::connect(addr) {
+                Ok(mut c) => {
+                    let key = 0x40u8;
+                    if c.login_versioned(version, key, &account, &password).is_ok() {
+                        let mut state = SessionState::default();
+                        if let Ok(body) = c.read_frame_into(&mut state) {
+                            if let Ok(text) = String::from_utf8(body) {
+                                let entries = parse_list_reply(&text);
+                                if !entries.is_empty() {
+                                    println!("Servers:");
+                                    for (i, e) in entries.iter().enumerate() {
+                                        println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
+                                    }
+                                    println!("pick a number:");
+                                    let mut pick = String::new();
+                                    let _ = std::io::stdin().read_line(&mut pick);
+                                    if let Ok(n) = pick.trim().parse::<usize>() {
+                                        if let Some(e) = entries.get(n) {
+                                            online = Some(format!("{}:{}", e.host, e.port));
+                                            settings.last_server = online.clone();
+                                            settings.save();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("listserver failed: {e}"),
+            }
+        }
+    }
 
     if let Some(addr) = &online {
         if version.encryption() != EncryptionGen::Gen3 {
