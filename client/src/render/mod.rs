@@ -7,7 +7,7 @@
 
 mod tiles;
 
-pub use tiles::{render_view, Framebuffer, TILE_PX};
+pub use tiles::{draw_player_sprites, render_view, Framebuffer, TILE_PX};
 
 use crate::assets::{read_png_rgb, tile_id, Level};
 use crate::offline::OfflineSession;

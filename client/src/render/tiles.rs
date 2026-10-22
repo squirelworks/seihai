@@ -85,6 +85,56 @@ impl Framebuffer {
             }
         }
     }
+
+    /// Blit a sprite from an RGB or RGBA image.
+    ///
+    /// Transparent pixels (alpha 0, or magenta 255,0,255) are skipped.
+    pub fn blit_sprite(
+        &mut self,
+        src: &[u8],
+        src_w: u32,
+        bpp: usize,
+        sx: i32,
+        sy: i32,
+        sw: i32,
+        sh: i32,
+        dx: i32,
+        dy: i32,
+    ) {
+        for ty in 0..sh {
+            for tx in 0..sw {
+                let px = dx + tx;
+                let py = dy + ty;
+                if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
+                    continue;
+                }
+                let sidx = ((sy + ty) as usize * src_w as usize + (sx + tx) as usize) * bpp;
+                if sidx + bpp > src.len() {
+                    continue;
+                }
+                if bpp == 4 && src[sidx + 3] == 0 {
+                    continue;
+                }
+                if bpp == 3 && src[sidx] == 255 && src[sidx + 1] == 0 && src[sidx + 2] == 255 {
+                    continue;
+                }
+                let didx = (py as usize * self.width as usize + px as usize) * 3;
+                if didx + 2 < self.pixels.len() {
+                    self.pixels[didx..didx + 3].copy_from_slice(&src[sidx..sidx + 3]);
+                }
+            }
+        }
+    }
+
+    /// Draw a simple HUD: health bar and rupee bar.
+    pub fn draw_hud(&mut self, health: i32, rupees: i32) {
+        let hp = health.max(0).min(100) as i32;
+        self.fill_rect(4, 4, 100, 8, [0x40, 0x00, 0x00]);
+        self.fill_rect(4, 4, hp, 8, [0xC0, 0x20, 0x20]);
+        let ru = rupees.max(0).min(100) as i32;
+        self.fill_rect(110, 4, 50, 8, [0x00, 0x40, 0x00]);
+        self.fill_rect(110, 4, ru / 2, 8, [0x20, 0xC0, 0x20]);
+    }
 }
 
 /// Render a camera view of the level into a framebuffer.
@@ -128,16 +178,56 @@ pub fn render_view(
         }
     }
 
-    // Player marker (centre of view).
+    // Chests, signs, NPCs.
+    for chest in &level.chests {
+        draw_marker(&mut fb, chest.x, chest.y, ox, oy, [0xC0, 0x80, 0x20]);
+    }
+    for sign in &level.signs {
+        draw_marker(&mut fb, sign.x, sign.y, ox, oy, [0xFF, 0xFF, 0x40]);
+    }
+    for npc in &level.npcs {
+        if npc.visible {
+            draw_marker(&mut fb, npc.x as i32, npc.y as i32, ox, oy, [0x40, 0xC0, 0x40]);
+        }
+    }
+
+    // Player: body + head if sheets are provided, else marker.
     let px = (view_tiles_w as i32 / 2) * TILE_PX as i32;
     let py = (view_tiles_h as i32 / 2) * TILE_PX as i32;
-    let color = if session.in_water {
-        [0x40, 0x80, 0xFF]
-    } else {
-        [0xFF, 0x40, 0x40]
-    };
-    fb.fill_rect(px + 4, py + 4, 8, 8, color);
     fb
+}
+
+/// Draw the player body and head sprites for the given direction.
+///
+/// `body` and `head` are RGB or RGBA images. Direction: 0 south, 1 west,
+/// 2 east, 3 north. Body sprites are 32×32 at column `dir`, row 0.
+/// Head sprites are 32×32 at column 0, row `dir`.
+pub fn draw_player_sprites(
+    fb: &mut Framebuffer,
+    body: &[u8],
+    body_w: u32,
+    body_bpp: usize,
+    head: &[u8],
+    head_w: u32,
+    head_bpp: usize,
+    dir: u8,
+    dx: i32,
+    dy: i32,
+) {
+    let d = (dir as i32) % 4;
+    // Body: column d, row 0.
+    fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx - 8, dy - 16);
+    // Head: column 0, row d.
+    fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx - 8, dy - 32);
+}
+
+fn draw_marker(fb: &mut Framebuffer, x: i32, y: i32, ox: i32, oy: i32, color: [u8; 3]) {
+    let tx = x - ox;
+    let ty = y - oy;
+    if tx < 0 || ty < 0 {
+        return;
+    }
+    fb.fill_rect(tx * TILE_PX as i32 + 2, ty * TILE_PX as i32 + 2, 12, 12, color);
 }
 
 fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
