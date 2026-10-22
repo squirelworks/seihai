@@ -568,11 +568,26 @@ fn main() {
                 show_debug = !show_debug;
             }
             if window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No) {
-                show_players = !show_players;
-                eprintln!("F4: level editor (not yet)");
+                eprintln!("F4: level editor not yet implemented");
             }
             if window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No) {
-                eprintln!("F5: level picker (not yet)");
+                // List .nw files in the assets levels folder and print them.
+                let levels_dir = root.levels_dir();
+                if let Ok(entries) = std::fs::read_dir(&levels_dir) {
+                    let mut names: Vec<String> = entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .filter(|n| n.ends_with(".nw"))
+                        .collect();
+                    names.sort();
+                    eprintln!("Levels in {}:", levels_dir.display());
+                    for (i, n) in names.iter().enumerate() {
+                        eprintln!("  {i}) {n}");
+                    }
+                    eprintln!("type a number in the terminal to load");
+                } else {
+                    eprintln!("no levels dir at {}", levels_dir.display());
+                }
             }
         }
         if window.is_key_pressed(minifb::Key::PageUp, minifb::KeyRepeat::Yes) {
