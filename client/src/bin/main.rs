@@ -519,12 +519,12 @@ fn main() {
                             my_chat = t.clone();
                             dirty = true;
                             if !t.is_empty() {
-                                net_state.push_chat(ChatKind::Say, account.clone(), t.clone());
+                                net_state.push_chat(ChatKind::Say, me(&net_state, &account), t.clone());
                             }
                             conn.as_mut().map(|c| c.send_chat(&t))
                         }
                         ui::ChatSend::Toall(t) if !t.is_empty() => {
-                            net_state.push_chat(ChatKind::Toall, account.clone(), t.clone());
+                            net_state.push_chat(ChatKind::Toall, me(&net_state, &account), t.clone());
                             conn.as_mut().map(|c| c.send_toall(&t))
                         }
                         ui::ChatSend::Toall(_) => None,
@@ -575,7 +575,7 @@ fn main() {
         }
         let mut frame = scene.clone();
         if show_players {
-            ui::draw_player_list(&mut frame, &account, &net_state.others);
+            ui::draw_player_list(&mut frame, &me(&net_state, &account), &net_state.others);
         }
         if show_debug {
             ui::draw_debug(
@@ -624,6 +624,11 @@ fn main() {
             fps_since = Instant::now();
         }
     }
+}
+
+/// The name others see for us: the server's nickname, else the account.
+fn me(state: &SessionState, account: &str) -> String {
+    state.nickname.clone().unwrap_or_else(|| account.to_string())
 }
 
 /// Collects typed characters for the chat bar.

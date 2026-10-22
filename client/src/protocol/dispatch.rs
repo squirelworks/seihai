@@ -185,6 +185,8 @@ pub struct SessionState {
     /// `PLO_FILE` carries a 5-byte modtime for 2.1+ clients. 2.05 and
     /// older get the name and data only. Set this from the version.
     pub file_has_modtime: bool,
+    /// Our own nickname (NICKNAME, prop 0, in `PLO_PLAYERPROPS`).
+    pub nickname: Option<String>,
     /// Read prop 10 as the pre-2.1 bow slot (1.33–1.39 logins).
     pub bow_prop10: bool,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
@@ -460,6 +462,7 @@ impl SessionState {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
                 (17, Some(v)) => self.player_dir = Some(v % 4),
+                (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
                 _ => {}
             }
         }
@@ -741,6 +744,13 @@ mod tests {
         // PCONNECTED (51) with no value: gone.
         st.apply_body(&other(200, &[51 + 0x20]));
         assert!(st.others.is_empty());
+    }
+
+    #[test]
+    fn own_nickname_from_player_props() {
+        let mut st = SessionState::default();
+        st.apply_body(b") 'default\n");
+        assert_eq!(st.nickname.as_deref(), Some("default"));
     }
 
     #[test]

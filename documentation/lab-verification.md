@@ -115,3 +115,14 @@ Loopback check (2.22 framing, a scripted second player): the server got the CURC
 - **HUD:** the rupee bar now shows the rupee count, and the debug overlay lists rupees, bombs and arrows.
 
 Offline check on `onlinestartlocal.nw`: walking up stops below the chest at (20, 24), and A opens it and gives one green rupee.
+
+## 11. Lab rerun of chat, players and chests (7a06b97)
+Run against the lab GServer-v2: Seihai as 2.22, next to a real 2.05 client, with throwaway accounts.
+
+- **Other player:** drawn at 30, 30.5 with its nickname tag. On logout the server sent prop 50 = 0, then prop 51, and the player was removed. GServer sends no `PLO_DELPLAYER` to 2.22.
+- **Chat bubble:** the bubble showed in the 2.05 client. Walking after chatting still reached the server.
+- **Toall and PM:** both are correct on the wire. The server relayed `PLO_TOALL` and `PLO_PRIVATEMESSAGE` to the 2.05 session.
+- **Chest at (20, 24):** `PLI_OPENCHEST` drew `PLO_LEVELCHEST` opened, plus a rupee prop update.
+- **1.39:** the direction is set and props parse up to 36.
+- **2.05 file request:** the missing level arrived byte-identical.
+- **Own chat lines:** they are now labelled with the server's nickname (prop 0) instead of the account name.
