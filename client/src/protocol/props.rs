@@ -51,7 +51,9 @@ fn prop_len(id: u8, data: &[u8]) -> Option<usize> {
     let c = |i: usize| data.get(i).map(|b| b.wrapping_sub(0x20) as usize);
     let len = match id {
         // str
-        0 | 12 | 20 | 21 | 34 | 35 | 37..=41 | 46..=49 | 52 | 54..=75 | 82 => gstring_len(data)?,
+        // 10 is listed as the pre-2.1 bow slot for 2.05, but GServer-v2
+        // sends a plain gani name ("idle") to a 2.05 login.
+        0 | 10 | 12 | 20 | 21 | 34 | 35 | 37..=41 | 46..=49 | 52 | 54..=75 | 82 => gstring_len(data)?,
         // c
         1 | 2 | 4..=7 | 15..=19 | 22 | 23 | 26 | 32 | 33 | 43..=45 | 50 | 53 | 81 => 1,
         // i3
@@ -74,15 +76,6 @@ fn prop_len(id: u8, data: &[u8]) -> Option<usize> {
             let v = c(0)?;
             if v > 3 {
                 1 + gstring_len(data.get(1..)?)?
-            } else {
-                1
-            }
-        }
-        // 2.05 bow: c(10 + len) + image, or c(bowpower)
-        10 => {
-            let v = c(0)?;
-            if v >= 10 {
-                1 + (v - 10)
             } else {
                 1
             }
@@ -144,6 +137,24 @@ mod tests {
         assert_eq!(ids, vec![0, 15, 16, 17, 32]);
         assert_eq!(props[1].gchar(), Some(61));
         assert_eq!(props[3].gchar().map(|s| s % 4), Some(2));
+    }
+
+    /// First PLO_PLAYERPROPS sent by the lab GServer to a 2.05 login,
+    /// cut before the account prop.
+    #[test]
+    fn lab_login_burst() {
+        let hex = "2123222623202020242a25252621283f2a73776f7264312e706e67292b2b736869656c64312e706e672a2469646c652b8d68656164302e706e672d22202a24323122323435203620372039205d3a";
+        let p: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        let props = parse_player_props(&p);
+        let ids: Vec<u8> = props.iter().map(|p| p.id).collect();
+        assert_eq!(ids, vec![1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 17, 18, 21, 22, 23, 25]);
+        assert_eq!(&props[8].raw[1..], b"idle");
+        assert_eq!(props[11].gchar(), Some(2));
+        // APCOUNTER is a GSHORT: 61 - 1 = 60 s
+        assert_eq!(props[16].raw, vec![0x20, 0x5d]);
     }
 
     #[test]

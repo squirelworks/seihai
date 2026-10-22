@@ -43,15 +43,17 @@ Seihai's `Gen3`, resumed from each frame's exported iterator state, was run over
 - **Still open:** a client→server bz2 frame, from the client's own ≥ 0x1000 path.
 
 ## 5. Level-entry packets
-The export drops every frame that carries an account name or nickname. The level-entry frames are among them, so this experiment needs a live run of `session_probe` in the lab.
+This was checked with a live `session_probe` run against the lab GServer, using a throwaway 2.05 account.
 
-What the export does show:
-- PLO ids 7, 8, 9, 22 and 23 appear. The frequent unhandled ids are 42 `NEWWORLDTIME`, 32, 30 and 45.
-- One 2.22 frame fills `level_name` and a board line.
-
-Fixes made from the notes:
-- **Login line:** `write_login` wrote the client type and key as raw bytes. Both are GCHARs, so 2.05 now opens with `0x20` + (key + 0x20).
-- **Player props:** `PLO_PLAYERPROPS` was read as raw `(prop, value)` byte pairs with x/y/dir at props 0/1/2. It is a GCHAR prop stream with variable-length values. `parse_player_props` now walks it using the PLPROP encoding table, and `SessionState` takes X/Y from props 15/16 (half-tiles) and direction from SPRITE (17) mod 4.
+- **What came through:** 6 frames. `level_name` = `onlinestartlocal.nw`, 1 board line, 3 chests and one `PLO_PLAYERWARP` (14).
+- **Login line:** `write_login` wrote the client type and key as raw bytes. Both are GCHARs, so 2.05 now opens with `0x20` + (key + 0x20). The lab server accepted the corrected line.
+- **Player props:** `PLO_PLAYERPROPS` used to be read as raw `(prop, value)` byte pairs, with x/y/dir at props 0/1/2. It is actually a GCHAR prop stream with variable-length values. `parse_player_props` now walks it using the PLPROP encoding table.
+- **Prop 10:** GServer sends a 2.05 login a plain GSTRING gani name (`idle`), not the pre-2.1 bow form. Reading it as the bow form made the parse drift after prop 10. The cleaned login burst (props 1–25, cut before the account prop) is now a unit test. APCOUNTER (25) is a GSHORT, and it reads 60 s.
+- **Position:**
+  - The login burst carries no X/Y. The start position arrives in `PLO_PLAYERWARP` (`c x*2, c y*2, level`), and `SessionState` now takes `player_x`/`player_y` from it.
+  - Direction comes from SPRITE (17) mod 4.
+  - Later X/Y updates come through props 15/16.
+- **Frequent unhandled ids:** 32, 34, 42 `NEWWORLDTIME` and 43.
 
 ## 6. UDP peer channel (2.05)
 - **Format:** a datagram is `seq` + GCHAR id + fields, and the whole datagram is XORed with `recipientId XOR 1`. The old scaffold sent `[21, x, y, dir]` with no seq, no XOR and no +0x20.

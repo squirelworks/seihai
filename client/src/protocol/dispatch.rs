@@ -118,9 +118,11 @@ impl SessionState {
                 }
             }
             14 => {
-                // PLO_PLAYERWARP
-                if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.warps.push(s);
+                // PLO_PLAYERWARP: c x*2, c y*2, rest = level name
+                if let [x, y, level @ ..] = msg.payload.as_slice() {
+                    self.player_x = Some(x.wrapping_sub(0x20) as f32 / 2.0);
+                    self.player_y = Some(y.wrapping_sub(0x20) as f32 / 2.0);
+                    self.warps.push(String::from_utf8_lossy(level).into_owned());
                 }
             }
             22 => {
@@ -182,5 +184,16 @@ mod tests {
         state.apply_body(body);
         assert_eq!(state.level_name.as_deref(), Some("start"));
         assert_eq!(state.board_lines.len(), 1);
+    }
+
+    #[test]
+    fn player_warp_sets_position() {
+        // id 14, x = 30.5 (61), y = 12 (24), level "start.nw"
+        let body = [&[0x2e, 0x20 + 61, 0x20 + 24][..], b"start.nw\n"].concat();
+        let mut state = SessionState::default();
+        state.apply_body(&body);
+        assert_eq!(state.player_x, Some(30.5));
+        assert_eq!(state.player_y, Some(12.0));
+        assert_eq!(state.warps, vec!["start.nw".to_string()]);
     }
 }
