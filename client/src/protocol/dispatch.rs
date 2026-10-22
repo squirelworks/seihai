@@ -67,6 +67,8 @@ pub struct SessionState {
     pub others: Vec<OtherPlayer>,
     /// File names the server asked for or sent.
     pub file_requests: Vec<String>,
+    /// Completed files: (name, bytes).
+    pub incoming_files: Vec<(String, Vec<u8>)>,
     pub unhandled: HashMap<u8, usize>,
 }
 
@@ -164,10 +166,17 @@ impl SessionState {
                     self.others.retain(|o| o.id != id as u16);
                 }
             }
-            45 | 67 => {
-                // File request / file data. Record the name for later fetch.
+            45 => {
+                // PLO_FILE: modTime(5) + name_len(1) + name + data + \n
+                if let Some((name, data)) = parse_file_packet(&msg.payload) {
+                    self.file_requests.push(format!("FILE:{name}"));
+                    self.incoming_files.push((name, data));
+                }
+            }
+            68 => {
+                // PLO_FILESENDFAILED
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.file_requests.push(s);
+                    self.file_requests.push(format!("FAIL:{s}"));
                 }
             }
             _ => {
@@ -245,6 +254,21 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
         dir,
         nick,
     })
+}
+
+/// Parse a `PLO_FILE` payload: modTime(5) + name_len(1) + name + data.
+fn parse_file_packet(payload: &[u8]) -> Option<(String, Vec<u8>)> {
+    if payload.len() < 7 {
+        return None;
+    }
+    // Skip 5-byte modTime.
+    let name_len = payload[5] as usize;
+    if payload.len() < 6 + name_len {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&payload[6..6 + name_len]).into_owned();
+    let data = payload[6 + name_len..].to_vec();
+    Some((name, data))
 }
 
 #[cfg(test)]
