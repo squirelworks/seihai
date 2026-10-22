@@ -116,7 +116,13 @@ fn main() {
         }
         match Connection::connect(addr) {
             Ok(mut c) => {
-                let key = 0x40u8;
+                // The real client sends `rand & 0x7F`; a fixed even key
+                // would always put the gen-3 byte at index 0 of short lines.
+                let key = (std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(1)
+                    & 0x7F) as u8;
                 if let Err(e) = c.login_versioned(version, key, &account, &password) {
                     eprintln!("login failed: {e}");
                 } else {
