@@ -194,11 +194,11 @@ pub fn render_view(
 
     // Chests, signs, NPCs.
     for chest in &level.chests {
-        // A chest covers 2×2 tiles.
+        // Chest: brown box with a gold latch.
         let (cx, cy) = (chest.x * t - cam_x, chest.y * t - cam_y);
-        fb.fill_rect(cx + 2, cy + 2, 28, 28, [0x80, 0x40, 0x10]);
-        fb.fill_rect(cx + 4, cy + 4, 24, 10, [0xC0, 0x30, 0x20]);
-        fb.fill_rect(cx + 13, cy + 12, 6, 6, [0xF0, 0xD0, 0x40]);
+        fb.fill_rect(cx + 2, cy + 6, 28, 22, [0x80, 0x40, 0x10]);
+        fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
+        fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
     }
     for sign in &level.signs {
         draw_marker(&mut fb, sign.x, sign.y, cam_x, cam_y, [0xFF, 0xFF, 0x40]);

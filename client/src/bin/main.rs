@@ -296,6 +296,9 @@ fn main() {
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
         fb.draw_hud(session.player_health, 0);
+        if let Some(level) = &session.current_level {
+            fb.draw_minimap(level, session.player_x, session.player_y);
+        }
         // Convert RGB to minifb's 0RGB u32.
         let buffer = fb
             .pixels
@@ -426,6 +429,20 @@ fn main() {
                 if let Err(e) = c.send_walk(&session.player_update()) {
                     eprintln!("send failed: {e}");
                     conn = None;
+                }
+            }
+        }
+        // Enter sends a chat line; F2 sends a PM to the last other player.
+        if window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No) {
+            if let Some(c) = conn.as_mut() {
+                let _ = c.send_chat("hello");
+            }
+        }
+        if window.is_key_pressed(minifb::Key::F2, minifb::KeyRepeat::No) {
+            if let Some(c) = conn.as_mut() {
+                if let Some(other) = net_state.others.first() {
+                    let target = other.nick.clone().unwrap_or_else(|| format!("{}", other.id));
+                    let _ = c.send_pm(&target, "hi");
                 }
             }
         }

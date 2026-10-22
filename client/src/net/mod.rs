@@ -26,6 +26,8 @@ pub struct Connection {
     /// Gen-3 insertion state for client→server messages, set by a
     /// versioned 2.05-style login.
     gen3: Option<Gen3>,
+    /// Gen-5 XOR state for client→server frames, set by a 2.22 login.
+    gen5: Option<crate::protocol::Gen5>,
 }
 
 impl Connection {
@@ -33,7 +35,7 @@ impl Connection {
     pub fn connect(addr: &str) -> io::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None })
+        Ok(Self { stream, gen3: None, gen5: None })
     }
 
     /// Send a raw byte buffer.
@@ -62,12 +64,15 @@ impl Connection {
         // fresh with the first message after the login line.
         if version.encryption() == EncryptionGen::Gen3 {
             self.gen3 = Some(Gen3::new(key));
+        } else if version.encryption() == EncryptionGen::Gen5 {
+            self.gen5 = Some(crate::protocol::Gen5::new(key));
         }
         self.stream.flush()
     }
 
-    /// Send logical messages (each `GCHAR id + payload + \n`) in one
-    /// zlib frame, applying the gen-3 insertion when the login set it up.
+    /// Send logical messages in one frame.
+    ///
+    /// Gen-3: zlib + insertion. Gen-5: ctype + XOR + compress (bz2 if ≥ 0x1000).
     pub fn send_messages(&mut self, msgs: &[Vec<u8>]) -> io::Result<()> {
         let mut body = Vec::new();
         for m in msgs {
@@ -76,8 +81,20 @@ impl Connection {
                 None => body.extend_from_slice(m),
             }
         }
-        let frame = write_zlib_frame(&body)?;
-        self.send_raw(&frame)?;
+        if let Some(g5) = self.gen5.as_mut() {
+            let comp = crate::protocol::choose_comp(body.len());
+            let compressed = match comp {
+                crate::protocol::Gen5Comp::Bz2 => crate::protocol::bz2_compress(&body)?,
+                crate::protocol::Gen5Comp::Zlib => crate::protocol::zlib_compress(&body)?,
+                crate::protocol::Gen5Comp::None => body.clone(),
+            };
+            let encoded = g5.encode(compressed, comp);
+            let frame = crate::protocol::write_frame(comp, &encoded);
+            self.send_raw(&frame)?;
+        } else {
+            let frame = write_zlib_frame(&body)?;
+            self.send_raw(&frame)?;
+        }
         self.stream.flush()
     }
 
