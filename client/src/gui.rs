@@ -151,6 +151,7 @@ impl eframe::App for Launcher {
                 s.save();
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            if ui.button("Connect to listserver").clicked() {
                 self.connect_list();
             }
             ui.label(&self.status);
