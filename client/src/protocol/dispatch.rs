@@ -254,6 +254,9 @@ pub struct SessionState {
     pub weapons: Vec<Weapon>,
     /// Built-in weapons from `PLO_DEFAULTWEAPON` (43), by id.
     pub default_weapons: Vec<u8>,
+    /// Tiles of the current level from `PLO_BOARDPACKET` (101): 64×64
+    /// tile ids, row by row.
+    pub board: Option<Vec<u16>>,
     /// Server world time from `PLO_NEWWORLDTIME` (42).
     pub world_time: Option<u32>,
     pub unhandled: HashMap<u8, usize>,
@@ -429,6 +432,18 @@ impl SessionState {
                 // also uses it for "already up to date".
                 let name = String::from_utf8_lossy(&msg.payload);
                 self.file_requests.push(format!("FAIL:{name}"));
+            }
+            101 => {
+                // PLO_BOARDPACKET: 64×64 little-endian u16 tile ids,
+                // always behind PLO_RAWDATA.
+                if msg.payload.len() >= 8192 {
+                    self.board = Some(
+                        msg.payload[..8192]
+                            .chunks_exact(2)
+                            .map(|p| u16::from_le_bytes([p[0], p[1]]) & 0x0FFF)
+                            .collect(),
+                    );
+                }
             }
             28 => {
                 // PLO_FLAGSET: rest = `name` or `name=value`.
@@ -807,6 +822,29 @@ mod tests {
             state.disconnect_message.as_deref(),
             Some("Your client version is not allowed.\nAllowed: 2.22")
         );
+    }
+
+    #[test]
+    fn board_packet_behind_rawdata() {
+        let n = 1 + 8192 + 1;
+        let mut body = vec![
+            100 + 0x20,
+            ((n >> 14) & 0x7F) as u8 + 0x20,
+            ((n >> 7) & 0x7F) as u8 + 0x20,
+            (n & 0x7F) as u8 + 0x20,
+            b'\n',
+            101 + 0x20,
+        ];
+        for i in 0..4096u16 {
+            body.extend_from_slice(&(i % 512).to_le_bytes());
+        }
+        body.push(b'\n');
+        let mut state = SessionState::default();
+        state.apply_body(&body);
+        let board = state.board.expect("board");
+        assert_eq!(board.len(), 4096);
+        assert_eq!((board[0], board[1], board[600]), (0, 1, 88));
+        assert!(state.unhandled.is_empty());
     }
 
     #[test]

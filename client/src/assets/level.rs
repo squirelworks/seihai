@@ -6,6 +6,12 @@ use std::path::Path;
 /// A single tile (2-character code, e.g. "Id").
 pub type Tile = [u8; 2];
 
+/// Encode a 12-bit tile id (0–4095) as its 2-char base64 code.
+pub fn tile_code(id: u16) -> Tile {
+    const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    [B64[((id >> 6) & 0x3F) as usize], B64[(id & 0x3F) as usize]]
+}
+
 /// Decode a 2-char base64 tile code into a 12-bit tile id (0–4095).
 pub fn tile_id(tile: Tile) -> u16 {
     fn val(c: u8) -> u16 {
@@ -224,6 +230,32 @@ pub struct Level {
 }
 
 impl Level {
+    /// Build a level from a 64×64 board of tile ids, row by row, as the
+    /// server sends it in `PLO_BOARDPACKET`. Links, signs and chests
+    /// arrive in their own packets and start empty here.
+    pub fn from_board(tiles: &[u16]) -> Self {
+        let boards = tiles
+            .chunks(64)
+            .take(64)
+            .enumerate()
+            .map(|(y, row)| BoardRun {
+                x: 0,
+                y: y as i32,
+                width: row.len() as i32,
+                layer: 0,
+                tiles: row.iter().map(|&t| tile_code(t)).collect(),
+            })
+            .collect();
+        Level {
+            boards,
+            npcs: Vec::new(),
+            links: Vec::new(),
+            signs: Vec::new(),
+            baddies: Vec::new(),
+            chests: Vec::new(),
+        }
+    }
+
     /// Load a .nw or .graal file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let path = path.as_ref();
@@ -321,7 +353,7 @@ impl Level {
                     if run_tiles.is_empty() {
                         run_start = x;
                     }
-                    run_tiles.push([((t >> 6) & 0x3F) as u8, (t & 0x3F) as u8]);
+                    run_tiles.push(tile_code(t));
                 }
                 if (t == 0 || x == 63) && !run_tiles.is_empty() {
                     boards.push(BoardRun {
@@ -703,6 +735,16 @@ pub fn decode_sign_record(line: &[u8]) -> Option<(i32, i32, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn board_ids_round_trip() {
+        let tiles: Vec<u16> = (0..4096).collect();
+        let lvl = Level::from_board(&tiles);
+        assert_eq!(tile_code(3 * 64 + 29), *b"Dd");
+        for (x, y) in [(0, 0), (63, 0), (5, 9), (63, 63)] {
+            assert_eq!(lvl.tile_id_at(x, y), Some((y * 64 + x) as u16));
+        }
+    }
 
     #[test]
     fn parse_minimal() {

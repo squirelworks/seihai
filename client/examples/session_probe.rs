@@ -65,6 +65,7 @@ fn main() {
     println!("message ids {ids:?}");
     println!("PLO_PLAYERPROPS prop ids {prop_ids:?}");
     println!("level_name {:?}", state.level_name);
+    println!("server board {}", if state.board.is_some() { "received" } else { "none" });
     println!(
         "board_lines {} links {} signs {} chests {} npcs {} baddies {} items {}",
         state.board_lines.len(),
