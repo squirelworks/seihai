@@ -14,6 +14,7 @@ pub struct Settings {
     pub version: Option<String>,
     pub last_server: Option<String>,
     pub listserver: Option<String>,
+    pub offline: Option<bool>,
 }
 
 impl Settings {
@@ -35,6 +36,7 @@ impl Settings {
                     "version" => s.version = Some(v),
                     "last_server" => s.last_server = Some(v),
                     "listserver" => s.listserver = Some(v),
+                    "offline" => s.offline = Some(v == "1"),
                     _ => {}
                 }
             }
@@ -65,6 +67,9 @@ impl Settings {
         }
         if let Some(l) = &self.listserver {
             out.push_str(&format!("listserver={l}\n"));
+        }
+        if self.offline == Some(true) {
+            out.push_str("offline=1\n");
         }
         let _ = fs::write(&path, out);
     }

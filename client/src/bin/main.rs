@@ -125,6 +125,15 @@ fn main() {
                 None => seihai::gui::run(),
             };
             let Some(addr) = pick else {
+                // Offline chosen, or the window was closed.
+                let s = Settings::load();
+                if s.offline == Some(true) {
+                    online = None;
+                    if let Some(a) = s.assets {
+                        assets = Some(a);
+                    }
+                    break;
+                }
                 return;
             };
             online = Some(addr);
@@ -560,6 +569,10 @@ fn main() {
             }
             if window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No) {
                 show_players = !show_players;
+                eprintln!("F4: level editor (not yet)");
+            }
+            if window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No) {
+                eprintln!("F5: level picker (not yet)");
             }
         }
         if window.is_key_pressed(minifb::Key::PageUp, minifb::KeyRepeat::Yes) {

@@ -312,9 +312,10 @@ fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32)
 /// by [`render_view`] with the same size.
 pub fn player_box_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
     let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
+    // Shift down 12 px so the feet sit on the tile the collision tests.
     (
         (session.player_x * TILE_PX as f32) as i32 - cam_x,
-        (session.player_y * TILE_PX as f32) as i32 - cam_y,
+        (session.player_y * TILE_PX as f32) as i32 - cam_y + 12,
     )
 }
 

@@ -100,21 +100,19 @@ fn fit(text: &str, max_px: i32) -> String {
     }
 }
 
-/// Draw the chat window at the bottom: the last [`CHAT_LINES`] lines
-/// before `scroll` (0 = newest), then the input line when it is open.
+/// Draw the chat window at the bottom. Always shows a bar.
+///
+/// The last [`CHAT_LINES`] lines appear above a permanent input line.
 pub fn draw_chat(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &Input) {
     let w = fb.width as i32;
     let line_h = CELL_H + 1;
-    let input_h = if input.is_open() { line_h + 2 } else { 0 };
+    let input_h = line_h + 4;
     let end = log.len().saturating_sub(scroll);
     let start = end.saturating_sub(CHAT_LINES);
     let shown = &log[start..end];
     let h = shown.len() as i32 * line_h + input_h;
-    if h == 0 {
-        return;
-    }
     let top = fb.height as i32 - h - 2;
-    fb.shade_rect(0, top - 2, w, h + 4, 110);
+    fb.shade_rect(0, top - 2, w, h + 4, 140);
     for (i, l) in shown.iter().enumerate() {
         let text = match l.kind {
             ChatKind::Say => format!("{}: {}", l.from, l.text),
@@ -128,20 +126,21 @@ pub fn draw_chat(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &
         let more = format!("^{scroll}");
         fb.draw_text(w - 4 - text_width(&more), top, &more, [0xA0, 0xA0, 0xA0]);
     }
-    if let Some(mode) = &input.mode {
+    let y = top + shown.len() as i32 * line_h + 1;
+    fb.fill_rect(0, y - 1, w, 1, [0x60, 0x60, 0x60]);
+    let line = if let Some(mode) = &input.mode {
         let prompt = match mode {
             InputMode::Chat => String::from("> "),
             InputMode::Pm { name, .. } => format!("PM {name}> "),
         };
-        let y = top + shown.len() as i32 * line_h + 1;
-        fb.fill_rect(0, y - 1, w, 1, [0x60, 0x60, 0x60]);
-        let line = format!("{prompt}{}_", input.text);
-        // Keep the end of a long line in view.
-        let max = ((w - 8) / CELL_W) as usize;
-        let n = line.chars().count();
-        let line: String = line.chars().skip(n.saturating_sub(max)).collect();
-        fb.draw_text(4, y + 1, &line, [0xFF, 0xFF, 0xFF]);
-    }
+        format!("{prompt}{}_", input.text)
+    } else {
+        String::from("> ")
+    };
+    let max = ((w - 8) / CELL_W) as usize;
+    let n = line.chars().count();
+    let line: String = line.chars().skip(n.saturating_sub(max)).collect();
+    fb.draw_text(4, y + 1, &line, [0xFF, 0xFF, 0xFF]);
 }
 
 /// Screen position of a level point, given the camera origin in pixels.

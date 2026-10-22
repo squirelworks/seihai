@@ -144,7 +144,13 @@ impl eframe::App for Launcher {
                     });
             }
             ui.separator();
-            if ui.button("Connect to listserver").clicked() {
+            if ui.button("Play offline").clicked() {
+                let mut s = Settings::load();
+                s.last_server = None;
+                s.offline = Some(true);
+                s.save();
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
                 self.connect_list();
             }
             ui.label(&self.status);
