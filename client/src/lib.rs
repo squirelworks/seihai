@@ -8,6 +8,7 @@ pub mod protocol;
 pub mod render;
 pub mod scripting;
 pub mod settings;
+pub mod ui;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

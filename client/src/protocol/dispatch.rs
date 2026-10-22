@@ -125,7 +125,33 @@ pub struct OtherPlayer {
     pub y: f32,
     pub dir: u8,
     pub nick: Option<String>,
+    /// Chat bubble text (CURCHAT, prop 12). Empty clears it.
+    pub chat: Option<String>,
 }
+
+/// Where a chat line came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatKind {
+    /// A chat bubble in the level (CURCHAT).
+    Say,
+    /// `PLO_TOALL`.
+    Toall,
+    /// `PLO_PRIVATEMESSAGE`.
+    Private,
+    /// `PLO_RC_ADMINMESSAGE`, or a line from Seihai itself.
+    Admin,
+}
+
+/// One line in the chat history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatLine {
+    pub kind: ChatKind,
+    pub from: String,
+    pub text: String,
+}
+
+/// Lines kept in the chat history.
+pub const CHAT_HISTORY: usize = 200;
 
 /// Minimal session state built from the level-entry packets.
 #[derive(Debug, Default)]
@@ -159,10 +185,19 @@ pub struct SessionState {
     /// `PLO_FILE` carries a 5-byte modtime for 2.1+ clients. 2.05 and
     /// older get the name and data only. Set this from the version.
     pub file_has_modtime: bool,
+    /// Our own nickname (NICKNAME, prop 0, in `PLO_PLAYERPROPS`).
+    pub nickname: Option<String>,
     /// Read prop 10 as the pre-2.1 bow slot (1.33–1.39 logins).
     pub bow_prop10: bool,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
     pub disconnect_message: Option<String>,
+    /// Chat history, oldest first, at most [`CHAT_HISTORY`] lines.
+    pub chat_log: Vec<ChatLine>,
+    /// Chests the server reports as opened, by tile position. The game
+    /// loop moves them into the session.
+    pub opened_chests: Vec<(i32, i32)>,
+    /// Server messages received, for the debug overlay.
+    pub messages_seen: usize,
     pub unhandled: HashMap<u8, usize>,
     splitter: Splitter,
 }
@@ -170,6 +205,7 @@ pub struct SessionState {
 impl SessionState {
     /// Apply one message to the session.
     pub fn apply(&mut self, msg: &Message) {
+        self.messages_seen += 1;
         match msg.id {
             0 => {
                 // PLO_LEVELBOARD — rest is a board line
@@ -184,9 +220,15 @@ impl SessionState {
                 }
             }
             4 => {
-                // PLO_LEVELCHEST
+                // PLO_LEVELCHEST: c opened, c x, c y [, c item, c sign].
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.chests.push(s);
+                }
+                if let [o, x, y, ..] = msg.payload[..] {
+                    if o.wrapping_sub(0x20) == 1 {
+                        let pos = (x.wrapping_sub(0x20) as i32, y.wrapping_sub(0x20) as i32);
+                        self.opened_chests.push(pos);
+                    }
                 }
             }
             5 => {
@@ -210,12 +252,8 @@ impl SessionState {
             8 => {
                 // PLO_OTHERPLPROPS — parse position and store.
                 self.other_props.push((msg.id, msg.payload.clone()));
-                if let Some(other) = parse_other_player(&msg.payload) {
-                    if let Some(existing) = self.others.iter_mut().find(|o| o.id == other.id) {
-                        *existing = other;
-                    } else {
-                        self.others.push(other);
-                    }
+                if let Some(u) = parse_other_player(&msg.payload, self.bow_prop10) {
+                    self.apply_other(u);
                 }
             }
             9 => {
@@ -256,10 +294,43 @@ impl SessionState {
                 }
             }
             56 => {
-                // PLO_DELPLAYER — remove by id (first byte).
-                if let Some(&id) = msg.payload.first() {
-                    self.others.retain(|o| o.id != id as u16);
+                // PLO_DELPLAYER: GSHORT id.
+                if let Some(id) = read_gshort(&msg.payload) {
+                    self.others.retain(|o| o.id != id);
                 }
+            }
+            13 => {
+                // PLO_TOALL: GSHORT from, GSTRING message.
+                if let Some(from) = read_gshort(&msg.payload) {
+                    // GSTRING; fall back to the rest of the line if the
+                    // length runs past it.
+                    let rest = msg.payload.get(2..).unwrap_or(&[]);
+                    let text = match rest.split_first() {
+                        Some((&n, t)) => t.get(..n.wrapping_sub(0x20) as usize).unwrap_or(t),
+                        None => rest,
+                    };
+                    let who = self.name_of(from);
+                    self.push_chat(ChatKind::Toall, who, latin1(text));
+                }
+            }
+            37 => {
+                // PLO_PRIVATEMESSAGE: GSHORT from, rest = "type","message".
+                if let Some(from) = read_gshort(&msg.payload) {
+                    let rest = latin1(msg.payload.get(2..).unwrap_or(&[]));
+                    let fields = split_quoted(&rest);
+                    let text = fields.last().cloned().unwrap_or_default();
+                    let who = self.name_of(from);
+                    self.push_chat(ChatKind::Private, who, text);
+                }
+            }
+            35 => {
+                // PLO_RC_ADMINMESSAGE: "<from>:\xa7<text>".
+                let rest = latin1(&msg.payload);
+                let (who, text) = match rest.split_once('\u{a7}') {
+                    Some((w, t)) => (w.trim_end_matches(':').to_string(), t.to_string()),
+                    None => ("Server".to_string(), rest),
+                };
+                self.push_chat(ChatKind::Admin, who, text);
             }
             16 => {
                 // PLO_DISCMESSAGE: rest = text, `\r` = line break.
@@ -322,6 +393,65 @@ impl SessionState {
         }
     }
 
+    /// Add a line to the chat history.
+    pub fn push_chat(&mut self, kind: ChatKind, from: String, text: String) {
+        self.chat_log.push(ChatLine { kind, from, text });
+        if self.chat_log.len() > CHAT_HISTORY {
+            let extra = self.chat_log.len() - CHAT_HISTORY;
+            self.chat_log.drain(..extra);
+        }
+    }
+
+    /// Nickname for a player id, or the id itself.
+    fn name_of(&self, id: u16) -> String {
+        self.others
+            .iter()
+            .find(|o| o.id == id)
+            .and_then(|o| o.nick.clone())
+            .unwrap_or_else(|| format!("#{id}"))
+    }
+
+    fn apply_other(&mut self, u: OtherUpdate) {
+        if u.left {
+            self.others.retain(|o| o.id != u.id);
+            return;
+        }
+        let i = match self.others.iter().position(|o| o.id == u.id) {
+            Some(i) => i,
+            None => {
+                self.others.push(OtherPlayer {
+                    id: u.id,
+                    x: 0.0,
+                    y: 0.0,
+                    dir: 2,
+                    nick: None,
+                    chat: None,
+                });
+                self.others.len() - 1
+            }
+        };
+        let o = &mut self.others[i];
+        if let Some(v) = u.x {
+            o.x = v;
+        }
+        if let Some(v) = u.y {
+            o.y = v;
+        }
+        if let Some(v) = u.dir {
+            o.dir = v;
+        }
+        if u.nick.is_some() {
+            o.nick = u.nick;
+        }
+        if let Some(text) = u.chat {
+            o.chat = Some(text.clone());
+            if !text.is_empty() {
+                let who = self.name_of(u.id);
+                self.push_chat(ChatKind::Say, who, text);
+            }
+        }
+    }
+
     /// Pick position and direction out of a `PLO_PLAYERPROPS` stream.
     ///
     /// X/Y are props 15/16 (GCHAR, half-tiles); direction is SPRITE
@@ -332,6 +462,7 @@ impl SessionState {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
                 (17, Some(v)) => self.player_dir = Some(v % 4),
+                (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
                 _ => {}
             }
         }
@@ -354,52 +485,76 @@ impl SessionState {
     }
 }
 
-/// Parse one `PLO_OTHERPLPROPS` payload into an `OtherPlayer`.
-///
-/// The first two bytes are the player id (GCHAR pair or raw). The rest
-/// is a prop stream like `PLO_PLAYERPROPS`.
-fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
-    if payload.len() < 4 {
-        return None;
-    }
-    let id = payload[0] as u16;
-    let mut x = 0.0f32;
-    let mut y = 0.0f32;
-    let mut dir = 2u8;
-    let mut nick = None;
-    for prop in parse_player_props_with(&payload[2..], false) {
+/// Read a GSHORT: two GCHARs, high 7 bits first.
+pub fn read_gshort(b: &[u8]) -> Option<u16> {
+    let (hi, lo) = (*b.first()?, *b.get(1)?);
+    Some(((hi.wrapping_sub(0x20) as u16 & 0x7F) << 7) | (lo.wrapping_sub(0x20) as u16 & 0x7F))
+}
+
+/// The props one `PLO_OTHERPLPROPS` carried. The server sends only the
+/// props that changed, so anything absent keeps its old value.
+#[derive(Debug, Default)]
+struct OtherUpdate {
+    id: u16,
+    x: Option<f32>,
+    y: Option<f32>,
+    dir: Option<u8>,
+    nick: Option<String>,
+    chat: Option<String>,
+    /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
+    left: bool,
+}
+
+/// Parse one `PLO_OTHERPLPROPS` payload: `GSHORT id` + prop stream.
+fn parse_other_player(payload: &[u8], bow_prop10: bool) -> Option<OtherUpdate> {
+    let id = read_gshort(payload)?;
+    let mut u = OtherUpdate { id, ..Default::default() };
+    let text = |raw: &[u8]| latin1(raw.get(1..).unwrap_or(&[]));
+    for prop in parse_player_props_with(&payload[2..], bow_prop10) {
         match prop.id {
-            0 => {
-                // GSTRING nickname.
-                if prop.raw.len() > 1 {
-                    nick = String::from_utf8(prop.raw[1..].to_vec()).ok();
-                }
-            }
-            15 => {
-                if let Some(v) = prop.gchar() {
-                    x = v as f32 / 2.0;
-                }
-            }
-            16 => {
-                if let Some(v) = prop.gchar() {
-                    y = v as f32 / 2.0;
-                }
-            }
-            17 => {
-                if let Some(v) = prop.gchar() {
-                    dir = v % 4;
-                }
-            }
+            0 => u.nick = Some(text(&prop.raw)),
+            12 => u.chat = Some(text(&prop.raw)),
+            15 => u.x = prop.gchar().map(|v| v as f32 / 2.0),
+            16 => u.y = prop.gchar().map(|v| v as f32 / 2.0),
+            17 => u.dir = prop.gchar().map(|v| v % 4),
+            50 => u.left |= prop.gchar() == Some(0),
+            51 => u.left = true,
+            // X2/Y2: precise position, GSHORT.
+            78 => u.x = read_gshort(&prop.raw).map(super::props::decode_pos_precise),
+            79 => u.y = read_gshort(&prop.raw).map(super::props::decode_pos_precise),
             _ => {}
         }
     }
-    Some(OtherPlayer {
-        id,
-        x,
-        y,
-        dir,
-        nick,
-    })
+    Some(u)
+}
+
+/// Graal text is single-byte (Windows code page); map each byte to the
+/// same code point, which is exact for Latin-1.
+pub fn latin1(b: &[u8]) -> String {
+    b.iter().map(|&c| c as char).collect()
+}
+
+/// Split a `"a","b",c` list, as GServer's gtokenize writes it.
+fn split_quoted(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' if quoted && chars.peek() == Some(&'"') => {
+                cur.push('"');
+                chars.next();
+            }
+            '"' => quoted = !quoted,
+            ',' if !quoted => out.push(std::mem::take(&mut cur)),
+            _ => cur.push(c),
+        }
+    }
+    if !cur.is_empty() || s.ends_with(',') {
+        out.push(cur);
+    }
+    out
 }
 
 /// Read a GINT5: five GCHARs, high 7 bits first.
@@ -560,6 +715,67 @@ mod tests {
         assert_eq!(
             state.disconnect_message.as_deref(),
             Some("Your client version is not allowed.\nAllowed: 2.22")
+        );
+    }
+
+    fn gs(v: u16) -> [u8; 2] {
+        [((v >> 7) as u8) + 0x20, (v & 0x7F) as u8 + 0x20]
+    }
+
+    /// `PLO_OTHERPLPROPS` for player `id` with a prop stream.
+    fn other(id: u16, props: &[u8]) -> Vec<u8> {
+        [&[8 + 0x20][..], &gs(id), props, b"\n"].concat()
+    }
+
+    #[test]
+    fn other_player_updates_merge() {
+        let mut st = SessionState::default();
+        // Nick "bob" (prop 0), x 30 (15 = 60), y 12 (16 = 24), dir 3.
+        let first = other(200, &[0x20, 0x23, b'b', b'o', b'b', 15 + 0x20, 60 + 0x20, 16 + 0x20, 24 + 0x20, 17 + 0x20, 3 + 0x20]);
+        st.apply_body(&first);
+        // Later: only the chat bubble (prop 12).
+        st.apply_body(&other(200, &[12 + 0x20, 0x22, b'h', b'i']));
+        let o = &st.others[0];
+        assert_eq!((o.id, o.x, o.y, o.dir), (200, 30.0, 12.0, 3));
+        assert_eq!(o.nick.as_deref(), Some("bob"));
+        assert_eq!(o.chat.as_deref(), Some("hi"));
+        assert_eq!(st.chat_log.last().map(|l| (l.from.as_str(), l.text.as_str())), Some(("bob", "hi")));
+
+        // PCONNECTED (51) with no value: gone.
+        st.apply_body(&other(200, &[51 + 0x20]));
+        assert!(st.others.is_empty());
+    }
+
+    #[test]
+    fn own_nickname_from_player_props() {
+        let mut st = SessionState::default();
+        st.apply_body(b") 'default\n");
+        assert_eq!(st.nickname.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn delplayer_reads_gshort() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(300, &[15 + 0x20, 0x30]));
+        st.apply_body(&[&[56 + 0x20][..], &gs(300), b"\n"].concat());
+        assert!(st.others.is_empty());
+    }
+
+    #[test]
+    fn toall_pm_and_admin_lines() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(5, &[0x20, 0x21, b'z']));
+        st.apply_body(&[&[13 + 0x20][..], &gs(5), b"%hello\n"].concat());
+        st.apply_body(&[&[37 + 0x20][..], &gs(5), b"\"\",\"Private message:\",\"psst, \"\"x\"\"\"\n"].concat());
+        st.apply_body(b"CServer message:\xa7Shutting down\n");
+        let got: Vec<_> = st.chat_log.iter().map(|l| (l.kind, l.from.as_str(), l.text.as_str())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (ChatKind::Toall, "z", "hello"),
+                (ChatKind::Private, "z", "psst, \"x\""),
+                (ChatKind::Admin, "Server message", "Shutting down"),
+            ]
         );
     }
 
