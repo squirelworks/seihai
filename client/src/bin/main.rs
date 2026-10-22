@@ -101,26 +101,107 @@ fn main() {
     // Use the version saved by the GUI if no CLI --version was given.
     if version == ClientVersion::V205 {
         if let Some(v) = &settings.version {
-            version = match v.as_str() {
-                "2.22" => ClientVersion::V222,
-                "2.31" => ClientVersion::V231,
-                "2.17" => ClientVersion::V217,
-                "1.39" => ClientVersion::V139,
-                _ => ClientVersion::V205,
-            };
+            version = version_from_label(v).unwrap_or(ClientVersion::V205);
         }
     }
     // Do not auto-fill online from settings. The GUI is the waiting area.
     // Settings only pre-fill the form.
 
-    // GUI when no CLI mode is given.
-    if !cli_mode {
-        if let Some(addr) = seihai::gui::run() {
+    let mut session = OfflineSession::new();
+    let mut net_state = SessionState::default();
+    let mut conn: Option<Connection> = None;
+    let mut frames = None;
+    let mut loaded_level: Option<String> = None;
+
+    // GUI when no CLI mode is given. A failed connect or login goes back
+    // to the GUI with the error, and a later Join tries again.
+    let mut gui_error: Option<String> = None;
+    loop {
+        if !cli_mode {
+            let pick = match gui_error.take() {
+                Some(e) => seihai::gui::run_with_error(e),
+                None => seihai::gui::run(),
+            };
+            let Some(addr) = pick else {
+                return;
+            };
             online = Some(addr);
-            // Fall through to the game connection.
-        } else {
-            return;
+            // The GUI saved its form; use it for this connection.
+            let s = Settings::load();
+            if s.assets.is_some() {
+                assets = s.assets;
+            }
+            if let Some(a) = s.account {
+                account = a;
+            }
+            if let Some(p) = s.password {
+                password = p;
+            }
+            if let Some(v) = s.version.as_deref().and_then(version_from_label) {
+                version = v;
+            }
         }
+        net_state.file_has_modtime = version.file_has_modtime();
+
+        if let Some(addr) = &online {
+            // If this looks like a listserver, fetch the list and pick a gserver.
+            if addr.contains("14921") || addr.contains("14922") || addr.contains("listserver") {
+                match Connection::fetch_server_list(addr, version, &account, &password) {
+                    Ok(reply) => {
+                        if let Some(err) = &reply.error {
+                            eprintln!("listserver error: {err}");
+                        }
+                        if !reply.servers.is_empty() {
+                            println!("Servers:");
+                            for (i, e) in reply.servers.iter().enumerate() {
+                                println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
+                            }
+                            println!("pick a number:");
+                            let mut pick = String::new();
+                            let _ = std::io::stdin().read_line(&mut pick);
+                            if let Ok(n) = pick.trim().parse::<usize>() {
+                                if let Some(e) = reply.servers.get(n) {
+                                    online = Some(format!("{}:{}", e.host, e.port));
+                                    settings.last_server = online.clone();
+                                    settings.save();
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("listserver failed: {e}"),
+                }
+            }
+        }
+
+        if let Some(addr) = &online {
+            match Connection::connect(addr) {
+                Ok(mut c) => {
+                    let key = seihai::net::random_key();
+                    if let Err(e) = c.login_versioned(version, key, &account, &password) {
+                        eprintln!("login failed: {e}");
+                        if !cli_mode {
+                            gui_error = Some(format!("login failed: {e}"));
+                            continue;
+                        }
+                    } else {
+                        eprintln!("logged in to {addr} as {account}");
+                        match c.spawn_reader() {
+                            Ok(rx) => frames = Some(rx),
+                            Err(e) => eprintln!("reader failed: {e}"),
+                        }
+                        conn = Some(c);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("connect failed: {e}");
+                    if !cli_mode {
+                        gui_error = Some(format!("connect failed: {e}"));
+                        continue;
+                    }
+                }
+            }
+        }
+        break;
     }
 
     let root = match assets {
@@ -149,72 +230,6 @@ fn main() {
             return;
         }
     };
-
-    let mut session = OfflineSession::new();
-    let mut net_state = SessionState::default();
-    net_state.file_has_modtime = version.file_has_modtime();
-    let mut conn: Option<Connection> = None;
-    let mut frames = None;
-    let mut loaded_level: Option<String> = None;
-
-    if let Some(addr) = &online {
-        // If this looks like a listserver, fetch the list and pick a gserver.
-        if addr.contains("14921") || addr.contains("14922") || addr.contains("listserver") {
-            match Connection::fetch_server_list(addr, version, &account, &password) {
-                Ok(reply) => {
-                    if let Some(err) = &reply.error {
-                        eprintln!("listserver error: {err}");
-                    }
-                    if !reply.servers.is_empty() {
-                        println!("Servers:");
-                        for (i, e) in reply.servers.iter().enumerate() {
-                            println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
-                        }
-                        println!("pick a number:");
-                        let mut pick = String::new();
-                        let _ = std::io::stdin().read_line(&mut pick);
-                        if let Ok(n) = pick.trim().parse::<usize>() {
-                            if let Some(e) = reply.servers.get(n) {
-                                online = Some(format!("{}:{}", e.host, e.port));
-                                settings.last_server = online.clone();
-                                settings.save();
-                            }
-                        }
-                    }
-                }
-                Err(e) => eprintln!("listserver failed: {e}"),
-            }
-        }
-    }
-
-    if let Some(addr) = &online {
-        match Connection::connect(addr) {
-            Ok(mut c) => {
-                let key = seihai::net::random_key();
-                if let Err(e) = c.login_versioned(version, key, &account, &password) {
-                    eprintln!("login failed: {e}");
-                    if !cli_mode {
-                        let _ = seihai::gui::run_with_error(format!("login failed: {e}"));
-                        return;
-                    }
-                } else {
-                    eprintln!("logged in to {addr} as {account}");
-                    match c.spawn_reader() {
-                        Ok(rx) => frames = Some(rx),
-                        Err(e) => eprintln!("reader failed: {e}"),
-                    }
-                    conn = Some(c);
-                }
-            }
-            Err(e) => {
-                eprintln!("connect failed: {e}");
-                if !cli_mode {
-                    let _ = seihai::gui::run_with_error(format!("connect failed: {e}"));
-                    return;
-                }
-            }
-        }
-    }
 
     if let Some(name) = level_name {
         let path = root.level(&name);
@@ -444,4 +459,12 @@ fn main() {
         }
         let _ = window.update_with_buffer(&buffer, fb.width as usize, fb.height as usize);
     }
+}
+
+/// Version for a GUI label such as "2.22".
+fn version_from_label(label: &str) -> Option<ClientVersion> {
+    ClientVersion::all_versions()
+        .iter()
+        .copied()
+        .find(|v| v.label() == label)
 }
