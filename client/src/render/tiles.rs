@@ -184,22 +184,54 @@ impl Framebuffer {
         }
     }
 
-    /// Draw a short nickname tag under a player box.
-    ///
-    /// Uses a simple 4×6 block font for ASCII. `dx`/`dy` is the
-    /// top-left of the 48×48 player box.
-    pub fn draw_nick(&mut self, nick: &str, dx: i32, dy: i32) {
-        let mut x = dx + 8;
-        let y = dy + 48;
-        for ch in nick.chars().take(12) {
-            let c = ch as u8;
-            if c < 32 || c > 126 {
-                continue;
+    /// Darken a rectangle to `keep`/256 of its brightness, for text
+    /// backgrounds that leave the level visible.
+    pub fn shade_rect(&mut self, x: i32, y: i32, w: i32, h: i32, keep: u16) {
+        let x0 = x.max(0);
+        let y0 = y.max(0);
+        let x1 = (x + w).min(self.width as i32);
+        let y1 = (y + h).min(self.height as i32);
+        for py in y0..y1 {
+            for px in x0..x1 {
+                let i = (py as usize * self.width as usize + px as usize) * 3;
+                for c in &mut self.pixels[i..i + 3] {
+                    *c = ((*c as u16 * keep) >> 8) as u8;
+                }
             }
-            // 4×6 block: fill a small rect per character.
-            self.fill_rect(x, y, 4, 6, [0xFF, 0xFF, 0xFF]);
-            x += 5;
         }
+    }
+
+    /// Draw `text` with the 5×7 font, top-left at `(x, y)`.
+    pub fn draw_text(&mut self, x: i32, y: i32, text: &str, rgb: [u8; 3]) {
+        let mut cx = x;
+        for ch in text.chars() {
+            let g = super::font::glyph(ch);
+            for (row, bits) in g.iter().enumerate() {
+                for col in 0..5 {
+                    if bits >> (4 - col) & 1 != 0 {
+                        self.fill_rect(cx + col, y + row as i32, 1, 1, rgb);
+                    }
+                }
+            }
+            cx += super::font::CELL_W;
+        }
+    }
+
+    /// Draw `text` with a one-pixel dark outline, so it reads on any tile.
+    pub fn draw_text_outlined(&mut self, x: i32, y: i32, text: &str, rgb: [u8; 3]) {
+        for (ox, oy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            self.draw_text(x + ox, y + oy, text, [0, 0, 0]);
+        }
+        self.draw_text(x, y, text, rgb);
+    }
+
+    /// Draw a nickname tag centred under a player box.
+    ///
+    /// `dx`/`dy` is the top-left of the 48×48 player box.
+    pub fn draw_nick(&mut self, nick: &str, dx: i32, dy: i32) {
+        let nick: String = nick.chars().take(24).collect();
+        let x = dx + 24 - super::font::text_width(&nick) / 2;
+        self.draw_text_outlined(x, dy + 48, &nick, [0xFF, 0xFF, 0xFF]);
     }
 }
 
@@ -245,8 +277,14 @@ pub fn render_view(
         // Chest: brown box with a gold latch.
         let (cx, cy) = (chest.x * t - cam_x, chest.y * t - cam_y);
         fb.fill_rect(cx + 2, cy + 6, 28, 22, [0x80, 0x40, 0x10]);
-        fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
-        fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
+        if session.opened_chests.contains(&(chest.x, chest.y)) {
+            // Open: lid up, dark inside.
+            fb.fill_rect(cx + 2, cy, 28, 5, [0xA0, 0x50, 0x18]);
+            fb.fill_rect(cx + 5, cy + 9, 22, 8, [0x20, 0x10, 0x04]);
+        } else {
+            fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
+            fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
+        }
     }
     for sign in &level.signs {
         draw_marker(&mut fb, sign.x, sign.y, cam_x, cam_y, [0xFF, 0xFF, 0x40]);
