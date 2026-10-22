@@ -193,22 +193,20 @@ fn main() {
                     if c.login_versioned(version, key, &account, &password).is_ok() {
                         let mut state = SessionState::default();
                         if let Ok(body) = c.read_frame_into(&mut state) {
-                            if let Ok(text) = String::from_utf8(body) {
-                                let entries = parse_list_reply(&text);
-                                if !entries.is_empty() {
-                                    println!("Servers:");
-                                    for (i, e) in entries.iter().enumerate() {
-                                        println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
-                                    }
-                                    println!("pick a number:");
-                                    let mut pick = String::new();
-                                    let _ = std::io::stdin().read_line(&mut pick);
-                                    if let Ok(n) = pick.trim().parse::<usize>() {
-                                        if let Some(e) = entries.get(n) {
-                                            online = Some(format!("{}:{}", e.host, e.port));
-                                            settings.last_server = online.clone();
-                                            settings.save();
-                                        }
+                            let reply = parse_list_reply(&body);
+                            if !reply.servers.is_empty() {
+                                println!("Servers:");
+                                for (i, e) in reply.servers.iter().enumerate() {
+                                    println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
+                                }
+                                println!("pick a number:");
+                                let mut pick = String::new();
+                                let _ = std::io::stdin().read_line(&mut pick);
+                                if let Ok(n) = pick.trim().parse::<usize>() {
+                                    if let Some(e) = reply.servers.get(n) {
+                                        online = Some(format!("{}:{}", e.host, e.port));
+                                        settings.last_server = online.clone();
+                                        settings.save();
                                     }
                                 }
                             }
