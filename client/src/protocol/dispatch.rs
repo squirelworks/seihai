@@ -156,6 +156,12 @@ impl SessionState {
                     self.items.push(format!("DEL:{s}"));
                 }
             }
+            56 => {
+                // PLO_DELPLAYER — remove by id (first byte).
+                if let Some(&id) = msg.payload.first() {
+                    self.others.retain(|o| o.id != id as u16);
+                }
+            }
             _ => {
                 *self.unhandled.entry(msg.id).or_insert(0) += 1;
             }

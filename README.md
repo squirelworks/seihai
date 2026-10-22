@@ -1,39 +1,10 @@
-# Seihai
-
-Open Graal Reborn-compatible client (Rust).
-
-## Run (Windows / Linux / macOS)
-
-No system SDL2 is required. The window uses a software framebuffer.
+## Online
 
 ```bash
-cargo run -p seihai -- --assets /path/to/assets --level onlinestartlocal.nw
+cargo run -p seihai -- --assets /path/to/assets \
+  --online 127.0.0.1:14802 \
+  --account player --password secret \
+  --version 2.05
 ```
 
-The asset directory should contain:
-- `pics1.png` (2048×512 tile sheet)
-- `levels/bodies/body.png` and `levels/heads/head.png` (optional; falls back to a marker)
-- `tiledefs.txt` or `arrays.dat` (optional)
-- `levels/` with `.nw` files
-- `gani/` or `levels/ganis/` with `.gani` files (optional)
-
-Arrow keys move the player. Escape closes the window.
-
-## Build
-
-```bash
-cargo build --release -p seihai
-```
-
-The binary is at `target/release/seihai` (or `seihai.exe` on Windows).
-
-## Status
-
-- Offline level load, collision, and movement
-- Gen-3 and gen-5 codecs verified against lab captures
-- Version toggle (1.39–2.31)
-- Software tile renderer with player body/head sprites
-- Chest/sign/NPC markers and simple HUD bars
-- Cross-platform window (minifb)
-
-See `documentation/implementation.md` for the full slice.
+Connects to a gserver, logs in, and updates the view from the server. Other players are drawn if body/head sheets are present. Arrow keys send walk frames. Escape closes the window.

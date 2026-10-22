@@ -14,7 +14,8 @@ use seihai::net::Connection;
 use seihai::offline::OfflineSession;
 use seihai::protocol::{ClientVersion, EncryptionGen, SessionState};
 use seihai::render::{
-    draw_player_marker, draw_player_sprites, player_box_origin, render_view, Framebuffer,
+    draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
+    Framebuffer,
 };
 use std::env;
 use std::path::PathBuf;
@@ -162,8 +163,32 @@ fn main() {
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
-    let draw = |session: &OfflineSession| -> (Framebuffer, Vec<u32>) {
+    let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer]| -> (Framebuffer, Vec<u32>) {
         let mut fb = render_view(session, &sheet, sw, sh, view_w, view_h);
+        let (cam_x, cam_y) = (
+            ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
+            ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
+        );
+        // Other players first, so the local player draws on top.
+        if let (Some((bw, b)), Some((hw, h))) = (&body, &head) {
+            for other in others {
+                draw_other_player(
+                    &mut fb,
+                    b,
+                    *bw,
+                    4,
+                    h,
+                    *hw,
+                    4,
+                    sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)),
+                    other.dir,
+                    other.x,
+                    other.y,
+                    cam_x,
+                    cam_y,
+                );
+            }
+        }
         let (dx, dy) = player_box_origin(session, view_w, view_h);
         match (&body, &head) {
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
@@ -190,7 +215,7 @@ fn main() {
             .collect();
         (fb, buffer)
     };
-    let (fb, mut buffer) = draw(&session);
+    let (fb, mut buffer) = draw(&session, &[]);
 
     let mut window = match minifb::Window::new(
         "Seihai",
@@ -266,7 +291,7 @@ fn main() {
                         session.player_x, session.player_y, session.player_dir
                     );
                 }
-                buffer = draw(&session).1;
+                buffer = draw(&session, &net_state.others).1;
             }
         }
 
