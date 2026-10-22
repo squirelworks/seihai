@@ -31,6 +31,7 @@ fn main() {
     let mut password = String::new();
     let mut version = ClientVersion::V205;
     let mut i = 0;
+    let mut cli_mode = false;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -40,10 +41,12 @@ fn main() {
             "--level" | "-l" => {
                 i += 1;
                 level_name = args.get(i).cloned();
+                cli_mode = true;
             }
             "--online" | "-o" => {
                 i += 1;
                 online = args.get(i).cloned();
+                cli_mode = true;
             }
             "--account" => {
                 i += 1;
@@ -95,12 +98,11 @@ fn main() {
             password = p.clone();
         }
     }
-    if online.is_none() {
-        online = settings.listserver.clone();
-    }
+    // Do not auto-fill online from settings. The GUI is the waiting area.
+    // Settings only pre-fill the form.
 
-    // GUI when no mode is given.
-    if online.is_none() && level_name.is_none() {
+    // GUI when no CLI mode is given.
+    if !cli_mode {
         if let Err(e) = seihai::gui::run() {
             eprintln!("gui failed: {e}");
         }
