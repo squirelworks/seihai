@@ -155,53 +155,85 @@ pub fn render_view(
         Some(l) => l,
         None => return fb,
     };
-    let ox = session.player_x as i32 - (view_tiles_w as i32 / 2);
-    let oy = session.player_y as i32 - (view_tiles_h as i32 / 2);
+    let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
+    let t = TILE_PX as i32;
+    let (ox, oy) = (cam_x.div_euclid(t), cam_y.div_euclid(t));
+    let (sub_x, sub_y) = (cam_x.rem_euclid(t), cam_y.rem_euclid(t));
 
-    for ty in 0..view_tiles_h as i32 {
-        for tx in 0..view_tiles_w as i32 {
+    // One extra row and column cover the sub-tile scroll.
+    for ty in 0..=view_tiles_h as i32 {
+        for tx in 0..=view_tiles_w as i32 {
             let lx = ox + tx;
             let ly = oy + ty;
             if lx < 0 || ly < 0 || lx >= 64 || ly >= 64 {
                 continue;
             }
             if let Some(id) = tile_at(level, lx, ly) {
-                fb.blit_tile(
-                    sheet,
-                    sheet_w,
-                    sheet_h,
-                    id,
-                    tx * TILE_PX as i32,
-                    ty * TILE_PX as i32,
-                );
+                fb.blit_tile(sheet, sheet_w, sheet_h, id, tx * t - sub_x, ty * t - sub_y);
             }
         }
     }
 
     // Chests, signs, NPCs.
     for chest in &level.chests {
-        draw_marker(&mut fb, chest.x, chest.y, ox, oy, [0xC0, 0x80, 0x20]);
+        // A chest covers 2×2 tiles.
+        let (cx, cy) = (chest.x * t - cam_x, chest.y * t - cam_y);
+        fb.fill_rect(cx + 2, cy + 2, 28, 28, [0x80, 0x40, 0x10]);
+        fb.fill_rect(cx + 4, cy + 4, 24, 10, [0xC0, 0x30, 0x20]);
+        fb.fill_rect(cx + 13, cy + 12, 6, 6, [0xF0, 0xD0, 0x40]);
     }
     for sign in &level.signs {
-        draw_marker(&mut fb, sign.x, sign.y, ox, oy, [0xFF, 0xFF, 0x40]);
+        draw_marker(&mut fb, sign.x, sign.y, cam_x, cam_y, [0xFF, 0xFF, 0x40]);
     }
     for npc in &level.npcs {
         if npc.visible {
-            draw_marker(&mut fb, npc.x as i32, npc.y as i32, ox, oy, [0x40, 0xC0, 0x40]);
+            draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x40, 0xC0, 0x40]);
         }
     }
 
-    // Player: body + head if sheets are provided, else marker.
-    let px = (view_tiles_w as i32 / 2) * TILE_PX as i32;
-    let py = (view_tiles_h as i32 / 2) * TILE_PX as i32;
     fb
 }
 
-/// Draw the player body and head sprites for the given direction.
+/// Top-left pixel of the view in level pixels: the camera centres on
+/// the middle of the player's 48×48 box (player x/y + 1.5 tiles).
+fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
+    let t = TILE_PX as f32;
+    (
+        ((session.player_x + 1.5) * t - (view_tiles_w as f32 * t) / 2.0) as i32,
+        ((session.player_y + 1.5) * t - (view_tiles_h as f32 * t) / 2.0) as i32,
+    )
+}
+
+/// Pixel position of the player's 48×48 box (top-left) in a view made
+/// by [`render_view`] with the same size.
+pub fn player_box_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
+    let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
+    (
+        (session.player_x * TILE_PX as f32) as i32 - cam_x,
+        (session.player_y * TILE_PX as f32) as i32 - cam_y,
+    )
+}
+
+/// Fallback when no body/head sheets are loaded: a coloured square
+/// where the body would be.
+pub fn draw_player_marker(fb: &mut Framebuffer, in_water: bool, dx: i32, dy: i32) {
+    let color = if in_water {
+        [0x40, 0x80, 0xFF]
+    } else {
+        [0xFF, 0x40, 0x40]
+    };
+    fb.fill_rect(dx + 16, dy + 24, 16, 16, color);
+}
+
+/// Draw the standing player (idle.gani, frame 0) for direction `dir`.
 ///
-/// `body` and `head` are RGB or RGBA images. Direction: 0 south, 1 west,
-/// 2 east, 3 north. Body sprites are 32×32 at column `dir`, row 0.
-/// Head sprites are 32×32 at column 0, row `dir`.
+/// `body` and `head` are images with `*_bpp` bytes per pixel (4 keeps
+/// palette transparency). Direction is Graal order: 0 up, 1 left,
+/// 2 down, 3 right. Body frames are 32×32 at column `dir`, row 0 of
+/// `body.png`; head frames are 32×32 at row `dir` of the single-column
+/// head sheet. `(dx, dy)` is the top-left of the 48×48 player box.
+/// Offsets are the 2.05 `idle.gani` ones; `sprites` (if given) supplies
+/// the shadow at 0,0 24×12.
 pub fn draw_player_sprites(
     fb: &mut Framebuffer,
     body: &[u8],
@@ -210,24 +242,31 @@ pub fn draw_player_sprites(
     head: &[u8],
     head_w: u32,
     head_bpp: usize,
+    sprites: Option<(&[u8], u32, usize)>,
     dir: u8,
     dx: i32,
     dy: i32,
 ) {
-    let d = (dir as i32) % 4;
-    // Body: column d, row 0.
-    fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx - 8, dy - 16);
-    // Head: column 0, row d.
-    fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx - 8, dy - 32);
+    // (shadow, body, head) offsets per direction, from idle.gani.
+    const OFFSETS: [((i32, i32), (i32, i32), (i32, i32)); 4] = [
+        ((12, 34), (8, 16), (8, 2)),
+        ((12, 36), (12, 16), (12, 2)),
+        ((12, 34), (8, 16), (8, 2)),
+        ((12, 36), (4, 16), (4, 2)),
+    ];
+    let d = (dir % 4) as usize;
+    let (shadow, b, h) = OFFSETS[d];
+    if let Some((spr, spr_w, spr_bpp)) = sprites {
+        fb.blit_sprite(spr, spr_w, spr_bpp, 0, 0, 24, 12, dx + shadow.0, dy + shadow.1);
+    }
+    let d = d as i32;
+    fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx + b.0, dy + b.1);
+    fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1);
 }
 
-fn draw_marker(fb: &mut Framebuffer, x: i32, y: i32, ox: i32, oy: i32, color: [u8; 3]) {
-    let tx = x - ox;
-    let ty = y - oy;
-    if tx < 0 || ty < 0 {
-        return;
-    }
-    fb.fill_rect(tx * TILE_PX as i32 + 2, ty * TILE_PX as i32 + 2, 12, 12, color);
+fn draw_marker(fb: &mut Framebuffer, x: i32, y: i32, cam_x: i32, cam_y: i32, color: [u8; 3]) {
+    let t = TILE_PX as i32;
+    fb.fill_rect(x * t - cam_x + 2, y * t - cam_y + 2, 12, 12, color);
 }
 
 fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {

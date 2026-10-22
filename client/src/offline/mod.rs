@@ -8,11 +8,12 @@ use crate::assets::{GaniPlayer, Level, TileTypes};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::HashMap;
 
-/// Facing: 0 south, 1 west, 2 east, 3 north.
-pub const DIR_SOUTH: u8 = 0;
+/// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
+/// 2 down, 3 right.
+pub const DIR_NORTH: u8 = 0;
 pub const DIR_WEST: u8 = 1;
-pub const DIR_EAST: u8 = 2;
-pub const DIR_NORTH: u8 = 3;
+pub const DIR_SOUTH: u8 = 2;
+pub const DIR_EAST: u8 = 3;
 
 /// A locally simulated game session (no server).
 #[derive(Debug)]
@@ -301,7 +302,7 @@ impl OfflineSession {
         if dx == 0.0 && dy == 0.0 {
             return None;
         }
-        // Facing from dominant axis (Graal order: 0 south, 1 west, 2 east, 3 north).
+        // Facing from dominant axis.
         if dx.abs() > dy.abs() {
             self.player_dir = if dx > 0.0 { DIR_EAST } else { DIR_WEST };
         } else {

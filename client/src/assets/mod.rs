@@ -16,4 +16,4 @@ pub use level::{
     decode_sign_record, decode_sign_text, tile_id, tile_src_rect, Baddy, BoardRun, Chest, Level,
     Link, Npc, Sign, Tile, TileTypes,
 };
-pub use png::{read_png_rgb, write_png_indexed, write_png_rgb};
+pub use png::{read_png_rgb, read_png_rgba, write_png_indexed, write_png_rgb};

@@ -63,3 +63,21 @@ This was checked with a live `session_probe` run against the lab GServer, using 
 - **Ids seen:** 0 movement (8 bytes), 10 bomb add, 15 showimg, 20 item delete and 26 trigger action.
 - **Port:** 14897, 14898 and 14899 were all used, so the peer port is configurable (`fixedudpport`) rather than fixed.
 - **Id numbering:** ids 21, 23 and 24 are hit, level name and entered level, not position, props and board. The constants are renamed to match. None of the three appears in the captures.
+
+## 7. Sprites and HUD (d1c499c)
+This check uses the player sheets from the lab 2.05 client folder: `body.png`, `head0.png`, `sprites.png`, and `idle.gani` for the offsets. It is run with `cargo run -p seihai --example render_sprites -- <assets> onlinestartlocal.nw <out>`, from the start position 30, 30.5.
+
+Problems found in d1c499c:
+- **PNG reading:** the sheets are 4-bit palette PNGs with `tRNS`. The reader only took 8-bit images and dropped alpha, so the sprites could not load. `read_png_rgba` now reads 1/2/4/8-bit palettes and applies `tRNS`, and the sprites blit as RGBA.
+- **Direction order:** the offline session used 0 south, 1 west, 2 east, 3 north. Graal's order, in the ganis, on the 2.05 wire and in `scripting::DIR_*`, is 0 up, 1 left, 2 down, 3 right. With the old order the player faced away when walking down. `offline::DIR_*` and the ASCII view now use Graal order.
+- **Player placement:** body and head are now placed with the `idle.gani` offsets in the 48×48 player box, per direction, with the shadow from `sprites.png`. Before, they were at fixed offsets from the screen centre.
+- **Camera:** the camera now centres on the middle of the player box, to the pixel. It used to snap to whole tiles from the player's top-left.
+
+Result next to the real 2.05 screenshot (`screens/client205-onlinestartlocal.png`):
+- **Tiles:** the tile layout matches. The horizontal alignment matches to the pixel. Vertically Seihai sits about 12 px lower, because the real client centres on the play area above its 24 px chat bar.
+- **Player:** the player is recognisable, and the four step images show the back, right, front and left of the head and body.
+- **Chests:** the three chests appear as 2×2-tile markers in the right places. They are not chest art yet.
+- **HUD:** the HUD bar shows at the top left. It is a placeholder, not the real hearts and counters.
+- **Fallback:** without `body.png`/`head0.png` the player falls back to a coloured marker, with no crash.
+
+Not drawn yet: shield, hat, sword, the nickname tag, and gani animation.

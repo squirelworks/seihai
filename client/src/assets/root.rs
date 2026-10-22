@@ -7,6 +7,9 @@
 //!   tiledefs.txt       # or arrays.dat
 //!   levels/            # .nw files
 //!   gani/              # .gani files
+//!   bodies/body.png    # player sheets (also found at the root or
+//!   heads/head0.png    #   under levels/bodies, levels/heads)
+//!   sprites.png        # shadow and effects
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -48,6 +51,18 @@ impl AssetRoot {
 
     pub fn gani(&self, name: &str) -> PathBuf {
         self.gani_dir().join(name)
+    }
+
+    /// Find a player image such as `body.png` in `<dir>/`, `levels/<dir>/`
+    /// or the root itself.
+    pub fn find_image(&self, dir: &str, name: &str) -> Option<PathBuf> {
+        [
+            self.root.join(dir).join(name),
+            self.root.join("levels").join(dir).join(name),
+            self.root.join(name),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
     }
 
     /// True if the root contains at least a `pics1.png`.
