@@ -71,11 +71,61 @@ fn main() {
             "--help" | "-h" => {
                 println!("seihai --assets <dir> [--level <name.nw>]");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
+                println!("       seihai                  (menu if no mode given)");
                 return;
             }
             _ => {}
         }
         i += 1;
+    }
+
+    // Menu when no mode is given.
+    if online.is_none() && level_name.is_none() && assets.is_none() {
+        println!("Seihai");
+        println!("1) Offline  2) Online  q) Quit");
+        let mut choice = String::new();
+        let _ = std::io::stdin().read_line(&mut choice);
+        match choice.trim() {
+            "1" => {
+                println!("assets path:");
+                let mut p = String::new();
+                let _ = std::io::stdin().read_line(&mut p);
+                assets = Some(PathBuf::from(p.trim()));
+                println!("level name (e.g. onlinestartlocal.nw):");
+                let mut l = String::new();
+                let _ = std::io::stdin().read_line(&mut l);
+                level_name = Some(l.trim().to_string());
+            }
+            "2" => {
+                println!("assets path:");
+                let mut p = String::new();
+                let _ = std::io::stdin().read_line(&mut p);
+                assets = Some(PathBuf::from(p.trim()));
+                println!("server (host:port):");
+                let mut s = String::new();
+                let _ = std::io::stdin().read_line(&mut s);
+                online = Some(s.trim().to_string());
+                println!("account:");
+                let mut a = String::new();
+                let _ = std::io::stdin().read_line(&mut a);
+                account = a.trim().to_string();
+                println!("password:");
+                let mut pw = String::new();
+                let _ = std::io::stdin().read_line(&mut pw);
+                password = pw.trim().to_string();
+                println!("version (2.05 / 2.22):");
+                let mut v = String::new();
+                let _ = std::io::stdin().read_line(&mut v);
+                version = match v.trim() {
+                    "2.22" => ClientVersion::V222,
+                    "2.31" => ClientVersion::V231,
+                    "2.17" => ClientVersion::V217,
+                    "1.39" => ClientVersion::V139,
+                    _ => ClientVersion::V205,
+                };
+            }
+            _ => return,
+        }
     }
 
     let root = match assets {
