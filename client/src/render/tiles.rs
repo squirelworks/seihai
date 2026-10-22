@@ -180,7 +180,7 @@ impl Framebuffer {
             } else {
                 32
             };
-            self.blit_sprite(sheet, sheet_w as usize, 16, sx as usize, 0, 4 + i * 18, 4, 16, 16);
+            self.blit_sprite(sheet, sheet_w, 16, sx, 0, 4 + i * 18, 4, 16, 16);
         }
     }
 
