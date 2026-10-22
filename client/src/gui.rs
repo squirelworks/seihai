@@ -16,6 +16,7 @@ pub struct Launcher {
     status: String,
     servers: Vec<(String, String, u16)>,
     selected: Option<usize>,
+    join_addr: Option<String>,
 }
 
 impl Launcher {
@@ -48,6 +49,7 @@ impl Launcher {
             status: "Ready".into(),
             servers: Vec::new(),
             selected: None,
+            join_addr: None,
         }
     }
 
@@ -140,9 +142,11 @@ impl eframe::App for Launcher {
             if let Some(i) = self.selected {
                 if ui.button("Join").clicked() {
                     if let Some((_, host, port)) = self.servers.get(i) {
-                        self.settings.last_server = Some(format!("{host}:{port}"));
+                        let addr = format!("{host}:{port}");
+                        self.settings.last_server = Some(addr.clone());
                         self.settings.save();
-                        self.status = format!("selected {host}:{port} — restart to join");
+                        self.join_addr = Some(addr);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 }
             }
@@ -150,14 +154,17 @@ impl eframe::App for Launcher {
     }
 }
 
-pub fn run() -> Result<(), eframe::Error> {
+/// Run the launcher. Returns the chosen gserver address, if any.
+pub fn run() -> Option<String> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 520.0]),
         ..Default::default()
     };
-    eframe::run_native(
+    let _ = eframe::run_native(
         "Seihai",
         options,
         Box::new(|_cc| Ok(Box::new(Launcher::new()))),
-    )
+    );
+    // Join saved the choice before closing the window.
+    Settings::load().last_server
 }

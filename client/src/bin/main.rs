@@ -103,10 +103,12 @@ fn main() {
 
     // GUI when no CLI mode is given.
     if !cli_mode {
-        if let Err(e) = seihai::gui::run() {
-            eprintln!("gui failed: {e}");
+        if let Some(addr) = seihai::gui::run() {
+            online = Some(addr);
+            // Fall through to the game connection.
+        } else {
+            return;
         }
-        return;
     }
 
     let root = match assets {
