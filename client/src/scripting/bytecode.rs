@@ -173,8 +173,16 @@ impl Commands {
         c.register("move", cmd_move);
         c.register("showimg", cmd_setimg);
         c.register("hideimg", cmd_noop);
+        c.register("hide", cmd_noop);
+        c.register("show", cmd_noop);
         c.register("setlevel", cmd_noop);
         c.register("warp", cmd_noop);
+        c.register("hurt", cmd_noop);
+        c.register("set", cmd_noop);
+        c.register("unset", cmd_noop);
+        c.register("setstring", cmd_noop);
+        c.register("addstring", cmd_noop);
+        c.register("setplayerprop", cmd_noop);
         c
     }
 

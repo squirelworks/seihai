@@ -45,6 +45,8 @@ pub struct Npc {
     pub x: f32,
     pub y: f32,
     pub script: String,
+    /// Visibility flag. `hide`/`show` commands toggle this.
+    pub visible: bool,
 }
 
 /// A level link (LINK record).
@@ -308,6 +310,29 @@ impl Level {
         })
     }
 
+    /// Place a stamp onto the board at (x, y).
+    /// Each stamp row becomes a new layer-0 BOARD run.
+    /// Collision is decided later by the type table.
+    pub fn place_stamp(&mut self, stamp: &crate::assets::Stamp, x: i32, y: i32) {
+        for row in 0..stamp.height {
+            let mut tiles = Vec::with_capacity(stamp.width);
+            for col in 0..stamp.width {
+                if let Some(t) = stamp.tile_at(col, row) {
+                    tiles.push(t);
+                }
+            }
+            if !tiles.is_empty() {
+                self.boards.push(BoardRun {
+                    x,
+                    y: y + row as i32,
+                    width: tiles.len() as i32,
+                    layer: 0,
+                    tiles,
+                });
+            }
+        }
+    }
+
     /// Apply a board modify (PLO_BOARDMODIFY style) to layer 0.
     /// Creates or extends BOARD runs as needed.
     pub fn apply_board_modify(&mut self, m: &BoardModify) {
@@ -438,6 +463,7 @@ fn parse_npc(lines: &[String]) -> Option<Npc> {
         x,
         y,
         script,
+        visible: true,
     })
 }
 

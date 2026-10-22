@@ -2,10 +2,31 @@
 //!
 //! SDL2 is not available in this environment. This module draws a
 //! loaded level as ASCII (or a raw PPM) so offline movement can be
-//! watched. A real SDL2/OpenGL path can replace this later.
+//! watched. `tiles` composites a 16×16 tile view into an RGB buffer
+//! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
-use crate::assets::{tile_id, Level};
+mod tiles;
+
+pub use tiles::{render_view, Framebuffer, TILE_PX};
+
+use crate::assets::{read_png_rgb, tile_id, Level};
 use crate::offline::OfflineSession;
+use std::fs;
+use std::path::Path;
+
+/// Load a `pics1.png` (or any 2048×512 RGB sheet) and render a camera view.
+///
+/// Returns the framebuffer. The sheet is expected to be 8-bit RGB.
+pub fn render_with_sheet<P: AsRef<Path>>(
+    session: &OfflineSession,
+    sheet_path: P,
+    view_tiles_w: u32,
+    view_tiles_h: u32,
+) -> Result<Framebuffer, String> {
+    let data = fs::read(sheet_path.as_ref()).map_err(|e| e.to_string())?;
+    let (w, h, sheet) = read_png_rgb(&data).map_err(|e| e.to_string())?;
+    Ok(render_view(session, &sheet, w, h, view_tiles_w, view_tiles_h))
+}
 
 /// ASCII preview of the current board and player.
 ///
@@ -107,6 +128,21 @@ fn tile_char(types: Option<&crate::assets::TileTypes>, id: u16) -> char {
     } else {
         char::from_digit((id & 0xF) as u32, 16).unwrap_or('.')
     }
+}
+
+/// ASCII preview of a single stamp (for blit-path proof).
+/// Uses the same wall/water/passable characters as the board view.
+pub fn ascii_stamp(stamp: &crate::assets::Stamp, types: Option<&crate::assets::TileTypes>) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("stamp {} ({}x{})\n", stamp.name, stamp.width, stamp.height));
+    for row in 0..stamp.height {
+        for col in 0..stamp.width {
+            let id = stamp.tile_at(col, row).map(crate::assets::tile_id).unwrap_or(0);
+            out.push(tile_char(types, id));
+        }
+        out.push('\n');
+    }
+    out
 }
 
 fn tile_at(level: &Level, x: i32, y: i32) -> u16 {

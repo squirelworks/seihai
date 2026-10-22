@@ -13,6 +13,12 @@ Date: 2026-10-14
 6. Parse `LINK`, `SIGN`, `BADDY`, and `CHEST` records.
 7. Decode binary sign text (x+0x20, alphabet byte-89, space token).
 8. Step an optional walk GANI on every successful move.
+9. Apply `hide`/`show` (toggles `Npc.visible`), `warp` (sets player position), `hurt` (health), `say`/`message` (last message), `set`/`unset` (flags), `setstring`/`addstring` (string variables), and `setplayerprop` (props) via `handle_command`.
+10. Use the documented single-point foot test (`+32` / `+44` pixel offsets) in `try_move`.
+11. Load type-0 collision from `arrays.dat` via `load_tiletypes_arrays` (first array = nowall list).
+12. Detect nearby NPCs with `check_touch` and fire simple `hide`/`warp` patterns from their scripts.
+13. Place stamps onto the board via `Level::place_stamp` or `place_named_stamp` (from an `ObjectSet`).
+14. Detect when the player enters a `LINK` rectangle and record the destination in `pending_link`.
 
 Directions are fixed: 0 south, 1 west, 2 east, 3 north.
 

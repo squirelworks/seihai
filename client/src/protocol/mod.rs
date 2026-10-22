@@ -1,17 +1,45 @@
 //! Protocol definitions.
 //!
 //! Layouts are provisional where noted, and concrete where taken from
-//! GServer-v2 / OpenGS1 / captures.
+//! cleaned observations of client 2.05 and public sources (GServer-v2,
+//! OpenGS1, captures). No decompile material.
 
 mod board;
+mod compress;
+mod dispatch;
+mod frame;
+mod gen3;
+mod gen5;
+mod list;
 mod props;
+mod version;
 
 pub use board::BoardModify;
+pub use compress::{bz2_compress, bz2_decompress};
+pub use dispatch::{split_messages, Message, SessionState};
+pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
+pub use gen3::Gen3;
+pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};
+pub use list::{parse_list_reply, ServerEntry};
+pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
+pub use gen3::Gen3;
+pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};
 pub use props::{decode_pos_precise, encode_pos_classic, encode_pos_precise};
+pub use version::{ClientVersion, EncryptionGen};
 
 use std::io::{self, Write};
 
-/// Packet type identifiers (provisional).
+/// Retired provisional packet ids.
+///
+/// These were early placeholders. The real ids are documented in
+/// Graal_analysis `protocol/packet-ids.md`:
+/// - login uses client type 0 (not a packet id)
+/// - `PLI_LEVELWARP` is 0
+/// - `PLI_PLAYERPROPS` is 2
+/// - `PLO_LEVELBOARD` is 0, `PLO_LEVELNAME` is 6, etc.
+///
+/// Kept only so older call sites still compile. Do not use for new code.
+#[deprecated(note = "provisional ids retired; use the documented PLI/PLO ids")]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PacketId {
@@ -20,7 +48,6 @@ pub enum PacketId {
     LevelRequest = 0x10,
     LevelData = 0x11,
     PlayerUpdate = 0x20,
-    // Extend as more are recovered
 }
 
 /// Logical client→server type for a walk frame.
@@ -115,6 +142,25 @@ fn write_length_biased<W: Write>(w: &mut W, bytes: &[u8]) -> io::Result<()> {
     }
     w.write_all(&[(len as u8) + 0x20])?;
     w.write_all(bytes)?;
+    Ok(())
+}
+
+/// Write a login line for the given client version.
+///
+/// Uses the version's client type, token, and length-biased account/password.
+/// The login frame itself is clean for all versions covered here.
+pub fn write_login<W: Write>(
+    w: &mut W,
+    version: ClientVersion,
+    key: u8,
+    account: &str,
+    password: &str,
+) -> io::Result<()> {
+    w.write_all(&[version.client_type()])?;
+    w.write_all(&[key & 0x7F])?;
+    w.write_all(version.token().as_bytes())?;
+    write_length_biased(w, account.as_bytes())?;
+    write_length_biased(w, password.as_bytes())?;
     Ok(())
 }
 

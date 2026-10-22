@@ -3,7 +3,8 @@
 //! Uses the same CRC-32 as the client.
 
 use super::crc32::crc32;
-use std::io::{self, Write};
+use flate2::read::ZlibDecoder;
+use std::io::{self, Read, Write};
 
 fn write_chunk<W: Write>(w: &mut W, tag: &[u8; 4], data: &[u8]) -> io::Result<()> {
     let len = data.len() as u32;
@@ -128,6 +129,71 @@ fn adler32(data: &[u8]) -> u32 {
         b = (b + a) % 65521;
     }
     (b << 16) | a
+}
+
+/// Minimal RGB PNG reader.
+///
+/// Handles 8-bit RGB (color type 2) with no interlace. Returns
+/// `(width, height, pixels)` where `pixels` is row-major RGB.
+pub fn read_png_rgb(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
+    if data.len() < 8 || &data[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "not a PNG"));
+    }
+    let mut pos = 8;
+    let mut width = 0u32;
+    let mut height = 0u32;
+    let mut color_type = 0u8;
+    let mut idat = Vec::new();
+    while pos + 8 <= data.len() {
+        let len = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+        let tag = &data[pos + 4..pos + 8];
+        let chunk = &data[pos + 8..pos + 8 + len];
+        if tag == b"IHDR" && chunk.len() >= 13 {
+            width = u32::from_be_bytes(chunk[0..4].try_into().unwrap());
+            height = u32::from_be_bytes(chunk[4..8].try_into().unwrap());
+            color_type = chunk[9];
+        } else if tag == b"IDAT" {
+            idat.extend_from_slice(chunk);
+        } else if tag == b"IEND" {
+            break;
+        }
+        pos += 12 + len;
+    }
+    if color_type != 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "only 8-bit RGB PNGs are supported",
+        ));
+    }
+    let mut dec = ZlibDecoder::new(&idat[..]);
+    let mut raw = Vec::new();
+    dec.read_to_end(&mut raw)?;
+    // Undo PNG row filters (type 0 = none, type 1 = sub, type 2 = up).
+    let stride = width as usize * 3;
+    let mut pixels = Vec::with_capacity(height as usize * stride);
+    let mut prev = vec![0u8; stride];
+    let mut i = 0;
+    for _ in 0..height {
+        if i >= raw.len() {
+            break;
+        }
+        let filter = raw[i];
+        i += 1;
+        let mut row = vec![0u8; stride];
+        for x in 0..stride {
+            let v = if i < raw.len() { raw[i] } else { 0 };
+            i += 1;
+            row[x] = match filter {
+                0 => v,
+                1 => v.wrapping_add(if x >= 3 { row[x - 3] } else { 0 }),
+                2 => v.wrapping_add(prev[x]),
+                _ => v,
+            };
+        }
+        pixels.extend_from_slice(&row);
+        prev = row;
+    }
+    Ok((width, height, pixels))
 }
 
 #[cfg(test)]

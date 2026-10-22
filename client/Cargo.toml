@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# Placeholder for future networking / serialization
-# tokio = { version = "1", features = ["full"] }
-# bytes = "1"
+flate2 = "1"
+bzip2 = "0.5"
+minifb = "0.27"
+
+[[bin]]
+name = "seihai"
+path = "src/bin/main.rs"

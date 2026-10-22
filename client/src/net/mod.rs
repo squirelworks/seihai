@@ -1,9 +1,16 @@
 //! Networking.
 //!
 //! Connection and high-level send helpers. Packet formats are provisional
-//! and will be adjusted as the decompile reveals the real layouts.
+//! where noted; login and framing follow the cleaned 2.05/2.22 observations.
 
-use crate::protocol::{LevelRequest, LoginRequest, PlayerUpdate};
+mod udp;
+
+pub use udp::{encode_udp_pos, PeerChannel, UDP_ID_BOARD, UDP_ID_POS, UDP_ID_PROPS, UDP_PORT};
+
+use crate::protocol::{
+    read_zlib_frame, write_login, write_zlib_frame, ClientVersion, LevelRequest, LoginRequest,
+    PlayerUpdate, SessionState,
+};
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::time::Duration;
@@ -24,6 +31,36 @@ impl Connection {
     /// Send a raw byte buffer.
     pub fn send_raw(&mut self, data: &[u8]) -> io::Result<()> {
         self.stream.write_all(data)
+    }
+
+    /// Send a version-aware login as a zlib frame.
+    ///
+    /// Builds the login line for `version`, wraps it in a gen-2/3 zlib frame,
+    /// and writes it. The login frame itself is clean (no gen-3 insertion,
+    /// no gen-5 XOR).
+    pub fn login_versioned(
+        &mut self,
+        version: ClientVersion,
+        key: u8,
+        account: &str,
+        password: &str,
+    ) -> io::Result<()> {
+        let mut line = Vec::new();
+        write_login(&mut line, version, key, account, password)?;
+        line.push(b'\n');
+        let frame = write_zlib_frame(&line)?;
+        self.send_raw(&frame)?;
+        self.stream.flush()
+    }
+
+    /// Read one zlib frame and apply its messages to `state`.
+    ///
+    /// Reads `u16be` length, decompresses the body, then calls
+    /// `SessionState::apply_body`. Returns the decompressed body.
+    pub fn read_frame_into(&mut self, state: &mut SessionState) -> io::Result<Vec<u8>> {
+        let body = read_zlib_frame(&mut self.stream)?;
+        state.apply_body(&body);
+        Ok(body)
     }
 
     /// Send the locked classic login line.
@@ -99,6 +136,31 @@ impl Connection {
         let mut buf = Vec::new();
         upd.write_walk(&mut buf)?;
         self.send_raw(&buf)
+    }
+
+    /// Send a chat message as `PLI_TOALL` (id 6).
+    ///
+    /// Wire: `GCHAR(6)` + text + `\n`. The text is sent as-is.
+    pub fn send_chat(&mut self, text: &str) -> io::Result<()> {
+        let mut msg = Vec::new();
+        msg.push(6u8.wrapping_add(0x20));
+        msg.extend_from_slice(text.as_bytes());
+        msg.push(b'\n');
+        self.send_raw(&msg)
+    }
+
+    /// Send a private message as `PLI_PRIVATEMESSAGE` (id 28).
+    ///
+    /// Wire: `GCHAR(28)` + target + `:` + text + `\n`.
+    /// Layout is provisional; the id is documented.
+    pub fn send_pm(&mut self, target: &str, text: &str) -> io::Result<()> {
+        let mut msg = Vec::new();
+        msg.push(28u8.wrapping_add(0x20));
+        msg.extend_from_slice(target.as_bytes());
+        msg.push(b':');
+        msg.extend_from_slice(text.as_bytes());
+        msg.push(b'\n');
+        self.send_raw(&msg)
     }
 }
 
