@@ -161,12 +161,9 @@ fn terminal_menu(l: &mut Launcher) -> Option<String> {
         println!("Error: {err}");
     }
     println!("Seihai");
-    println!("1) assets: {}", l.assets);
-    println!("2) listserver: {}:{}", l.list_host, l.list_port);
-    println!("3) account: {}", l.account);
-    println!("4) password: {}", if l.password.is_empty() { "(empty)" } else { "****" });
-    println!("5) version: {}", l.version);
-    println!("c) connect  q) quit");
+    println!("1) Connect");
+    println!("2) Settings");
+    println!("q) Quit");
     loop {
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line).is_err() {
@@ -174,40 +171,6 @@ fn terminal_menu(l: &mut Launcher) -> Option<String> {
         }
         match line.trim() {
             "1" => {
-                println!("assets path:");
-                let mut p = String::new();
-                let _ = std::io::stdin().read_line(&mut p);
-                l.assets = p.trim().to_string();
-            }
-            "2" => {
-                println!("host:");
-                let mut h = String::new();
-                let _ = std::io::stdin().read_line(&mut h);
-                l.list_host = h.trim().to_string();
-                println!("port:");
-                let mut p = String::new();
-                let _ = std::io::stdin().read_line(&mut p);
-                l.list_port = p.trim().to_string();
-            }
-            "3" => {
-                println!("account:");
-                let mut a = String::new();
-                let _ = std::io::stdin().read_line(&mut a);
-                l.account = a.trim().to_string();
-            }
-            "4" => {
-                println!("password:");
-                let mut p = String::new();
-                let _ = std::io::stdin().read_line(&mut p);
-                l.password = p.trim().to_string();
-            }
-            "5" => {
-                println!("version (1.39 / 2.05 / 2.17 / 2.22 / 2.31):");
-                let mut v = String::new();
-                let _ = std::io::stdin().read_line(&mut v);
-                l.version = v.trim().to_string();
-            }
-            "c" => {
                 l.connect_list();
                 println!("{}", l.status);
                 if !l.servers.is_empty() {
@@ -225,6 +188,59 @@ fn terminal_menu(l: &mut Launcher) -> Option<String> {
                             s.save();
                             return Some(addr);
                         }
+                    }
+                }
+            }
+            "2" => {
+                println!("Settings");
+                println!("1) assets: {}", l.assets);
+                println!("2) listserver: {}:{}", l.list_host, l.list_port);
+                println!("3) account: {}", l.account);
+                println!("4) password: {}", if l.password.is_empty() { "(empty)" } else { "****" });
+                println!("5) version: {}", l.version);
+                println!("b) back");
+                loop {
+                    let mut sline = String::new();
+                    if std::io::stdin().read_line(&mut sline).is_err() {
+                        break;
+                    }
+                    match sline.trim() {
+                        "1" => {
+                            println!("assets path:");
+                            let mut p = String::new();
+                            let _ = std::io::stdin().read_line(&mut p);
+                            l.assets = p.trim().to_string();
+                        }
+                        "2" => {
+                            println!("host:");
+                            let mut h = String::new();
+                            let _ = std::io::stdin().read_line(&mut h);
+                            l.list_host = h.trim().to_string();
+                            println!("port:");
+                            let mut p = String::new();
+                            let _ = std::io::stdin().read_line(&mut p);
+                            l.list_port = p.trim().to_string();
+                        }
+                        "3" => {
+                            println!("account:");
+                            let mut a = String::new();
+                            let _ = std::io::stdin().read_line(&mut a);
+                            l.account = a.trim().to_string();
+                        }
+                        "4" => {
+                            println!("password:");
+                            let mut p = String::new();
+                            let _ = std::io::stdin().read_line(&mut p);
+                            l.password = p.trim().to_string();
+                        }
+                        "5" => {
+                            println!("version (1.39 / 2.05 / 2.17 / 2.22 / 2.31):");
+                            let mut v = String::new();
+                            let _ = std::io::stdin().read_line(&mut v);
+                            l.version = v.trim().to_string();
+                        }
+                        "b" => break,
+                        _ => {}
                     }
                 }
             }
