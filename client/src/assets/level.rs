@@ -244,7 +244,15 @@ impl Level {
             return Err("binary level too short".into());
         }
         let magic = &data[0..8];
-        let codebits = if magic == b"GR-V1.02" || magic == b"GR-V1.03" { 13 } else { 12 };
+        let codebits = if magic == b"GR-V1.02" || magic == b"GR-V1.03" {
+            13
+        } else if magic == b"Z3-V1.02" {
+            11
+        } else if magic == b"Z3-V1.03" || magic == b"Z3-V1.04" {
+            12
+        } else {
+            12
+        };
         let mut tiles = vec![0u16; 4096];
         let mut boardindex = 0usize;
         let mut bitsread = 0u32;
