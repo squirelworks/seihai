@@ -60,11 +60,12 @@ fn main() {
             }
         }
     }
-    let unhandled: BTreeMap<_, _> = state.unhandled.iter().filter(|(_, &n)| n > 1).collect();
+    let unhandled: BTreeMap<_, _> = state.unhandled.iter().collect();
     println!("frames {frames}");
     println!("message ids {ids:?}");
     println!("PLO_PLAYERPROPS prop ids {prop_ids:?}");
     println!("level_name {:?}", state.level_name);
+    println!("server board {}", if state.board.is_some() { "received" } else { "none" });
     println!(
         "board_lines {} links {} signs {} chests {} npcs {} baddies {} items {}",
         state.board_lines.len(),
@@ -85,5 +86,12 @@ fn main() {
             println!("  {m}");
         }
     }
-    println!("unhandled (>1) {unhandled:?}");
+    let weapons: Vec<&str> = state.weapons.iter().map(|w| w.name.as_str()).collect();
+    println!(
+        "flags {} weapons {weapons:?} default weapons {:?} world time {:?}",
+        state.flags.len(),
+        state.default_weapons,
+        state.world_time
+    );
+    println!("unhandled {unhandled:?}");
 }

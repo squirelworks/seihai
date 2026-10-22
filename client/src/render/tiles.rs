@@ -312,10 +312,12 @@ fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32)
 /// by [`render_view`] with the same size.
 pub fn player_box_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
     let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
-    // Shift down 12 px so the feet sit on the tile the collision tests.
+    // The box starts at the player's tile position, the same as for other
+    // players. The 2.05 client draws it there too (checked against a
+    // screenshot at onlinestartlocal.nw 30, 30.5).
     (
         (session.player_x * TILE_PX as f32) as i32 - cam_x,
-        (session.player_y * TILE_PX as f32) as i32 - cam_y + 12,
+        (session.player_y * TILE_PX as f32) as i32 - cam_y,
     )
 }
 
@@ -413,6 +415,20 @@ fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_player_box_matches_other_players() {
+        let mut s = OfflineSession::default();
+        s.player_x = 30.0;
+        s.player_y = 30.5;
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        // Other players are drawn at level * 16 - camera; the local
+        // player must land on the same pixel for the same position.
+        assert_eq!(
+            player_box_origin(&s, 40, 30),
+            ((30.0 * 16.0) as i32 - cam_x, (30.5 * 16.0) as i32 - cam_y)
+        );
+    }
 
     #[test]
     fn blit_respects_bounds() {

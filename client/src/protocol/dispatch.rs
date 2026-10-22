@@ -44,6 +44,54 @@ pub fn read_gint3(b: &[u8]) -> Option<usize> {
     )
 }
 
+/// Read a GINT4: four GCHARs, high 7 bits first.
+pub fn read_gint4(b: &[u8]) -> Option<u32> {
+    if b.len() < 4 {
+        return None;
+    }
+    Some(
+        b[..4]
+            .iter()
+            .fold(0u32, |acc, &c| (acc << 7) | (c.wrapping_sub(0x20) as u32 & 0x7F)),
+    )
+}
+
+/// A weapon from `PLO_NPCWEAPONADD`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Weapon {
+    pub name: String,
+    /// NPCPROP_IMAGE (0), if sent.
+    pub image: Option<String>,
+    /// NPCPROP_SCRIPT (1): the GS1 client script, if sent.
+    pub script: Option<String>,
+}
+
+/// Parse a `PLO_NPCWEAPONADD` payload: `GCHAR len` + name, then NPC props.
+/// Only image (0, `GCHAR len`) and script (1, `GSHORT len`) are read;
+/// parsing stops at any other prop.
+pub fn parse_weapon_add(b: &[u8]) -> Option<Weapon> {
+    let len = b.first()?.wrapping_sub(0x20) as usize;
+    let name = latin1(b.get(1..1 + len)?);
+    let mut w = Weapon { name, image: None, script: None };
+    let mut i = 1 + len;
+    while let Some(&id) = b.get(i) {
+        match id.wrapping_sub(0x20) {
+            0 => {
+                let n = b.get(i + 1)?.wrapping_sub(0x20) as usize;
+                w.image = Some(latin1(b.get(i + 2..i + 2 + n)?));
+                i += 2 + n;
+            }
+            1 => {
+                let n = read_gshort(b.get(i + 1..)?)? as usize;
+                w.script = Some(latin1(b.get(i + 3..i + 3 + n)?));
+                i += 3 + n;
+            }
+            _ => break,
+        }
+    }
+    Some(w)
+}
+
 /// Message splitter that carries a partial message from one body to the
 /// next.
 #[derive(Debug, Default)]
@@ -198,6 +246,19 @@ pub struct SessionState {
     pub opened_chests: Vec<(i32, i32)>,
     /// Server messages received, for the debug overlay.
     pub messages_seen: usize,
+    /// Server flags from `PLO_FLAGSET` (28). A flag without `=` has an
+    /// empty value.
+    pub flags: HashMap<String, String>,
+    /// Weapons the player holds, by name, in the order they arrived
+    /// (`PLO_NPCWEAPONADD` 33, `PLO_NPCWEAPONDEL` 34).
+    pub weapons: Vec<Weapon>,
+    /// Built-in weapons from `PLO_DEFAULTWEAPON` (43), by id.
+    pub default_weapons: Vec<u8>,
+    /// Tiles of the current level from `PLO_BOARDPACKET` (101): 64×64
+    /// tile ids, row by row.
+    pub board: Option<Vec<u16>>,
+    /// Server world time from `PLO_NEWWORLDTIME` (42).
+    pub world_time: Option<u32>,
     pub unhandled: HashMap<u8, usize>,
     splitter: Splitter,
 }
@@ -371,6 +432,51 @@ impl SessionState {
                 // also uses it for "already up to date".
                 let name = String::from_utf8_lossy(&msg.payload);
                 self.file_requests.push(format!("FAIL:{name}"));
+            }
+            101 => {
+                // PLO_BOARDPACKET: 64×64 little-endian u16 tile ids,
+                // always behind PLO_RAWDATA.
+                if msg.payload.len() >= 8192 {
+                    self.board = Some(
+                        msg.payload[..8192]
+                            .chunks_exact(2)
+                            .map(|p| u16::from_le_bytes([p[0], p[1]]) & 0x0FFF)
+                            .collect(),
+                    );
+                }
+            }
+            28 => {
+                // PLO_FLAGSET: rest = `name` or `name=value`.
+                let text = latin1(&msg.payload);
+                let (k, v) = text.split_once('=').unwrap_or((text.as_str(), ""));
+                self.flags.insert(k.to_string(), v.to_string());
+            }
+            33 => {
+                // PLO_NPCWEAPONADD: replaces a weapon of the same name.
+                if let Some(w) = parse_weapon_add(&msg.payload) {
+                    match self.weapons.iter_mut().find(|o| o.name == w.name) {
+                        Some(old) => *old = w,
+                        None => self.weapons.push(w),
+                    }
+                }
+            }
+            34 => {
+                // PLO_NPCWEAPONDEL: rest = name.
+                let name = latin1(&msg.payload);
+                self.weapons.retain(|w| w.name != name);
+            }
+            42 => {
+                // PLO_NEWWORLDTIME: GINT4.
+                self.world_time = read_gint4(&msg.payload);
+            }
+            43 => {
+                // PLO_DEFAULTWEAPON: GCHAR id.
+                if let Some(&c) = msg.payload.first() {
+                    let id = c.wrapping_sub(0x20);
+                    if !self.default_weapons.contains(&id) {
+                        self.default_weapons.push(id);
+                    }
+                }
             }
             45 => {
                 // PLO_FILEUPTODATE: rest = name (2.1+).
@@ -716,6 +822,63 @@ mod tests {
             state.disconnect_message.as_deref(),
             Some("Your client version is not allowed.\nAllowed: 2.22")
         );
+    }
+
+    #[test]
+    fn board_packet_behind_rawdata() {
+        let n = 1 + 8192 + 1;
+        let mut body = vec![
+            100 + 0x20,
+            ((n >> 14) & 0x7F) as u8 + 0x20,
+            ((n >> 7) & 0x7F) as u8 + 0x20,
+            (n & 0x7F) as u8 + 0x20,
+            b'\n',
+            101 + 0x20,
+        ];
+        for i in 0..4096u16 {
+            body.extend_from_slice(&(i % 512).to_le_bytes());
+        }
+        body.push(b'\n');
+        let mut state = SessionState::default();
+        state.apply_body(&body);
+        let board = state.board.expect("board");
+        assert_eq!(board.len(), 4096);
+        assert_eq!((board[0], board[1], board[600]), (0, 1, 88));
+        assert!(state.unhandled.is_empty());
+    }
+
+    #[test]
+    fn flags_weapons_and_world_time() {
+        let mut state = SessionState::default();
+        // PLO_FLAGSET (28) with and without a value.
+        state.apply_body(b"<gr.fileerror=none\n<quest1\n");
+        assert_eq!(state.flags.get("gr.fileerror").map(String::as_str), Some("none"));
+        assert_eq!(state.flags.get("quest1").map(String::as_str), Some(""));
+        // PLO_NPCWEAPONADD (33): name, NPCPROP_IMAGE, NPCPROP_SCRIPT.
+        let mut add = vec![b'A', 0x20 + 3];
+        add.extend_from_slice(b"Bow");
+        add.extend_from_slice(&[0x20, 0x20 + 7]);
+        add.extend_from_slice(b"bow.png");
+        add.push(0x21);
+        add.extend_from_slice(&gs(2));
+        add.extend_from_slice(b"//\n");
+        state.apply_body(&add);
+        assert_eq!(
+            state.weapons,
+            vec![Weapon { name: "Bow".into(), image: Some("bow.png".into()), script: Some("//".into()) }]
+        );
+        // PLO_DEFAULTWEAPON (43) and PLO_NEWWORLDTIME (42).
+        state.apply_body(b"K!\nK!\n");
+        assert_eq!(state.default_weapons, vec![1]);
+        let mut t = vec![b'J'];
+        t.extend_from_slice(&[0x20, 0x20, 0x21, 0x20 + 5]);
+        t.push(b'\n');
+        state.apply_body(&t);
+        assert_eq!(state.world_time, Some(128 + 5));
+        // PLO_NPCWEAPONDEL (34).
+        state.apply_body(b"BBow\n");
+        assert!(state.weapons.is_empty());
+        assert!(state.unhandled.is_empty());
     }
 
     fn gs(v: u16) -> [u8; 2] {

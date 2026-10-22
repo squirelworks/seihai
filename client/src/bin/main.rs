@@ -439,6 +439,14 @@ fn main() {
                         loaded_level = Some(name.clone());
                     }
                 }
+                // No local copy: draw the tiles the server sent, as the
+                // real client does, until the file (if any) arrives.
+                if session.current_level.is_none() {
+                    if let Some(tiles) = net_state.board.take() {
+                        session.current_level = Some(seihai::assets::Level::from_board(&tiles));
+                        eprintln!("level from the server's board");
+                    }
+                }
                 // Take server positions once, so local walking is not
                 // snapped back by later frames.
                 let warped = net_state.player_x.is_some() || net_state.player_y.is_some();
