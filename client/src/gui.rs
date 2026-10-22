@@ -15,7 +15,7 @@ pub struct Launcher {
     status: String,
     servers: Vec<(String, String, u16)>,
     selected: Option<usize>,
-    error: Option<String>,
+    show_advanced: bool,
 }
 
 impl Launcher {
@@ -56,13 +56,12 @@ impl Launcher {
     }
 
     fn version_enum(&self) -> ClientVersion {
-        match self.version.as_str() {
-            "2.22" => ClientVersion::V222,
-            "2.31" => ClientVersion::V231,
-            "2.17" => ClientVersion::V217,
-            "1.39" => ClientVersion::V139,
-            _ => ClientVersion::V205,
+        for v in ClientVersion::all_versions() {
+            if v.label() == self.version {
+                return *v;
+            }
         }
+        ClientVersion::V205
     }
 
     fn connect_list(&mut self) {
@@ -131,10 +130,24 @@ impl eframe::App for Launcher {
             egui::ComboBox::from_label("")
                 .selected_text(&self.version)
                 .show_ui(ui, |ui| {
-                    for v in ["1.39", "2.05", "2.17", "2.22", "2.31"] {
-                        ui.selectable_value(&mut self.version, v.to_string(), v);
+                    for v in ClientVersion::main_versions() {
+                        ui.selectable_value(&mut self.version, v.label().to_string(), v.label());
                     }
                 });
+            ui.checkbox(&mut self.show_advanced, "Advanced versions");
+            if self.show_advanced {
+                egui::ComboBox::from_label("all")
+                    .selected_text(&self.version)
+                    .show_ui(ui, |ui| {
+                        for v in ClientVersion::all_versions() {
+                            ui.selectable_value(
+                                &mut self.version,
+                                v.label().to_string(),
+                                format!("{} ({})", v.label(), v.token()),
+                            );
+                        }
+                    });
+            }
             ui.separator();
             if ui.button("Connect to listserver").clicked() {
                 self.connect_list();
