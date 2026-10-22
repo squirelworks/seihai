@@ -131,6 +131,11 @@ impl LoginRequest {
     }
 }
 
+/// Write a GSTRING: GCHAR length + bytes (at most 95 bytes).
+pub fn write_gstring<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
+    write_length_biased(w, s.as_bytes())
+}
+
 fn write_length_biased<W: Write>(w: &mut W, bytes: &[u8]) -> io::Result<()> {
     let len = bytes.len();
     if len > 0x5F {
@@ -155,9 +160,13 @@ pub fn write_login<W: Write>(
     account: &str,
     password: &str,
 ) -> io::Result<()> {
-    // Both are GCHARs: type 0 goes out as 0x20, then the key.
+    // Both are GCHARs: type 0 goes out as 0x20, then the key. Gen 2
+    // (1.33–1.39) has no key: GServer picks gen 2 when the token follows
+    // the type directly.
     w.write_all(&[version.client_type() + 0x20])?;
-    w.write_all(&[(key & 0x7F) + 0x20])?;
+    if version.encryption() != EncryptionGen::Gen2 {
+        w.write_all(&[(key & 0x7F) + 0x20])?;
+    }
     w.write_all(version.token().as_bytes())?;
     write_length_biased(w, account.as_bytes())?;
     write_length_biased(w, password.as_bytes())?;

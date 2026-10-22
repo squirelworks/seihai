@@ -12,9 +12,11 @@ pub use udp::{
 };
 
 use crate::protocol::{
-    encode_pos_classic, read_zlib_frame, write_login, write_zlib_frame, ClientVersion,
-    EncryptionGen, Gen3, LevelRequest, LoginRequest, PlayerUpdate, SessionState,
+    bz2_compress, choose_comp, encode_pos_classic, read_zlib_frame, write_frame, write_gstring,
+    write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5,
+    Gen5Comp, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
 };
+use crate::protocol::parse_list_reply;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver};
@@ -27,7 +29,10 @@ pub struct Connection {
     /// versioned 2.05-style login.
     gen3: Option<Gen3>,
     /// Gen-5 XOR state for client→server frames, set by a 2.22 login.
-    gen5: Option<crate::protocol::Gen5>,
+    gen5: Option<Gen5>,
+    /// Gen-5 XOR state for server→client frames. Each direction has its
+    /// own iterator, both seeded at login.
+    gen5_in: Option<Gen5>,
 }
 
 impl Connection {
@@ -35,7 +40,7 @@ impl Connection {
     pub fn connect(addr: &str) -> io::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None })
     }
 
     /// Send a raw byte buffer.
@@ -43,11 +48,14 @@ impl Connection {
         self.stream.write_all(data)
     }
 
-    /// Send a version-aware login as a zlib frame.
+    /// Send a version-aware game-server login.
     ///
-    /// For gen-5, first sends the listserver handshake: plain zlib of
-    /// `GCHAR 7` + `GCHAR key` + `GNW30123` + `newmain`. Every later
-    /// frame is then gen-5. The game login follows.
+    /// The login frame is plain zlib for every generation: no gen-3 byte,
+    /// no gen-5 compression byte or XOR, since the server needs the key
+    /// inside it. Every later client→server frame is ciphered. For gen 5
+    /// the iterator is still at the seed for the first frame after the
+    /// login (lab 2.22 capture). The `GNW30123` id 7 handshake belongs to
+    /// the listserver only; see [`Self::login_listserver`].
     pub fn login_versioned(
         &mut self,
         version: ClientVersion,
@@ -55,40 +63,103 @@ impl Connection {
         account: &str,
         password: &str,
     ) -> io::Result<()> {
-        if version.encryption() == EncryptionGen::Gen5 {
-            // Listserver handshake for 2.22+.
-            let mut hs = Vec::new();
-            hs.push(7u8.wrapping_add(0x20));
-            hs.push(key.wrapping_add(0x20));
-            hs.extend_from_slice(b"GNW30123");
-            hs.extend_from_slice(b"newmain");
-            hs.push(b'\n');
-            let frame = write_zlib_frame(&hs)?;
-            self.send_raw(&frame)?;
-            self.gen5 = Some(crate::protocol::Gen5::new(key));
-        }
         let mut line = Vec::new();
         write_login(&mut line, version, key, account, password)?;
         line.push(b'\n');
-        if version.encryption() == EncryptionGen::Gen5 {
-            let g5 = self.gen5.as_mut().unwrap();
-            let comp = crate::protocol::choose_comp(line.len());
-            let compressed = match comp {
-                crate::protocol::Gen5Comp::Bz2 => crate::protocol::bz2_compress(&line)?,
-                crate::protocol::Gen5Comp::Zlib => crate::protocol::zlib_compress(&line)?,
-                crate::protocol::Gen5Comp::None => line.clone(),
-            };
-            let encoded = g5.encode(compressed, comp);
-            let frame = crate::protocol::write_frame(comp, &encoded);
-            self.send_raw(&frame)?;
-        } else {
-            let frame = write_zlib_frame(&line)?;
-            self.send_raw(&frame)?;
-            if version.encryption() == EncryptionGen::Gen3 {
-                self.gen3 = Some(Gen3::new(key));
+        self.send_raw(&write_zlib_frame(&line)?)?;
+        match version.encryption() {
+            EncryptionGen::Gen3 => self.gen3 = Some(Gen3::new(key)),
+            EncryptionGen::Gen5 => {
+                self.gen5 = Some(Gen5::new(key));
+                self.gen5_in = Some(Gen5::new(key));
             }
+            _ => {}
         }
         self.stream.flush()
+    }
+
+    /// Log in to a listserver and ask for the server list.
+    ///
+    /// - 2.22+: a plain zlib frame with id 7 = `GCHAR key` + `GNW30123`
+    ///   + `newmain`, then a gen-5 frame with id 1 = account and password.
+    ///   Replies are gen-5 frames keyed with the same key.
+    /// - Older: one plain zlib frame with id 0 `newmain` and id 1. There
+    ///   is no cipher on this link.
+    pub fn login_listserver(
+        &mut self,
+        version: ClientVersion,
+        key: u8,
+        account: &str,
+        password: &str,
+    ) -> io::Result<()> {
+        let mut serverlist = vec![1 + 0x20];
+        write_gstring(&mut serverlist, account)?;
+        write_gstring(&mut serverlist, password)?;
+        serverlist.push(b'\n');
+        if version.encryption() == EncryptionGen::Gen5 {
+            let mut hs = vec![7 + 0x20, (key & 0x7F) + 0x20];
+            hs.extend_from_slice(version.listserver_token().as_bytes());
+            hs.extend_from_slice(b"newmain\n");
+            self.send_raw(&write_zlib_frame(&hs)?)?;
+            self.gen5 = Some(Gen5::new(key));
+            self.gen5_in = Some(Gen5::new(key));
+            self.send_messages(&[serverlist])
+        } else {
+            let mut body = b" newmain\n".to_vec();
+            body.extend_from_slice(&serverlist);
+            self.send_raw(&write_zlib_frame(&body)?)?;
+            self.stream.flush()
+        }
+    }
+
+    /// Log in to a listserver and collect its reply.
+    ///
+    /// Reads frames until one carries servers or an error, the server
+    /// closes, or five frames have gone by. 1.33–1.39 have no listserver,
+    /// so they fetch the list as 2.05.
+    pub fn fetch_server_list(
+        addr: &str,
+        version: ClientVersion,
+        account: &str,
+        password: &str,
+    ) -> io::Result<ListReply> {
+        let version = if version.encryption() == EncryptionGen::Gen2 {
+            ClientVersion::V205
+        } else {
+            version
+        };
+        let mut conn = Self::connect(addr)?;
+        conn.login_listserver(version, random_key(), account, password)?;
+        let mut reply = ListReply::default();
+        for _ in 0..5 {
+            let body = match conn.read_body() {
+                Ok(b) => b,
+                Err(e) if reply.status.is_some() => {
+                    let _ = e;
+                    break;
+                }
+                Err(e) => return Err(e),
+            };
+            let part = parse_list_reply(&body);
+            reply.servers.extend(part.servers);
+            reply.status = part.status.or(reply.status);
+            reply.site_url = part.site_url.or(reply.site_url);
+            reply.error = part.error.or(reply.error);
+            reply.upgrade_url = part.upgrade_url.or(reply.upgrade_url);
+            if !reply.servers.is_empty() || reply.error.is_some() {
+                break;
+            }
+        }
+        Ok(reply)
+    }
+
+    /// Read one server frame and return its decompressed body: gen-5
+    /// framing after a gen-5 login, plain zlib otherwise.
+    pub fn read_body(&mut self) -> io::Result<Vec<u8>> {
+        match self.gen5_in.as_mut() {
+            Some(g) => crate::protocol::read_frame(&mut self.stream, g),
+            None => read_zlib_frame(&mut self.stream),
+        }
     }
 
     /// Send logical messages in one frame.
@@ -103,14 +174,14 @@ impl Connection {
             }
         }
         if let Some(g5) = self.gen5.as_mut() {
-            let comp = crate::protocol::choose_comp(body.len());
+            let comp = choose_comp(body.len());
             let compressed = match comp {
-                crate::protocol::Gen5Comp::Bz2 => crate::protocol::bz2_compress(&body)?,
-                crate::protocol::Gen5Comp::Zlib => crate::protocol::zlib_compress(&body)?,
-                crate::protocol::Gen5Comp::None => body.clone(),
+                Gen5Comp::Bz2 => bz2_compress(&body)?,
+                Gen5Comp::Zlib => zlib_compress(&body)?,
+                Gen5Comp::None => body,
             };
             let encoded = g5.encode(compressed, comp);
-            let frame = crate::protocol::write_frame(comp, &encoded);
+            let frame = write_frame(comp, &encoded);
             self.send_raw(&frame)?;
         } else {
             let frame = write_zlib_frame(&body)?;
@@ -139,35 +210,33 @@ impl Connection {
 
     /// Read server frames on a background thread.
     ///
-    /// `gen5` selects the gen-5 frame reader (ctype + XOR + decompress).
-    /// Otherwise plain zlib is used (2.05).
-    pub fn spawn_reader(&self, gen5: bool, key: u8) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
+    /// After a gen-5 login the reader uses gen-5 framing (ctype + XOR +
+    /// decompress) and takes over the server→client iterator. Otherwise
+    /// it reads plain zlib frames.
+    pub fn spawn_reader(&mut self) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
         let mut stream = self.stream.try_clone()?;
         stream.set_read_timeout(None)?;
+        let mut cipher = self.gen5_in.take();
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut cipher = crate::protocol::Gen5::new(key);
-            loop {
-                let frame = if gen5 {
-                    crate::protocol::read_frame(&mut stream, &mut cipher)
-                } else {
-                    read_zlib_frame(&mut stream)
-                };
-                let stop = frame.is_err();
-                if tx.send(frame).is_err() || stop {
-                    break;
-                }
+        std::thread::spawn(move || loop {
+            let frame = match cipher.as_mut() {
+                Some(g) => crate::protocol::read_frame(&mut stream, g),
+                None => read_zlib_frame(&mut stream),
+            };
+            let stop = frame.is_err();
+            if tx.send(frame).is_err() || stop {
+                break;
             }
         });
         Ok(rx)
     }
 
-    /// Read one zlib frame and apply its messages to `state`.
+    /// Read one server frame and apply its messages to `state`.
     ///
-    /// Reads `u16be` length, decompresses the body, then calls
-    /// `SessionState::apply_body`. Returns the decompressed body.
+    /// Uses [`Self::read_body`], then `SessionState::apply_body`. Returns
+    /// the decompressed body.
     pub fn read_frame_into(&mut self, state: &mut SessionState) -> io::Result<Vec<u8>> {
-        let body = read_zlib_frame(&mut self.stream)?;
+        let body = self.read_body()?;
         state.apply_body(&body);
         Ok(body)
     }
@@ -278,6 +347,18 @@ impl Connection {
     }
 }
 
+/// A login key like the real client's `rand & 0x7F`.
+///
+/// A fixed even key would always put the gen-3 byte at index 0 of short
+/// lines.
+pub fn random_key() -> u8 {
+    (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(1)
+        & 0x7F) as u8
+}
+
 /// Extract server-list-like lines from a listserver reply.
 ///
 /// Provisional: returns non-empty lines that do not start with the
@@ -331,5 +412,116 @@ mod tests {
         let props = parse_player_props(&msg[1..msg.len() - 1]);
         let vals: Vec<(u8, Option<u8>)> = props.iter().map(|p| (p.id, p.gchar())).collect();
         assert_eq!(vals, vec![(15, Some(61)), (16, Some(24)), (17, Some(2))]);
+    }
+
+    fn read_raw(s: &mut TcpStream) -> Vec<u8> {
+        let mut len = [0u8; 2];
+        s.read_exact(&mut len).unwrap();
+        let mut body = vec![0u8; u16::from_be_bytes(len) as usize];
+        s.read_exact(&mut body).unwrap();
+        body
+    }
+
+    fn pair() -> (Connection, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let conn = Connection::connect(&addr).unwrap();
+        let (srv, _) = listener.accept().unwrap();
+        (conn, srv)
+    }
+
+    /// GServer's view of a 2.22 login: the first frame is plain zlib and
+    /// is the login line itself (type 5, key, token), and the next frame
+    /// is gen-5 with the iterator at the seed.
+    #[test]
+    fn gen5_login_is_plain_then_seeded() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x2B, "ab", "cd").unwrap();
+        conn.send_messages(&[b"EEnglish\n".to_vec()]).unwrap();
+
+        let login = read_frame(&mut srv);
+        assert_eq!(&login[..10], b"%KGNW03014");
+        assert_eq!(&login[10..], b"\"ab\"cd\n");
+
+        let raw = read_raw(&mut srv);
+        let mut g = Gen5::new(0x2B);
+        let body = crate::protocol::read_frame(
+            &mut [&(raw.len() as u16).to_be_bytes()[..], &raw].concat().as_slice(),
+            &mut g,
+        )
+        .unwrap();
+        assert_eq!(body, b"EEnglish\n");
+    }
+
+    /// 2.22 listserver login: plain zlib id 7 handshake, then a gen-5
+    /// frame with id 1, then a gen-5 reply read back with the same key.
+    #[test]
+    fn gen5_listserver_login() {
+        let (mut conn, mut srv) = pair();
+        conn.login_listserver(ClientVersion::V222, 0x66, "ab", "cd").unwrap();
+        assert_eq!(read_frame(&mut srv), b"'\x86GNW30123newmain\n");
+        let raw = read_raw(&mut srv);
+        let mut g = Gen5::new(0x66);
+        assert_eq!(raw[0], Gen5Comp::None as u8);
+        let mut body = raw[1..].to_vec();
+        g.xor_body(&mut body, Gen5Comp::None);
+        assert_eq!(body, b"!\"ab\"cd\n");
+
+        // Reply: id 2 status, gen-5 zlib, server iterator from the seed.
+        let mut out = Gen5::new(0x66);
+        let z = zlib_compress(b"\"Lab listserver\n").unwrap();
+        let frame = write_frame(Gen5Comp::Zlib, &out.encode(z, Gen5Comp::Zlib));
+        srv.write_all(&frame).unwrap();
+        let reply = parse_list_reply(&conn.read_body().unwrap());
+        assert_eq!(reply.status.as_deref(), Some("Lab listserver"));
+    }
+
+    /// 2.05 listserver login: one plain zlib frame, id 0 then id 1.
+    #[test]
+    fn classic_listserver_login() {
+        let (mut conn, mut srv) = pair();
+        conn.login_listserver(ClientVersion::V205, 0x66, "ab", "cd").unwrap();
+        assert_eq!(read_frame(&mut srv), b" newmain\n!\"ab\"cd\n");
+    }
+
+    /// GServer's gen-2 test is "type 0, then a known token": 1.39 sends
+    /// no key.
+    #[test]
+    fn gen2_login_has_no_key() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V139, 0x42, "ab", "cd").unwrap();
+        assert_eq!(read_frame(&mut srv), b" GNW07080\"ab\"cd\n");
+    }
+
+    /// A gen-5 server that refuses the login: the reader hands over the
+    /// disconnect text before the close.
+    #[test]
+    fn gen5_disconnect_message_reaches_state() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x11, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut out = Gen5::new(0x11);
+        let msg = b"0Your client version is not allowed on this server.\n".to_vec();
+        let frame = write_frame(Gen5Comp::None, &out.encode(msg, Gen5Comp::None));
+        srv.write_all(&frame).unwrap();
+        drop(srv);
+
+        let rx = conn.spawn_reader().unwrap();
+        let mut state = SessionState::default();
+        let mut closed = false;
+        while let Ok(item) = rx.recv() {
+            match item {
+                Ok(body) => state.apply_body(&body),
+                Err(_) => {
+                    closed = true;
+                    break;
+                }
+            }
+        }
+        assert!(closed);
+        assert_eq!(
+            state.disconnect_message.as_deref(),
+            Some("Your client version is not allowed on this server.")
+        );
     }
 }

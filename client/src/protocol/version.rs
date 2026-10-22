@@ -94,6 +94,11 @@ impl ClientVersion {
         }
     }
 
+    /// GServer sends `PLO_FILE` with a modtime to 2.1+ clients only.
+    pub fn file_has_modtime(self) -> bool {
+        matches!(self, Self::V217 | Self::V222 | Self::V231)
+    }
+
     pub fn sends_tampercheck(self) -> bool {
         matches!(self, Self::V217 | Self::V222 | Self::V231)
     }

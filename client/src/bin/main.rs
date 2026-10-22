@@ -12,7 +12,7 @@
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
 use seihai::net::Connection;
 use seihai::offline::OfflineSession;
-use seihai::protocol::{parse_list_reply, ClientVersion, EncryptionGen, SessionState};
+use seihai::protocol::{ClientVersion, SessionState};
 use seihai::settings::Settings;
 use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
@@ -152,6 +152,7 @@ fn main() {
 
     let mut session = OfflineSession::new();
     let mut net_state = SessionState::default();
+    net_state.file_has_modtime = version.file_has_modtime();
     let mut conn: Option<Connection> = None;
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
@@ -159,28 +160,24 @@ fn main() {
     if let Some(addr) = &online {
         // If this looks like a listserver, fetch the list and pick a gserver.
         if addr.contains("14921") || addr.contains("14922") || addr.contains("listserver") {
-            match Connection::connect(addr) {
-                Ok(mut c) => {
-                    let key = 0x40u8;
-                    if c.login_versioned(version, key, &account, &password).is_ok() {
-                        let mut state = SessionState::default();
-                        if let Ok(body) = c.read_frame_into(&mut state) {
-                            let reply = parse_list_reply(&body);
-                            if !reply.servers.is_empty() {
-                                println!("Servers:");
-                                for (i, e) in reply.servers.iter().enumerate() {
-                                    println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
-                                }
-                                println!("pick a number:");
-                                let mut pick = String::new();
-                                let _ = std::io::stdin().read_line(&mut pick);
-                                if let Ok(n) = pick.trim().parse::<usize>() {
-                                    if let Some(e) = reply.servers.get(n) {
-                                        online = Some(format!("{}:{}", e.host, e.port));
-                                        settings.last_server = online.clone();
-                                        settings.save();
-                                    }
-                                }
+            match Connection::fetch_server_list(addr, version, &account, &password) {
+                Ok(reply) => {
+                    if let Some(err) = &reply.error {
+                        eprintln!("listserver error: {err}");
+                    }
+                    if !reply.servers.is_empty() {
+                        println!("Servers:");
+                        for (i, e) in reply.servers.iter().enumerate() {
+                            println!("  {i}) {} ({}:{})", e.name, e.host, e.port);
+                        }
+                        println!("pick a number:");
+                        let mut pick = String::new();
+                        let _ = std::io::stdin().read_line(&mut pick);
+                        if let Ok(n) = pick.trim().parse::<usize>() {
+                            if let Some(e) = reply.servers.get(n) {
+                                online = Some(format!("{}:{}", e.host, e.port));
+                                settings.last_server = online.clone();
+                                settings.save();
                             }
                         }
                     }
@@ -191,18 +188,9 @@ fn main() {
     }
 
     if let Some(addr) = &online {
-        if version.encryption() != EncryptionGen::Gen3 {
-            eprintln!("online mode reads gen-3 (2.05/2.17) sessions only; trying anyway");
-        }
         match Connection::connect(addr) {
             Ok(mut c) => {
-                // The real client sends `rand & 0x7F`; a fixed even key
-                // would always put the gen-3 byte at index 0 of short lines.
-                let key = (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.subsec_nanos())
-                    .unwrap_or(1)
-                    & 0x7F) as u8;
+                let key = seihai::net::random_key();
                 if let Err(e) = c.login_versioned(version, key, &account, &password) {
                     eprintln!("login failed: {e}");
                     if !cli_mode {
@@ -211,7 +199,7 @@ fn main() {
                     }
                 } else {
                     eprintln!("logged in to {addr} as {account}");
-                    match c.spawn_reader(version.encryption() == EncryptionGen::Gen5, key) {
+                    match c.spawn_reader() {
                         Ok(rx) => frames = Some(rx),
                         Err(e) => eprintln!("reader failed: {e}"),
                     }
@@ -347,9 +335,14 @@ fn main() {
                         changed = true;
                     }
                     Ok(Err(e)) => {
-                        eprintln!("connection closed: {e}");
+                        // The server's own reason, when it sent one.
+                        let why = match &net_state.disconnect_message {
+                            Some(m) => format!("disconnected: {m}"),
+                            None => format!("connection closed: {e}"),
+                        };
+                        eprintln!("{why}");
                         if !cli_mode {
-                            let _ = seihai::gui::run_with_error(format!("connection closed: {e}"));
+                            let _ = seihai::gui::run_with_error(why);
                             return;
                         }
                         conn = None;

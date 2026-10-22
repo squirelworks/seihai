@@ -8,7 +8,7 @@
 //!
 //! Group limits:
 //! - uncompressed (`0x02`): `ceil(len/4)` capped at 12
-//! - zlib (`0x04`) / bz2 (`0x06`): `floor(len/4)` capped at 4
+//! - zlib (`0x04`) / bz2 (`0x06`): `ceil(len/4)` capped at 4
 //!
 //! A partial last group is XORed byte by byte.
 //! Login frame is plain zlib with no compression byte and no XOR.
@@ -55,23 +55,21 @@ impl Gen5 {
 
     /// XOR `body` in place. `comp` selects the group limit.
     ///
-    /// gs2lib XORs a fixed number of 4-byte groups: 12 for uncompressed
-    /// (0x02), 4 for zlib (0x04) or bz2 (0x06). A short last group still
-    /// steps the iterator.
+    /// The iterator steps once per 4-byte group that the body actually
+    /// has, up to 12 groups for uncompressed (`0x02`) bodies and 4 for
+    /// zlib (`0x04`) or bz2 (`0x06`). A partial last group is XORed byte
+    /// by byte and still steps the iterator. A short body steps fewer
+    /// times: a 7-byte `0x02` body steps twice, not 12 times. The lab
+    /// 2.22 captures only chain from frame to frame with this count.
     pub fn xor_body(&mut self, body: &mut [u8], comp: Gen5Comp) {
-        let groups = match comp {
+        let limit = match comp {
             Gen5Comp::None => 12,
             Gen5Comp::Zlib | Gen5Comp::Bz2 => 4,
         };
-        let mut off = 0;
-        for _ in 0..groups {
+        for chunk in body.chunks_mut(4).take(limit) {
             self.it = self.it.wrapping_mul(GEN3_MUL).wrapping_add(self.key as u32);
-            let bytes = self.it.to_le_bytes();
-            for b in &bytes {
-                if off < body.len() {
-                    body[off] ^= b;
-                }
-                off += 1;
+            for (b, k) in chunk.iter_mut().zip(self.it.to_le_bytes()) {
+                *b ^= k;
             }
         }
     }
@@ -122,7 +120,6 @@ pub fn read_frame<R: std::io::Read>(
     r: &mut R,
     cipher: &mut Gen5,
 ) -> std::io::Result<Vec<u8>> {
-    use std::io::Read;
     let mut len_buf = [0u8; 2];
     r.read_exact(&mut len_buf)?;
     let total = u16::from_be_bytes(len_buf) as usize;
@@ -135,7 +132,12 @@ pub fn read_frame<R: std::io::Read>(
         0x02 => Gen5Comp::None,
         0x04 => Gen5Comp::Zlib,
         0x06 => Gen5Comp::Bz2,
-        _ => Gen5Comp::None,
+        other => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown gen-5 compression byte {other:#04x}"),
+            ))
+        }
     };
     let mut body = raw[1..].to_vec();
     cipher.xor_body(&mut body, comp);
@@ -172,6 +174,75 @@ mod tests {
         // 12 groups * 4 = 48 bytes should be touched; rest stay zero.
         assert!(body[..48].iter().any(|&b| b != 0));
         assert!(body[48..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn short_body_steps_per_group() {
+        let mut g = Gen5::new(1);
+        g.xor_body(&mut [0u8; 7], Gen5Comp::None);
+        let mut h = Gen5::new(1);
+        h.xor_body(&mut [0u8; 8], Gen5Comp::None);
+        assert_eq!(g.state(), h.state());
+        h.xor_body(&mut [], Gen5Comp::None);
+        assert_eq!(g.state(), h.state());
+    }
+
+    fn hex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    /// Lab 2.22 session, client→server frame 1 (the first frame after the
+    /// plain zlib login line). The iterator is still at the seed, and the
+    /// next frame's exported starting state follows from two groups.
+    #[test]
+    fn lab_222_first_client_frame() {
+        let raw = hex("02065dbfb1166cc3b487443600a1ca0db3c4609eed04");
+        let mut g = Gen5::new(43);
+        let mut body = raw[1..].to_vec();
+        g.xor_body(&mut body, Gen5Comp::None);
+        assert_eq!(&body[..8], b"EEnglish");
+        assert_eq!(body[8], b'\n');
+        assert_eq!(body[9], 39 + 0x20);
+        assert_eq!(*body.last().unwrap(), b'\n');
+        assert_eq!(g.state(), 497_901_838);
+    }
+
+    /// Lab 2.22 session, server→client frames 2–4: a 7-byte uncompressed
+    /// frame between zlib frames. Each frame's end state is the next
+    /// frame's exported starting state.
+    #[test]
+    fn lab_222_server_chain() {
+        let frames = [
+            "02a124beb5d097",
+            "044d003e203aae18995ee1e89e7da02751cec84ccd817192f2532ac12cbbf2a4fcdc2488a89dae5e7a661a97a6825a414e62656a111700c76614f9",
+            "0461a02179c7da8f6387a6cd63c16e8e77c8c92c2ec94ccecf4b4d2cc9cc4b4713ccc84cc114cccb5728c82d060b02002a201bfd",
+        ];
+        let states = [3_340_213_666u32, 2_094_352_182];
+        let mut g = Gen5::with_state(194_979_936, 11);
+        let mut bodies = Vec::new();
+        for (i, f) in frames.iter().enumerate() {
+            let mut wire = hex(f);
+            let len = wire.len() as u16;
+            let mut framed = len.to_be_bytes().to_vec();
+            framed.append(&mut wire);
+            bodies.push(read_frame(&mut framed.as_slice(), &mut g).unwrap());
+            if let Some(s) = states.get(i) {
+                assert_eq!(g.state(), *s, "after frame {}", i + 2);
+            }
+        }
+        assert_eq!(bodies[0][0], 42 + 0x20);
+        assert!(bodies[1].starts_with(b"Msword1.png\n"));
+        assert!(bodies[2].ends_with(b"plisticonno pms.png\n"));
+    }
+
+    #[test]
+    fn unknown_ctype_is_an_error() {
+        let framed = [0u8, 2, 0x09, 0x00];
+        let mut g = Gen5::new(1);
+        assert!(read_frame(&mut &framed[..], &mut g).is_err());
     }
 
     #[test]
