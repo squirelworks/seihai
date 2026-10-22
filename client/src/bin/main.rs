@@ -12,12 +12,13 @@
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot, Level};
 use seihai::net::Connection;
 use seihai::offline::OfflineSession;
-use seihai::protocol::{ClientVersion, SessionState};
+use seihai::protocol::{ClientVersion, EncryptionGen, SessionState};
 use seihai::render::{
     draw_player_marker, draw_player_sprites, player_box_origin, render_view, Framebuffer,
 };
 use std::env;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -106,16 +107,30 @@ fn main() {
     let mut session = OfflineSession::new();
     let mut net_state = SessionState::default();
     let mut conn: Option<Connection> = None;
+    let mut frames = None;
     let mut loaded_level: Option<String> = None;
 
     if let Some(addr) = &online {
+        if version.encryption() != EncryptionGen::Gen3 {
+            eprintln!("online mode reads gen-3 (2.05/2.17) sessions only; trying anyway");
+        }
         match Connection::connect(addr) {
             Ok(mut c) => {
-                let key = 0x40u8;
+                // The real client sends `rand & 0x7F`; a fixed even key
+                // would always put the gen-3 byte at index 0 of short lines.
+                let key = (std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(1)
+                    & 0x7F) as u8;
                 if let Err(e) = c.login_versioned(version, key, &account, &password) {
                     eprintln!("login failed: {e}");
                 } else {
                     eprintln!("logged in to {addr} as {account}");
+                    match c.spawn_reader() {
+                        Ok(rx) => frames = Some(rx),
+                        Err(e) => eprintln!("reader failed: {e}"),
+                    }
                     conn = Some(c);
                 }
             }
@@ -194,54 +209,98 @@ fn main() {
     };
     window.limit_update_rate(Some(std::time::Duration::from_millis(16)));
 
+    const STEP_EVERY: Duration = Duration::from_millis(50);
+    let mut last_step = Instant::now();
     while window.is_open() && !window.is_key_down(minifb::Key::Escape) {
-        // Online: read one frame if available and apply to session.
-        if let Some(c) = conn.as_mut() {
-            if let Ok(_) = c.read_frame_into(&mut net_state) {
+        // Online: apply every frame that has arrived, without blocking.
+        if let Some(rx) = &frames {
+            let mut changed = false;
+            loop {
+                match rx.try_recv() {
+                    Ok(Ok(body)) => {
+                        net_state.apply_body(&body);
+                        changed = true;
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("connection closed: {e}");
+                        conn = None;
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }
+            if changed {
                 if let Some(name) = &net_state.level_name {
                     if loaded_level.as_ref() != Some(name) {
-                        let path = root.level(&format!("{name}.nw"));
-                        if session.load_level(&path).is_ok() {
-                            loaded_level = Some(name.clone());
+                        // The server sends the file name, e.g. "onlinestartlocal.nw".
+                        let file = if name.ends_with(".nw") {
+                            name.clone()
+                        } else {
+                            format!("{name}.nw")
+                        };
+                        match session.load_level(root.level(&file)) {
+                            Ok(()) => eprintln!("level {file}"),
+                            Err(e) => {
+                                eprintln!("level {file} not loaded ({e}); empty board");
+                                session.current_level = None;
+                            }
                         }
+                        loaded_level = Some(name.clone());
                     }
                 }
-                if let Some(x) = net_state.player_x {
+                // Take server positions once, so local walking is not
+                // snapped back by later frames.
+                let warped = net_state.player_x.is_some() || net_state.player_y.is_some();
+                if let Some(x) = net_state.player_x.take() {
                     session.player_x = x;
                 }
-                if let Some(y) = net_state.player_y {
+                if let Some(y) = net_state.player_y.take() {
                     session.player_y = y;
                 }
-                if let Some(d) = net_state.player_dir {
+                if let Some(d) = net_state.player_dir.take() {
                     session.player_dir = d;
+                }
+                if warped {
+                    eprintln!(
+                        "position {} {} dir {}",
+                        session.player_x, session.player_y, session.player_dir
+                    );
                 }
                 buffer = draw(&session).1;
             }
         }
 
-        // Arrow keys move the player.
+        // Arrow keys move the player half a tile per step, at most one
+        // step every 50 ms.
         let mut moved = false;
-        if window.is_key_down(minifb::Key::Left) {
-            session.try_move(-1.0, 0.0);
-            moved = true;
-        }
-        if window.is_key_down(minifb::Key::Right) {
-            session.try_move(1.0, 0.0);
-            moved = true;
-        }
-        if window.is_key_down(minifb::Key::Up) {
-            session.try_move(0.0, -1.0);
-            moved = true;
-        }
-        if window.is_key_down(minifb::Key::Down) {
-            session.try_move(0.0, 1.0);
-            moved = true;
+        if last_step.elapsed() >= STEP_EVERY {
+            let (mut dx, mut dy) = (0.0, 0.0);
+            if window.is_key_down(minifb::Key::Left) {
+                dx -= 0.5;
+            }
+            if window.is_key_down(minifb::Key::Right) {
+                dx += 0.5;
+            }
+            if window.is_key_down(minifb::Key::Up) {
+                dy -= 0.5;
+            }
+            if window.is_key_down(minifb::Key::Down) {
+                dy += 0.5;
+            }
+            if dx != 0.0 || dy != 0.0 {
+                session.try_move(dx, dy);
+                moved = true;
+                last_step = Instant::now();
+            }
         }
         if moved {
             buffer = draw(&session).1;
-            // Online: send a walk frame.
+            // Online: send the new position as PLI_PLAYERPROPS.
             if let Some(c) = conn.as_mut() {
-                let _ = c.send_walk(&session.player_update());
+                if let Err(e) = c.send_walk(&session.player_update()) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
             }
         }
         let _ = window.update_with_buffer(&buffer, fb.width as usize, fb.height as usize);

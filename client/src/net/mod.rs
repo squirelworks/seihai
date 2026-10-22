@@ -12,16 +12,20 @@ pub use udp::{
 };
 
 use crate::protocol::{
-    read_zlib_frame, write_login, write_zlib_frame, ClientVersion, LevelRequest, LoginRequest,
-    PlayerUpdate, SessionState,
+    encode_pos_classic, read_zlib_frame, write_login, write_zlib_frame, ClientVersion,
+    EncryptionGen, Gen3, LevelRequest, LoginRequest, PlayerUpdate, SessionState,
 };
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
+use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 /// TCP connection to a listserver or gserver.
 pub struct Connection {
     stream: TcpStream,
+    /// Gen-3 insertion state for client→server messages, set by a
+    /// versioned 2.05-style login.
+    gen3: Option<Gen3>,
 }
 
 impl Connection {
@@ -29,7 +33,7 @@ impl Connection {
     pub fn connect(addr: &str) -> io::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream })
+        Ok(Self { stream, gen3: None })
     }
 
     /// Send a raw byte buffer.
@@ -54,7 +58,64 @@ impl Connection {
         line.push(b'\n');
         let frame = write_zlib_frame(&line)?;
         self.send_raw(&frame)?;
+        // Every later message carries a gen-3 byte; the iterator starts
+        // fresh with the first message after the login line.
+        if version.encryption() == EncryptionGen::Gen3 {
+            self.gen3 = Some(Gen3::new(key));
+        }
         self.stream.flush()
+    }
+
+    /// Send logical messages (each `GCHAR id + payload + \n`) in one
+    /// zlib frame, applying the gen-3 insertion when the login set it up.
+    pub fn send_messages(&mut self, msgs: &[Vec<u8>]) -> io::Result<()> {
+        let mut body = Vec::new();
+        for m in msgs {
+            match self.gen3.as_mut() {
+                Some(g) => body.extend(g.encode(m)),
+                None => body.extend_from_slice(m),
+            }
+        }
+        let frame = write_zlib_frame(&body)?;
+        self.send_raw(&frame)?;
+        self.stream.flush()
+    }
+
+    /// Send `PLI_PLAYERPROPS` (2) with X (15), Y (16) and SPRITE (17).
+    ///
+    /// This is the 2.05 "walk" message: X/Y in half-tiles, SPRITE with
+    /// the direction in its low two bits.
+    pub fn send_position(&mut self, x: f32, y: f32, dir: u8) -> io::Result<()> {
+        let msg = vec![
+            2 + 0x20,
+            15 + 0x20,
+            encode_pos_classic(x).wrapping_add(0x20),
+            16 + 0x20,
+            encode_pos_classic(y).wrapping_add(0x20),
+            17 + 0x20,
+            (dir % 4) + 0x20,
+            b'\n',
+        ];
+        self.send_messages(&[msg])
+    }
+
+    /// Read server frames on a background thread.
+    ///
+    /// Each zlib frame body is sent down the channel; the channel closes
+    /// (after an `Err`) when the connection drops. Gen-3 server→client
+    /// traffic is plain zlib, so this suits 2.05-style logins.
+    pub fn spawn_reader(&self) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
+        let mut stream = self.stream.try_clone()?;
+        stream.set_read_timeout(None)?;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || loop {
+            let frame = read_zlib_frame(&mut stream);
+            let stop = frame.is_err();
+            if tx.send(frame).is_err() || stop {
+                break;
+            }
+        });
+        Ok(rx)
     }
 
     /// Read one zlib frame and apply its messages to `state`.
@@ -135,11 +196,9 @@ impl Connection {
         self.send_raw(&buf)
     }
 
-    /// Send a short walk frame for the given update.
+    /// Send a walk update for the given position (see [`Self::send_position`]).
     pub fn send_walk(&mut self, upd: &PlayerUpdate) -> io::Result<()> {
-        let mut buf = Vec::new();
-        upd.write_walk(&mut buf)?;
-        self.send_raw(&buf)
+        self.send_position(upd.x, upd.y, upd.dir)
     }
 
     /// Send a chat message as `PLI_TOALL` (id 6).
@@ -181,3 +240,45 @@ pub fn parse_server_list(reply: &str) -> Vec<String> {
         .collect()
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{parse_player_props, zlib_decompress};
+    use std::io::Read;
+    use std::net::TcpListener;
+
+    fn read_frame(s: &mut TcpStream) -> Vec<u8> {
+        let mut len = [0u8; 2];
+        s.read_exact(&mut len).unwrap();
+        let mut body = vec![0u8; u16::from_be_bytes(len) as usize];
+        s.read_exact(&mut body).unwrap();
+        zlib_decompress(&body).unwrap()
+    }
+
+    #[test]
+    fn walk_after_login_is_gen3_framed() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut conn = Connection::connect(&addr).unwrap();
+        let (mut srv, _) = listener.accept().unwrap();
+
+        conn.login_versioned(ClientVersion::V205, 0x42, "ab", "cd").unwrap();
+        conn.send_position(30.5, 12.0, 2).unwrap();
+
+        let login = read_frame(&mut srv);
+        assert_eq!(&login[..2], &[0x20, 0x42 + 0x20]);
+
+        // Server side: undo the gen-3 byte, as GServer does.
+        let body = read_frame(&mut srv);
+        let line = body.strip_suffix(b"\n").unwrap();
+        let mut g = Gen3::new(0x42);
+        let mut enc = line.to_vec();
+        enc.push(b'\n');
+        let msg = g.decode(&enc).unwrap();
+        assert_eq!(msg[0], 2 + 0x20);
+        let props = parse_player_props(&msg[1..msg.len() - 1]);
+        let vals: Vec<(u8, Option<u8>)> = props.iter().map(|p| (p.id, p.gchar())).collect();
+        assert_eq!(vals, vec![(15, Some(61)), (16, Some(24)), (17, Some(2))]);
+    }
+}
