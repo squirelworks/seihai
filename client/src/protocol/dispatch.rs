@@ -21,15 +21,42 @@ pub struct Message {
 /// Each message is `GCHAR(id)` + payload + `\n`.
 pub fn split_messages(body: &[u8]) -> Vec<Message> {
     let mut out = Vec::new();
-    for line in body.split(|&b| b == b'\n') {
-        if line.is_empty() {
-            continue;
+    let mut i = 0;
+    while i < body.len() {
+        let id = body[i].wrapping_sub(0x20);
+        i += 1;
+        if id == 100 {
+            // PLO_RAWDATA: GINT3 length, then that many bytes as one message.
+            if i + 3 > body.len() {
+                break;
+            }
+            let n = (body[i] as usize)
+                | ((body[i + 1] as usize) << 8)
+                | ((body[i + 2] as usize) << 16);
+            i += 3;
+            let end = (i + n).min(body.len());
+            if i < end {
+                let inner_id = body[i].wrapping_sub(0x20);
+                out.push(Message {
+                    id: inner_id,
+                    payload: body[i + 1..end].to_vec(),
+                });
+            }
+            i = end;
+        } else {
+            // Normal: rest of the line until \n.
+            let start = i;
+            while i < body.len() && body[i] != b'\n' {
+                i += 1;
+            }
+            out.push(Message {
+                id,
+                payload: body[start..i].to_vec(),
+            });
+            if i < body.len() {
+                i += 1;
+            }
         }
-        let id = line[0].wrapping_sub(0x20);
-        out.push(Message {
-            id,
-            payload: line[1..].to_vec(),
-        });
     }
     out
 }

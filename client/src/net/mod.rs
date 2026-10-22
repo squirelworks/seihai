@@ -45,9 +45,9 @@ impl Connection {
 
     /// Send a version-aware login as a zlib frame.
     ///
-    /// Builds the login line for `version`, wraps it in a gen-2/3 zlib frame,
-    /// and writes it. The login frame itself is clean (no gen-3 insertion,
-    /// no gen-5 XOR).
+    /// For gen-5, first sends the listserver handshake: plain zlib of
+    /// `GCHAR 7` + `GCHAR key` + `GNW30123` + `newmain`. Every later
+    /// frame is then gen-5. The game login follows.
     pub fn login_versioned(
         &mut self,
         version: ClientVersion,
@@ -55,17 +55,38 @@ impl Connection {
         account: &str,
         password: &str,
     ) -> io::Result<()> {
+        if version.encryption() == EncryptionGen::Gen5 {
+            // Listserver handshake for 2.22+.
+            let mut hs = Vec::new();
+            hs.push(7u8.wrapping_add(0x20));
+            hs.push(key.wrapping_add(0x20));
+            hs.extend_from_slice(b"GNW30123");
+            hs.extend_from_slice(b"newmain");
+            hs.push(b'\n');
+            let frame = write_zlib_frame(&hs)?;
+            self.send_raw(&frame)?;
+            self.gen5 = Some(crate::protocol::Gen5::new(key));
+        }
         let mut line = Vec::new();
         write_login(&mut line, version, key, account, password)?;
         line.push(b'\n');
-        let frame = write_zlib_frame(&line)?;
-        self.send_raw(&frame)?;
-        // Every later message carries a gen-3 byte; the iterator starts
-        // fresh with the first message after the login line.
-        if version.encryption() == EncryptionGen::Gen3 {
-            self.gen3 = Some(Gen3::new(key));
-        } else if version.encryption() == EncryptionGen::Gen5 {
-            self.gen5 = Some(crate::protocol::Gen5::new(key));
+        if version.encryption() == EncryptionGen::Gen5 {
+            let g5 = self.gen5.as_mut().unwrap();
+            let comp = crate::protocol::choose_comp(line.len());
+            let compressed = match comp {
+                crate::protocol::Gen5Comp::Bz2 => crate::protocol::bz2_compress(&line)?,
+                crate::protocol::Gen5Comp::Zlib => crate::protocol::zlib_compress(&line)?,
+                crate::protocol::Gen5Comp::None => line.clone(),
+            };
+            let encoded = g5.encode(compressed, comp);
+            let frame = crate::protocol::write_frame(comp, &encoded);
+            self.send_raw(&frame)?;
+        } else {
+            let frame = write_zlib_frame(&line)?;
+            self.send_raw(&frame)?;
+            if version.encryption() == EncryptionGen::Gen3 {
+                self.gen3 = Some(Gen3::new(key));
+            }
         }
         self.stream.flush()
     }

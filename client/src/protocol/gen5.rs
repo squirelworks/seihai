@@ -54,24 +54,23 @@ impl Gen5 {
     }
 
     /// XOR `body` in place. `comp` selects the group limit.
+    ///
+    /// gs2lib XORs a fixed number of 4-byte groups: 12 for uncompressed
+    /// (0x02), 4 for zlib (0x04) or bz2 (0x06). A short last group still
+    /// steps the iterator.
     pub fn xor_body(&mut self, body: &mut [u8], comp: Gen5Comp) {
-        let limit = match comp {
-            Gen5Comp::None => (body.len() + 3) / 4,
-            Gen5Comp::Zlib | Gen5Comp::Bz2 => body.len() / 4,
-        };
-        let limit = limit.min(match comp {
+        let groups = match comp {
             Gen5Comp::None => 12,
             Gen5Comp::Zlib | Gen5Comp::Bz2 => 4,
-        });
+        };
         let mut off = 0;
-        for _ in 0..limit {
+        for _ in 0..groups {
             self.it = self.it.wrapping_mul(GEN3_MUL).wrapping_add(self.key as u32);
             let bytes = self.it.to_le_bytes();
             for b in &bytes {
-                if off >= body.len() {
-                    return;
+                if off < body.len() {
+                    body[off] ^= b;
                 }
-                body[off] ^= b;
                 off += 1;
             }
         }
