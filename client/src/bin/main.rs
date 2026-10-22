@@ -9,7 +9,7 @@
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
 
-use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot, Level};
+use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
 use seihai::net::Connection;
 use seihai::offline::OfflineSession;
 use seihai::protocol::{ClientVersion, EncryptionGen, SessionState};
@@ -319,7 +319,7 @@ fn main() {
             }
         }
         if moved {
-            buffer = draw(&session).1;
+            buffer = draw(&session, &net_state.others).1;
             // Online: send the new position as PLI_PLAYERPROPS.
             if let Some(c) = conn.as_mut() {
                 if let Err(e) = c.send_walk(&session.player_update()) {
