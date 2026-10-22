@@ -60,7 +60,7 @@ The player sprite is shifted down 12 px so the feet sit on the collision tile.
 `AssetRoot` expects:
 - `pics1.png`
 - `levels/bodies/body.png`, `levels/heads/head.png` (4-bit palette with tRNS)
-- `levels/*.nw`
+- `levels/*.nw`, `levels/*.graal`, `levels/*.zelda`
 - `gani/` or `levels/ganis/`
 - `tiledefs.txt` or `arrays.dat`
 
