@@ -203,11 +203,30 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
     let mut x = 0.0f32;
     let mut y = 0.0f32;
     let mut dir = 2u8;
+    let mut nick = None;
     for prop in parse_player_props(&payload[2..]) {
-        match (prop.id, prop.gchar()) {
-            (15, Some(v)) => x = v as f32 / 2.0,
-            (16, Some(v)) => y = v as f32 / 2.0,
-            (17, Some(v)) => dir = v % 4,
+        match prop.id {
+            0 => {
+                // GSTRING nickname.
+                if prop.raw.len() > 1 {
+                    nick = String::from_utf8(prop.raw[1..].to_vec()).ok();
+                }
+            }
+            15 => {
+                if let Some(v) = prop.gchar() {
+                    x = v as f32 / 2.0;
+                }
+            }
+            16 => {
+                if let Some(v) = prop.gchar() {
+                    y = v as f32 / 2.0;
+                }
+            }
+            17 => {
+                if let Some(v) = prop.gchar() {
+                    dir = v % 4;
+                }
+            }
             _ => {}
         }
     }
@@ -216,7 +235,7 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
         x,
         y,
         dir,
-        nick: None,
+        nick,
     })
 }
 

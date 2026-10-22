@@ -135,6 +135,24 @@ impl Framebuffer {
         self.fill_rect(110, 4, 50, 8, [0x00, 0x40, 0x00]);
         self.fill_rect(110, 4, ru / 2, 8, [0x20, 0xC0, 0x20]);
     }
+
+    /// Draw a short nickname tag under a player box.
+    ///
+    /// Uses a simple 4×6 block font for ASCII. `dx`/`dy` is the
+    /// top-left of the 48×48 player box.
+    pub fn draw_nick(&mut self, nick: &str, dx: i32, dy: i32) {
+        let mut x = dx + 8;
+        let y = dy + 48;
+        for ch in nick.chars().take(12) {
+            let c = ch as u8;
+            if c < 32 || c > 126 {
+                continue;
+            }
+            // 4×6 block: fill a small rect per character.
+            self.fill_rect(x, y, 4, 6, [0xFF, 0xFF, 0xFF]);
+            x += 5;
+        }
+    }
 }
 
 /// Render a camera view of the level into a framebuffer.
