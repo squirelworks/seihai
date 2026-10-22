@@ -159,7 +159,31 @@ impl Framebuffer {
         }
     }
 
-    /// Draw a short nickname tag under a player box.
+    /// Draw hearts in 0.5 increments using a HUD sheet.
+    ///
+    /// `sheet` is a 96×16 RGBA image: full, half, empty heart, rupee, bomb, arrow.
+    /// `health` and `max_health` are in half-hearts.
+    pub fn draw_hearts(
+        &mut self,
+        sheet: &[u8],
+        sheet_w: u32,
+        health: i32,
+        max_health: i32,
+    ) {
+        let hearts = (max_health.max(1) + 1) / 2;
+        let filled = health.max(0);
+        for i in 0..hearts {
+            let sx = if filled >= (i + 1) * 2 {
+                0
+            } else if filled >= i * 2 + 1 {
+                16
+            } else {
+                32
+            };
+            self.blit_sprite(sheet, sheet_w as usize, 16, sx as usize, 0, 4 + i * 18, 4, 16, 16);
+        }
+    }
+}
     ///
     /// Uses a simple 4×6 block font for ASCII. `dx`/`dy` is the
     /// top-left of the 48×48 player box.
