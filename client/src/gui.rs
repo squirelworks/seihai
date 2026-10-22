@@ -16,6 +16,7 @@ pub struct Launcher {
     servers: Vec<(String, String, u16)>,
     selected: Option<usize>,
     show_advanced: bool,
+    error: Option<String>,
 }
 
 impl Launcher {
