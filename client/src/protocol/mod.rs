@@ -16,7 +16,7 @@ mod version;
 
 pub use board::BoardModify;
 pub use compress::{bz2_compress, bz2_decompress};
-pub use dispatch::{split_messages, Message, SessionState};
+pub use dispatch::{split_messages, Message, OtherPlayer, SessionState};
 pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
 pub use gen3::Gen3;
 pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};

@@ -34,6 +34,16 @@ pub fn split_messages(body: &[u8]) -> Vec<Message> {
     out
 }
 
+/// Another player seen via `PLO_OTHERPLPROPS`.
+#[derive(Debug, Clone)]
+pub struct OtherPlayer {
+    pub id: u16,
+    pub x: f32,
+    pub y: f32,
+    pub dir: u8,
+    pub nick: Option<String>,
+}
+
 /// Minimal session state built from the level-entry packets.
 #[derive(Debug, Default)]
 pub struct SessionState {
@@ -53,6 +63,8 @@ pub struct SessionState {
     pub player_y: Option<f32>,
     pub player_dir: Option<u8>,
     pub other_props: Vec<(u8, Vec<u8>)>,
+    /// Other players parsed from `PLO_OTHERPLPROPS`.
+    pub others: Vec<OtherPlayer>,
     pub unhandled: HashMap<u8, usize>,
 }
 
@@ -97,8 +109,15 @@ impl SessionState {
                 }
             }
             8 => {
-                // PLO_OTHERPLPROPS
+                // PLO_OTHERPLPROPS — parse position and store.
                 self.other_props.push((msg.id, msg.payload.clone()));
+                if let Some(other) = parse_other_player(&msg.payload) {
+                    if let Some(existing) = self.others.iter_mut().find(|o| o.id == other.id) {
+                        *existing = other;
+                    } else {
+                        self.others.push(other);
+                    }
+                }
             }
             9 => {
                 // PLO_PLAYERPROPS — extract classic position if present.
@@ -164,6 +183,35 @@ impl SessionState {
             }
         }
     }
+}
+
+/// Parse one `PLO_OTHERPLPROPS` payload into an `OtherPlayer`.
+///
+/// The first two bytes are the player id (GCHAR pair or raw). The rest
+/// is a prop stream like `PLO_PLAYERPROPS`.
+fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
+    if payload.len() < 4 {
+        return None;
+    }
+    let id = payload[0] as u16;
+    let mut x = 0.0f32;
+    let mut y = 0.0f32;
+    let mut dir = 2u8;
+    for prop in parse_player_props(&payload[2..]) {
+        match (prop.id, prop.gchar()) {
+            (15, Some(v)) => x = v as f32 / 2.0,
+            (16, Some(v)) => y = v as f32 / 2.0,
+            (17, Some(v)) => dir = v % 4,
+            _ => {}
+        }
+    }
+    Some(OtherPlayer {
+        id,
+        x,
+        y,
+        dir,
+        nick: None,
+    })
 }
 
 #[cfg(test)]

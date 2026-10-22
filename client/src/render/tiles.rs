@@ -225,7 +225,31 @@ pub fn draw_player_marker(fb: &mut Framebuffer, in_water: bool, dx: i32, dy: i32
     fb.fill_rect(dx + 16, dy + 24, 16, 16, color);
 }
 
-/// Draw the standing player (idle.gani, frame 0) for direction `dir`.
+/// Draw another player at a level position.
+///
+/// Uses the same body/head blit as the local player. `(cam_x, cam_y)` is
+/// the camera origin in level pixels.
+pub fn draw_other_player(
+    fb: &mut Framebuffer,
+    body: &[u8],
+    body_w: u32,
+    body_bpp: usize,
+    head: &[u8],
+    head_w: u32,
+    head_bpp: usize,
+    sprites: Option<(&[u8], u32, usize)>,
+    dir: u8,
+    level_x: f32,
+    level_y: f32,
+    cam_x: i32,
+    cam_y: i32,
+) {
+    let dx = (level_x * TILE_PX as f32) as i32 - cam_x;
+    let dy = (level_y * TILE_PX as f32) as i32 - cam_y;
+    draw_player_sprites(
+        fb, body, body_w, body_bpp, head, head_w, head_bpp, sprites, dir, dx, dy,
+    );
+}
 ///
 /// `body` and `head` are images with `*_bpp` bytes per pixel (4 keeps
 /// palette transparency). Direction is Graal order: 0 up, 1 left,

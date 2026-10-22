@@ -8,7 +8,8 @@
 mod tiles;
 
 pub use tiles::{
-    draw_player_marker, draw_player_sprites, player_box_origin, render_view, Framebuffer, TILE_PX,
+    draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
+    Framebuffer, TILE_PX,
 };
 
 use crate::assets::{read_png_rgb, tile_id, Level};
