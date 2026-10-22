@@ -95,3 +95,14 @@ Not drawn yet: shield, hat, sword, the nickname tag, and gani animation.
 Checks: unit tests replay lab 2.22 frames (client frame 1 from the seed; server frames 2–4 across a 7-byte uncompressed frame), and loopback tests cover the gen-5 login, both listserver logins and the gen-2 login. A loopback gserver that follows GServer-v2's framing logged Seihai in as 2.22, sent a missing `new1.nw` through `PLO_RAWDATA`/`PLO_FILE` (byte-identical on disk), and decoded every walk frame.
 
 Still open: a public gserver run. `session_probe` now takes a version (`... session_probe -- <host:port> 10 2.22`) and prints frame sizes, ids, the level name and the disconnect text.
+
+## 9. Chat, player list and overlays
+Layouts are from GServer-v2 and the 2.05 notes (`chat-pm-rc.md`); they still need the lab check.
+
+- **Chat bar (Enter):** a line goes out as CURCHAT (prop 12) in `PLI_PLAYERPROPS`, which is the bubble. A line that starts with `toall:` goes out as `PLI_TOALL` (6) instead, as 2.05 does. Before, Enter sent a fixed "hello" as a raw, unframed `PLI_TOALL`, which a gen-3 or gen-5 server cannot read.
+- **PM (F2):** `PLI_PRIVATEMESSAGE` (28) is a GSHORT count, GSHORT player ids, then the gtokenized text, to the nearest player. Before, it sent `name:text` unframed.
+- **Incoming:** `PLO_TOALL` (13), `PLO_PRIVATEMESSAGE` (37, `"type","text"` list), `PLO_RC_ADMINMESSAGE` (35) and other players' CURCHAT go into a 200-line history. PgUp/PgDn scroll it. Text is single-byte (Latin-1).
+- **Other players:** the id in `PLO_OTHERPLPROPS` and `PLO_DELPLAYER` is a GSHORT, not the first byte. Updates are partial, so a prop that is absent keeps its value (a chat-only update used to reset the player to 0,0). PCONNECTED (51) or JOINLEAVELVL 0 removes the player. X2/Y2 are read too.
+- **Overlays:** nickname tags and bubbles use a 5×7 bitmap font drawn for Seihai. F4 toggles the player list, F3 a debug overlay (fps, position, level, frames and messages, players), F12 saves a PNG to `screenshots/`. Esc closes the chat bar, and quits only when it is closed.
+
+Loopback check (2.22 framing, a scripted second player): the server got the CURCHAT, toall and PM with the right layouts. The bubble, nickname, toall, PM, history, list and debug overlay all showed.
