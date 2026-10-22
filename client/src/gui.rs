@@ -1,7 +1,7 @@
 //! Settings and connect window.
 
 use crate::net::Connection;
-use crate::protocol::ClientVersion;
+use crate::protocol::{ClientVersion, ServerList};
 use crate::settings::Settings;
 use eframe::egui;
 
@@ -17,6 +17,10 @@ pub struct Launcher {
     selected: Option<usize>,
     show_advanced: bool,
     error: Option<String>,
+    /// Game server for versions with no listserver.
+    direct: String,
+    /// Asset folder for the selected version only.
+    version_assets: String,
 }
 
 impl Launcher {
@@ -54,25 +58,50 @@ impl Launcher {
             selected: None,
             error,
             show_advanced: false,
+            direct: s
+                .direct_server
+                .clone()
+                .unwrap_or_else(|| "localhost:14900".into()),
+            version_assets: String::new(),
         }
+        .with_version_assets()
+    }
+
+    /// Load the per-version asset folder for the selected version.
+    fn with_version_assets(mut self) -> Self {
+        let label = self.version_enum().label();
+        self.version_assets = Settings::load()
+            .assets_for(label)
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        self
+    }
+
+    /// Save the form and the chosen server, then close.
+    fn join(&self, ctx: &egui::Context, name: &str, addr: String) {
+        let mut s = Settings::load();
+        s.account = Some(self.account.clone());
+        s.password = Some(self.password.clone());
+        s.version = Some(self.version.clone());
+        s.assets = Some(self.assets.clone().into());
+        s.set_assets_for(self.version_enum().label(), &self.version_assets);
+        s.last_server = Some(addr);
+        s.last_server_name = Some(name.to_string());
+        s.offline = None;
+        s.save();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
     fn version_enum(&self) -> ClientVersion {
-        for v in ClientVersion::all_versions() {
-            if v.label() == self.version {
-                return *v;
-            }
-        }
-        ClientVersion::V205
+        ClientVersion::from_label(&self.version).unwrap_or(ClientVersion::V205)
     }
 
     fn connect_list(&mut self) {
-        let list_version = if self.version == "1.39" {
-            self.status = "1.39 has no listserver; fetching as 2.05".into();
-            ClientVersion::V205
-        } else {
-            self.version_enum()
-        };
+        let version = self.version_enum();
+        let list_version = version.list_version();
+        if list_version != version {
+            self.status = format!("{} has no listserver; fetching as {}", version.label(), list_version.label());
+        }
         let addr = format!("{}:{}", self.list_host, self.list_port);
         match Connection::fetch_server_list(&addr, list_version, &self.account, &self.password) {
             Ok(reply) => {
@@ -122,32 +151,58 @@ impl eframe::App for Launcher {
             ui.label("Password");
             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
             ui.label("Version");
-            egui::ComboBox::from_label("")
+            let before = self.version.clone();
+            let shown: &[ClientVersion] = if self.show_advanced {
+                ClientVersion::all_versions()
+            } else {
+                ClientVersion::main_versions()
+            };
+            egui::ComboBox::from_id_salt("version")
                 .selected_text(&self.version)
                 .show_ui(ui, |ui| {
-                    for v in ClientVersion::main_versions() {
-                        ui.selectable_value(&mut self.version, v.label().to_string(), v.label());
+                    for v in shown {
+                        let p = v.profile();
+                        let text = match p.basis {
+                            crate::protocol::Basis::Binary => format!("{} ({})", p.label, p.token),
+                            crate::protocol::Basis::Inferred => format!("{} ({}, inferred)", p.label, p.token),
+                        };
+                        ui.selectable_value(&mut self.version, p.label.to_string(), text);
                     }
                 });
-            ui.checkbox(&mut self.show_advanced, "Advanced versions");
-            if self.show_advanced {
-                egui::ComboBox::from_label("all")
-                    .selected_text(&self.version)
-                    .show_ui(ui, |ui| {
-                        for v in ClientVersion::all_versions() {
-                            ui.selectable_value(
-                                &mut self.version,
-                                v.label().to_string(),
-                                format!("{} ({})", v.label(), v.token()),
-                            );
-                        }
-                    });
+            ui.checkbox(&mut self.show_advanced, "All versions");
+            if self.version != before {
+                let label = self.version_enum().label();
+                self.version_assets = Settings::load()
+                    .assets_for(label)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
+            }
+            let profile = self.version_enum().profile();
+            ui.small(profile.summary());
+            ui.label(format!("Assets for {} only (optional)", profile.label));
+            ui.text_edit_singleline(&mut self.version_assets);
+            if let ServerList::Direct { default } = profile.ui.server_list {
+                ui.separator();
+                ui.label(format!("{} connects straight to a game server (default was {default})", profile.label));
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.direct);
+                    if ui.button("Connect").clicked() {
+                        let mut s = Settings::load();
+                        s.direct_server = Some(self.direct.clone());
+                        s.save();
+                        let addr = self.direct.clone();
+                        self.join(ctx, "", addr);
+                    }
+                });
             }
             ui.separator();
             if ui.button("Play offline").clicked() {
                 let mut s = Settings::load();
                 s.last_server = None;
                 s.offline = Some(true);
+                s.version = Some(self.version.clone());
+                s.assets = Some(self.assets.clone().into());
+                s.set_assets_for(self.version_enum().label(), &self.version_assets);
                 s.save();
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -167,12 +222,8 @@ impl eframe::App for Launcher {
             }
             if let Some(i) = self.selected {
                 if ui.button("Join").clicked() {
-                    if let Some((_, host, port)) = self.servers.get(i) {
-                        let addr = format!("{host}:{port}");
-                        let mut s = Settings::load();
-                        s.last_server = Some(addr);
-                        s.save();
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    if let Some((name, host, port)) = self.servers.get(i).cloned() {
+                        self.join(ctx, &name, format!("{host}:{port}"));
                     }
                 }
             }
@@ -205,8 +256,9 @@ fn run_inner(error: Option<String>) -> Option<String> {
     Settings::load().last_server
 }
 
-/// Pick a level file. Returns the chosen path, if any.
-pub fn pick_level(start: &std::path::Path) -> Option<std::path::PathBuf> {
+/// Pick a level file with one of `exts` (e.g. `.nw`). Returns the chosen
+/// path, if any.
+pub fn pick_level(start: &std::path::Path, exts: &[&str]) -> Option<std::path::PathBuf> {
     use std::sync::{Arc, Mutex};
     let chosen = Arc::new(Mutex::new(None));
     let chosen2 = chosen.clone();
@@ -214,6 +266,7 @@ pub fn pick_level(start: &std::path::Path) -> Option<std::path::PathBuf> {
         dir: std::path::PathBuf,
         entries: Vec<String>,
         out: Arc<Mutex<Option<std::path::PathBuf>>>,
+        exts: Vec<String>,
     }
     impl Picker {
         fn refresh(&mut self) {
@@ -225,7 +278,7 @@ pub fn pick_level(start: &std::path::Path) -> Option<std::path::PathBuf> {
                     let name = e.file_name().to_string_lossy().into_owned();
                     if e.path().is_dir() {
                         dirs.push(format!("{name}/"));
-                    } else if name.ends_with(".nw") || name.ends_with(".graal") || name.ends_with(".zelda") {
+                    } else if self.exts.iter().any(|x| name.ends_with(x.as_str())) {
                         files.push(name);
                     }
                 }
@@ -266,6 +319,7 @@ pub fn pick_level(start: &std::path::Path) -> Option<std::path::PathBuf> {
         dir: start.to_path_buf(),
         entries: Vec::new(),
         out: chosen2,
+        exts: exts.iter().map(|x| x.to_string()).collect(),
     };
     picker.refresh();
     let options = eframe::NativeOptions {

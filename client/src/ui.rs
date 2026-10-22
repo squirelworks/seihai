@@ -39,17 +39,25 @@ pub fn classify_chat(line: &str) -> ChatSend {
     }
 }
 
+/// Typed lines kept for Up/Down recall (1.39 keeps 100).
+pub const RECALL_LINES: usize = 100;
+
 /// The text being typed.
 #[derive(Debug, Default)]
 pub struct Input {
     pub mode: Option<InputMode>,
     pub text: String,
+    /// Earlier submitted lines, oldest first.
+    recall: Vec<String>,
+    /// Index into `recall` while stepping through it.
+    recall_pos: Option<usize>,
 }
 
 impl Input {
     pub fn open(&mut self, mode: InputMode) {
         self.mode = Some(mode);
         self.text.clear();
+        self.recall_pos = None;
     }
 
     pub fn is_open(&self) -> bool {
@@ -70,7 +78,40 @@ impl Input {
     /// Close the line and return what was typed with its mode.
     pub fn submit(&mut self) -> Option<(InputMode, String)> {
         let mode = self.mode.take()?;
-        Some((mode, std::mem::take(&mut self.text)))
+        let text = std::mem::take(&mut self.text);
+        if !text.trim().is_empty() {
+            self.recall.push(text.clone());
+            if self.recall.len() > RECALL_LINES {
+                self.recall.remove(0);
+            }
+        }
+        self.recall_pos = None;
+        Some((mode, text))
+    }
+
+    /// Up: put the previous submitted line in the input.
+    pub fn recall_prev(&mut self) {
+        if !self.is_open() || self.recall.is_empty() {
+            return;
+        }
+        let i = match self.recall_pos {
+            Some(i) => i.saturating_sub(1),
+            None => self.recall.len() - 1,
+        };
+        self.recall_pos = Some(i);
+        self.text = self.recall[i].clone();
+    }
+
+    /// Down: step forward again; past the newest line the input empties.
+    pub fn recall_next(&mut self) {
+        let Some(i) = self.recall_pos else { return };
+        if i + 1 < self.recall.len() {
+            self.recall_pos = Some(i + 1);
+            self.text = self.recall[i + 1].clone();
+        } else {
+            self.recall_pos = None;
+            self.text.clear();
+        }
     }
 
     pub fn cancel(&mut self) {
@@ -104,11 +145,16 @@ fn fit(text: &str, max_px: i32) -> String {
 ///
 /// The last [`CHAT_LINES`] lines appear above a permanent input line.
 pub fn draw_chat(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &Input) {
+    draw_chat_lines(fb, log, scroll, input, CHAT_LINES)
+}
+
+/// [`draw_chat`] with `lines` history lines; 0 shows only the input line.
+pub fn draw_chat_lines(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &Input, lines: usize) {
     let w = fb.width as i32;
     let line_h = CELL_H + 1;
     let input_h = line_h + 4;
     let end = log.len().saturating_sub(scroll);
-    let start = end.saturating_sub(CHAT_LINES);
+    let start = end.saturating_sub(lines);
     let shown = &log[start..end];
     let h = shown.len() as i32 * line_h + input_h;
     let top = fb.height as i32 - h - 2;
@@ -319,5 +365,25 @@ mod tests {
         input.open(InputMode::Chat);
         draw_chat(&mut fb, &log, 0, &input);
         assert!(fb.pixels.chunks(3).any(|p| p == [0xFF, 0xFF, 0xFF]));
+    }
+
+    #[test]
+    fn recall_steps_through_sent_lines() {
+        let mut input = Input::default();
+        for line in ["one", "two"] {
+            input.open(InputMode::Chat);
+            input.text = line.into();
+            input.submit();
+        }
+        input.open(InputMode::Chat);
+        input.recall_prev();
+        assert_eq!(input.text, "two");
+        input.recall_prev();
+        input.recall_prev();
+        assert_eq!(input.text, "one");
+        input.recall_next();
+        assert_eq!(input.text, "two");
+        input.recall_next();
+        assert_eq!(input.text, "");
     }
 }
