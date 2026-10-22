@@ -20,11 +20,10 @@ pub use dispatch::{split_messages, Message, SessionState};
 pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
 pub use gen3::Gen3;
 pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};
-pub use list::{parse_list_reply, ServerEntry};
-pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
-pub use gen3::Gen3;
-pub use gen5::{choose_comp, write_frame, Gen5, Gen5Comp};
-pub use props::{decode_pos_precise, encode_pos_classic, encode_pos_precise};
+pub use list::{parse_list_reply, parse_svrlist, ListReply, ServerEntry};
+pub use props::{
+    decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, PlayerProp,
+};
 pub use version::{ClientVersion, EncryptionGen};
 
 use std::io::{self, Write};
@@ -156,8 +155,9 @@ pub fn write_login<W: Write>(
     account: &str,
     password: &str,
 ) -> io::Result<()> {
-    w.write_all(&[version.client_type()])?;
-    w.write_all(&[key & 0x7F])?;
+    // Both are GCHARs: type 0 goes out as 0x20, then the key.
+    w.write_all(&[version.client_type() + 0x20])?;
+    w.write_all(&[(key & 0x7F) + 0x20])?;
     w.write_all(version.token().as_bytes())?;
     write_length_biased(w, account.as_bytes())?;
     write_length_biased(w, password.as_bytes())?;
@@ -305,8 +305,17 @@ mod tests {
     }
 
     #[test]
+    fn login_versioned_gchar_header() {
+        let mut buf = Vec::new();
+        write_login(&mut buf, ClientVersion::V205, 102, "ab", "cd").unwrap();
+        assert_eq!(&buf[..2], &[0x20, 102 + 0x20]);
+        assert_eq!(&buf[2..10], b"GNW03081");
+        assert_eq!(&buf[10..], b"\"ab\"cd");
+    }
+
+    #[test]
     fn walk_rejects_non_walk() {
         assert!(decode_walk(b"1-\n").is_none());
-        assert!(decode_walk(b"\"1-\n").is_some());
+        assert!(decode_walk(b"\"11-\n").is_some());
     }
 }

@@ -4,6 +4,7 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
+use super::props::parse_player_props;
 use std::collections::HashMap;
 
 /// A single logical message after frame decompression.
@@ -147,21 +148,16 @@ impl SessionState {
         }
     }
 
-    /// Parse classic position from a `PLO_PLAYERPROPS` payload.
+    /// Pick position and direction out of a `PLO_PLAYERPROPS` stream.
     ///
-    /// Format (cleaned): a sequence of `(prop_id, value)` pairs.
-    /// Prop 0 = x (value / 2), prop 1 = y (value / 2), prop 2 = direction.
-    /// Values are single bytes in the classic encoding.
+    /// X/Y are props 15/16 (GCHAR, half-tiles); direction is SPRITE
+    /// (17) mod 4.
     fn apply_player_props(&mut self, payload: &[u8]) {
-        let mut i = 0;
-        while i + 1 < payload.len() {
-            let prop = payload[i];
-            let val = payload[i + 1];
-            i += 2;
-            match prop {
-                0 => self.player_x = Some(val as f32 / 2.0),
-                1 => self.player_y = Some(val as f32 / 2.0),
-                2 => self.player_dir = Some(val),
+        for prop in parse_player_props(payload) {
+            match (prop.id, prop.gchar()) {
+                (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
+                (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
+                (17, Some(v)) => self.player_dir = Some(v % 4),
                 _ => {}
             }
         }
