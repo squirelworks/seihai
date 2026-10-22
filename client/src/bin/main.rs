@@ -193,6 +193,10 @@ fn main() {
                     & 0x7F) as u8;
                 if let Err(e) = c.login_versioned(version, key, &account, &password) {
                     eprintln!("login failed: {e}");
+                    if !cli_mode {
+                        let _ = seihai::gui::run_with_error(format!("login failed: {e}"));
+                        return;
+                    }
                 } else {
                     eprintln!("logged in to {addr} as {account}");
                     match c.spawn_reader() {
@@ -202,7 +206,13 @@ fn main() {
                     conn = Some(c);
                 }
             }
-            Err(e) => eprintln!("connect failed: {e}"),
+            Err(e) => {
+                eprintln!("connect failed: {e}");
+                if !cli_mode {
+                    let _ = seihai::gui::run_with_error(format!("connect failed: {e}"));
+                    return;
+                }
+            }
         }
     }
 
@@ -315,6 +325,10 @@ fn main() {
                     }
                     Ok(Err(e)) => {
                         eprintln!("connection closed: {e}");
+                        if !cli_mode {
+                            let _ = seihai::gui::run_with_error(format!("connection closed: {e}"));
+                            return;
+                        }
                         conn = None;
                         break;
                     }
