@@ -4,7 +4,7 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
-use super::props::parse_player_props;
+use super::props::parse_player_props_with;
 use std::collections::HashMap;
 
 /// A single logical message after frame decompression.
@@ -159,6 +159,8 @@ pub struct SessionState {
     /// `PLO_FILE` carries a 5-byte modtime for 2.1+ clients. 2.05 and
     /// older get the name and data only. Set this from the version.
     pub file_has_modtime: bool,
+    /// Read prop 10 as the pre-2.1 bow slot (1.33–1.39 logins).
+    pub bow_prop10: bool,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
     pub disconnect_message: Option<String>,
     pub unhandled: HashMap<u8, usize>,
@@ -266,8 +268,9 @@ impl SessionState {
             }
             102 => {
                 // PLO_FILE, always behind PLO_RAWDATA.
-                if let Some((name, data)) = parse_file_packet(&msg.payload, self.file_has_modtime)
-                {
+                let parsed = parse_file_packet(&msg.payload, self.file_has_modtime)
+                    .or_else(|| parse_file_packet(&msg.payload, !self.file_has_modtime));
+                if let Some((name, data)) = parsed {
                     self.file_requests.push(format!("FILE:{name}"));
                     match self.large_file {
                         Some((ref n, ref mut buf)) if n == &name => buf.extend_from_slice(&data),
@@ -324,7 +327,7 @@ impl SessionState {
     /// X/Y are props 15/16 (GCHAR, half-tiles); direction is SPRITE
     /// (17) mod 4.
     fn apply_player_props(&mut self, payload: &[u8]) {
-        for prop in parse_player_props(payload) {
+        for prop in parse_player_props_with(payload, self.bow_prop10) {
             match (prop.id, prop.gchar()) {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
@@ -364,7 +367,7 @@ fn parse_other_player(payload: &[u8]) -> Option<OtherPlayer> {
     let mut y = 0.0f32;
     let mut dir = 2u8;
     let mut nick = None;
-    for prop in parse_player_props(&payload[2..]) {
+    for prop in parse_player_props_with(&payload[2..], false) {
         match prop.id {
             0 => {
                 // GSTRING nickname.
@@ -422,7 +425,15 @@ fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u
     if rest.len() < name_len {
         return None;
     }
-    let name = String::from_utf8_lossy(&rest[..name_len]).into_owned();
+    // GServer decides by its own version table whether the modtime is
+    // there, so a name that is not a plain file name means the other
+    // layout.
+    let name_bytes = &rest[..name_len];
+    let plain = |b: &u8| b.is_ascii_graphic() || *b == b' ';
+    if name_len == 0 || !name_bytes.iter().all(plain) || !name_bytes.contains(&b'.') {
+        return None;
+    }
+    let name = String::from_utf8_lossy(name_bytes).into_owned();
     let mut data = &rest[name_len..];
     if has_modtime {
         data = data.strip_suffix(b"\n").unwrap_or(data);
@@ -511,6 +522,24 @@ mod tests {
         state.apply_body(two);
         assert_eq!(state.incoming_files, vec![(name.to_string(), data)]);
         assert_eq!(state.level_name.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn file_layout_follows_the_server() {
+        // A 2.1+ reply while the client expected the 2.05 layout.
+        let name = "new1.nw";
+        let mut file = vec![102 + 0x20];
+        file.extend_from_slice(b"  !\"#");
+        file.push(name.len() as u8 + 0x20);
+        file.extend_from_slice(name.as_bytes());
+        file.extend_from_slice(b"GLEVNW01\n");
+        file.push(b'\n');
+        let n = file.len();
+        let mut body = vec![100 + 0x20, 0x20, (n >> 7) as u8 + 0x20, (n & 0x7F) as u8 + 0x20, b'\n'];
+        body.extend_from_slice(&file);
+        let mut st = SessionState::default();
+        st.apply_body(&body);
+        assert_eq!(st.incoming_files, vec![(name.to_string(), b"GLEVNW01\n".to_vec())]);
     }
 
     #[test]

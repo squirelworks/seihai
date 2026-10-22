@@ -47,9 +47,18 @@ fn gstring_len(data: &[u8]) -> Option<usize> {
 ///
 /// Encodings follow the cleaned PLPROP table (2.05 forms where they
 /// differ from later clients).
-fn prop_len(id: u8, data: &[u8]) -> Option<usize> {
+fn prop_len(id: u8, data: &[u8], bow_prop10: bool) -> Option<usize> {
     let c = |i: usize| data.get(i).map(|b| b.wrapping_sub(0x20) as usize);
     let len = match id {
+        // Pre-2.1 bow slot: c(10 + len) + image, or c(power) under 10.
+        10 if bow_prop10 => {
+            let v = c(0)?;
+            if v >= 10 {
+                1 + (v - 10)
+            } else {
+                1
+            }
+        }
         // str
         // 10 is listed as the pre-2.1 bow slot for 2.05, but GServer-v2
         // sends a plain gani name ("idle") to a 2.05 login.
@@ -108,12 +117,20 @@ fn prop_len(id: u8, data: &[u8]) -> Option<usize> {
 /// Stops at the first unknown id or truncated value, like the 2.05
 /// client does; everything decoded before that point is returned.
 pub fn parse_player_props(payload: &[u8]) -> Vec<PlayerProp> {
+    parse_player_props_with(payload, false)
+}
+
+/// [`parse_player_props`] with prop 10 read as the pre-2.1 bow slot.
+///
+/// GServer sends that form to clients it counts as older than 2.1: in
+/// the lab, a 1.39 login got it and a 2.05 login got a gani name.
+pub fn parse_player_props_with(payload: &[u8], bow_prop10: bool) -> Vec<PlayerProp> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < payload.len() {
         let id = payload[i].wrapping_sub(0x20);
         let rest = &payload[i + 1..];
-        let Some(n) = prop_len(id, rest) else { break };
+        let Some(n) = prop_len(id, rest, bow_prop10) else { break };
         out.push(PlayerProp {
             id,
             raw: rest[..n].to_vec(),
@@ -126,6 +143,18 @@ pub fn parse_player_props(payload: &[u8]) -> Vec<PlayerProp> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bow_slot_for_old_clients() {
+        // Prop 10 as bow power 0, then X = 30, SPRITE dir 2.
+        let p = [0x2a, 0x20, 0x2f, 0x20 + 60, 0x31, 0x22];
+        let ids: Vec<u8> = parse_player_props_with(&p, true).iter().map(|p| p.id).collect();
+        assert_eq!(ids, vec![10, 15, 17]);
+        // Bow image "b.gif": c(10 + 5) + name.
+        let p = [&[0x2a, 0x20 + 15][..], b"b.gif", &[0x31, 0x22]].concat();
+        let props = parse_player_props_with(&p, true);
+        assert_eq!(props[1].id, 17);
+    }
 
     #[test]
     fn prop_stream_position_and_sprite() {
