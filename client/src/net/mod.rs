@@ -111,7 +111,7 @@ impl Connection {
             let mut cipher = crate::protocol::Gen5::new(key);
             loop {
                 let frame = if gen5 {
-                    crate::protocol::gen5::read_frame(&mut stream, &mut cipher)
+                    crate::protocol::read_frame(&mut stream, &mut cipher)
                 } else {
                     read_zlib_frame(&mut stream)
                 };
