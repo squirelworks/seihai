@@ -10,7 +10,7 @@
 //! since a server may quote the account in it.
 
 use seihai::net::{random_key, Connection};
-use seihai::protocol::{parse_player_props, split_messages, ClientVersion, SessionState};
+use seihai::protocol::{parse_player_props_with, split_messages, ClientVersion, SessionState};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
@@ -33,6 +33,7 @@ fn main() {
 
     let mut state = SessionState::default();
     state.file_has_modtime = version.file_has_modtime();
+    state.bow_prop10 = version.encryption() == seihai::protocol::EncryptionGen::Gen2;
     let mut ids: BTreeMap<u8, usize> = BTreeMap::new();
     let mut prop_ids: BTreeMap<u8, usize> = BTreeMap::new();
     let mut frames = 0;
@@ -47,7 +48,7 @@ fn main() {
                 for m in split_messages(&body) {
                     *ids.entry(m.id).or_default() += 1;
                     if m.id == 9 {
-                        for p in parse_player_props(&m.payload) {
+                        for p in parse_player_props_with(&m.payload, state.bow_prop10) {
                             *prop_ids.entry(p.id).or_default() += 1;
                         }
                     }

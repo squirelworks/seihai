@@ -144,6 +144,7 @@ fn main() {
             }
         }
         net_state.file_has_modtime = version.file_has_modtime();
+        net_state.bow_prop10 = version.encryption() == seihai::protocol::EncryptionGen::Gen2;
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
