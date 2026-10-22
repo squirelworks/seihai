@@ -321,6 +321,14 @@ fn main() {
                 match rx.try_recv() {
                     Ok(Ok(body)) => {
                         net_state.apply_body(&body);
+                        // Write any completed files and reload levels.
+                        let written = net_state.flush_files(&root.levels_dir());
+                        for name in &written {
+                            if name.ends_with(".nw") {
+                                let _ = session.load_level(root.level(name));
+                                eprintln!("loaded {name}");
+                            }
+                        }
                         changed = true;
                     }
                     Ok(Err(e)) => {

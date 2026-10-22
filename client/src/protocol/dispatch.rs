@@ -69,6 +69,8 @@ pub struct SessionState {
     pub file_requests: Vec<String>,
     /// Completed files: (name, bytes).
     pub incoming_files: Vec<(String, Vec<u8>)>,
+    /// In-progress large file: (name, accumulated bytes).
+    pub large_file: Option<(String, Vec<u8>)>,
     pub unhandled: HashMap<u8, usize>,
 }
 
@@ -170,6 +172,24 @@ impl SessionState {
                 // PLO_FILE: modTime(5) + name_len(1) + name + data + \n
                 if let Some((name, data)) = parse_file_packet(&msg.payload) {
                     self.file_requests.push(format!("FILE:{name}"));
+                    if let Some((ref n, ref mut buf)) = self.large_file {
+                        if n == &name {
+                            buf.extend_from_slice(&data);
+                        }
+                    } else {
+                        self.incoming_files.push((name, data));
+                    }
+                }
+            }
+            84 => {
+                // PLO_LARGEFILESTART — begin accumulation.
+                if let Ok(name) = String::from_utf8(msg.payload.clone()) {
+                    self.large_file = Some((name, Vec::new()));
+                }
+            }
+            86 => {
+                // PLO_LARGEFILEEND — finish and store.
+                if let Some((name, data)) = self.large_file.take() {
                     self.incoming_files.push((name, data));
                 }
             }
@@ -205,6 +225,22 @@ impl SessionState {
                 _ => {}
             }
         }
+    }
+
+    /// Write every completed file into `dir` and clear the list.
+    /// Returns the names written.
+    pub fn flush_files(&mut self, dir: &std::path::Path) -> Vec<String> {
+        let mut written = Vec::new();
+        for (name, data) in self.incoming_files.drain(..) {
+            let path = dir.join(&name);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if std::fs::write(&path, &data).is_ok() {
+                written.push(name);
+            }
+        }
+        written
     }
 }
 
