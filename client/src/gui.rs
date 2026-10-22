@@ -71,12 +71,19 @@ impl Launcher {
     }
 
     fn connect_list(&mut self) {
+        // 1.39 has no listserver. Fetch the list with 2.05, then join as 1.39.
+        let list_version = if self.version == "1.39" {
+            println!("1.39 has no listserver; fetching the list as 2.05");
+            ClientVersion::V205
+        } else {
+            self.version_enum()
+        };
         self.status = "Connecting...".into();
         let addr = format!("{}:{}", self.list_host, self.list_port);
         match Connection::connect(&addr) {
             Ok(mut c) => {
                 let key = 0x40u8;
-                if c.login_versioned(self.version_enum(), key, &self.account, &self.password)
+                if c.login_versioned(list_version, key, &self.account, &self.password)
                     .is_ok()
                 {
                     let mut state = SessionState::default();
