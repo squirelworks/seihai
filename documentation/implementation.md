@@ -58,7 +58,8 @@ From the merged chat/HUD PRs:
 | Piece | Status |
 |-------|--------|
 | `write_login` | versioned login line, GCHAR type and key |
-| `ClientVersion` | 1.39–2.31 toggle with token and encryption gen |
+| `ClientVersion` | 1.33–2.31 version switch; everything per version is in its `VersionProfile` |
+| `VersionProfile` | per-version table: login, packet and prop sets, files, levels, UI switches (see `version-profiles.md`) |
 | `Gen3` | LCG insertion, verified 0 mismatches on 704 lab messages |
 | `Gen5` | partial-XOR + zlib/bz2, verified on 2.22 lab sessions |
 | `read_zlib_frame` / `write_zlib_frame` | u16be + zlib |

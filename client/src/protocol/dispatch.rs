@@ -4,7 +4,9 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
-use super::props::parse_player_props_with;
+use super::profile::IdSet;
+use super::props::parse_player_props_in;
+use super::version::ClientVersion;
 use std::collections::HashMap;
 
 /// A single logical message after frame decompression.
@@ -187,8 +189,18 @@ pub struct SessionState {
     pub file_has_modtime: bool,
     /// Our own nickname (NICKNAME, prop 0, in `PLO_PLAYERPROPS`).
     pub nickname: Option<String>,
-    /// Read prop 10 as the pre-2.1 bow slot (1.33–1.39 logins).
+    /// Read prop 10 as the pre-2.1 bow slot.
     pub bow_prop10: bool,
+    /// Server→client ids this client version handles. Others are counted
+    /// in `ignored` and dropped, as that client would. `None` takes all.
+    pub known_plo: Option<IdSet>,
+    /// Ids the own-player prop parser accepts; the first other id ends
+    /// the stream. `None` takes every id Seihai can decode.
+    pub own_prop_ids: Option<IdSet>,
+    /// Same for other players' props.
+    pub other_prop_ids: Option<IdSet>,
+    /// Messages dropped because this version has no handler for them.
+    pub ignored: HashMap<u8, usize>,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
     pub disconnect_message: Option<String>,
     /// Chat history, oldest first, at most [`CHAT_HISTORY`] lines.
@@ -203,9 +215,35 @@ pub struct SessionState {
 }
 
 impl SessionState {
+    /// A session that reads server traffic the way `version` does.
+    pub fn for_version(version: ClientVersion) -> Self {
+        let p = version.profile();
+        Self {
+            file_has_modtime: p.files.modtime,
+            bow_prop10: p.props.bow_prop10,
+            known_plo: Some(p.protocol.plo),
+            own_prop_ids: Some(p.props.own),
+            other_prop_ids: Some(p.props.other),
+            ..Default::default()
+        }
+    }
+
+    /// True if this client version would act on message `id`. A raw block
+    /// (101 board, 102 file) belongs to the `PLO_RAWDATA` (100) before it.
+    pub fn handles(&self, id: u8) -> bool {
+        match &self.known_plo {
+            None => true,
+            Some(set) => set.contains(id) || (matches!(id, 101 | 102) && set.contains(100)),
+        }
+    }
+
     /// Apply one message to the session.
     pub fn apply(&mut self, msg: &Message) {
         self.messages_seen += 1;
+        if !self.handles(msg.id) {
+            *self.ignored.entry(msg.id).or_insert(0) += 1;
+            return;
+        }
         match msg.id {
             0 => {
                 // PLO_LEVELBOARD — rest is a board line
@@ -252,7 +290,7 @@ impl SessionState {
             8 => {
                 // PLO_OTHERPLPROPS — parse position and store.
                 self.other_props.push((msg.id, msg.payload.clone()));
-                if let Some(u) = parse_other_player(&msg.payload, self.bow_prop10) {
+                if let Some(u) = parse_other_player(&msg.payload, self.bow_prop10, self.other_prop_ids.as_ref()) {
                     self.apply_other(u);
                 }
             }
@@ -457,7 +495,7 @@ impl SessionState {
     /// X/Y are props 15/16 (GCHAR, half-tiles); direction is SPRITE
     /// (17) mod 4.
     fn apply_player_props(&mut self, payload: &[u8]) {
-        for prop in parse_player_props_with(payload, self.bow_prop10) {
+        for prop in parse_player_props_in(payload, self.bow_prop10, self.own_prop_ids.as_ref()) {
             match (prop.id, prop.gchar()) {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
@@ -506,11 +544,11 @@ struct OtherUpdate {
 }
 
 /// Parse one `PLO_OTHERPLPROPS` payload: `GSHORT id` + prop stream.
-fn parse_other_player(payload: &[u8], bow_prop10: bool) -> Option<OtherUpdate> {
+fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>) -> Option<OtherUpdate> {
     let id = read_gshort(payload)?;
     let mut u = OtherUpdate { id, ..Default::default() };
     let text = |raw: &[u8]| latin1(raw.get(1..).unwrap_or(&[]));
-    for prop in parse_player_props_with(&payload[2..], bow_prop10) {
+    for prop in parse_player_props_in(&payload[2..], bow_prop10, accepted) {
         match prop.id {
             0 => u.nick = Some(text(&prop.raw)),
             12 => u.chat = Some(text(&prop.raw)),
@@ -788,5 +826,39 @@ mod tests {
         assert_eq!(state.player_x, Some(30.5));
         assert_eq!(state.player_y, Some(12.0));
         assert_eq!(state.warps, vec!["start.nw".to_string()]);
+    }
+
+    /// 1.39 has no handler for world time (42); 2.05 does.
+    #[test]
+    fn version_drops_unknown_ids() {
+        let body = [&[42 + 0x20][..], b"    \n", &[6 + 0x20][..], b"start.nw\n"].concat();
+        let mut old = SessionState::for_version(ClientVersion::V139);
+        old.apply_body(&body);
+        assert_eq!(old.ignored.get(&42), Some(&1));
+        assert_eq!(old.level_name.as_deref(), Some("start.nw"));
+        let mut new = SessionState::for_version(ClientVersion::V205);
+        new.apply_body(&body);
+        assert!(new.ignored.is_empty());
+    }
+
+    /// A file inside a raw block reaches a version whose switch has 100
+    /// but not 102.
+    #[test]
+    fn raw_block_ids_follow_rawdata() {
+        let st = SessionState::for_version(ClientVersion::V139);
+        assert!(st.handles(101) && st.handles(102));
+        assert!(!st.handles(169));
+    }
+
+    /// Another player's stream stops at MAXPOWER (1) for 2.05.
+    #[test]
+    fn other_player_props_per_version() {
+        let mut st = SessionState::for_version(ClientVersion::V205);
+        st.apply_body(&other(7, &[15 + 0x20, 0x20 + 20, 1 + 0x20, 0x23, 16 + 0x20, 0x20 + 8]));
+        assert_eq!(st.others[0].x, 10.0);
+        assert_eq!(st.others[0].y, 0.0);
+        let mut all = SessionState::default();
+        all.apply_body(&other(7, &[15 + 0x20, 0x20 + 20, 1 + 0x20, 0x23, 16 + 0x20, 0x20 + 8]));
+        assert_eq!(all.others[0].y, 4.0);
     }
 }

@@ -1,9 +1,8 @@
-//! Client version profiles.
+//! Client versions.
 //!
-//! A single switch that selects the version token, login client type,
-//! encryption generation, and a few other version-specific behaviours.
-//! Values come from cleaned observations (build catalogue, cross-version
-//! notes). No decompile material.
+//! The version switch. What each version does is in `profile.rs`.
+
+use super::profile::VersionProfile;
 
 /// Encryption generation used on the game socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +18,10 @@ pub enum EncryptionGen {
 }
 
 /// A client version Seihai can present as.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Everything that differs between versions lives in that version's row in
+/// [`super::profile::PROFILES`]; the methods here read from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClientVersion {
     /// Graal 1.33 (`GNW20020`). Gen 2.
     V133,
@@ -47,99 +49,84 @@ pub enum ClientVersion {
     V202,
     /// Graal 2.05 rev 2 (`GNW03081`). Gen 3.
     V205,
+    /// Graal 2.1 (`GNW31101`). Gen 3. No binary; inferred.
+    V210,
+    /// Graal 2.12 (`GNW01012`). Gen 3. No binary; inferred.
+    V212,
+    /// Graal 2.13 (`GNW23012`). Gen 3. No binary; inferred.
+    V213,
+    /// Graal 2.14 (`GNW30042`). Gen 3. No binary; inferred.
+    V214,
+    /// Graal 2.15 (`GNW19052`). Gen 3. No binary; inferred.
+    V215,
+    /// Graal 2.16 (`GNW12102`). Gen 3. No binary; inferred.
+    V216,
     /// Graal 2.17 (`GNW22122`). Gen 3.
     V217,
     /// Graal 2.22 (`GNW03014`). Gen 5.
     V222,
+    /// Graal 2.3 (`GNW14015`). Gen 5. No binary; inferred from 2.31.
+    V230,
     /// Graal 2.31 (`GNW28015`). Gen 5.
     V231,
 }
 
 impl ClientVersion {
+    /// This version's profile row.
+    pub fn profile(self) -> &'static VersionProfile {
+        super::profile::profile(self)
+    }
+
     /// Eight-character version token sent at login.
     pub fn token(self) -> &'static str {
-        match self {
-            Self::V133 => "GNW20020",
-            Self::V134 => "GNW22030",
-            Self::V135 => "GNW13040",
-            Self::V136 => "GNW10050",
-            Self::V137 => "GNW21050",
-            Self::V138 => "GNW22060",
-            Self::V139 => "GNW07080",
-            Self::V141 => "GNW13110",
-            Self::V142 => "GNW08011",
-            Self::V200 => "GNW24011",
-            Self::V201 => "GNW23021",
-            Self::V202 => "GNW15041",
-            Self::V205 => "GNW03081",
-            Self::V217 => "GNW22122",
-            Self::V222 => "GNW03014",
-            Self::V231 => "GNW28015",
-        }
+        self.profile().token
     }
 
     pub fn client_type(self) -> u8 {
-        match self {
-            Self::V222 | Self::V231 => 5,
-            _ => 0,
-        }
+        self.profile().protocol.client_type
     }
 
     pub fn encryption(self) -> EncryptionGen {
-        match self {
-            Self::V133 | Self::V134 | Self::V135 | Self::V136 | Self::V137 | Self::V138
-            | Self::V139 => EncryptionGen::Gen2,
-            Self::V222 | Self::V231 => EncryptionGen::Gen5,
-            _ => EncryptionGen::Gen3,
-        }
+        self.profile().protocol.encryption
     }
 
-    /// GServer sends `PLO_FILE` with a modtime to 2.1+ clients only.
+    /// `PLO_FILE` carries a modtime for clients GServer counts as 2.1+.
     pub fn file_has_modtime(self) -> bool {
-        matches!(self, Self::V217 | Self::V222 | Self::V231)
+        self.profile().files.modtime
     }
 
     pub fn sends_tampercheck(self) -> bool {
-        matches!(self, Self::V217 | Self::V222 | Self::V231)
+        self.profile().protocol.tampercheck
     }
 
+    /// Listserver port, or the 2.05 one for versions without a listserver.
     pub fn listserver_port(self) -> u16 {
-        match self {
-            Self::V133 | Self::V134 | Self::V135 | Self::V136 | Self::V137 | Self::V138
-            | Self::V139 => 14900,
-            Self::V141 => 14923,
-            Self::V222 | Self::V231 => 14922,
-            _ => 14921,
-        }
+        self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)
     }
 
     pub fn listserver_token(self) -> &'static str {
-        match self {
-            Self::V222 | Self::V231 => "GNW30123",
-            _ => self.token(),
+        let p = self.profile();
+        p.protocol.listserver.and_then(|l| l.token).unwrap_or(p.token)
+    }
+
+    /// The version to fetch the server list as. 1.33–1.39 have no
+    /// listserver, so they borrow 2.05's.
+    pub fn list_version(self) -> ClientVersion {
+        if self.profile().protocol.listserver.is_some() {
+            self
+        } else {
+            Self::V205
         }
     }
 
     /// Display name for the GUI.
     pub fn label(self) -> &'static str {
-        match self {
-            Self::V133 => "1.33",
-            Self::V134 => "1.34",
-            Self::V135 => "1.35",
-            Self::V136 => "1.36",
-            Self::V137 => "1.37",
-            Self::V138 => "1.38",
-            Self::V139 => "1.39",
-            Self::V141 => "1.41",
-            Self::V142 => "1.42",
-            Self::V200 => "2.00",
-            Self::V201 => "2.01",
-            Self::V202 => "2.02",
-            Self::V205 => "2.05",
-            Self::V217 => "2.17",
-            Self::V222 => "2.22",
-            Self::V231 => "2.31",
-        }
+        self.profile().label
+    }
+
+    /// The version with this GUI label.
+    pub fn from_label(label: &str) -> Option<ClientVersion> {
+        super::profile::by_label(label).map(|p| p.version)
     }
 
     /// Main versions shown by default.
@@ -147,12 +134,13 @@ impl ClientVersion {
         &[Self::V139, Self::V205, Self::V217, Self::V222, Self::V231]
     }
 
-    /// All analysed versions.
+    /// All versions with a profile, oldest first.
     pub fn all_versions() -> &'static [ClientVersion] {
         &[
             Self::V133, Self::V134, Self::V135, Self::V136, Self::V137, Self::V138, Self::V139,
-            Self::V141, Self::V142, Self::V200, Self::V201, Self::V202, Self::V205, Self::V217,
-            Self::V222, Self::V231,
+            Self::V141, Self::V142, Self::V200, Self::V201, Self::V202, Self::V205, Self::V210,
+            Self::V212, Self::V213, Self::V214, Self::V215, Self::V216, Self::V217, Self::V222,
+            Self::V230, Self::V231,
         ]
     }
 }

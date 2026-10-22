@@ -14,7 +14,7 @@ pub use udp::{
 use crate::protocol::{
     bz2_compress, choose_comp, encode_pos_classic, read_zlib_frame, write_frame, write_gstring,
     write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5,
-    Gen5Comp, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
+    Gen5Comp, IdSet, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
 };
 use crate::protocol::parse_list_reply;
 use std::io::{self, BufRead, BufReader, Write};
@@ -33,6 +33,9 @@ pub struct Connection {
     /// Gen-5 XOR state for server→client frames. Each direction has its
     /// own iterator, both seeded at login.
     gen5_in: Option<Gen5>,
+    /// Client→server ids the logged-in version can send, set by
+    /// [`Self::login_versioned`]. Others are refused.
+    pli: Option<IdSet>,
 }
 
 impl Connection {
@@ -40,7 +43,7 @@ impl Connection {
     pub fn connect(addr: &str) -> io::Result<Self> {
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None })
     }
 
     /// Send a raw byte buffer.
@@ -67,6 +70,7 @@ impl Connection {
         write_login(&mut line, version, key, account, password)?;
         line.push(b'\n');
         self.send_raw(&write_zlib_frame(&line)?)?;
+        self.pli = Some(version.profile().protocol.pli);
         match version.encryption() {
             EncryptionGen::Gen3 => self.gen3 = Some(Gen3::new(key)),
             EncryptionGen::Gen5 => {
@@ -123,11 +127,7 @@ impl Connection {
         account: &str,
         password: &str,
     ) -> io::Result<ListReply> {
-        let version = if version.encryption() == EncryptionGen::Gen2 {
-            ClientVersion::V205
-        } else {
-            version
-        };
+        let version = version.list_version();
         let mut conn = Self::connect(addr)?;
         conn.login_listserver(version, random_key(), account, password)?;
         let mut reply = ListReply::default();
@@ -166,6 +166,14 @@ impl Connection {
     ///
     /// Gen-3: zlib + insertion. Gen-5: ctype + XOR + compress (bz2 if ≥ 0x1000).
     pub fn send_messages(&mut self, msgs: &[Vec<u8>]) -> io::Result<()> {
+        if let Some(pli) = &self.pli {
+            if let Some(id) = msgs.iter().filter_map(|m| m.first()).map(|b| b.wrapping_sub(0x20)).find(|&id| !pli.contains(id)) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!("this client version cannot send message {id}"),
+                ));
+            }
+        }
         let mut body = Vec::new();
         for m in msgs {
             match self.gen3.as_mut() {
@@ -188,6 +196,19 @@ impl Connection {
             self.send_raw(&frame)?;
         }
         self.stream.flush()
+    }
+
+    /// Send what `version` sends straight after its login line:
+    /// `PLI_LANGUAGE` (37) for 2.05 and later. 2.17+ would follow it with
+    /// `PLI_TAMPERCHECK` (39), which Seihai cannot fill yet.
+    pub fn send_post_login(&mut self, version: ClientVersion, language: &str) -> io::Result<()> {
+        if !version.profile().protocol.sends_language {
+            return Ok(());
+        }
+        let mut msg = vec![37 + 0x20];
+        msg.extend_from_slice(&to_latin1(language));
+        msg.push(b'\n');
+        self.send_messages(&[msg])
     }
 
     /// Send `PLI_PLAYERPROPS` (2) with X (15), Y (16) and SPRITE (17).
@@ -582,5 +603,24 @@ mod tests {
         assert_eq!(read_frame(&mut srv), b"&#all\n");
         // 28, count 2, ids 200 and 3 as GSHORTs, then gtokenized text.
         assert_eq!(read_frame(&mut srv), b"< \"!h #\"a \"\"b\"\"\"\n");
+    }
+
+    /// 1.39 cannot send PLI_LANGUAGE (37); 2.05 sends it after login.
+    #[test]
+    fn sends_follow_the_version() {
+        let (mut conn, mut server) = pair();
+        conn.login_versioned(ClientVersion::V139, 0, "ab", "cd").unwrap();
+        let _ = read_frame(&mut server);
+        conn.send_post_login(ClientVersion::V139, "English").unwrap();
+        let mut lang = vec![37 + 0x20];
+        lang.extend_from_slice(b"English\n");
+        assert!(conn.send_messages(&[lang]).is_err());
+
+        let (mut conn, mut server) = pair();
+        conn.login_versioned(ClientVersion::V205, 0x42, "ab", "cd").unwrap();
+        let _ = read_frame(&mut server);
+        conn.send_post_login(ClientVersion::V205, "English").unwrap();
+        let body = read_frame(&mut server);
+        assert_eq!(body[0], 37 + 0x20);
     }
 }

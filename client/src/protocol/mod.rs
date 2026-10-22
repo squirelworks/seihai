@@ -11,6 +11,7 @@ mod frame;
 mod gen3;
 mod gen5;
 mod list;
+mod profile;
 mod props;
 mod version;
 
@@ -24,7 +25,11 @@ pub use gen3::Gen3;
 pub use gen5::{choose_comp, read_frame, write_frame, Gen5, Gen5Comp};
 pub use list::{parse_list_reply, parse_svrlist, ListReply, ServerEntry};
 pub use props::{
-    decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_with, PlayerProp,
+    decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_in, parse_player_props_with, PlayerProp,
+};
+pub use profile::{
+    by_label, profile, Basis, Files, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
+    VersionProfile, PROFILES,
 };
 pub use version::{ClientVersion, EncryptionGen};
 

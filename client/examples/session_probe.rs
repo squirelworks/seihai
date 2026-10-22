@@ -32,7 +32,7 @@ fn main() {
     conn.login_versioned(version, 0x42, &account, &password)
         .expect("login");
 
-    let mut state = SessionState::default();
+    let mut state = SessionState::for_version(version);
     let mut ids: BTreeMap<u8, usize> = BTreeMap::new();
     let mut prop_ids: BTreeMap<u8, usize> = BTreeMap::new();
     let mut disc_msgs: Vec<String> = Vec::new();

@@ -1,5 +1,7 @@
 //! Selected player property encodings.
 
+use super::profile::IdSet;
+
 /// Position scaled the classic way (pos * 2 as u8).
 pub fn encode_pos_classic(pos: f32) -> u8 {
     (pos * 2.0) as u8
@@ -125,10 +127,23 @@ pub fn parse_player_props(payload: &[u8]) -> Vec<PlayerProp> {
 /// GServer sends that form to clients it counts as older than 2.1: in
 /// the lab, a 1.39 login got it and a 2.05 login got a gani name.
 pub fn parse_player_props_with(payload: &[u8], bow_prop10: bool) -> Vec<PlayerProp> {
+    parse_player_props_in(payload, bow_prop10, None)
+}
+
+/// [`parse_player_props_with`] that also stops at the first id outside
+/// `accepted`, the way a client whose prop switch lacks that id does.
+pub fn parse_player_props_in(
+    payload: &[u8],
+    bow_prop10: bool,
+    accepted: Option<&IdSet>,
+) -> Vec<PlayerProp> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < payload.len() {
         let id = payload[i].wrapping_sub(0x20);
+        if accepted.is_some_and(|s| !s.contains(id)) {
+            break;
+        }
         let rest = &payload[i + 1..];
         let Some(n) = prop_len(id, rest, bow_prop10) else { break };
         out.push(PlayerProp {
@@ -184,6 +199,35 @@ mod tests {
         assert_eq!(props[11].gchar(), Some(2));
         // APCOUNTER is a GSHORT: 61 - 1 = 60 s
         assert_eq!(props[16].raw, vec![0x20, 0x5d]);
+    }
+
+    /// The same burst read as each main version: 2.05 stops at 43, 1.39
+    /// at 35, and 2.22 reads on.
+    #[test]
+    fn prop_sets_per_version() {
+        use crate::protocol::ClientVersion;
+        // X = 30, prop 34 ACCOUNTNAME "a", prop 43 GMAPLEVELX 1, Y = 12.
+        let p = [0x2f, 0x20 + 60, 0x20 + 34, 0x21, b'a', 0x20 + 43, 0x21, 0x30, 0x20 + 24];
+        let ids = |v: ClientVersion| -> Vec<u8> {
+            let pr = v.profile().props;
+            parse_player_props_in(&p, false, Some(&pr.own)).iter().map(|p| p.id).collect()
+        };
+        assert_eq!(ids(ClientVersion::V138), vec![15]);
+        assert_eq!(ids(ClientVersion::V139), vec![15, 34]);
+        assert_eq!(ids(ClientVersion::V205), vec![15, 34]);
+        assert_eq!(ids(ClientVersion::V222), vec![15, 34, 43, 16]);
+    }
+
+    /// 2.05 drops another player's stream at MAXPOWER (1); 2.22 too.
+    #[test]
+    fn other_player_stops_at_maxpower() {
+        use crate::protocol::ClientVersion;
+        let p = [0x2f, 0x20 + 60, 0x21, 0x23, 0x30, 0x20 + 24];
+        for v in [ClientVersion::V205, ClientVersion::V222, ClientVersion::V231] {
+            let other = v.profile().props.other;
+            let ids: Vec<u8> = parse_player_props_in(&p, false, Some(&other)).iter().map(|p| p.id).collect();
+            assert_eq!(ids, vec![15], "{v:?}");
+        }
     }
 
     #[test]

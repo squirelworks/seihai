@@ -15,6 +15,13 @@ pub struct Settings {
     pub last_server: Option<String>,
     pub listserver: Option<String>,
     pub offline: Option<bool>,
+    /// Name of the server in `last_server`, for the window title.
+    pub last_server_name: Option<String>,
+    /// Game server for versions with no listserver (1.33–1.39).
+    pub direct_server: Option<String>,
+    /// Asset folders for single versions (`assets.1.39=...`), so a
+    /// version can use its own install's images.
+    pub version_assets: Vec<(String, PathBuf)>,
 }
 
 impl Settings {
@@ -37,7 +44,13 @@ impl Settings {
                     "last_server" => s.last_server = Some(v),
                     "listserver" => s.listserver = Some(v),
                     "offline" => s.offline = Some(v == "1"),
-                    _ => {}
+                    "last_server_name" => s.last_server_name = Some(v),
+                    "direct_server" => s.direct_server = Some(v),
+                    k => {
+                        if let Some(label) = k.strip_prefix("assets.") {
+                            s.version_assets.push((label.to_string(), PathBuf::from(v)));
+                        }
+                    }
                 }
             }
         }
@@ -71,7 +84,34 @@ impl Settings {
         if self.offline == Some(true) {
             out.push_str("offline=1\n");
         }
+        if let Some(n) = &self.last_server_name {
+            out.push_str(&format!("last_server_name={n}\n"));
+        }
+        if let Some(d) = &self.direct_server {
+            out.push_str(&format!("direct_server={d}\n"));
+        }
+        for (label, p) in &self.version_assets {
+            out.push_str(&format!("assets.{label}={}\n", p.display()));
+        }
         let _ = fs::write(&path, out);
+    }
+}
+
+impl Settings {
+    /// The asset folder set for one version, if any.
+    pub fn assets_for(&self, label: &str) -> Option<&Path> {
+        self.version_assets
+            .iter()
+            .find(|(l, p)| l == label && !p.as_os_str().is_empty())
+            .map(|(_, p)| p.as_path())
+    }
+
+    /// Set or clear the asset folder for one version.
+    pub fn set_assets_for(&mut self, label: &str, path: &str) {
+        self.version_assets.retain(|(l, _)| l != label);
+        if !path.trim().is_empty() {
+            self.version_assets.push((label.to_string(), PathBuf::from(path.trim())));
+        }
     }
 }
 

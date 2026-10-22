@@ -65,13 +65,10 @@ fn main() {
             "--version" => {
                 i += 1;
                 if let Some(v) = args.get(i) {
-                    version = match v.as_str() {
-                        "1.39" => ClientVersion::V139,
-                        "2.17" => ClientVersion::V217,
-                        "2.22" => ClientVersion::V222,
-                        "2.31" => ClientVersion::V231,
-                        _ => ClientVersion::V205,
-                    };
+                    version = ClientVersion::from_label(v).unwrap_or_else(|| {
+                        eprintln!("unknown version {v}; using 2.05");
+                        ClientVersion::V205
+                    });
                 }
             }
             "--help" | "-h" => {
@@ -103,7 +100,7 @@ fn main() {
     // Use the version saved by the GUI if no CLI --version was given.
     if version == ClientVersion::V205 {
         if let Some(v) = &settings.version {
-            version = version_from_label(v).unwrap_or(ClientVersion::V205);
+            version = ClientVersion::from_label(v).unwrap_or(ClientVersion::V205);
         }
     }
     // Do not auto-fill online from settings. The GUI is the waiting area.
@@ -129,6 +126,9 @@ fn main() {
                 let s = Settings::load();
                 if s.offline == Some(true) {
                     online = None;
+                    if let Some(v) = s.version.as_deref().and_then(ClientVersion::from_label) {
+                        version = v;
+                    }
                     if let Some(a) = s.assets {
                         assets = Some(a);
                     }
@@ -148,12 +148,12 @@ fn main() {
             if let Some(p) = s.password {
                 password = p;
             }
-            if let Some(v) = s.version.as_deref().and_then(version_from_label) {
+            if let Some(v) = s.version.as_deref().and_then(ClientVersion::from_label) {
                 version = v;
             }
         }
-        net_state.file_has_modtime = version.file_has_modtime();
-        net_state.bow_prop10 = version.encryption() == seihai::protocol::EncryptionGen::Gen2;
+        // Read server traffic the way the chosen version does.
+        net_state = SessionState::for_version(version);
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
@@ -196,7 +196,10 @@ fn main() {
                             continue;
                         }
                     } else {
-                        eprintln!("logged in to {addr} as {account}");
+                        eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
+                        if let Err(e) = c.send_post_login(version, "English") {
+                            eprintln!("post-login send failed: {e}");
+                        }
                         match c.spawn_reader() {
                             Ok(rx) => frames = Some(rx),
                             Err(e) => eprintln!("reader failed: {e}"),
@@ -216,6 +219,10 @@ fn main() {
         break;
     }
 
+    // A version can have its own asset folder (its own install's images).
+    if let Some(p) = Settings::load().assets_for(version.label()) {
+        assets = Some(p.to_path_buf());
+    }
     let root = match assets {
         Some(p) => AssetRoot::new(p),
         None => {
@@ -256,6 +263,7 @@ fn main() {
         let _ = session.load_tiletypes_arrays(root.arrays_dat());
     }
 
+    let profile = version.profile();
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -321,8 +329,11 @@ fn main() {
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
         fb.draw_hud(session.player_health, session.rupees);
-        if let Some(level) = &session.current_level {
-            fb.draw_minimap(level, session.player_x, session.player_y);
+        // The minimap is set by the game server from 2.1 on.
+        if profile.ui.minimap {
+            if let Some(level) = &session.current_level {
+                fb.draw_minimap(level, session.player_x, session.player_y);
+            }
         }
         fb
     };
@@ -331,8 +342,10 @@ fn main() {
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
+    let server_name = Settings::load().last_server_name;
+    let title = profile.window_title(server_name.as_deref().filter(|_| online.is_some()));
     let mut window = match minifb::Window::new(
-        "Seihai",
+        &title,
         fb.width as usize,
         fb.height as usize,
         minifb::WindowOptions {
@@ -372,6 +385,15 @@ fn main() {
             }
             if window.is_key_pressed(minifb::Key::Backspace, minifb::KeyRepeat::Yes) {
                 input.backspace();
+            }
+            // 1.39 added Up/Down recall of earlier chat lines.
+            if profile.ui.chat_recall {
+                if window.is_key_pressed(minifb::Key::Up, minifb::KeyRepeat::No) {
+                    input.recall_prev();
+                }
+                if window.is_key_pressed(minifb::Key::Down, minifb::KeyRepeat::No) {
+                    input.recall_next();
+                }
             }
             if window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No) {
                 input.cancel();
@@ -567,11 +589,21 @@ fn main() {
             if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
                 show_debug = !show_debug;
             }
-            if window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No) {
+            let f4 = window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No);
+            let f5 = window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No);
+            if (f4 || f5) && !profile.ui.editor {
+                // 2.3 moved the editor and level loading to GraalEditor.
+                net_state.push_chat(
+                    ChatKind::Admin,
+                    "Seihai".into(),
+                    format!("{} has no built-in editor", profile.label),
+                );
+            } else if f4 {
                 eprintln!("F4: level editor not yet implemented");
             }
-            if window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No) {
-                if let Some(path) = seihai::gui::pick_level(root.levels_dir().as_path()) {
+            if f5 && profile.ui.editor {
+                let exts = profile.level_extensions();
+                if let Some(path) = seihai::gui::pick_level(root.levels_dir().as_path(), &exts) {
                     if let Err(e) = session.load_level(&path) {
                         eprintln!("load failed: {e}");
                     } else {
@@ -674,12 +706,4 @@ fn save_screenshot(fb: &Framebuffer) -> std::io::Result<PathBuf> {
     let mut out = std::fs::File::create(&path)?;
     write_png_rgb(&mut out, fb.width, fb.height, &fb.pixels)?;
     Ok(path)
-}
-
-/// Version for a GUI label such as "2.22".
-fn version_from_label(label: &str) -> Option<ClientVersion> {
-    ClientVersion::all_versions()
-        .iter()
-        .copied()
-        .find(|v| v.label() == label)
 }
