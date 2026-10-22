@@ -8,8 +8,6 @@ license.workspace = true
 flate2 = "1"
 bzip2 = "0.5"
 minifb = "0.27"
-eframe = "0.29"
-egui = "0.29"
 
 [[bin]]
 name = "seihai"

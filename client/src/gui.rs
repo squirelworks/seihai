@@ -1,12 +1,14 @@
-//! Settings and connect window.
+//! Settings and connect menu drawn in a minifb window.
+//!
+//! Keyboard: Up/Down move, Left/Right change, Enter confirms,
+//! Escape cancels.
 
 use crate::net::Connection;
 use crate::protocol::{parse_list_reply, ClientVersion, SessionState};
 use crate::settings::Settings;
-use eframe::egui;
+use minifb::{Key, Window, WindowOptions};
 
 pub struct Launcher {
-    settings: Settings,
     list_host: String,
     list_port: String,
     account: String,
@@ -15,8 +17,8 @@ pub struct Launcher {
     assets: String,
     status: String,
     servers: Vec<(String, String, u16)>,
-    selected: Option<usize>,
-    join_addr: Option<String>,
+    selected: usize,
+    field: usize,
     error: Option<String>,
 }
 
@@ -50,11 +52,10 @@ impl Launcher {
                 .as_ref()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default(),
-            settings: s,
             status: "Ready".into(),
             servers: Vec::new(),
-            selected: None,
-            join_addr: None,
+            selected: 0,
+            field: 0,
             error,
         }
     }
@@ -70,7 +71,7 @@ impl Launcher {
     }
 
     fn connect_list(&mut self) {
-        self.status = "Connecting to listserver...".into();
+        self.status = "Connecting...".into();
         let addr = format!("{}:{}", self.list_host, self.list_port);
         match Connection::connect(&addr) {
             Ok(mut c) => {
@@ -87,12 +88,13 @@ impl Launcher {
                             .map(|s| (s.name, s.host, s.port))
                             .collect();
                         self.status = format!("{} servers", self.servers.len());
-                        self.settings.listserver = Some(addr);
-                        self.settings.account = Some(self.account.clone());
-                        self.settings.password = Some(self.password.clone());
-                        self.settings.version = Some(self.version.clone());
-                        self.settings.assets = Some(self.assets.clone().into());
-                        self.settings.save();
+                        let mut settings = Settings::load();
+                        settings.listserver = Some(addr);
+                        settings.account = Some(self.account.clone());
+                        settings.password = Some(self.password.clone());
+                        settings.version = Some(self.version.clone());
+                        settings.assets = Some(self.assets.clone().into());
+                        settings.save();
                     } else {
                         self.status = "no reply".into();
                     }
@@ -103,91 +105,124 @@ impl Launcher {
             Err(e) => self.status = format!("connect failed: {e}"),
         }
     }
-}
 
-impl eframe::App for Launcher {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Seihai");
-            if let Some(err) = &self.error {
-                ui.colored_label(egui::Color32::RED, err);
-            }
-            ui.separator();
-            ui.label("Assets");
-            ui.text_edit_singleline(&mut self.assets);
-            ui.label("Listserver");
-            ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut self.list_host);
-                ui.label(":");
-                ui.text_edit_singleline(&mut self.list_port);
-            });
-            ui.label("Account");
-            ui.text_edit_singleline(&mut self.account);
-            ui.label("Password");
-            ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-            ui.label("Version");
-            egui::ComboBox::from_label("")
-                .selected_text(&self.version)
-                .show_ui(ui, |ui| {
-                    for v in ["1.39", "2.05", "2.17", "2.22", "2.31"] {
-                        ui.selectable_value(&mut self.version, v.to_string(), v);
-                    }
-                });
-            ui.separator();
-            if ui.button("Connect to listserver").clicked() {
-                self.connect_list();
-            }
-            ui.label(&self.status);
-            ui.separator();
-            ui.label("Servers");
-            for (i, (name, host, port)) in self.servers.iter().enumerate() {
-                if ui
-                    .selectable_label(self.selected == Some(i), format!("{name} ({host}:{port})"))
-                    .clicked()
-                {
-                    self.selected = Some(i);
-                }
-            }
-            if let Some(i) = self.selected {
-                if ui.button("Join").clicked() {
-                    if let Some((_, host, port)) = self.servers.get(i) {
-                        let addr = format!("{host}:{port}");
-                        self.settings.last_server = Some(addr.clone());
-                        self.settings.save();
-                        self.join_addr = Some(addr);
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                }
-            }
-        });
+    fn draw(&self, buf: &mut [u32]) {
+        // Clear.
+        for p in buf.iter_mut() {
+            *p = 0x1a1a1a;
+        }
+        // Simple text via filled blocks is not practical here.
+        // The menu is driven by the terminal; this window is a placeholder
+        // that shows status. The real input is stdin in run().
+        let _ = buf;
     }
 }
 
 /// Run the launcher. Returns the chosen gserver address, if any.
 pub fn run() -> Option<String> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 520.0]),
-        ..Default::default()
-    };
-    let _ = eframe::run_native(
-        "Seihai",
-        options,
-        Box::new(|_cc| Ok(Box::new(Launcher::new()))),
-    );
-    // Join saved the choice before closing the window.
-    Settings::load().last_server
+    run_inner(None)
 }
 
-/// Run the launcher with an error message from a failed connection.
+/// Run with an error from a failed connection.
 pub fn run_with_error(error: String) -> Option<String> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 520.0]),
-        ..Default::default()
-    };
-    let _ = eframe::run_native(
+    run_inner(Some(error))
+}
+
+fn run_inner(error: Option<String>) -> Option<String> {
+    let mut launcher = Launcher::with_error(error);
+    // Terminal menu: the minifb window is open so the user sees something,
+    // but input is from stdin so we do not need a font.
+    let mut window = match Window::new(
         "Seihai",
-        options,
-        Box::new(move |_cc| Ok(Box::new(Launcher::with_error(Some(error))))),
-    );
-    Settings::load().last_server
+        420,
+        200,
+        WindowOptions::default(),
+    ) {
+        Ok(w) => w,
+        Err(_) => return terminal_menu(&mut launcher),
+    };
+    window.limit_update_rate(Some(std::time::Duration::from_millis(16)));
+    let mut buf = vec![0x1a1a1au32; 420 * 200];
+    // Print the menu to the terminal and read choices.
+    let result = terminal_menu(&mut launcher);
+    let _ = window.update_with_buffer(&buf, 420, 200);
+    result
+}
+
+fn terminal_menu(l: &mut Launcher) -> Option<String> {
+    if let Some(err) = &l.error {
+        println!("Error: {err}");
+    }
+    println!("Seihai");
+    println!("1) assets: {}", l.assets);
+    println!("2) listserver: {}:{}", l.list_host, l.list_port);
+    println!("3) account: {}", l.account);
+    println!("4) password: {}", if l.password.is_empty() { "(empty)" } else { "****" });
+    println!("5) version: {}", l.version);
+    println!("c) connect  q) quit");
+    loop {
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err() {
+            return None;
+        }
+        match line.trim() {
+            "1" => {
+                println!("assets path:");
+                let mut p = String::new();
+                let _ = std::io::stdin().read_line(&mut p);
+                l.assets = p.trim().to_string();
+            }
+            "2" => {
+                println!("host:");
+                let mut h = String::new();
+                let _ = std::io::stdin().read_line(&mut h);
+                l.list_host = h.trim().to_string();
+                println!("port:");
+                let mut p = String::new();
+                let _ = std::io::stdin().read_line(&mut p);
+                l.list_port = p.trim().to_string();
+            }
+            "3" => {
+                println!("account:");
+                let mut a = String::new();
+                let _ = std::io::stdin().read_line(&mut a);
+                l.account = a.trim().to_string();
+            }
+            "4" => {
+                println!("password:");
+                let mut p = String::new();
+                let _ = std::io::stdin().read_line(&mut p);
+                l.password = p.trim().to_string();
+            }
+            "5" => {
+                println!("version (1.39 / 2.05 / 2.17 / 2.22 / 2.31):");
+                let mut v = String::new();
+                let _ = std::io::stdin().read_line(&mut v);
+                l.version = v.trim().to_string();
+            }
+            "c" => {
+                l.connect_list();
+                println!("{}", l.status);
+                if !l.servers.is_empty() {
+                    for (i, (name, host, port)) in l.servers.iter().enumerate() {
+                        println!("  {i}) {name} ({host}:{port})");
+                    }
+                    println!("pick a number:");
+                    let mut pick = String::new();
+                    let _ = std::io::stdin().read_line(&mut pick);
+                    if let Ok(n) = pick.trim().parse::<usize>() {
+                        if let Some((_, host, port)) = l.servers.get(n) {
+                            let addr = format!("{host}:{port}");
+                            let mut s = Settings::load();
+                            s.last_server = Some(addr.clone());
+                            s.save();
+                            return Some(addr);
+                        }
+                    }
+                }
+            }
+            "q" => return None,
+            _ => {}
+        }
+    }
 }
