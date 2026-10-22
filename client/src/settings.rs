@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub struct Settings {
     pub assets: Option<PathBuf>,
     pub account: Option<String>,
+    pub password: Option<String>,
     pub version: Option<String>,
     pub last_server: Option<String>,
     pub listserver: Option<String>,
@@ -30,6 +31,7 @@ impl Settings {
                 match k.trim() {
                     "assets" => s.assets = Some(PathBuf::from(v)),
                     "account" => s.account = Some(v),
+                    "password" => s.password = Some(v),
                     "version" => s.version = Some(v),
                     "last_server" => s.last_server = Some(v),
                     "listserver" => s.listserver = Some(v),
@@ -51,6 +53,9 @@ impl Settings {
         }
         if let Some(a) = &self.account {
             out.push_str(&format!("account={a}\n"));
+        }
+        if let Some(p) = &self.password {
+            out.push_str(&format!("password={p}\n"));
         }
         if let Some(v) = &self.version {
             out.push_str(&format!("version={v}\n"));

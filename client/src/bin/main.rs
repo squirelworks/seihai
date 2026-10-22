@@ -12,7 +12,8 @@
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
 use seihai::net::Connection;
 use seihai::offline::OfflineSession;
-use seihai::protocol::{ClientVersion, EncryptionGen, SessionState};
+use seihai::protocol::{parse_list_reply, ClientVersion, EncryptionGen, SessionState};
+use seihai::settings::Settings;
 use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
     Framebuffer,
@@ -89,6 +90,11 @@ fn main() {
             account = a.clone();
         }
     }
+    if password.is_empty() {
+        if let Some(p) = &settings.password {
+            password = p.clone();
+        }
+    }
     if online.is_none() {
         online = settings.listserver.clone();
     }
@@ -127,6 +133,9 @@ fn main() {
                 let mut pw = String::new();
                 let _ = std::io::stdin().read_line(&mut pw);
                 password = pw.trim().to_string();
+                settings.password = Some(password.clone());
+                settings.account = Some(account.clone());
+                settings.save();
                 println!("version (2.05 / 2.22):");
                 let mut v = String::new();
                 let _ = std::io::stdin().read_line(&mut v);
