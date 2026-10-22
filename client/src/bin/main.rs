@@ -310,7 +310,7 @@ fn main() {
         }
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
-        fb.draw_hud(session.player_health, 0);
+        fb.draw_hud(session.player_health, session.rupees);
         if let Some(level) = &session.current_level {
             fb.draw_minimap(level, session.player_x, session.player_y);
         }
@@ -367,7 +367,10 @@ fn main() {
                 input.cancel();
             }
         } else if window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No) {
-            break;
+            if session.reading.take().is_none() {
+                break;
+            }
+            dirty = true;
         }
         // Online: apply every frame that has arrived, without blocking.
         if let Some(rx) = &frames {
@@ -438,6 +441,7 @@ fn main() {
                 if let Some(d) = net_state.player_dir.take() {
                     session.player_dir = d;
                 }
+                session.opened_chests.extend(net_state.opened_chests.drain(..));
                 if warped {
                     eprintln!(
                         "position {} {} dir {}",
@@ -451,7 +455,27 @@ fn main() {
         // Arrow keys move the player half a tile per step, at most one
         // step every 50 ms.
         let mut moved = false;
-        if !input.is_open() && last_step.elapsed() >= STEP_EVERY {
+        // A or Space: close the reading panel, or interact with what the
+        // player faces.
+        let interact = !input.is_open()
+            && (window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No)
+                || window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No));
+        if interact {
+            if session.reading.take().is_none() {
+                match session.interact() {
+                    seihai::offline::Interaction::Chest { x, y, item, got } => {
+                        eprintln!("chest {x},{y}: {item}");
+                        net_state.push_chat(ChatKind::Admin, "Chest".into(), format!("You got {got}."));
+                        if let Some(c) = conn.as_mut() {
+                            let _ = c.send_open_chest(x, y);
+                        }
+                    }
+                    seihai::offline::Interaction::Sign(_) | seihai::offline::Interaction::Nothing => {}
+                }
+            }
+            dirty = true;
+        }
+        if !input.is_open() && session.reading.is_none() && last_step.elapsed() >= STEP_EVERY {
             let (mut dx, mut dy) = (0.0, 0.0);
             if window.is_key_down(minifb::Key::Left) {
                 dx -= 0.5;
@@ -557,6 +581,9 @@ fn main() {
                 &mut frame,
                 &ui::DebugInfo {
                     fps,
+                    rupees: session.rupees,
+                    bombs: session.bombs,
+                    darts: session.darts,
                     x: session.player_x,
                     y: session.player_y,
                     dir: session.player_dir,
@@ -567,6 +594,9 @@ fn main() {
                     online: frames.is_some(),
                 },
             );
+        }
+        if let Some(text) = &session.reading {
+            ui::draw_panel(&mut frame, "Sign", text);
         }
         ui::draw_chat(&mut frame, &net_state.chat_log, chat_scroll, &input);
         if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {

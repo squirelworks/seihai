@@ -277,8 +277,14 @@ pub fn render_view(
         // Chest: brown box with a gold latch.
         let (cx, cy) = (chest.x * t - cam_x, chest.y * t - cam_y);
         fb.fill_rect(cx + 2, cy + 6, 28, 22, [0x80, 0x40, 0x10]);
-        fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
-        fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
+        if session.opened_chests.contains(&(chest.x, chest.y)) {
+            // Open: lid up, dark inside.
+            fb.fill_rect(cx + 2, cy, 28, 5, [0xA0, 0x50, 0x18]);
+            fb.fill_rect(cx + 5, cy + 9, 22, 8, [0x20, 0x10, 0x04]);
+        } else {
+            fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
+            fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
+        }
     }
     for sign in &level.signs {
         draw_marker(&mut fb, sign.x, sign.y, cam_x, cam_y, [0xFF, 0xFF, 0x40]);

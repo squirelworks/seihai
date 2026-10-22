@@ -345,6 +345,12 @@ impl Connection {
         self.send_messages(&[msg])
     }
 
+    /// Open a chest: `PLI_OPENCHEST` (20), `c x`, `c y` in whole tiles.
+    pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
+        let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
+        self.send_messages(&[msg])
+    }
+
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
     pub fn send_wantfile(&mut self, name: &str) -> io::Result<()> {
         let mut msg = Vec::new();

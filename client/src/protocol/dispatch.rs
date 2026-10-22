@@ -189,6 +189,9 @@ pub struct SessionState {
     pub disconnect_message: Option<String>,
     /// Chat history, oldest first, at most [`CHAT_HISTORY`] lines.
     pub chat_log: Vec<ChatLine>,
+    /// Chests the server reports as opened, by tile position. The game
+    /// loop moves them into the session.
+    pub opened_chests: Vec<(i32, i32)>,
     /// Server messages received, for the debug overlay.
     pub messages_seen: usize,
     pub unhandled: HashMap<u8, usize>,
@@ -213,9 +216,15 @@ impl SessionState {
                 }
             }
             4 => {
-                // PLO_LEVELCHEST
+                // PLO_LEVELCHEST: c opened, c x, c y [, c item, c sign].
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.chests.push(s);
+                }
+                if let [o, x, y, ..] = msg.payload[..] {
+                    if o.wrapping_sub(0x20) == 1 {
+                        let pos = (x.wrapping_sub(0x20) as i32, y.wrapping_sub(0x20) as i32);
+                        self.opened_chests.push(pos);
+                    }
                 }
             }
             5 => {

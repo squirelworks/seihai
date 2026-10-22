@@ -200,6 +200,9 @@ pub fn draw_player_list(fb: &mut Framebuffer, me: &str, others: &[OtherPlayer]) 
 #[derive(Debug, Default, Clone)]
 pub struct DebugInfo {
     pub fps: f32,
+    pub rupees: i32,
+    pub bombs: i32,
+    pub darts: i32,
     pub x: f32,
     pub y: f32,
     pub dir: u8,
@@ -222,6 +225,7 @@ pub fn draw_debug(fb: &mut Framebuffer, d: &DebugInfo) {
             String::from("offline")
         },
         format!("players {}", d.others + 1),
+        format!("rupees {} bombs {} arrows {}", d.rupees, d.bombs, d.darts),
     ];
     let w = rows.iter().map(|r| text_width(r)).max().unwrap_or(0) + 8;
     let line_h = CELL_H + 2;
@@ -229,6 +233,45 @@ pub fn draw_debug(fb: &mut Framebuffer, d: &DebugInfo) {
     for (i, r) in rows.iter().enumerate() {
         fb.draw_text(8, 24 + i as i32 * line_h, r, [0xB0, 0xFF, 0xB0]);
     }
+}
+
+/// Reading panel for a sign or a chest note, in the upper middle.
+pub fn draw_panel(fb: &mut Framebuffer, title: &str, text: &str) {
+    let w = (fb.width as i32 - 80).min(400);
+    let max_chars = ((w - 16) / CELL_W) as usize;
+    let mut lines: Vec<String> = Vec::new();
+    for para in text.split('\n') {
+        let mut cur = String::new();
+        for word in para.split(' ') {
+            if !cur.is_empty() && cur.chars().count() + 1 + word.chars().count() > max_chars {
+                lines.push(std::mem::take(&mut cur));
+            }
+            if !cur.is_empty() {
+                cur.push(' ');
+            }
+            cur.push_str(word);
+        }
+        lines.push(cur);
+    }
+    lines.truncate(12);
+    let line_h = CELL_H + 2;
+    let h = (lines.len() as i32 + 2) * line_h + 10;
+    let x = (fb.width as i32 - w) / 2;
+    let y = 60;
+    fb.shade_rect(x, y, w, h, 60);
+    fb.fill_rect(x, y, w, 1, [0xC0, 0xC0, 0xC0]);
+    fb.fill_rect(x, y + h - 1, w, 1, [0xC0, 0xC0, 0xC0]);
+    fb.draw_text(x + 8, y + 6, title, [0xFF, 0xE0, 0x70]);
+    for (i, l) in lines.iter().enumerate() {
+        fb.draw_text(x + 8, y + 6 + (i as i32 + 1) * line_h, &fit(l, w - 16), [0xFF, 0xFF, 0xFF]);
+    }
+    let hint = "A / Space to close";
+    fb.draw_text(
+        x + w - 8 - text_width(hint),
+        y + h - 4 - CELL_H,
+        hint,
+        [0xA0, 0xA0, 0xA0],
+    );
 }
 
 /// The other player nearest to `(x, y)`, for F2.
