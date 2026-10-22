@@ -96,3 +96,33 @@ Not drawn yet: shield, hat, sword, the nickname tag, and gani animation.
 Checks: unit tests replay lab 2.22 frames (client frame 1 from the seed; server frames 2–4 across a 7-byte uncompressed frame), and loopback tests cover the gen-5 login, both listserver logins and the gen-2 login. A loopback gserver that follows GServer-v2's framing logged Seihai in as 2.22, sent a missing `new1.nw` through `PLO_RAWDATA`/`PLO_FILE` (byte-identical on disk), and decoded every walk frame.
 
 Still open: a public gserver run. `session_probe` now takes a version (`... session_probe -- <host:port> 10 2.22`) and prints frame sizes, ids, the level name and the disconnect text.
+
+## 9. Chat, player list and overlays
+Layouts are from GServer-v2 and the 2.05 notes (`chat-pm-rc.md`); they still need the lab check.
+
+- **Chat bar (Enter):** a line goes out as CURCHAT (prop 12) in `PLI_PLAYERPROPS`, which is the bubble. A line that starts with `toall:` goes out as `PLI_TOALL` (6) instead, as 2.05 does. Before, Enter sent a fixed "hello" as a raw, unframed `PLI_TOALL`, which a gen-3 or gen-5 server cannot read.
+- **PM (F2):** `PLI_PRIVATEMESSAGE` (28) is a GSHORT count, GSHORT player ids, then the gtokenized text, to the nearest player. Before, it sent `name:text` unframed.
+- **Incoming:** `PLO_TOALL` (13), `PLO_PRIVATEMESSAGE` (37, `"type","text"` list), `PLO_RC_ADMINMESSAGE` (35) and other players' CURCHAT go into a 200-line history. PgUp/PgDn scroll it. Text is single-byte (Latin-1).
+- **Other players:** the id in `PLO_OTHERPLPROPS` and `PLO_DELPLAYER` is a GSHORT, not the first byte. Updates are partial, so a prop that is absent keeps its value (a chat-only update used to reset the player to 0,0). PCONNECTED (51) or JOINLEAVELVL 0 removes the player. X2/Y2 are read too.
+- **Overlays:** nickname tags and bubbles use a 5×7 bitmap font drawn for Seihai. F4 toggles the player list, F3 a debug overlay (fps, position, level, frames and messages, players), F12 saves a PNG to `screenshots/`. Esc closes the chat bar, and quits only when it is closed.
+
+Loopback check (2.22 framing, a scripted second player): the server got the CURCHAT, toall and PM with the right layouts. The bubble, nickname, toall, PM, history, list and debug overlay all showed.
+
+## 10. Chests and signs
+- **Interact (A or Space):** checks the point one tile ahead of the player's feet, which is the same point the collision uses. It opens a closed chest there (2×2 tiles); otherwise it reads a sign there (2×1 tiles). Chests are now solid.
+- **Chest:** the item is applied locally (rupees, bombs, arrows, hearts, heart container, sword, shield, glove, spin attack), and "You got …" goes into the chat history. A chest whose sign index is 0 or more shows that sign as its note. Online, the client also sends `PLI_OPENCHEST` (`c x, c y`), and `PLO_LEVELCHEST` with opened = 1 marks the chest open. The amounts (5 bombs, 5 arrows, and so on) are placeholders until a capture or the 2.05 item table confirms them.
+- **Reading panel:** sign text appears in a panel and walking stops until A, Space or Esc closes it.
+- **HUD:** the rupee bar now shows the rupee count, and the debug overlay lists rupees, bombs and arrows.
+
+Offline check on `onlinestartlocal.nw`: walking up stops below the chest at (20, 24), and A opens it and gives one green rupee.
+
+## 11. Lab rerun of chat, players and chests (7a06b97)
+Run against the lab GServer-v2: Seihai as 2.22, next to a real 2.05 client, with throwaway accounts.
+
+- **Other player:** drawn at 30, 30.5 with its nickname tag. On logout the server sent prop 50 = 0, then prop 51, and the player was removed. GServer sends no `PLO_DELPLAYER` to 2.22.
+- **Chat bubble:** the bubble showed in the 2.05 client. Walking after chatting still reached the server.
+- **Toall and PM:** both are correct on the wire. The server relayed `PLO_TOALL` and `PLO_PRIVATEMESSAGE` to the 2.05 session.
+- **Chest at (20, 24):** `PLI_OPENCHEST` drew `PLO_LEVELCHEST` opened, plus a rupee prop update.
+- **1.39:** the direction is set and props parse up to 36.
+- **2.05 file request:** the missing level arrived byte-identical.
+- **Own chat lines:** they are now labelled with the server's nickname (prop 0) instead of the account name.

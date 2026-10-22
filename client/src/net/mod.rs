@@ -314,15 +314,41 @@ impl Connection {
         self.send_position(upd.x, upd.y, upd.dir)
     }
 
-    /// Send a chat message as `PLI_TOALL` (id 6).
-    ///
-    /// Wire: `GCHAR(6)` + text + `\n`. The text is sent as-is.
+    /// Say `text` in the level: `PLI_PLAYERPROPS` (2) with CURCHAT (12)
+    /// as a GSTRING. The server shows it as the chat bubble and runs chat
+    /// commands such as `setnick` from it. An empty text clears the bubble.
     pub fn send_chat(&mut self, text: &str) -> io::Result<()> {
-        let mut msg = Vec::new();
-        msg.push(6u8.wrapping_add(0x20));
-        msg.extend_from_slice(text.as_bytes());
+        let mut msg = vec![2 + 0x20, 12 + 0x20];
+        push_gstring_latin1(&mut msg, text);
         msg.push(b'\n');
-        self.send_raw(&msg)
+        self.send_messages(&[msg])
+    }
+
+    /// Send a toall: `PLI_TOALL` (6) with a GSTRING message.
+    pub fn send_toall(&mut self, text: &str) -> io::Result<()> {
+        let mut msg = vec![6 + 0x20];
+        push_gstring_latin1(&mut msg, text);
+        msg.push(b'\n');
+        self.send_messages(&[msg])
+    }
+
+    /// Send a private message: `PLI_PRIVATEMESSAGE` (28) with a GSHORT
+    /// count, a GSHORT per player id, then the message gtokenized.
+    pub fn send_pm(&mut self, ids: &[u16], text: &str) -> io::Result<()> {
+        let mut msg = vec![28 + 0x20];
+        msg.extend_from_slice(&gshort(ids.len() as u16));
+        for &id in ids {
+            msg.extend_from_slice(&gshort(id));
+        }
+        msg.extend(to_latin1(&gtokenize(text)));
+        msg.push(b'\n');
+        self.send_messages(&[msg])
+    }
+
+    /// Open a chest: `PLI_OPENCHEST` (20), `c x`, `c y` in whole tiles.
+    pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
+        let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
+        self.send_messages(&[msg])
     }
 
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
@@ -333,18 +359,37 @@ impl Connection {
         msg.push(b'\n');
         self.send_messages(&[msg])
     }
-    ///
-    /// Wire: `GCHAR(28)` + target + `:` + text + `\n`.
-    /// Layout is provisional; the id is documented.
-    pub fn send_pm(&mut self, target: &str, text: &str) -> io::Result<()> {
-        let mut msg = Vec::new();
-        msg.push(28u8.wrapping_add(0x20));
-        msg.extend_from_slice(target.as_bytes());
-        msg.push(b':');
-        msg.extend_from_slice(text.as_bytes());
-        msg.push(b'\n');
-        self.send_raw(&msg)
-    }
+
+}
+
+/// A GSHORT: two GCHARs, high 7 bits first.
+fn gshort(v: u16) -> [u8; 2] {
+    [((v >> 7) & 0x7F) as u8 + 0x20, (v & 0x7F) as u8 + 0x20]
+}
+
+/// Graal text is single-byte: Latin-1 as is, anything else as `?`.
+fn to_latin1(text: &str) -> Vec<u8> {
+    text.chars()
+        .map(|c| if (c as u32) < 0x100 { c as u8 } else { b'?' })
+        .collect()
+}
+
+/// A GSTRING of `text` in Latin-1, cut to the 223 bytes a GCHAR length
+/// can hold.
+fn push_gstring_latin1(out: &mut Vec<u8>, text: &str) {
+    let mut b = to_latin1(text);
+    b.truncate(223);
+    out.push(b.len() as u8 + 0x20);
+    out.extend(b);
+}
+
+/// GServer's gtokenize: one quoted token per line, `"` doubled, joined
+/// with commas.
+pub fn gtokenize(text: &str) -> String {
+    text.lines()
+        .map(|l| format!("\"{}\"", l.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// A login key like the real client's `rand & 0x7F`.
@@ -523,5 +568,19 @@ mod tests {
             state.disconnect_message.as_deref(),
             Some("Your client version is not allowed on this server.")
         );
+    }
+
+    #[test]
+    fn chat_toall_and_pm_wire() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V139, 0, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        conn.send_chat("hi there").unwrap();
+        conn.send_toall("all").unwrap();
+        conn.send_pm(&[200, 3], "a \"b\"").unwrap();
+        assert_eq!(read_frame(&mut srv), b"\",(hi there\n");
+        assert_eq!(read_frame(&mut srv), b"&#all\n");
+        // 28, count 2, ids 200 and 3 as GSHORTs, then gtokenized text.
+        assert_eq!(read_frame(&mut srv), b"< \"!h #\"a \"\"b\"\"\"\n");
     }
 }

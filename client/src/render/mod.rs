@@ -5,6 +5,7 @@
 //! watched. `tiles` composites a 16×16 tile view into an RGB buffer
 //! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
+pub mod font;
 mod tiles;
 
 pub use tiles::{

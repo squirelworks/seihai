@@ -6,7 +6,7 @@
 
 use crate::assets::{GaniPlayer, Level, TileTypes};
 use crate::protocol::{BoardModify, PlayerUpdate};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
 /// 2 down, 3 right.
@@ -39,6 +39,31 @@ pub struct OfflineSession {
     pub props: HashMap<String, String>,
     /// Pending link destination if the player walked into a LINK area.
     pub pending_link: Option<(String, i32, i32)>,
+    /// Rupees (gralats).
+    pub rupees: i32,
+    pub bombs: i32,
+    pub darts: i32,
+    /// Sword power 1–4 and shield power 1–3.
+    pub sword_power: u8,
+    pub shield_power: u8,
+    /// Whether the glove is held, and its power.
+    pub glove_power: u8,
+    /// Heart containers, in half hearts as Graal counts them.
+    pub max_hearts: i32,
+    /// Chests opened in the current level, by tile position.
+    pub opened_chests: HashSet<(i32, i32)>,
+    /// Sign or chest text being read. The game waits until it is closed.
+    pub reading: Option<String>,
+}
+
+/// What an interact press did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Interaction {
+    /// A closed chest was opened at `(x, y)`; `got` describes the item.
+    Chest { x: i32, y: i32, item: String, got: String },
+    /// A sign is being read.
+    Sign(String),
+    Nothing,
 }
 
 impl OfflineSession {
@@ -57,6 +82,121 @@ impl OfflineSession {
             strings: HashMap::new(),
             props: HashMap::new(),
             pending_link: None,
+            rupees: 0,
+            bombs: 10,
+            darts: 10,
+            sword_power: 1,
+            shield_power: 1,
+            glove_power: 0,
+            max_hearts: 6,
+            opened_chests: HashSet::new(),
+            reading: None,
+        }
+    }
+
+    /// The point one tile ahead of the player's feet, in tiles. The feet
+    /// are the collision point used by [`Self::try_move`].
+    pub fn facing_point(&self) -> (f32, f32) {
+        let (fx, fy) = (self.player_x + 2.0, self.player_y + 2.75);
+        match self.player_dir {
+            DIR_NORTH => (fx, fy - 1.0),
+            DIR_WEST => (fx - 1.0, fy - 0.5),
+            DIR_EAST => (fx + 1.0, fy - 0.5),
+            _ => (fx, fy + 1.0),
+        }
+    }
+
+    /// Interact with what the player faces: open a closed chest (2×2
+    /// tiles), or read a sign (2×1 tiles). A chest is tried first.
+    pub fn interact(&mut self) -> Interaction {
+        let Some(level) = &self.current_level else {
+            return Interaction::Nothing;
+        };
+        let (px, py) = self.facing_point();
+        let inside = |x: i32, y: i32, w: f32, h: f32| {
+            px >= x as f32 && px < x as f32 + w && py >= y as f32 && py < y as f32 + h
+        };
+        let chest = level
+            .chests
+            .iter()
+            .find(|c| inside(c.x, c.y, 2.0, 2.0) && !self.opened_chests.contains(&(c.x, c.y)))
+            .cloned();
+        if let Some(c) = chest {
+            // A chest's sign index points into the level's signs.
+            let note = usize::try_from(c.sign_index)
+                .ok()
+                .filter(|_| c.sign_index >= 0)
+                .and_then(|i| level.signs.get(i))
+                .map(|s| s.text.clone());
+            self.opened_chests.insert((c.x, c.y));
+            let got = self.give_item(&c.item);
+            self.reading = note;
+            return Interaction::Chest { x: c.x, y: c.y, item: c.item, got };
+        }
+        if let Some(sign) = level.signs.iter().find(|s| inside(s.x, s.y, 2.0, 1.0)) {
+            let text = sign.text.clone();
+            self.reading = Some(text.clone());
+            return Interaction::Sign(text);
+        }
+        Interaction::Nothing
+    }
+
+    /// Apply a chest item. Returns a short description.
+    ///
+    /// Item names are the CHEST record's (`greenrupee`, `fullheart`, ...).
+    pub fn give_item(&mut self, item: &str) -> String {
+        let item = item.to_ascii_lowercase();
+        let mut gain = |what: &mut i32, n: i32, label: &str| {
+            *what += n;
+            format!("{n} {label}")
+        };
+        match item.as_str() {
+            "greenrupee" => gain(&mut self.rupees, 1, "rupee"),
+            "bluerupee" => gain(&mut self.rupees, 5, "rupees"),
+            "redrupee" => gain(&mut self.rupees, 30, "rupees"),
+            "goldrupee" => gain(&mut self.rupees, 100, "rupees"),
+            "bombs" => gain(&mut self.bombs, 5, "bombs"),
+            "darts" => gain(&mut self.darts, 5, "arrows"),
+            "heart" => {
+                self.player_health = 100;
+                "a heart".into()
+            }
+            "fullheart" => {
+                self.max_hearts = (self.max_hearts + 2).min(40);
+                self.player_health = 100;
+                "a heart container".into()
+            }
+            "spinattack" => {
+                self.flags.insert("spinattack".into(), true);
+                "the spin attack".into()
+            }
+            "glove1" | "glove2" => {
+                self.glove_power = self.glove_power.max(if item == "glove1" { 1 } else { 2 });
+                "a glove".into()
+            }
+            "sword" | "battleaxe" | "lizardsword" | "goldensword" => {
+                let p = match item.as_str() {
+                    "sword" => 1,
+                    "battleaxe" => 2,
+                    "lizardsword" => 3,
+                    _ => 4,
+                };
+                self.sword_power = self.sword_power.max(p);
+                format!("sword {p}")
+            }
+            "shield" | "mirrorshield" | "lizardshield" => {
+                let p = match item.as_str() {
+                    "shield" => 1,
+                    "mirrorshield" => 2,
+                    _ => 3,
+                };
+                self.shield_power = self.shield_power.max(p);
+                format!("shield {p}")
+            }
+            other => {
+                self.flags.insert(format!("item:{other}"), true);
+                other.to_string()
+            }
         }
     }
 
@@ -64,6 +204,8 @@ impl OfflineSession {
     pub fn load_level<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<(), String> {
         let level = Level::load(path)?;
         self.current_level = Some(level);
+        self.opened_chests.clear();
+        self.reading = None;
         Ok(())
     }
 
@@ -323,6 +465,18 @@ impl OfflineSession {
                 return None;
             }
         }
+        // Chests are solid, 2×2 tiles.
+        if let Some(level) = &self.current_level {
+            let blocked = level.chests.iter().any(|c| {
+                test_x >= c.x as f32
+                    && test_x < c.x as f32 + 2.0
+                    && test_y >= c.y as f32
+                    && test_y < c.y as f32 + 2.0
+            });
+            if blocked {
+                return None;
+            }
+        }
 
         self.player_x += dx;
         self.player_y += dy;
@@ -364,5 +518,48 @@ impl OfflineSession {
 impl Default for OfflineSession {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chest_and_sign_interact() {
+        let text = "GLEVNW01\nCHEST 20 24 greenrupee 0\nCHEST 10 10 fullheart -1\nSIGN 30 10\nWelcome\nSIGNEND\n";
+        let mut s = OfflineSession::new();
+        s.current_level = Some(Level::parse(text).unwrap());
+
+        // Walk up into the chest at (20, 24): it stops the player below it.
+        s.player_x = 18.5;
+        s.player_y = 25.0;
+        while s.try_move(0.0, -0.5).is_some() {}
+        assert_eq!(s.player_y, 23.5);
+        assert_eq!(s.player_dir, DIR_NORTH);
+        let got = s.interact();
+        assert_eq!(
+            got,
+            Interaction::Chest { x: 20, y: 24, item: "greenrupee".into(), got: "1 rupee".into() }
+        );
+        assert_eq!(s.rupees, 1);
+        // Sign 0 is the chest's note.
+        assert_eq!(s.reading.as_deref(), Some("Welcome"));
+        // Opened once only.
+        s.reading = None;
+        assert_eq!(s.interact(), Interaction::Nothing);
+
+        // Sign at (30, 10), read from below.
+        s.player_x = 28.5;
+        s.player_y = 8.5;
+        assert_eq!(s.interact(), Interaction::Sign("Welcome".into()));
+
+        // A heart container with no note.
+        s.reading = None;
+        s.player_x = 8.5;
+        s.player_y = 9.0;
+        assert!(matches!(s.interact(), Interaction::Chest { x: 10, y: 10, .. }));
+        assert_eq!(s.max_hearts, 8);
+        assert!(s.reading.is_none());
     }
 }
