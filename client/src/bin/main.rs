@@ -19,6 +19,7 @@ use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
     Framebuffer,
 };
+use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -278,12 +279,25 @@ fn main() {
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
-    let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer], my_chat: &str| -> Framebuffer {
+    let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer], my_chat: &str, npc_imgs: &HashMap<String, (u32, Vec<u8>)>| -> Framebuffer {
         let mut fb = render_view(session, &sheet, sw, sh, view_w, view_h);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
         );
+        // NPC images on top of the gray placeholder.
+        if let Some(level) = &session.current_level {
+            for npc in &level.npcs {
+                if !npc.visible {
+                    continue;
+                }
+                if let Some((w, px)) = npc_imgs.get(&npc.image) {
+                    let dx = (npc.x * 16.0) as i32 - cam_x;
+                    let dy = (npc.y * 16.0) as i32 - cam_y;
+                    fb.blit_sprite(px, *w, 4, 0, 0, *w as i32, (px.len() / (*w as usize * 4)) as i32, dx, dy);
+                }
+            }
+        }
         // Other players first, so the local player draws on top.
         if body.is_none() || head.is_none() {
             for other in others {
@@ -339,8 +353,8 @@ fn main() {
         }
         fb
     };
-    let mut my_chat = String::new();
-    let mut scene = draw(&session, &[], &my_chat);
+    let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
+    let mut scene = draw(&session, &[], &my_chat, &npc_images);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
@@ -423,6 +437,13 @@ fn main() {
                                     level_from_board = false;
                                 }
                                 eprintln!("loaded {name}");
+                            } else if name.ends_with(".png") || name.ends_with(".gif") {
+                                if let Ok(data) = std::fs::read(root.levels_dir().join(name)) {
+                                    if let Ok((w, _, px)) = read_png_rgba(&data) {
+                                        npc_images.insert(name.clone(), (w, px));
+                                        eprintln!("image {name}");
+                                    }
+                                }
                             }
                         }
                         changed = true;
@@ -465,6 +486,27 @@ fn main() {
                             }
                         }
                         loaded_level = Some(name.clone());
+                        // Request missing NPC images.
+                        if let Some(level) = &session.current_level {
+                            for npc in &level.npcs {
+                                if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
+                                    continue;
+                                }
+                                let local = root.find_image("", &npc.image);
+                                if local.is_none() {
+                                    if let Some(c) = conn.as_mut() {
+                                        let _ = c.send_wantfile(&npc.image);
+                                        eprintln!("requesting {}", npc.image);
+                                    }
+                                } else if let Some(path) = local {
+                                    if let Ok(data) = std::fs::read(&path) {
+                                        if let Ok((w, _, px)) = read_png_rgba(&data) {
+                                            npc_images.insert(npc.image.clone(), (w, px));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 // No local copy: draw the tiles the server sent, as the
@@ -655,7 +697,7 @@ fn main() {
         }
 
         if dirty {
-            scene = draw(&session, &net_state.others, &my_chat);
+            scene = draw(&session, &net_state.others, &my_chat, &npc_images);
             dirty = false;
         }
         let mut frame = scene.clone();
