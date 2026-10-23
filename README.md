@@ -20,6 +20,7 @@ However, on Windows, it doesn't seem to do anything so I just straight up go and
 
 ```bash
 cargo run --release -p seihai
+```
 
 ## Assets
 
