@@ -354,6 +354,7 @@ fn main() {
         fb
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
+    let mut my_chat = String::new();
     let mut scene = draw(&session, &[], &my_chat, &npc_images);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
@@ -640,14 +641,27 @@ fn main() {
                 if let Err(e) = c.send_walk(&session.player_update()) {
                     eprintln!("send failed: {e}");
                     conn = None;
-                } else if session.check_links() {
-                    // The server owns the warp: ask for the level and let
-                    // its reply load it and set the position.
-                    if let Some((dest, x, y)) = session.pending_link.take() {
-                        eprintln!("link to {dest} at {x} {y}");
+                }
+            }
+            // Check links after every move, online or offline.
+            if session.check_links() {
+                if let Some((dest, x, y)) = session.pending_link.take() {
+                    eprintln!("link to {dest} at {x} {y}");
+                    if let Some(c) = conn.as_mut() {
+                        // Online: the server owns the warp.
                         if let Err(e) = c.send_levelwarp(x, y, &dest) {
                             eprintln!("send failed: {e}");
                             conn = None;
+                        }
+                    } else {
+                        // Offline: load the destination if it is local.
+                        let path = root.level(&dest);
+                        if session.load_level(&path).is_ok() {
+                            session.player_x = x;
+                            session.player_y = y;
+                            eprintln!("warped to {dest}");
+                        } else {
+                            eprintln!("no local {dest}");
                         }
                     }
                 }
