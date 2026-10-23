@@ -211,23 +211,37 @@ impl eframe::App for Launcher {
             }
             ui.label(&self.status);
             ui.separator();
-            ui.label("Servers");
-            for (i, (name, host, port)) in self.servers.iter().enumerate() {
-                if ui
-                    .selectable_label(self.selected == Some(i), format!("{name} ({host}:{port})"))
-                    .clicked()
-                {
-                    self.selected = Some(i);
-                }
-            }
-            if let Some(i) = self.selected {
-                if ui.button("Join").clicked() {
-                    if let Some((name, host, port)) = self.servers.get(i).cloned() {
-                        self.join(ctx, &name, format!("{host}:{port}"));
-                    }
-                }
+            if ui.button("Connect to listserver").clicked() {
+                self.connect_list();
             }
         });
+
+        egui::SidePanel::right("servers")
+            .resizable(true)
+            .default_width(260.0)
+            .show(ctx, |ui| {
+                ui.heading("Servers");
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, (name, host, port)) in self.servers.iter().enumerate() {
+                        if ui
+                            .selectable_label(self.selected == Some(i), format!("{name} ({host}:{port})"))
+                            .clicked()
+                        {
+                            self.selected = Some(i);
+                        }
+                    }
+                });
+                ui.separator();
+                if let Some(i) = self.selected {
+                    if ui.button("Join").clicked() {
+                        if let Some((name, host, port)) = self.servers.get(i).cloned() {
+                            self.join(ctx, &name, format!("{host}:{port}"));
+                        }
+                    }
+                } else {
+                    ui.label("Select a server");
+                }
+            });
     }
 }
 
@@ -245,7 +259,7 @@ fn run_inner(error: Option<String>) -> Option<String> {
     s.last_server = None;
     s.save();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([420.0, 520.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([720.0, 520.0]),
         ..Default::default()
     };
     let _ = eframe::run_native(

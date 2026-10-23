@@ -287,11 +287,18 @@ pub fn render_view(
         }
     }
     for sign in &level.signs {
-        draw_marker(&mut fb, sign.x, sign.y, cam_x, cam_y, [0xFF, 0xFF, 0x40]);
+        // Wooden sign: post and board.
+        let (sx, sy) = (sign.x * t - cam_x, sign.y * t - cam_y);
+        fb.fill_rect(sx + 14, sy + 20, 4, 12, [0x60, 0x40, 0x20]);
+        fb.fill_rect(sx + 6, sy + 6, 20, 16, [0xC0, 0xA0, 0x60]);
+        fb.fill_rect(sx + 8, sy + 8, 16, 2, [0x40, 0x30, 0x20]);
+        fb.fill_rect(sx + 8, sy + 12, 16, 2, [0x40, 0x30, 0x20]);
+        fb.fill_rect(sx + 8, sy + 16, 16, 2, [0x40, 0x30, 0x20]);
     }
     for npc in &level.npcs {
         if npc.visible {
-            draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x40, 0xC0, 0x40]);
+            // Placeholder until the image arrives. Request the file if missing.
+            draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x80, 0x80, 0x80]);
         }
     }
 

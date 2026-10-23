@@ -351,7 +351,8 @@ fn main() {
         fb.width as usize,
         fb.height as usize,
         minifb::WindowOptions {
-            resize: false,
+            resize: true,
+            scale: minifb::Scale::X2,
             ..minifb::WindowOptions::default()
         },
     ) {
