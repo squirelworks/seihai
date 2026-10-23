@@ -372,6 +372,18 @@ impl Connection {
         self.send_messages(&[msg])
     }
 
+    /// Warp to `level` at `(x, y)` in tiles (`PLI_LEVELWARP`, id 0):
+    /// `GCHAR x*2`, `GCHAR y*2`, level name. The server answers with the
+    /// level, as at login.
+    pub fn send_levelwarp(&mut self, x: f32, y: f32, level: &str) -> io::Result<()> {
+        let mut msg = vec![0x20];
+        msg.push(((x * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+        msg.push(((y * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+        msg.extend_from_slice(&to_latin1(level));
+        msg.push(b'\n');
+        self.send_messages(&[msg])
+    }
+
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
     pub fn send_wantfile(&mut self, name: &str) -> io::Result<()> {
         let mut msg = Vec::new();

@@ -339,7 +339,7 @@ impl SessionState {
             6 => {
                 // PLO_LEVELNAME
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.level_name = Some(s);
+                    self.enter_level(s);
                 }
             }
             7 => {
@@ -377,7 +377,13 @@ impl SessionState {
                 if let [x, y, level @ ..] = msg.payload.as_slice() {
                     self.player_x = Some(x.wrapping_sub(0x20) as f32 / 2.0);
                     self.player_y = Some(y.wrapping_sub(0x20) as f32 / 2.0);
-                    self.warps.push(String::from_utf8_lossy(level).into_owned());
+                    let name = latin1(level);
+                    // Pre-2.1 clients get no PLO_LEVELNAME on a warp; the
+                    // level name here is the only one they see.
+                    if !name.is_empty() {
+                        self.enter_level(name.clone());
+                    }
+                    self.warps.push(name);
                 }
             }
             22 => {
@@ -525,6 +531,20 @@ impl SessionState {
                 *self.unhandled.entry(msg.id).or_insert(0) += 1;
             }
         }
+    }
+
+    /// Switch to level `name`. When it differs from the current level,
+    /// drop the old level's board, links, signs and chests: the server
+    /// sends the new ones after the name.
+    fn enter_level(&mut self, name: String) {
+        if self.level_name.as_deref() != Some(name.as_str()) {
+            self.board = None;
+            self.board_lines.clear();
+            self.links.clear();
+            self.signs.clear();
+            self.chests.clear();
+        }
+        self.level_name = Some(name);
     }
 
     /// Apply every message in a decompressed body.
@@ -883,6 +903,21 @@ mod tests {
         assert_eq!(board.len(), 4096);
         assert_eq!((board[0], board[1], board[600]), (0, 1, 88));
         assert!(state.unhandled.is_empty());
+    }
+
+    #[test]
+    fn warp_to_another_level_resets_level_lists() {
+        let mut state = SessionState::default();
+        state.apply_body(b"&onlinestartlocal.nw\n!new1.nw 26 32 12 4 20 12.5\n");
+        assert_eq!(state.links.len(), 1);
+        // A pre-2.1 warp: PLO_PLAYERWARP carries the only level name.
+        state.apply_body(b".HYnew1.nw\n");
+        assert_eq!(state.level_name.as_deref(), Some("new1.nw"));
+        assert_eq!((state.player_x, state.player_y), (Some(20.0), Some(28.5)));
+        assert!(state.links.is_empty());
+        // The same name again (2.1+ sends both) keeps what followed it.
+        state.apply_body(b"!a 0 0 1 1 1 1\n&new1.nw\n");
+        assert_eq!(state.links.len(), 1);
     }
 
     #[test]

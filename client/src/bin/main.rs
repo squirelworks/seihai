@@ -111,6 +111,8 @@ fn main() {
     let mut conn: Option<Connection> = None;
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
+    // True while the level on screen was built from the server's board.
+    let mut level_from_board = false;
 
     // GUI when no CLI mode is given. A failed connect or login goes back
     // to the GUI with the error, and a later Join tries again.
@@ -416,7 +418,9 @@ fn main() {
                         let written = net_state.flush_files(&root.levels_dir());
                         for name in &written {
                             if name.ends_with(".nw") {
-                                let _ = session.load_level(root.level(name));
+                                if session.load_level(root.level(name)).is_ok() {
+                                    level_from_board = false;
+                                }
                                 eprintln!("loaded {name}");
                             }
                         }
@@ -448,6 +452,7 @@ fn main() {
                         } else {
                             format!("{name}.nw")
                         };
+                        level_from_board = false;
                         match session.load_level(root.level(&file)) {
                             Ok(()) => eprintln!("level {file}"),
                             Err(e) => {
@@ -466,7 +471,17 @@ fn main() {
                 if session.current_level.is_none() {
                     if let Some(tiles) = net_state.board.take() {
                         session.current_level = Some(seihai::assets::Level::from_board(&tiles));
+                        level_from_board = true;
                         eprintln!("level from the server's board");
+                    }
+                }
+                // Links can arrive a frame after the board.
+                if level_from_board {
+                    if let Some(level) = session.current_level.as_mut() {
+                        if level.links.len() != net_state.links.len() {
+                            level.links.clear();
+                            level.add_server_links(&net_state.links);
+                        }
                     }
                 }
                 // Take server positions once, so local walking is not
@@ -542,6 +557,16 @@ fn main() {
                 if let Err(e) = c.send_walk(&session.player_update()) {
                     eprintln!("send failed: {e}");
                     conn = None;
+                } else if session.check_links() {
+                    // The server owns the warp: ask for the level and let
+                    // its reply load it and set the position.
+                    if let Some((dest, x, y)) = session.pending_link.take() {
+                        eprintln!("link to {dest} at {x} {y}");
+                        if let Err(e) = c.send_levelwarp(x, y, &dest) {
+                            eprintln!("send failed: {e}");
+                            conn = None;
+                        }
+                    }
                 }
             }
         }
