@@ -46,6 +46,12 @@ impl Connection {
         Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None })
     }
 
+    /// Close the connection in both directions. A reader thread from
+    /// [`Self::spawn_reader`] then ends with an error.
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.stream.shutdown(std::net::Shutdown::Both)
+    }
+
     /// Send a raw byte buffer.
     pub fn send_raw(&mut self, data: &[u8]) -> io::Result<()> {
         self.stream.write_all(data)
