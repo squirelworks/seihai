@@ -38,7 +38,7 @@ pub struct OfflineSession {
     /// Player properties (`setplayerprop`).
     pub props: HashMap<String, String>,
     /// Pending link destination if the player walked into a LINK area.
-    pub pending_link: Option<(String, i32, i32)>,
+    pub pending_link: Option<(String, f32, f32)>,
     /// Rupees (gralats).
     pub rupees: i32,
     pub bombs: i32,
@@ -378,7 +378,11 @@ impl OfflineSession {
                     && py >= link.y
                     && py < link.y + link.height
                 {
-                    Some((link.dest.clone(), link.new_x, link.new_y))
+                    Some((
+                        link.dest.clone(),
+                        link.new_x.unwrap_or(self.player_x),
+                        link.new_y.unwrap_or(self.player_y),
+                    ))
                 } else {
                     None
                 }

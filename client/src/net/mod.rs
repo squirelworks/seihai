@@ -46,6 +46,12 @@ impl Connection {
         Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None })
     }
 
+    /// Close the connection in both directions. A reader thread from
+    /// [`Self::spawn_reader`] then ends with an error.
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.stream.shutdown(std::net::Shutdown::Both)
+    }
+
     /// Send a raw byte buffer.
     pub fn send_raw(&mut self, data: &[u8]) -> io::Result<()> {
         self.stream.write_all(data)
@@ -369,6 +375,18 @@ impl Connection {
     /// Open a chest: `PLI_OPENCHEST` (20), `c x`, `c y` in whole tiles.
     pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
         let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
+        self.send_messages(&[msg])
+    }
+
+    /// Warp to `level` at `(x, y)` in tiles (`PLI_LEVELWARP`, id 0):
+    /// `GCHAR x*2`, `GCHAR y*2`, level name. The server answers with the
+    /// level, as at login.
+    pub fn send_levelwarp(&mut self, x: f32, y: f32, level: &str) -> io::Result<()> {
+        let mut msg = vec![0x20];
+        msg.push(((x * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+        msg.push(((y * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+        msg.extend_from_slice(&to_latin1(level));
+        msg.push(b'\n');
         self.send_messages(&[msg])
     }
 

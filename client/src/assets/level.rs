@@ -63,8 +63,10 @@ pub struct Link {
     pub y: i32,
     pub width: i32,
     pub height: i32,
-    pub new_x: i32,
-    pub new_y: i32,
+    /// Arrival position in the destination level. `None` means the
+    /// link says `playerx` / `playery`: keep the player's coordinate.
+    pub new_x: Option<f32>,
+    pub new_y: Option<f32>,
 }
 
 /// A sign (SIGN / SIGNEND). Text is already plain for GLEVNW01.
@@ -254,6 +256,13 @@ impl Level {
             baddies: Vec::new(),
             chests: Vec::new(),
         }
+    }
+
+    /// Add the server's `PLO_LEVELLINK` lines (`dest x y w h newx newy`).
+    /// Lines that do not parse are skipped.
+    pub fn add_server_links(&mut self, lines: &[String]) {
+        self.links
+            .extend(lines.iter().filter_map(|l| parse_link(&format!("LINK {l}"))));
     }
 
     /// Load a .nw or .graal file.
@@ -630,9 +639,19 @@ fn parse_link(line: &str) -> Option<Link> {
         y: parts[3].parse().ok()?,
         width: parts[4].parse().ok()?,
         height: parts[5].parse().ok()?,
-        new_x: parts[6].parse().ok()?,
-        new_y: parts[7].parse().ok()?,
+        new_x: link_coord(parts[6], "playerx")?,
+        new_y: link_coord(parts[7], "playery")?,
     })
+}
+
+/// A LINK arrival coordinate: a number, or `playerx` / `playery`
+/// (`Some(None)`). Anything else rejects the link.
+fn link_coord(s: &str, keep: &str) -> Option<Option<f32>> {
+    if s.eq_ignore_ascii_case(keep) {
+        Some(None)
+    } else {
+        s.parse().ok().map(Some)
+    }
 }
 
 fn parse_sign(lines: &[String]) -> Option<Sign> {
@@ -737,6 +756,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn link_keeps_player_coordinate() {
+        let lvl = Level::parse("GLEVNW01\nLINK new1.nw 0 10 1 4 62 playery\n").unwrap();
+        assert_eq!(lvl.links.len(), 1);
+        assert_eq!((lvl.links[0].new_x, lvl.links[0].new_y), (Some(62.0), None));
+        // The server's PLO_LEVELLINK form has no LINK keyword.
+        let mut board = Level::from_board(&[0; 4096]);
+        board.add_server_links(&["new1.nw 33 28 2 6 20 12.5".to_string(), "bad".to_string()]);
+        assert_eq!(board.links.len(), 1);
+        assert_eq!((board.links[0].x, board.links[0].new_y), (33, Some(12.5)));
+    }
+
+    #[test]
     fn board_ids_round_trip() {
         let tiles: Vec<u16> = (0..4096).collect();
         let lvl = Level::from_board(&tiles);
@@ -769,6 +800,7 @@ CHEST 8 8 greenrupee 0
         assert_eq!(lvl.npcs[0].x, 10.0);
         assert_eq!(lvl.links.len(), 1);
         assert_eq!(lvl.links[0].dest, "town");
+        assert_eq!((lvl.links[0].new_x, lvl.links[0].new_y), (Some(30.0), Some(1.0)));
         assert_eq!(lvl.signs.len(), 1);
         assert_eq!(lvl.signs[0].text, "Hello");
         assert_eq!(lvl.baddies.len(), 1);
