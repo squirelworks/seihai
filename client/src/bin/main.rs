@@ -386,6 +386,7 @@ fn main() {
     let mut chat_scroll = 0usize;
     let mut show_debug = false;
     let mut show_players = false;
+    let mut confirm_quit = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
     let mut fps_count = 0u32;
@@ -417,9 +418,23 @@ fn main() {
             }
         } else if window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No) {
             if session.reading.take().is_none() {
-                break;
+                confirm_quit = true;
+                dirty = true;
             }
             dirty = true;
+        }
+        if confirm_quit {
+            if window.is_key_pressed(minifb::Key::Y, minifb::KeyRepeat::No)
+                || window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
+            {
+                break;
+            }
+            if window.is_key_pressed(minifb::Key::N, minifb::KeyRepeat::No)
+                || window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No)
+            {
+                confirm_quit = false;
+                dirty = true;
+            }
         }
         // Online: apply every frame that has arrived, without blocking.
         if let Some(rx) = &frames {
@@ -750,6 +765,9 @@ fn main() {
         }
         if let Some(text) = &session.reading {
             ui::draw_panel(&mut frame, "Sign", text);
+        }
+        if confirm_quit {
+            ui::draw_panel(&mut frame, "Quit", "Quit Seihai?  Y / Enter = yes,  N / Esc = no");
         }
         ui::draw_chat(&mut frame, &net_state.chat_log, chat_scroll, &input);
         if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {
