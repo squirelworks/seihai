@@ -2,28 +2,42 @@
 
 An open client for Graal Reborn listservers and gservers. It plays offline levels and connects to public servers. Written in Rust.
 
-## Prerequisites
+## First time setup
 
-Install [Rust](https://rustup.rs/). The build uses `cargo`.
-
-## Build
+1. Install Rust from [rustup.rs](https://rustup.rs/).
+2. Clone the repo:
 
 ```bash
+git clone https://github.com/squirelworks/seihai.git
+cd seihai
+```
+
+You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `.git`) before any of the commands below. If you are in a parent folder, `git` and `cargo` will fail with "not a git repository" and "could not find Cargo.toml".
+
+## Update and build
+
+```bash
+cd seihai
 git pull origin main
 cargo build --release -p seihai
 ```
 
-The binary is at `target/release/seihai`.
+This creates the binary at:
 
-On Windows, if the build appears to hang, run:
+- Linux / macOS: `target/release/seihai`
+- Windows: `target\release\seihai.exe`
+
+`cargo build` only builds. It does not start the program. To build and run in one step:
 
 ```bash
 cargo run --release -p seihai
 ```
 
+`cargo run` uses the same `target` folder. On Windows, if you do not see a `target` directory, check that you are in the `seihai` folder (not a parent folder) and that the build finished without errors.
+
 ## Assets
 
-The client needs a `pics1.png` tile sheet (2048×512). It is not included. Place it in a folder, then enter that folder path in the Assets field of the launcher. Optional files:
+The client needs a `pics1.png` tile sheet (2048×512). It is not included. Put it in a folder of your choice, then type that folder path into the Assets box in the launcher. Optional files:
 
 - `levels/` — `.nw`, `.graal`, or `.zelda` levels
 - `bodies/body.png` and `heads/head0.png` — player sprites
@@ -31,15 +45,21 @@ The client needs a `pics1.png` tile sheet (2048×512). It is not included. Place
 
 ## Run
 
-With no arguments, the launcher opens:
+From the `seihai` folder:
 
 ```bash
 ./target/release/seihai
 ```
 
-The launcher has a side panel for the server list. Choose a version, enter account details, and click Connect. Offline play is also available from the launcher.
+On Windows:
 
-CLI flags skip the launcher:
+```bash
+target\release\seihai.exe
+```
+
+The launcher opens. Pick a version, enter your account, and click Connect. Offline play is also available from the launcher.
+
+To skip the launcher:
 
 ```bash
 ./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password PASS --version 2.05
