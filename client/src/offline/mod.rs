@@ -369,8 +369,10 @@ impl OfflineSession {
     /// If so, record the destination in `pending_link`.
     /// Returns true if a link was entered.
     pub fn check_links(&mut self) -> bool {
-        let px = self.player_x as i32;
-        let py = self.player_y as i32;
+        // Use the foot point, not the sprite top-left.
+        let (fx, fy) = (self.player_x + 2.0, self.player_y + 2.75);
+        let px = fx as i32;
+        let py = fy as i32;
         let dest = if let Some(level) = &self.current_level {
             level.links.iter().find_map(|link| {
                 if px >= link.x

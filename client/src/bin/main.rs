@@ -435,6 +435,29 @@ fn main() {
                             if name.ends_with(".nw") {
                                 if session.load_level(root.level(name)).is_ok() {
                                     level_from_board = false;
+                                    // Scan for missing NPC images after the file arrives.
+                                    if let Some(level) = &session.current_level {
+                                        for npc in &level.npcs {
+                                            if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
+                                                continue;
+                                            }
+                                            let local = root.find_image("", &npc.image)
+                                                .or_else(|| root.find_image("levels", &npc.image))
+                                                .or_else(|| root.find_image("images", &npc.image));
+                                            if local.is_none() {
+                                                if let Some(c) = conn.as_mut() {
+                                                    let _ = c.send_wantfile(&npc.image);
+                                                    eprintln!("requesting {}", npc.image);
+                                                }
+                                            } else if let Some(path) = local {
+                                                if let Ok(data) = std::fs::read(&path) {
+                                                    if let Ok((w, _, px)) = read_png_rgba(&data) {
+                                                        npc_images.insert(npc.image.clone(), (w, px));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 eprintln!("loaded {name}");
                             } else if name.ends_with(".png") || name.ends_with(".gif") {
@@ -492,7 +515,9 @@ fn main() {
                                 if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
                                     continue;
                                 }
-                                let local = root.find_image("", &npc.image);
+                                let local = root.find_image("", &npc.image)
+                                    .or_else(|| root.find_image("levels", &npc.image))
+                                    .or_else(|| root.find_image("images", &npc.image));
                                 if local.is_none() {
                                     if let Some(c) = conn.as_mut() {
                                         let _ = c.send_wantfile(&npc.image);
