@@ -361,7 +361,7 @@ pub fn draw_other_player(
     let dx = (level_x * TILE_PX as f32) as i32 - cam_x;
     let dy = (level_y * TILE_PX as f32) as i32 - cam_y;
     draw_player_sprites(
-        fb, body, body_w, body_bpp, head, head_w, head_bpp, sprites, dir, dx, dy,
+        fb, body, body_w, body_bpp, head, head_w, head_bpp, sprites, dir, dx, dy, false,
     );
 }
 ///
@@ -384,6 +384,7 @@ pub fn draw_player_sprites(
     dir: u8,
     dx: i32,
     dy: i32,
+    in_water: bool,
 ) {
     // (shadow, body, head) offsets per direction, from idle.gani.
     const OFFSETS: [((i32, i32), (i32, i32), (i32, i32)); 4] = [
@@ -394,12 +395,17 @@ pub fn draw_player_sprites(
     ];
     let d = (dir % 4) as usize;
     let (shadow, b, h) = OFFSETS[d];
-    if let Some((spr, spr_w, spr_bpp)) = sprites {
-        fb.blit_sprite(spr, spr_w, spr_bpp, 0, 0, 24, 12, dx + shadow.0, dy + shadow.1);
-    }
     let d = d as i32;
-    fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx + b.0, dy + b.1);
-    fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1);
+    if in_water {
+        // Swimming: only the head, lowered to the water line.
+        fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1 + 14);
+    } else {
+        if let Some((spr, spr_w, spr_bpp)) = sprites {
+            fb.blit_sprite(spr, spr_w, spr_bpp, 0, 0, 24, 12, dx + shadow.0, dy + shadow.1);
+        }
+        fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx + b.0, dy + b.1);
+        fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1);
+    }
 }
 
 fn draw_marker(fb: &mut Framebuffer, x: i32, y: i32, cam_x: i32, cam_y: i32, color: [u8; 3]) {

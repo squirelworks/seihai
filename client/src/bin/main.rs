@@ -339,6 +339,7 @@ fn main() {
                 session.player_dir,
                 dx,
                 dy,
+                session.in_water,
             ),
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
@@ -582,6 +583,15 @@ fn main() {
                 }
                 session.opened_chests.extend(net_state.opened_chests.drain(..));
                 if warped {
+                    // Refresh water from the foot point after a server warp.
+                    session.in_water = session
+                        .current_level
+                        .as_ref()
+                        .zip(session.tiletypes.as_ref())
+                        .map(|(level, types)| {
+                            level.is_on_water(types, session.player_x + 2.0, session.player_y + 2.75)
+                        })
+                        .unwrap_or(false);
                     eprintln!(
                         "position {} {} dir {}",
                         session.player_x, session.player_y, session.player_dir

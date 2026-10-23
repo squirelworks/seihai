@@ -486,11 +486,14 @@ impl OfflineSession {
 
         self.player_x += dx;
         self.player_y += dy;
+        // Water is at the feet, same point as the wall test.
         self.in_water = self
             .current_level
             .as_ref()
             .zip(self.tiletypes.as_ref())
-            .map(|(level, types)| level.is_on_water(types, self.player_x, self.player_y))
+            .map(|(level, types)| {
+                level.is_on_water(types, self.player_x + 2.0, self.player_y + 2.75)
+            })
             .unwrap_or(false);
         if let Some(gani) = self.walk_gani.as_mut() {
             gani.step();
