@@ -729,6 +729,16 @@ fn main() {
             if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
                 show_debug = !show_debug;
             }
+            if window.is_key_pressed(minifb::Key::F9, minifb::KeyRepeat::No) {
+                session.wallhack = !session.wallhack;
+                let msg = if session.wallhack {
+                    "developer mode: wallhack on"
+                } else {
+                    "developer mode: wallhack off"
+                };
+                eprintln!("{msg}");
+                net_state.push_chat(ChatKind::Admin, "Seihai".into(), msg.into());
+            }
             let f4 = window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No);
             let f5 = window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No);
             if (f4 || f5) && !profile.ui.editor {

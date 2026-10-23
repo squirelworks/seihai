@@ -54,6 +54,8 @@ pub struct OfflineSession {
     pub opened_chests: HashSet<(i32, i32)>,
     /// Sign or chest text being read. The game waits until it is closed.
     pub reading: Option<String>,
+    /// Developer mode: walk through walls and chests.
+    pub wallhack: bool,
 }
 
 /// What an interact press did.
@@ -91,6 +93,7 @@ impl OfflineSession {
             max_hearts: 6,
             opened_chests: HashSet::new(),
             reading: None,
+            wallhack: false,
         }
     }
 
@@ -466,21 +469,23 @@ impl OfflineSession {
         let test_x = test_px / 16.0;
         let test_y = test_py / 16.0;
 
-        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-            if level.is_on_wall(types, test_x, test_y) {
-                return None;
+        if !self.wallhack {
+            if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
+                if level.is_on_wall(types, test_x, test_y) {
+                    return None;
+                }
             }
-        }
-        // Chests are solid, 2×2 tiles.
-        if let Some(level) = &self.current_level {
-            let blocked = level.chests.iter().any(|c| {
-                test_x >= c.x as f32
-                    && test_x < c.x as f32 + 2.0
-                    && test_y >= c.y as f32
-                    && test_y < c.y as f32 + 2.0
-            });
-            if blocked {
-                return None;
+            // Chests are solid, 2×2 tiles.
+            if let Some(level) = &self.current_level {
+                let blocked = level.chests.iter().any(|c| {
+                    test_x >= c.x as f32
+                        && test_x < c.x as f32 + 2.0
+                        && test_y >= c.y as f32
+                        && test_y < c.y as f32 + 2.0
+                });
+                if blocked {
+                    return None;
+                }
             }
         }
 
