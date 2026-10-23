@@ -9,6 +9,7 @@ Install [Rust](https://rustup.rs/). The build uses `cargo`.
 ## Build
 
 ```bash
+git pull origin main
 cargo build --release -p seihai
 ```
 
