@@ -6,7 +6,7 @@ What remains after the current gmaps / script engine / differential testing work
 
 - [x] Gmaps. Ids 49, 185 and 186, cell props 43/44, and the crossing behaviour captured in the lab. (aed001e)
 - [x] Script engine. The NPC and weapon script vocabulary, with a per-version delta table already mined from the builds. (c42e8fa)
-- Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames.
+- [x] Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames. (f8127f4)
 
 ## Next
 
