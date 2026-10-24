@@ -34,7 +34,7 @@ Single code path. Versions are profile rows, not branches.
 ## 5. Behaviour over time
 
 - [ ] Version chain. Each profile plus a per-step handler-change table, so adding a version means adding a row and a small delta, not new logic.
-- [ ] Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames. Finds every remaining gap automatically.
+- [x] Differential testing. Tools, lab runner and first results are in: a capture-to-frame-sequence decoder (`difftest trace`), a differ with a ranked report (`difftest diff`), and a private-namespace scenario runner (`tools/difftest/lab.sh`). First run: 2.22 and 2.31, login, gmap crossing, chat and door/warp, real client against Seihai. Ranked divergences are in `documentation/difftest.md`. Not yet covered: the real 2.17 client (its launcher needs its own UI steps), the server-side warp scenario, and running it in CI.
 - [ ] Public-server checks. Read-only first, and only with approval each time.
 - [ ] Tooling. A capture viewer and a layout explorer fed by the .tsv tables.
 

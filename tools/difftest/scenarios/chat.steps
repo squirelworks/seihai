@@ -1,0 +1,7 @@
+# Local chat bubble (PLPROP_CURCHAT inside PLI_PLAYERPROPS), twice.
+start lv_a.nw 30.00 30.50
+wait 4
+chat hello difftest
+wait 2
+chat second line
+wait 3

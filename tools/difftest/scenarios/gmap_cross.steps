@@ -1,0 +1,11 @@
+# Walk across the edges of the 2x2 gmap and back: east, west, south, north.
+start gm_nw.nw 58.00 30.50
+wait 3
+hold Right 2.6
+wait 1.5
+hold Left 2.6
+wait 1.5
+hold Down 8.5
+wait 1.5
+hold Up 8.5
+wait 2

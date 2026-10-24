@@ -1,0 +1,3 @@
+# Log in, stand still. Start in the lab's open-grass level.
+start lv_a.nw 30.00 30.50
+wait 12
