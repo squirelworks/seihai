@@ -10,7 +10,7 @@
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
 
-use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, AssetRoot, Gani, GaniPlayer, Level, TileTypesFile};
+use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, AssetRoot, Gani, GaniPlayer, Layer, Level, TileTypesFile};
 use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::protocol::login::LoginBurst;
@@ -22,7 +22,7 @@ use seihai::scripting::engine::host::{SessionScripts, WeaponScript};
 use seihai::settings::Settings;
 use seihai::ui;
 use seihai::render::{
-    draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
+    draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin,
     Framebuffer,
 };
 use std::collections::{HashMap, HashSet};
@@ -78,6 +78,18 @@ impl WorldLoader for RootLoader<'_> {
 
     fn level(&self, name: &str) -> Option<Level> {
         Level::load(self.0.level_path(name)).ok()
+    }
+}
+
+/// Load `walk.gani` or `swim.gani` (the animations whose cues are played)
+/// from the first layer that has it, into the session.
+fn load_motion_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
+    if let Some(path) = resolver.gani(name) {
+        match Gani::load(&path) {
+            Ok(g) if name.eq_ignore_ascii_case("swim.gani") => session.set_swim_gani(GaniPlayer::new(g)),
+            Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
+            Err(e) => eprintln!("sound: cannot read {name}: {e}"),
+        }
     }
 }
 
@@ -173,11 +185,22 @@ fn main() {
     // None: not given on the command line, so the settings file decides.
     let mut cli_sound: Option<bool> = None;
     let mut cli_save_downloads: Option<bool> = None;
+    let mut cli_cache_dir: Option<PathBuf> = None;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
                 i += 1;
                 assets = args.get(i).map(PathBuf::from);
+            }
+            "--cache-dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(d) => cli_cache_dir = Some(PathBuf::from(d)),
+                    None => {
+                        eprintln!("--cache-dir needs a folder");
+                        std::process::exit(2);
+                    }
+                }
             }
             "--level" | "-l" => {
                 i += 1;
@@ -256,7 +279,14 @@ fn main() {
                 }
             }
             "--help" | "-h" => {
-                println!("seihai --assets <dir> [--level <name.nw>]");
+                println!("seihai [--assets <dir>] [--level <name.nw>]");
+                println!("         --assets <dir>      your own asset folder (optional). A file it lacks comes");
+                println!("                             from the built-in default set; with no folder the");
+                println!("                             built-in set is all there is, and offline starts in");
+                println!("                             new1.nw");
+                println!("         --cache-dir <dir>   where per-server download caches live (default:");
+                println!("                             <settings dir>/cache; settings file: cache_dir=)");
+                println!("                             search order: server cache, --assets, built-in set");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
                 println!("         --password-env VAR  read the password from environment variable VAR");
@@ -287,9 +317,10 @@ fn main() {
                 println!("         --sound             play them even if the settings file says off");
                 println!("         --no-save-downloads  keep downloaded files in memory only, do not");
                 println!("                             write them to disk (settings file: save_downloads=0)");
-                println!("       seihai --assets <dir> --check-assets [--version 2.22]");
+                println!("       seihai [--assets <dir>] --check-assets [--version 2.22]");
                 println!("         --check-assets      resolve and load the files a version uses from the");
-                println!("                             data folder and print what is found; without");
+                println!("                             --assets folder, or from the built-in set when none");
+                println!("                             is given, and print what is found; without");
                 println!("                             --version, the five main versions. Exit 1 if a");
                 println!("                             required file is missing or unreadable");
                 println!("       seihai --level-info <file.graal|file.zelda> [--level-info <file> ...]");
@@ -361,6 +392,8 @@ fn main() {
     if assets.is_none() {
         assets = settings.assets.clone();
     }
+    // An empty path (an empty field in the settings window) is no folder.
+    assets = assets.filter(|p| !p.as_os_str().is_empty());
     if account == "player" {
         if let Some(a) = &settings.account {
             account = a.clone();
@@ -385,11 +418,19 @@ fn main() {
     }
     // Check the data folder for one version or the five main ones, print, exit.
     if check_assets {
-        let Some(dir) = &assets else {
-            eprintln!("--check-assets needs --assets <dir>");
-            std::process::exit(2);
+        let root = match &assets {
+            Some(dir) => AssetRoot::new(dir),
+            None => match seihai::assets::builtin::default_dir() {
+                Ok(d) => {
+                    println!("no --assets folder: checking the built-in default set in {}", d.display());
+                    AssetRoot::new(d)
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(2);
+                }
+            },
         };
-        let root = AssetRoot::new(dir);
         let versions: Vec<ClientVersion> = if version_given { vec![version] } else { ClientVersion::main_versions().to_vec() };
         let mut failed = false;
         for v in versions {
@@ -591,22 +632,65 @@ fn main() {
     if let Some(p) = Settings::load().assets_for(version.label()) {
         assets = Some(p.to_path_buf());
     }
-    let root = match assets {
-        Some(p) => AssetRoot::new(p),
-        None => {
-            eprintln!("usage: seihai --assets <dir> [--level <name.nw>]");
-            return;
+    // The layers, searched in this order: the server's cache (what it sent),
+    // the user's asset folder, the built-in default set.
+    let settings_now = Settings::load();
+    let user_root = match assets.filter(|p| !p.as_os_str().is_empty()) {
+        Some(p) if p.is_dir() => {
+            let r = AssetRoot::new(p);
+            if !r.is_valid() {
+                eprintln!("no pics1.png in {}; a file that folder lacks comes from the built-in assets", r.root.display());
+            }
+            Some(r)
+        }
+        Some(p) => {
+            eprintln!("assets folder {} not found; using the built-in assets", p.display());
+            None
+        }
+        None => None,
+    };
+    let builtin_dir = match seihai::assets::builtin::default_dir() {
+        Ok(d) => Some(d),
+        Err(e) => {
+            eprintln!("{e}; running without the built-in assets");
+            None
         }
     };
-    if !root.is_valid() {
-        eprintln!("no pics1.png in {}", root.pics1().display());
+    if user_root.is_none() && builtin_dir.is_none() {
+        eprintln!("no assets: give --assets <dir> or fix the settings folder so the built-in assets can be written");
         return;
     }
+    let cache_root = cli_cache_dir
+        .clone()
+        .or_else(|| settings_now.cache_dir.clone())
+        .unwrap_or_else(seihai::servercache::default_cache_root);
+    // The server's name is known only when the settings file has it for this address.
+    let server_name = |addr: &str| -> Option<String> {
+        (settings_now.last_server.as_deref() == Some(addr)).then(|| settings_now.last_server_name.clone()).flatten()
+    };
+    let cache_for = |addr: &str, name: Option<&str>| seihai::servercache::cache_dir_for(&cache_root, addr, name);
+    let cache_dir = online.as_deref().and_then(|a| cache_for(a, server_name(a).as_deref()));
     // Every lookup of a level, GANI, image or sound goes through this: it
     // knows the folders of the 2.22 data folder and what this version opens.
-    let resolver = AssetResolver::new(root.clone(), version.profile());
-    // What to ask the server for, and where downloads are saved.
+    // The built-in levels are for offline play only: online, a level of the
+    // same name (`new1.nw`) must come from the server.
+    let mut resolver = AssetResolver::empty(version.profile())
+        .with_assets(user_root)
+        .with_cache(cache_dir.clone())
+        .with_builtin(builtin_dir)
+        .with_builtin_levels(online.is_none());
+    // What to ask the server for, and where downloads are saved (the cache).
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
+    if let Some(a) = online.as_deref() {
+        files.store.set_cache_meta(Some(seihai::servercache::meta_text(a, server_name(a).as_deref())));
+        if let Some(d) = &cache_dir {
+            eprintln!("download cache: {}", d.display());
+        }
+    }
+    // A fresh install with no folder of its own starts offline in the built-in level.
+    if level_name.is_none() && online.is_none() && resolver.user_root().is_none() && resolver.level("new1.nw").is_some() {
+        level_name = Some("new1.nw".to_string());
+    }
     // The frame a real client sends once the server's login burst is in
     // (image checks, process list, props), and the GANI it asks for at once.
     let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
@@ -619,34 +703,36 @@ fn main() {
     let sound_clock = Instant::now();
     let mut sound = if sound_on {
         let (out, why) = seihai::sound::default_backend();
-        let dir = root.sounds_dir();
-        match &dir {
-            Some(d) => eprintln!("sound: {why}; sounds from {}", d.display()),
-            None => eprintln!("sound: no sounds folder in {}; sound is silent", root.root.display()),
+        let dirs = resolver.sound_dirs();
+        if dirs.is_empty() {
+            eprintln!("sound: no sounds folder; sound is silent");
+        } else {
+            let list: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
+            eprintln!("sound: {why}; sounds from {}", list.join(", "));
         }
-        SoundEngine::new(out, dir, true)
+        SoundEngine::with_dirs(out, dirs, true)
     } else {
         SoundEngine::off()
     };
     if sound.is_enabled() {
         // The animations whose PLAYSOUND cues are played: footsteps and
         // water, one frame per step taken.
-        for (name, swim) in [("walk.gani", false), ("swim.gani", true)] {
-            if let Some(path) = resolver.gani(name) {
-                match Gani::load(&path) {
-                    Ok(g) if swim => session.set_swim_gani(GaniPlayer::new(g)),
-                    Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
-                    Err(e) => eprintln!("sound: cannot read {name}: {e}"),
-                }
-            }
+        for name in ["walk.gani", "swim.gani"] {
+            load_motion_gani(&resolver, &mut session, name);
         }
     }
     let mut sound_serial = session.level_serial;
 
-    let sheet_data = match std::fs::read(root.pics1()) {
+    let Some(sheet_path) = resolver.image("pics1.png") else {
+        eprintln!("no pics1.png in any asset folder");
+        return;
+    };
+    // The open-chest art swap is for our own sheet only.
+    let view_opts = seihai::render::ViewOptions { builtin_sheet: resolver.layer_of(&sheet_path) == Some(Layer::Builtin) };
+    let sheet_data = match std::fs::read(&sheet_path) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("failed to read pics1.png: {e}");
+            eprintln!("failed to read {}: {e}", sheet_path.display());
             return;
         }
     };
@@ -703,7 +789,7 @@ fn main() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
     let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer], my_chat: &str, npc_imgs: &HashMap<String, (u32, Vec<u8>)>| -> Framebuffer {
-        let mut fb = render_view(session, &sheet, sw, sh, view_w, view_h);
+        let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
@@ -918,6 +1004,13 @@ fn main() {
                                     }
                                 }
                                 eprintln!("loaded {name}");
+                            } else if name.to_ascii_lowercase().ends_with(".wav") {
+                                // A new copy of a sound replaces the decoded one.
+                                sound.forget(name);
+                            } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
+                                if sound.is_enabled() {
+                                    load_motion_gani(&resolver, &mut session, name);
+                                }
                             } else if name.ends_with(".png") || name.ends_with(".gif") {
                                 // A new copy of an image replaces the one in memory.
                                 if let Some(data) = files.store.read(name) {
@@ -1293,8 +1386,14 @@ fn main() {
                 dy += 0.5;
             }
             if dx != 0.0 || dy != 0.0 {
+                let before = (session.player_x, session.player_y);
                 session.try_move(dx, dy);
                 moved = true;
+                // The first steps of a connection: the files the real client
+                // asks for then, if Seihai has no copy of them.
+                if conn.is_some() && (session.player_x, session.player_y) != before {
+                    send_file_msgs(conn.as_mut(), files.on_step());
+                }
                 last_step = seihai::offline::next_step_clock(last_step, Instant::now(), session.step_interval());
             }
         }
@@ -1568,6 +1667,11 @@ fn main() {
                         gmap_asked.clear();
                         // The request lists belong to one connection.
                         files.new_connection();
+                        // The new server has its own cache folder, searched first.
+                        let warp_cache = cache_for(&a, Some(&w.display_name()));
+                        resolver.set_cache(warp_cache.clone());
+                        files.store.set_cache(warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
+                        sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
@@ -1707,7 +1811,7 @@ fn main() {
             }
             if f5 && profile.ui.editor {
                 let exts = profile.level_extensions();
-                if let Some(path) = seihai::gui::pick_level(root.levels_dir().as_path(), &exts) {
+                if let Some(path) = seihai::gui::pick_level(resolver.root().levels_dir().as_path(), &exts) {
                     if let Err(e) = session.load_level(&path) {
                         eprintln!("load failed: {e}");
                     } else {

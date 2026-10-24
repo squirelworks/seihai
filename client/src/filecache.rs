@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use crate::assets::resolve::{clean_name, lookup};
-use crate::assets::AssetResolver;
+use crate::assets::{AssetResolver, AssetRoot, Layer};
 use crate::net::{updatefile_message, wantfile_message};
 use crate::protocol::{SessionState, VersionProfile};
 
@@ -191,6 +191,10 @@ impl FileRequester {
     }
 }
 
+fn is_level_name(p: &Path) -> bool {
+    p.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "nw" | "graal" | "zelda" | "gmap"))
+}
+
 /// The folder (under the game folder) a downloaded file is saved in, as
 /// path components. `name` is the file name the server sent.
 ///
@@ -283,53 +287,78 @@ pub enum Stored {
 }
 
 /// Saves downloads by the real clients' rules.
+///
+/// Where it writes: the resolver's [`download_root`](AssetResolver::download_root),
+/// which is the per-server cache folder when there is one. It never writes
+/// to the user's asset folder while a cache exists, and never to the
+/// built-in set (a target under it is refused).
 #[derive(Debug)]
 pub struct DownloadStore {
     resolver: AssetResolver,
     save_to_disk: bool,
     memory: HashMap<String, MemoryFile>,
+    /// The text of `server.txt`, written once into a new cache folder.
+    cache_meta: Option<String>,
 }
 
 impl DownloadStore {
     /// `save_to_disk` is the real clients' `saveimages` setting (on unless
     /// a user turns it off).
     pub fn new(resolver: AssetResolver, save_to_disk: bool) -> Self {
-        Self { resolver, save_to_disk, memory: HashMap::new() }
+        Self { resolver, save_to_disk, memory: HashMap::new(), cache_meta: None }
     }
 
     pub fn resolver(&self) -> &AssetResolver {
         &self.resolver
     }
 
-    /// The file the client already has under this name: first the name as a
-    /// path from the game folder, then the folders its kind lives in. Only a
-    /// file with the same name counts (a `.png` is not the `.gif` the server
-    /// was asked for).
-    pub fn local_path(&self, name: &str) -> Option<PathBuf> {
+    /// Point the store at another server's cache folder (after a server
+    /// warp). The in-memory copies of the old server are dropped: they are
+    /// that server's files.
+    pub fn set_cache(&mut self, dir: Option<PathBuf>, meta: Option<String>) {
+        self.resolver.set_cache(dir);
+        self.cache_meta = meta;
+        self.memory.clear();
+    }
+
+    pub fn set_cache_meta(&mut self, meta: Option<String>) {
+        self.cache_meta = meta;
+    }
+
+    /// The file the client already has under this name, and the layer it is
+    /// in: per layer (cache, the user's folder, the built-in set), first the
+    /// name as a path from the game folder, then the folders its kind lives
+    /// in. Only a file with the same name counts (a `.png` is not the `.gif`
+    /// the server was asked for).
+    pub fn local_copy(&self, name: &str) -> Option<(PathBuf, Layer)> {
         let rel = clean_name(name)?;
         let r = &self.resolver;
-        if let Some(p) = lookup(&r.root().root, &rel) {
-            return Some(p);
+        for (layer, root) in [(Layer::Cache, r.cache_root()), (Layer::Assets, r.user_root()), (Layer::Builtin, r.builtin_root())] {
+            let Some(root) = root else { continue };
+            if let Some(p) = find_in_root(root, r, &rel, name).filter(|p| layer != Layer::Builtin || r.builtin_levels() || !is_level_name(p)) {
+                return Some((p, layer));
+            }
         }
-        let last = rel.rsplit('/').next().unwrap_or(&rel).to_ascii_lowercase();
-        let ext = last.rfind('.').map(|i| &last[i..]).unwrap_or("");
-        let found = match ext {
-            ".png" | ".gif" | ".mng" => r.image(name),
-            ".gani" => r.gani(name),
-            ".wav" => r.sound(name),
-            ".nw" | ".graal" | ".zelda" | ".gmap" => r.level(name),
-            _ => None,
-        }?;
-        let same = found.file_name().and_then(|f| f.to_str()).is_some_and(|f| f.eq_ignore_ascii_case(&last));
-        same.then_some(found)
+        None
     }
 
-    /// Mod time of the local copy, in Unix seconds.
+    /// As [`local_copy`](Self::local_copy), the path only.
+    pub fn local_path(&self, name: &str) -> Option<PathBuf> {
+        self.local_copy(name).map(|(p, _)| p)
+    }
+
+    /// Mod time of the copy the client holds *of its own* (the cache or the
+    /// user's folder), in Unix seconds. A built-in file has no mod time to
+    /// offer a server: it is not a copy of the server's file.
     pub fn local_mod_time(&self, name: &str) -> Option<u32> {
-        self.local_path(name).and_then(|p| mod_time_of(&p))
+        match self.local_copy(name)? {
+            (_, Layer::Builtin) => None,
+            (p, _) => Some(mod_time_of(&p).unwrap_or(0)),
+        }
     }
 
-    /// Bytes of a file: the in-memory copy of a download, else the file.
+    /// Bytes of a file: the in-memory copy of a download, else the file
+    /// (from any layer, the built-in set included).
     pub fn read(&self, name: &str) -> Option<Vec<u8>> {
         if let Some(m) = self.memory.get(&key(name)) {
             return Some(m.data.clone());
@@ -341,9 +370,18 @@ impl DownloadStore {
         self.memory.get(&key(name))
     }
 
-    /// Save one received file. A file the client already has is replaced
-    /// where it is; a new one goes to [`download_dir`]. With a mod time from
-    /// the server (2.1+) the file gets it as its time, so the next
+    /// Does the client have this file in any form: kept in memory, in the
+    /// cache, in the user's folder or in the built-in set?
+    pub fn has_any_copy(&self, name: &str) -> bool {
+        self.memory.contains_key(&key(name)) || self.local_copy(name).is_some()
+    }
+
+    /// Save one received file. A file the client already holds *in the
+    /// download folder* (the cache) is replaced where it is; a new one goes
+    /// to [`download_dir`] under the cache. A copy in the user's folder or
+    /// in the built-in set is left alone: the server's file lands in the
+    /// cache, which is searched first, so it wins on this server. With a mod
+    /// time from the server (2.1+) the file gets it as its time, so the next
     /// `UPDATEFILE` carries the time the server knows; before 2.1 the
     /// file's time is the time of the download.
     ///
@@ -357,10 +395,14 @@ impl DownloadStore {
         if !self.save_to_disk && !is_level {
             return Ok(Stored::Memory);
         }
-        let target = match self.local_path(name) {
+        let Some(dl) = self.resolver.download_root().cloned() else {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "no download folder (only the read-only built-in set)"));
+        };
+        let in_place = find_in_root(&dl, &self.resolver, &rel, name);
+        let target = match in_place {
             Some(p) => p,
             None => {
-                let mut p = self.resolver.root().root.clone();
+                let mut p = dl.root.clone();
                 for c in download_dir(self.resolver.profile(), &rel) {
                     p.push(c);
                 }
@@ -368,8 +410,20 @@ impl DownloadStore {
                 p
             }
         };
+        // The built-in set is never a target, whatever the name.
+        if let Some(b) = self.resolver.builtin_root() {
+            if target.starts_with(&b.root) {
+                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "the built-in assets are read-only"));
+            }
+        }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
+        }
+        if let (Some(meta), true) = (&self.cache_meta, self.resolver.cache_root().is_some_and(|c| c.root == dl.root)) {
+            let m = dl.root.join("server.txt");
+            if !m.exists() {
+                let _ = fs::write(m, meta);
+            }
         }
         if target.exists() {
             fs::remove_file(&target)?;
@@ -380,6 +434,27 @@ impl DownloadStore {
         }
         Ok(Stored::Disk(target))
     }
+}
+
+/// The copy of `rel` in one folder: the name as a path from the folder, then
+/// the folders its kind lives in (as the resolver searches them, restricted
+/// to this one folder).
+fn find_in_root(root: &AssetRoot, resolver: &AssetResolver, rel: &str, name: &str) -> Option<PathBuf> {
+    if let Some(p) = lookup(&root.root, rel) {
+        return Some(p);
+    }
+    let last = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
+    let ext = last.rfind('.').map(|i| &last[i..]).unwrap_or("");
+    let one = AssetResolver::new(root.clone(), resolver.profile());
+    let found = match ext {
+        ".png" | ".gif" | ".mng" => one.image(name),
+        ".gani" => one.gani(name),
+        ".wav" => one.sound(name),
+        ".nw" | ".graal" | ".zelda" | ".gmap" => one.level(name),
+        _ => None,
+    }?;
+    let same = found.file_name().and_then(|f| f.to_str()).is_some_and(|f| f.eq_ignore_ascii_case(&last));
+    same.then_some(found)
 }
 
 /// What [`FileSession::process`] found in the server's traffic.
@@ -400,12 +475,20 @@ pub struct Processed {
 pub struct FileSession {
     pub requests: FileRequester,
     pub store: DownloadStore,
+    /// Steps taken on this connection, for [`on_step`](Self::on_step).
+    steps: u32,
 }
+
+/// What the real client asks for when it takes its first steps, because
+/// its clean folder has none of it (2.31 `gmap_cross` capture: `steps.wav`
+/// and `walk.gani` in the frame of the first step, `steps2.wav` with the
+/// second). `(step number, names)`.
+pub const FIRST_STEP_REQUESTS: &[(u32, &[&str])] = &[(1, &["steps.wav", "walk.gani"]), (2, &["steps2.wav"])];
 
 impl FileSession {
     pub fn new(resolver: AssetResolver, save_to_disk: bool) -> Self {
         let requests = FileRequester::new(resolver.profile());
-        Self { requests, store: DownloadStore::new(resolver, save_to_disk) }
+        Self { requests, store: DownloadStore::new(resolver, save_to_disk), steps: 0 }
     }
 
     /// A new connection: the name lists and the failure memory start empty
@@ -413,16 +496,52 @@ impl FileSession {
     /// stay.
     pub fn new_connection(&mut self) {
         self.requests = FileRequester::new(self.store.resolver().profile());
+        self.steps = 0;
     }
 
     /// The client needs this file. Returns the messages to send now: a
     /// `WANTFILE` if the file is missing, an `UPDATEFILE` with the local
     /// mod time if it is there and the build checks, else nothing.
+    ///
+    /// A file that only the **built-in set** has counts as missing here: it
+    /// is Seihai's stand-in, not a copy of the server's file, so it is asked
+    /// for with `WANTFILE` (no mod time is ever sent for it) and the
+    /// server's copy, if it has one, is saved in the cache and found before
+    /// the built-in one. If the server has none the reply is
+    /// `FILESENDFAILED` and the built-in file stays in use.
     pub fn need(&mut self, name: &str) -> Vec<Vec<u8>> {
         let Some(clean) = clean_name(name) else { return Vec::new() };
-        let local = self.store.local_path(&clean).map(|p| mod_time_of(&p).unwrap_or(0));
+        let local = self.store.local_mod_time(&clean);
         let local = local.or_else(|| self.store.memory_file(&clean).map(|m| m.mod_time.unwrap_or(0)));
         self.requests.need(name, local).iter().map(FileRequest::message).collect()
+    }
+
+    /// The player took a step. On the first two steps of a connection the
+    /// real client asks for `steps.wav`, `walk.gani` and `steps2.wav`
+    /// ([`FIRST_STEP_REQUESTS`]); Seihai asks for one **only if it has no
+    /// copy at all**: a copy in the cache, in the user's folder, in the
+    /// built-in set or already received counts as having it. The built-in set
+    /// has all three, so in practice a normal run asks for none of them; the
+    /// request is for a client whose built-in layer is unavailable. Builds
+    /// without GANIs, and builds that do not send `WANTFILE`, ask for none
+    /// (not captured for them).
+    pub fn on_step(&mut self) -> Vec<Vec<u8>> {
+        self.steps = self.steps.saturating_add(1);
+        let profile = self.store.resolver().profile();
+        if !profile.ui.ganis || !profile.protocol.pli.contains(23) {
+            return Vec::new();
+        }
+        let Some((_, names)) = FIRST_STEP_REQUESTS.iter().find(|(n, _)| *n == self.steps) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for name in *names {
+            if self.store.has_any_copy(name) {
+                continue;
+            }
+            out.extend(self.need(name));
+        }
+        out
     }
 
     /// Apply what the server sent since the last call: save finished

@@ -15,6 +15,7 @@ pub mod offline;
 pub mod protocol;
 pub mod render;
 pub mod scripting;
+pub mod servercache;
 pub mod settings;
 pub mod sound;
 pub mod ui;

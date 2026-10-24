@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Default)]
 pub struct Settings {
     pub assets: Option<PathBuf>,
+    /// Root of the per-server download caches (`cache_dir=`). `None` means
+    /// the default, `<settings dir>/cache`.
+    pub cache_dir: Option<PathBuf>,
     pub account: Option<String>,
     pub password: Option<String>,
     pub version: Option<String>,
@@ -54,6 +57,7 @@ impl Settings {
                 let v = v.trim().to_string();
                 match k.trim() {
                     "assets" => s.assets = Some(PathBuf::from(v)),
+                    "cache_dir" => s.cache_dir = Some(PathBuf::from(v)),
                     "account" => s.account = Some(v),
                     "password" => s.password = Some(v),
                     "version" => s.version = Some(v),
@@ -90,6 +94,9 @@ impl Settings {
         let mut out = String::new();
         if let Some(p) = &self.assets {
             out.push_str(&format!("assets={}\n", p.display()));
+        }
+        if let Some(p) = &self.cache_dir {
+            out.push_str(&format!("cache_dir={}\n", p.display()));
         }
         if let Some(a) = &self.account {
             out.push_str(&format!("account={a}\n"));
@@ -283,6 +290,15 @@ mod tests {
         assert!(off.save_downloads_with(Some(true)));
         assert!(!none.save_downloads_with(Some(false)));
         assert_eq!(Settings::parse(&off.to_text()).save_downloads, Some(false));
+    }
+
+    #[test]
+    fn cache_dir_round_trips_and_is_unset_by_default() {
+        assert_eq!(Settings::parse("account=a\n").cache_dir, None);
+        assert!(!Settings::parse("account=a\n").to_text().contains("cache_dir"));
+        let s = Settings::parse("cache_dir=/data/seihai-cache\n");
+        assert_eq!(s.cache_dir.as_deref(), Some(Path::new("/data/seihai-cache")));
+        assert_eq!(Settings::parse(&s.to_text()).cache_dir, s.cache_dir);
     }
 
     #[test]

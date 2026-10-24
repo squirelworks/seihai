@@ -75,7 +75,8 @@ struct Voice {
 
 pub struct SoundEngine {
     out: Box<dyn SoundOut>,
-    dir: Option<PathBuf>,
+    /// Folders to look in, first match wins (cache, user folder, built-in).
+    dirs: Vec<PathBuf>,
     enabled: bool,
     pub reverse_stereo: bool,
     /// Lower-cased file name to path, from the last folder scan.
@@ -90,9 +91,15 @@ pub struct SoundEngine {
 
 impl SoundEngine {
     pub fn new(out: Box<dyn SoundOut>, dir: Option<PathBuf>, enabled: bool) -> Self {
+        Self::with_dirs(out, dir.into_iter().collect(), enabled)
+    }
+
+    /// An engine that looks for a sound in each folder in turn: the first
+    /// folder that has the file wins.
+    pub fn with_dirs(out: Box<dyn SoundOut>, dirs: Vec<PathBuf>, enabled: bool) -> Self {
         Self {
             out,
-            dir,
+            dirs,
             enabled,
             reverse_stereo: false,
             index: HashMap::new(),
@@ -102,6 +109,22 @@ impl SoundEngine {
             warnings: Vec::new(),
             warned: HashSet::new(),
         }
+    }
+
+    /// Use other folders (another server's cache after a server warp). Every
+    /// decoded sound and the folder index are dropped.
+    pub fn set_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.dirs = dirs;
+        self.index.clear();
+        self.last_scan_ms = None;
+        self.cache.clear();
+    }
+
+    /// Forget the decoded copy of a sound (a new file of that name was
+    /// saved), so the next play reads the file again.
+    pub fn forget(&mut self, name: &str) {
+        let (name, _) = Self::normalize(name);
+        self.cache.remove(&name);
     }
 
     /// An engine that plays nothing.
@@ -213,12 +236,17 @@ impl SoundEngine {
         }
     }
 
-    /// Find a sound by lower-cased name, ignoring case in the folder.
+    /// Find a sound by lower-cased name, ignoring case in the folder. The
+    /// folders are tried in order and the first that has it wins.
     fn find(&mut self, name: &str, now_ms: u64) -> Option<PathBuf> {
-        let dir = self.dir.clone()?;
-        let direct = dir.join(name);
-        if direct.is_file() {
-            return Some(direct);
+        if self.dirs.is_empty() {
+            return None;
+        }
+        for d in &self.dirs {
+            let direct = d.join(name);
+            if direct.is_file() {
+                return Some(direct);
+            }
         }
         if let Some(p) = self.index.get(name) {
             if p.is_file() {
@@ -230,7 +258,12 @@ impl SoundEngine {
         let due = self.last_scan_ms.map_or(true, |t| now_ms >= t + RESCAN_MS);
         if due {
             self.last_scan_ms = Some(now_ms);
-            self.index = scan(&dir);
+            let mut index = HashMap::new();
+            // Later folders first, so an earlier folder's file replaces theirs.
+            for d in self.dirs.iter().rev() {
+                index.extend(scan(d));
+            }
+            self.index = index;
         }
         self.index.get(name).cloned()
     }
