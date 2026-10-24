@@ -4,6 +4,7 @@ pub mod assets;
 pub mod chatlists;
 pub mod combat;
 pub mod dev;
+pub mod filecache;
 pub mod difftest;
 pub mod gmap;
 pub mod gui;

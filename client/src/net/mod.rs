@@ -204,6 +204,28 @@ pub fn levelwarpmod_message(mod_time: u32, x: f32, y: f32, level: &str) -> Vec<u
     msg
 }
 
+/// `PLI_WANTFILE` (23): the file name, nothing else.
+pub fn wantfile_message(name: &str) -> Vec<u8> {
+    let mut msg = vec![23 + 0x20];
+    msg.extend_from_slice(&to_latin1(name));
+    msg.push(b'\n');
+    msg
+}
+
+/// `PLI_UPDATEFILE` (34): `GINT5` last-write time (Unix seconds) of the
+/// local copy, then the file name. Real 2.17, 2.22 and 2.31 clients, lab
+/// 2026-10-24: the time is the file's own mod time, and the server answers
+/// `PLO_FILEUPTODATE` (45) when it is the same.
+pub fn updatefile_message(mod_time: u32, name: &str) -> Vec<u8> {
+    let mut msg = vec![34 + 0x20];
+    for shift in [28, 21, 14, 7, 0] {
+        msg.push(((mod_time >> shift) as u8 & 0x7F) + 0x20);
+    }
+    msg.extend_from_slice(&to_latin1(name));
+    msg.push(b'\n');
+    msg
+}
+
 /// What went into a link-request frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkFrame {
@@ -921,11 +943,7 @@ impl Connection {
 
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
     pub fn send_wantfile(&mut self, name: &str) -> io::Result<()> {
-        let mut msg = Vec::new();
-        msg.push(23u8.wrapping_add(0x20));
-        msg.extend_from_slice(name.as_bytes());
-        msg.push(b'\n');
-        self.send_messages(&[msg])
+        self.send_messages(&[wantfile_message(name)])
     }
 
 }

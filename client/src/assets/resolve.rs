@@ -327,7 +327,7 @@ fn first_in(dirs: &[PathBuf], names: &[String]) -> Option<PathBuf> {
 }
 
 /// Find `rel` under `dir`, matching every component ignoring ASCII case.
-fn lookup(dir: &Path, rel: &str) -> Option<PathBuf> {
+pub(crate) fn lookup(dir: &Path, rel: &str) -> Option<PathBuf> {
     // Exact case first: one stat, no directory read.
     let direct = dir.join(rel);
     if direct.is_file() {
