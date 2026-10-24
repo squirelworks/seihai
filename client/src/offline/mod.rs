@@ -83,6 +83,9 @@ pub struct OfflineSession {
     arrival_tile: Option<(i32, i32)>,
     /// Swimming state last reported to the server.
     swim_sent: bool,
+    /// Counts levels loaded with [`OfflineSession::load_level`], so a
+    /// caller can tell when its per-level state (scripts) is stale.
+    pub level_serial: u64,
 }
 
 /// What an interact press did.
@@ -142,6 +145,7 @@ impl OfflineSession {
             armed: true,
             arrival_tile: None,
             swim_sent: false,
+            level_serial: 0,
         }
     }
 
@@ -261,6 +265,7 @@ impl OfflineSession {
         self.current_level = Some(level);
         self.opened_chests.clear();
         self.reading = None;
+        self.level_serial += 1;
         Ok(())
     }
 
@@ -506,51 +511,6 @@ impl OfflineSession {
         } else {
             None
         }
-    }
-
-    /// Check for player-touch-NPC events.
-    ///
-    /// If the player is within 1 tile of a visible NPC whose script contains
-    /// a simple `hide` or `warp` pattern, apply the corresponding command.
-    /// Returns the number of NPCs that fired.
-    pub fn check_touch(&mut self) -> usize {
-        let mut fired = 0;
-        let px = self.player_x;
-        let py = self.player_y;
-        let mut actions: Vec<(String, Vec<crate::scripting::Value>)> = Vec::new();
-
-        if let Some(level) = &self.current_level {
-            for npc in &level.npcs {
-                if !npc.visible {
-                    continue;
-                }
-                let dx = (npc.x - px).abs();
-                let dy = (npc.y - py).abs();
-                if dx <= 1.0 && dy <= 1.0 {
-                    let script = npc.script.to_lowercase();
-                    if script.contains("hide") {
-                        actions.push(("hide".into(), vec![]));
-                    }
-                    if script.contains("warp") {
-                        // Minimal: warp to a nearby open cell if no args parsed.
-                        actions.push((
-                            "warp".into(),
-                            vec![
-                                crate::scripting::Value::Num(px + 2.0),
-                                crate::scripting::Value::Num(py),
-                            ],
-                        ));
-                    }
-                }
-            }
-        }
-
-        for (name, args) in actions {
-            if self.handle_command(&name, &args) {
-                fired += 1;
-            }
-        }
-        fired
     }
 
     /// The kind of tile under a point given relative to the current cell.
@@ -1194,5 +1154,21 @@ mod tests {
         s.opened_chests.insert((3, 3));
         walk(&mut s, 0.5, 0.0, 2);
         assert!(s.opened_chests.is_empty());
+    }
+
+    #[test]
+    fn level_serial_counts_loaded_levels() {
+        let dir = std::env::temp_dir().join(format!("seihai-serial-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.nw");
+        std::fs::write(&path, "GLEVNW01\n").unwrap();
+        let mut s = OfflineSession::new();
+        assert_eq!(s.level_serial, 0);
+        s.load_level(&path).unwrap();
+        s.load_level(&path).unwrap();
+        assert_eq!(s.level_serial, 2);
+        assert!(s.load_level(dir.join("missing.nw")).is_err());
+        assert_eq!(s.level_serial, 2);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
