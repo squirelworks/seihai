@@ -93,8 +93,10 @@ they are.
   the death from the dead bit.
 - **Order of the respawn frame** (level warp then status clear) is a guess;
   the notes do not say.
-- **Hurt state** (mode 3 for 40 ticks, knockback, `playerhurt`) belongs to
-  combat (item 4) and is not modelled; script `hurt` is not gated by it.
+- **Hurt state** (mode 3 for 40 ticks) is now modelled for hits from other
+  players (`documentation/combat.md`). Script `hurt` and `damage_half` are
+  still not gated by it, and knockback and the `playerhurt` script event are
+  not done.
 - **Damage amounts.** The formula is unresolved (item 7). `damage_half` takes
   half hearts from its caller.
 - **Healing** (AP 40 or more only), swim mode and editor/pause exemptions.

@@ -15,7 +15,8 @@ use super::layouts::{
     parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
     parse_shoot, parse_showimg_relay, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
 };
-use super::profile::IdSet;
+use super::profile::{CombatRules, IdSet};
+use crate::combat::{self, IncomingHit};
 use super::props::parse_player_props_in;
 use super::version::ClientVersion;
 use std::collections::HashMap;
@@ -192,6 +193,13 @@ pub struct OtherPlayer {
     /// said. `x` and `y` are local to it. `None`: no cell sent, the same
     /// cell as ours.
     pub cell: Option<(i32, i32)>,
+    /// SPRITE (17) as received (`dir + 4 * S`), STATUS (18), ALIGNMENT (32,
+    /// AP) and SWORDPOWER (8), each once the server has said. The victim's
+    /// side of combat reads them.
+    pub sprite: Option<u8>,
+    pub status: Option<u8>,
+    pub ap: Option<u8>,
+    pub sword_power: Option<u8>,
 }
 
 impl OtherPlayer {
@@ -284,6 +292,16 @@ pub struct SessionState {
     pub own_prop_ids: Option<IdSet>,
     /// Same for other players' props.
     pub other_prop_ids: Option<IdSet>,
+    /// How this build judges hits from other players. `None`: ids 40 and 46
+    /// are not decoded and no swing is noticed.
+    pub combat: Option<CombatRules>,
+    /// Players whose latest props showed a sword-swing sprite, in the order
+    /// they arrived. The game loop judges each with
+    /// [`crate::offline::OfflineSession::receive_sword`] and drains it.
+    pub swings: Vec<u16>,
+    /// Decoded `PLO_HURTPLAYER` (40) and `PLO_HITOBJECTS` (46), drained by
+    /// the game loop.
+    pub hits: Vec<IncomingHit>,
     /// Messages dropped because this version has no handler for them.
     pub ignored: HashMap<u8, usize>,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
@@ -428,6 +446,7 @@ impl SessionState {
             known_plo: Some(p.protocol.plo),
             own_prop_ids: Some(p.props.own),
             other_prop_ids: Some(p.props.other),
+            combat: p.life.combat,
             ..Default::default()
         }
     }
@@ -693,6 +712,16 @@ impl SessionState {
                 self.file_requests.push(format!("UPTODATE:{name}"));
             }
             10 => self.is_leader = true,
+            40 if self.combat.is_some() => {
+                if let Some(h) = combat::parse_hurtplayer(&msg.payload) {
+                    self.hits.push(IncomingHit::Hurt(h));
+                }
+            }
+            46 if self.combat.is_some() => {
+                if let Some(h) = combat::parse_hitobjects(&msg.payload) {
+                    self.hits.push(IncomingHit::Objects(h));
+                }
+            }
             25 => self.signature = parse_signature(&msg.payload),
             39 => {
                 if let (Some(t), Some(level)) = (parse_level_mod_time(&msg.payload), &self.level_name) {
@@ -1069,6 +1098,10 @@ impl SessionState {
                     nick: None,
                     chat: None,
                     cell: None,
+                    sprite: None,
+                    status: None,
+                    ap: None,
+                    sword_power: None,
                 });
                 self.others.len() - 1
             }
@@ -1083,6 +1116,23 @@ impl SessionState {
         if let Some(v) = u.dir {
             o.dir = v;
         }
+        if u.sprite.is_some() {
+            o.sprite = u.sprite;
+        }
+        if u.status.is_some() {
+            o.status = u.status;
+        }
+        if u.ap.is_some() {
+            o.ap = u.ap;
+        }
+        if u.sword_power.is_some() {
+            o.sword_power = u.sword_power;
+        }
+        let swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
+        if swing {
+            self.swings.push(u.id);
+        }
+        let o = &mut self.others[i];
         if u.cell_x.is_some() || u.cell_y.is_some() {
             let (cx, cy) = o.cell.unwrap_or((0, 0));
             o.cell = Some((u.cell_x.unwrap_or(cx), u.cell_y.unwrap_or(cy)));
@@ -1172,6 +1222,10 @@ struct OtherUpdate {
     /// GMAPLEVELX (43) and GMAPLEVELY (44).
     cell_x: Option<i32>,
     cell_y: Option<i32>,
+    sprite: Option<u8>,
+    status: Option<u8>,
+    ap: Option<u8>,
+    sword_power: Option<u8>,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -1187,7 +1241,13 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             12 => u.chat = Some(text(&prop.raw)),
             15 => u.x = prop.gchar().map(|v| v as f32 / 2.0),
             16 => u.y = prop.gchar().map(|v| v as f32 / 2.0),
-            17 => u.dir = prop.gchar().map(|v| v % 4),
+            17 => {
+                u.dir = prop.gchar().map(|v| v % 4);
+                u.sprite = prop.gchar();
+            }
+            8 => u.sword_power = prop.gchar().map(|v| v.saturating_sub(30)),
+            18 => u.status = prop.gchar(),
+            32 => u.ap = prop.gchar(),
             43 => u.cell_x = prop.gchar().map(i32::from),
             44 => u.cell_y = prop.gchar().map(i32::from),
             50 => u.left |= prop.gchar() == Some(0),

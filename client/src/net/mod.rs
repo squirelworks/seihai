@@ -39,6 +39,12 @@ pub fn enter_level_message() -> Vec<u8> {
 
 /// The 2.05 "walk" props message: X (15), Y (16) and SPRITE (17).
 pub fn position_message(x: f32, y: f32, dir: u8) -> Vec<u8> {
+    position_message_sprite(x, y, dir % 4)
+}
+
+/// The same with the whole SPRITE value (`dir + 4 * S`), for a sword swing
+/// or hurt mode. `position_message` is the S = 0 case.
+pub fn position_message_sprite(x: f32, y: f32, sprite: u8) -> Vec<u8> {
     vec![
         2 + 0x20,
         15 + 0x20,
@@ -46,7 +52,7 @@ pub fn position_message(x: f32, y: f32, dir: u8) -> Vec<u8> {
         16 + 0x20,
         encode_pos_classic(y).wrapping_add(0x20),
         17 + 0x20,
-        (dir % 4) + 0x20,
+        sprite.wrapping_add(0x20),
         b'\n',
     ]
 }
@@ -742,6 +748,12 @@ impl Connection {
     /// Send a walk update for the given position (see [`Self::send_position`]).
     pub fn send_walk(&mut self, upd: &PlayerUpdate) -> io::Result<()> {
         self.send_position(upd.x, upd.y, upd.dir)
+    }
+
+    /// A walk update with an explicit SPRITE value (`dir + 4 * S`): the
+    /// sword swing and hurt mode ([`crate::combat::CombatState::sprite`]).
+    pub fn send_walk_sprite(&mut self, upd: &PlayerUpdate, sprite: u8) -> io::Result<()> {
+        self.send_messages(&[position_message_sprite(upd.x, upd.y, sprite)])
     }
 
     /// Say `text` in the level: `PLI_PLAYERPROPS` (2) with CURCHAT (12)

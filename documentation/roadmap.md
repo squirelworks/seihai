@@ -21,7 +21,7 @@ Single code path. Versions are profile rows, not branches.
 ## 3. Gameplay the client decides on its own
 
 - [x] Health and death. The 2.05 death sequence from the profile (`life.death`): 1.5 s timer, input lock to tick 27, dead bit in STATUS from tick 28, respawn hearts by AP, respawn at the saved level entry point, and the victim-sent `PLI_CLAIMPKER` (14). Still open: the damage formula and the same-name-group rule (item 7), the dead gani, whether the real client sends CURPOWER on damage, the order of the respawn frame, and a lab run. See `documentation/health-death.md`.
-- [ ] Combat. Sword hits are judged by the victim's client, with a reach of 0–4 tiles, a lateral limit under 2, and AP 100 immune.
+- [x] Combat. Sword hits are judged by the victim's client (`life.combat` in the profile): the attacker's swing sprite (S 6 to 10), the victim 0 to 4 tiles ahead (both ends count) and under 2 to the side, AP 100 immune, no hit on a dead, hurt (40 ticks) or swimming player; `PLO_HURTPLAYER` (40) judged by range and capped at one heart; Seihai's own swing on the S key broadcasts the swing sprite. The damage per sword hit is a labelled placeholder (item 7). Still open: id 46 is decoded but not applied (a player's centre is not in the notes), NPC-sourced hits, knockback, explosions, script `hitplayer`/`hitobjects` senders, the real swing frame times, and a lab run. See `documentation/combat.md`.
 - [ ] Swimming, emotes and chat. Head-only swim blit is done; emotes are local only. Chat popups and the buddy, ignore and mute files remain.
 - [ ] Unresolved rules. The damage formula and the respawn "same name group" rule.
 
