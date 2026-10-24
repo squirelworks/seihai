@@ -10,7 +10,7 @@
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
 
-use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot, Gani, GaniPlayer, Level};
+use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, AssetRoot, Gani, GaniPlayer, Level, TileTypesFile};
 use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
@@ -67,15 +67,15 @@ fn online_link(
 }
 
 /// Gmap files and levels from the asset folder.
-struct RootLoader<'a>(&'a AssetRoot);
+struct RootLoader<'a>(&'a AssetResolver);
 
 impl WorldLoader for RootLoader<'_> {
     fn gmap_text(&self, name: &str) -> Option<String> {
-        std::fs::read_to_string(self.0.level(name)).ok()
+        std::fs::read_to_string(self.0.level_path(name)).ok()
     }
 
     fn level(&self, name: &str) -> Option<Level> {
-        Level::load(self.0.level(name)).ok()
+        Level::load(self.0.level_path(name)).ok()
     }
 }
 
@@ -105,6 +105,8 @@ fn main() {
     let mut i = 0;
     let mut cli_mode = false;
     let mut list_only = false;
+    let mut check_assets = false;
+    let mut version_given = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
     let mut no_scripts = false;
@@ -141,6 +143,7 @@ fn main() {
                 }
             }
             "--list-only" => list_only = true,
+            "--check-assets" => check_assets = true,
             "--send-tampercheck" => send_tampercheck = true,
             "--send-showimg" => send_showimg = true,
             "--no-serverwarp" => cli_serverwarp = Some(false),
@@ -160,6 +163,7 @@ fn main() {
                 }
             }
             "--version" => {
+                version_given = true;
                 i += 1;
                 if let Some(v) = args.get(i) {
                     version = ClientVersion::from_label(v).unwrap_or_else(|| {
@@ -198,6 +202,11 @@ fn main() {
                 println!("                             the build has an audio device backend");
                 println!("                             (settings file: sound=0)");
                 println!("         --sound             play them even if the settings file says off");
+                println!("       seihai --assets <dir> --check-assets [--version 2.22]");
+                println!("         --check-assets      resolve and load the files a version uses from the");
+                println!("                             data folder and print what is found; without");
+                println!("                             --version, the five main versions. Exit 1 if a");
+                println!("                             required file is missing or unreadable");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -230,6 +239,24 @@ fn main() {
         if let Some(v) = &settings.version {
             version = ClientVersion::from_label(v).unwrap_or(ClientVersion::V205);
         }
+    }
+    // Check the data folder for one version or the five main ones, print, exit.
+    if check_assets {
+        let Some(dir) = &assets else {
+            eprintln!("--check-assets needs --assets <dir>");
+            std::process::exit(2);
+        };
+        let root = AssetRoot::new(dir);
+        let versions: Vec<ClientVersion> = if version_given { vec![version] } else { ClientVersion::main_versions().to_vec() };
+        let mut failed = false;
+        for v in versions {
+            let rep = seihai::assets::check_folder(&root, v.profile());
+            print!("{}", seihai::assets::format_report(v.label(), &rep));
+            failed |= rep.findings.iter().any(|f| {
+                (f.need.required && !f.is_ok()) || matches!(f.status, seihai::assets::Status::BadFile(_))
+            });
+        }
+        std::process::exit(i32::from(failed));
     }
     // List-only: ask the listserver, print, exit. Never prompts and never
     // logs in to a gserver. Exit 0 on a list, 1 on a failure, 2 on bad use.
@@ -428,6 +455,9 @@ fn main() {
         eprintln!("no pics1.png in {}", root.pics1().display());
         return;
     }
+    // Every lookup of a level, GANI, image or sound goes through this: it
+    // knows the folders of the 2.22 data folder and what this version opens.
+    let resolver = AssetResolver::new(root.clone(), version.profile());
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -447,7 +477,7 @@ fn main() {
         // The animations whose PLAYSOUND cues are played: footsteps and
         // water, one frame per step taken.
         for (name, swim) in [("walk.gani", false), ("swim.gani", true)] {
-            if let Some(path) = root.find_gani(name) {
+            if let Some(path) = resolver.gani(name) {
                 match Gani::load(&path) {
                     Ok(g) if swim => session.set_swim_gani(GaniPlayer::new(g)),
                     Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
@@ -475,7 +505,15 @@ fn main() {
 
     let offline_level = level_name.clone();
     if let Some(name) = level_name {
-        let path = root.level(&name);
+        let path = resolver.level_path(&name);
+        if resolver.level(&name).is_none() {
+            eprintln!(
+                "level {name} not found for {} (it opens {}); trying {}",
+                version.label(),
+                version.profile().level_extensions().join(" "),
+                path.display()
+            );
+        }
         if let Err(e) = session.load_level(&path) {
             eprintln!("failed to load level: {e}");
         } else {
@@ -483,10 +521,14 @@ fn main() {
             session.note_entry(&name);
         }
     }
-    if root.tiledefs().is_file() {
-        let _ = session.load_tiletypes(root.tiledefs());
-    } else if root.arrays_dat().is_file() {
-        let _ = session.load_tiletypes_arrays(root.arrays_dat());
+    match resolver.tile_types() {
+        Some((p, TileTypesFile::Text)) => {
+            let _ = session.load_tiletypes(p);
+        }
+        Some((p, TileTypesFile::ArraysDat)) => {
+            let _ = session.load_tiletypes_arrays(p);
+        }
+        None => {}
     }
 
     let profile = version.profile();
@@ -496,7 +538,7 @@ fn main() {
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
-        let data = std::fs::read(root.find_image(dir, name)?).ok()?;
+        let data = std::fs::read(resolver.image_in(dir, name)?).ok()?;
         read_png_rgba(&data).ok().map(|(w, _, px)| (w, px))
     };
     let body = load("bodies", "body.png");
@@ -711,7 +753,7 @@ fn main() {
                             if name.ends_with(".nw") && !is_current {
                                 eprintln!("loaded {name}");
                             } else if name.ends_with(".nw") {
-                                if session.load_level(root.level(name)).is_ok() {
+                                if session.load_level(resolver.level_path(name)).is_ok() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
                                     if let Some(level) = &session.current_level {
@@ -719,9 +761,7 @@ fn main() {
                                             if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
                                                 continue;
                                             }
-                                            let local = root.find_image("", &npc.image)
-                                                .or_else(|| root.find_image("levels", &npc.image))
-                                                .or_else(|| root.find_image("images", &npc.image));
+                                            let local = resolver.image(&npc.image);
                                             if local.is_none() {
                                                 if let Some(c) = conn.as_mut() {
                                                     let _ = c.send_wantfile(&npc.image);
@@ -797,7 +837,7 @@ fn main() {
                             format!("{name}.nw")
                         };
                         level_from_board = false;
-                        match session.load_level(root.level(&file)) {
+                        match session.load_level(resolver.level_path(&file)) {
                             Ok(()) => eprintln!("level {file}"),
                             Err(e) => {
                                 eprintln!("level {file} not loaded ({e}); requesting");
@@ -814,9 +854,7 @@ fn main() {
                                 if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
                                     continue;
                                 }
-                                let local = root.find_image("", &npc.image)
-                                    .or_else(|| root.find_image("levels", &npc.image))
-                                    .or_else(|| root.find_image("images", &npc.image));
+                                let local = resolver.image(&npc.image);
                                 if local.is_none() {
                                     if let Some(c) = conn.as_mut() {
                                         let _ = c.send_wantfile(&npc.image);
@@ -964,7 +1002,7 @@ fn main() {
                 }
                 // Gmap: the grid, the neighbouring levels, 186 blocks, and
                 // a request for whatever the server still has to send.
-                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
+                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req);
                 dirty = true;
             }
@@ -1005,7 +1043,7 @@ fn main() {
                             conn = None;
                         }
                     } else if let (seihai::offline::RespawnTo::Saved(e), None) = (&to, &conn) {
-                        if !session.is_loaded(&e.level) && session.load_level(root.level(&e.level)).is_err() {
+                        if !session.is_loaded(&e.level) && session.load_level(resolver.level_path(&e.level)).is_err() {
                             eprintln!("respawn: no local {}", e.level);
                         }
                         session.arrive(e.x, e.y);
@@ -1164,7 +1202,7 @@ fn main() {
                         }
                         Err(_) => conn = None,
                     }
-                } else if session.load_level(root.level(&dest)).is_ok() {
+                } else if session.load_level(resolver.level_path(&dest)).is_ok() {
                     if session.arrive(x, y) {
                         net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
                     }
@@ -1205,13 +1243,13 @@ fn main() {
                     }
                 }
                 if let Some(n) = &now {
-                    level_from_board = !root.level(n).is_file();
+                    level_from_board = resolver.level(n).is_none();
                 }
                 loaded_level = now;
                 if let Some(n) = &loaded_level {
                     session.note_entry(n);
                 }
-                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
+                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req);
             } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
@@ -1247,7 +1285,7 @@ fn main() {
                         }
                     } else {
                         // Offline: load the destination if it is local.
-                        let path = root.level(&dest);
+                        let path = resolver.level_path(&dest);
                         if session.load_level(&path).is_ok() {
                             if session.arrive(x, y) {
                                 net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
