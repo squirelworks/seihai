@@ -2137,7 +2137,7 @@ mod tests {
     }
 
     /// What a gserver sees from a login: the plain login frame, then the
-    /// gen-5 post-login frame, then 46 (2.31).
+    /// gen-5 post-login frame; the 46 (2.31) is owed to the post-login frame.
     #[test]
     fn login_gserver_sends_login_post_login_and_46() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -2154,7 +2154,7 @@ mod tests {
         let post = gen5_body(&mut srv, &mut g);
         assert_eq!(post[0], 37 + 0x20);
         assert!(post.len() > lang_msg().len(), "tamper check follows the language");
-        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        assert!(s.enter_level.login_owed(), "the 46 waits for the post-login frame (2.31)");
 
         // Without the flag: language only, and no tamper sender.
         let s = login_gserver(&addr, ClientVersion::V231, 0x32, "ab", "cd", false).unwrap();
@@ -2163,7 +2163,7 @@ mod tests {
         let _ = read_frame(&mut srv);
         let mut g = Gen5::new(0x32);
         assert_eq!(gen5_body(&mut srv, &mut g), lang_msg());
-        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        assert!(s.enter_level.login_owed());
 
         // A build with no tamper constant (2.3) says so.
         let s = login_gserver(&addr, ClientVersion::V230, 0x33, "ab", "cd", true).unwrap();
@@ -2226,7 +2226,7 @@ mod tests {
         assert_eq!(second[1], 0x42 + 0x20);
         let mut g = Gen5::new(0x42);
         assert_eq!(gen5_body(&mut srv2, &mut g), lang_msg());
-        assert_eq!(gen5_body(&mut srv2, &mut g), ENTER);
+        assert!(s2.enter_level.login_owed(), "the fresh login owes its 46 again");
         // A fresh sender: the first level on the new server is not a change.
         let mut el = s2.enter_level;
         assert!(!el.note_level("start.nw"));
