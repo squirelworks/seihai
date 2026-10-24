@@ -1,0 +1,7 @@
+# Needs the lab-only injection forwarder (see README): it injects one
+# PLO_SERVERWARP (178) at the "mark inject" point. Not run by the plain
+# runner; defined so a forwarder-enabled run uses the same steps.
+start lv_a.nw 30.00 30.50
+wait 4
+mark inject
+wait 6

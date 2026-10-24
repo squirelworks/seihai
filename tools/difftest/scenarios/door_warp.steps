@@ -1,0 +1,15 @@
+# Level links (west door, edge strips, cached and uncached), then a server-side warp.
+start lv_a.nw 30.00 30.50
+wait 3
+hold Left 3.6
+wait 2
+hold Right 2.0
+wait 2
+hold Down 4.2
+wait 2
+hold Up 1.0
+wait 2
+chat warpto 30 30 lv_d.nw
+wait 2
+chat warpto 30 30 lv_a.nw
+wait 3
