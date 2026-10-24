@@ -15,6 +15,10 @@ pub struct Settings {
     pub last_server: Option<String>,
     pub listserver: Option<String>,
     pub offline: Option<bool>,
+    /// Follow a `PLO_SERVERWARP` (178) to the server it names. `None` means
+    /// the key is absent, which is the default: follow, as the real client
+    /// does. `follow_serverwarp=0` turns it off.
+    pub follow_serverwarp: Option<bool>,
     /// Name of the server in `last_server`, for the window title.
     pub last_server_name: Option<String>,
     /// Game server for versions with no listserver (1.33–1.39).
@@ -28,6 +32,11 @@ impl Settings {
     pub fn load() -> Self {
         let path = config_path();
         let text = fs::read_to_string(&path).unwrap_or_default();
+        Self::parse(&text)
+    }
+
+    /// Read settings from the text of a settings file.
+    pub fn parse(text: &str) -> Self {
         let mut s = Settings::default();
         for line in text.lines() {
             let line = line.trim();
@@ -44,6 +53,8 @@ impl Settings {
                     "last_server" => s.last_server = Some(v),
                     "listserver" => s.listserver = Some(v),
                     "offline" => s.offline = Some(v == "1"),
+                    // An unreadable value leaves the default (follow).
+                    "follow_serverwarp" => s.follow_serverwarp = parse_bool(&v),
                     "last_server_name" => s.last_server_name = Some(v),
                     "direct_server" => s.direct_server = Some(v),
                     k => {
@@ -62,6 +73,11 @@ impl Settings {
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
+        let _ = fs::write(&path, self.to_text());
+    }
+
+    /// The text of the settings file for these settings.
+    pub fn to_text(&self) -> String {
         let mut out = String::new();
         if let Some(p) = &self.assets {
             out.push_str(&format!("assets={}\n", p.display()));
@@ -84,6 +100,9 @@ impl Settings {
         if self.offline == Some(true) {
             out.push_str("offline=1\n");
         }
+        if let Some(f) = self.follow_serverwarp {
+            out.push_str(&format!("follow_serverwarp={}\n", u8::from(f)));
+        }
         if let Some(n) = &self.last_server_name {
             out.push_str(&format!("last_server_name={n}\n"));
         }
@@ -93,7 +112,24 @@ impl Settings {
         for (label, p) in &self.version_assets {
             out.push_str(&format!("assets.{label}={}\n", p.display()));
         }
-        let _ = fs::write(&path, out);
+        out
+    }
+
+    /// Whether to follow a server warp. The command line wins over the
+    /// settings file, and the file wins over the default (follow).
+    /// `cli` is `Some(false)` for `--no-serverwarp` and `Some(true)` for
+    /// `--serverwarp`.
+    pub fn follow_serverwarp_with(&self, cli: Option<bool>) -> bool {
+        cli.or(self.follow_serverwarp).unwrap_or(true)
+    }
+}
+
+/// `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off`, in any case.
+fn parse_bool(v: &str) -> Option<bool> {
+    match v.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
     }
 }
 
@@ -128,5 +164,71 @@ fn config_path() -> PathBuf {
 impl AsRef<Path> for Settings {
     fn as_ref(&self) -> &Path {
         Path::new("seihai.conf")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serverwarp_is_followed_by_default() {
+        let s = Settings::parse("");
+        assert_eq!(s.follow_serverwarp, None);
+        assert!(s.follow_serverwarp_with(None));
+        // A settings file that says nothing about it changes nothing.
+        let s = Settings::parse("account=x\nversion=2.31\n");
+        assert!(s.follow_serverwarp_with(None));
+    }
+
+    #[test]
+    fn settings_file_can_turn_it_off() {
+        for v in ["0", "false", "no", "off", "FALSE", "Off"] {
+            let s = Settings::parse(&format!("follow_serverwarp = {v}\n"));
+            assert_eq!(s.follow_serverwarp, Some(false), "{v}");
+            assert!(!s.follow_serverwarp_with(None), "{v}");
+        }
+        for v in ["1", "true", "yes", "on"] {
+            let s = Settings::parse(&format!("follow_serverwarp={v}\n"));
+            assert!(s.follow_serverwarp_with(None), "{v}");
+        }
+    }
+
+    #[test]
+    fn unreadable_value_keeps_the_default() {
+        let s = Settings::parse("follow_serverwarp=maybe\n");
+        assert_eq!(s.follow_serverwarp, None);
+        assert!(s.follow_serverwarp_with(None));
+    }
+
+    #[test]
+    fn command_line_overrides_the_file() {
+        let off = Settings::parse("follow_serverwarp=0\n");
+        let on = Settings::parse("follow_serverwarp=1\n");
+        let none = Settings::default();
+        // --no-serverwarp always wins.
+        assert!(!off.follow_serverwarp_with(Some(false)));
+        assert!(!on.follow_serverwarp_with(Some(false)));
+        assert!(!none.follow_serverwarp_with(Some(false)));
+        // --serverwarp beats a file that says off.
+        assert!(off.follow_serverwarp_with(Some(true)));
+        assert!(on.follow_serverwarp_with(Some(true)));
+        // No flag: the file decides.
+        assert!(!off.follow_serverwarp_with(None));
+        assert!(on.follow_serverwarp_with(None));
+    }
+
+    #[test]
+    fn the_option_survives_a_save_and_load() {
+        // The launcher loads, edits and saves the file, so a key it does not
+        // touch must come back out.
+        let s = Settings::parse("account=a\nfollow_serverwarp=0\n");
+        let text = s.to_text();
+        assert!(text.contains("follow_serverwarp=0\n"), "{text}");
+        let back = Settings::parse(&text);
+        assert_eq!(back.follow_serverwarp, Some(false));
+        assert_eq!(back.account.as_deref(), Some("a"));
+        // An unset option stays unset, so the file stays as it was.
+        assert!(!Settings::parse("account=a\n").to_text().contains("follow_serverwarp"));
     }
 }
