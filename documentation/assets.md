@@ -84,6 +84,61 @@ Tests build `.graal` files from a board writer that follows the 2.05 writer's
 rules (single runs, double runs, 13-bit packing), so no game level is
 embedded.
 
+#### What real files showed (two supplied levels and a 3113-level player world)
+
+Two real `GR-V1.03` levels and an old player world (3141 files named
+`.graal`) were run through the reader. Nothing from them is stored in the
+repository; the `#[ignore]` tests read them from a folder you point at.
+
+- `SEIHAI_GRAAL_LEVELS=<dir>` (`real_graal_levels_match_the_format_notes`):
+  every `.graal` in the folder must parse and tile up, and the two supplied
+  levels are checked against counts, section offsets and a few tile ids
+  (keyed by the file's CRC-32).
+- `SEIHAI_PLAYERWORLD=<dir>` (`playerworld_graal_corpus_parses`): walks the
+  tree. 3113 files are `GR-V1.03`, 27 are empty, 1 is a text level
+  (`GLEVNW01`) under a `.graal` name. All 3113 binary levels now parse with
+  the board complete, every link line read, and the sections ending exactly at
+  the end of the file. `SEIHAI_CORPUS_TSV=<file>` also writes one derived row
+  per file.
+- `seihai --level-info <file>` prints sizes, offsets and record counts of a
+  binary level (no content).
+
+What this settled:
+
+- **13-bit codes are right for `GR-V1.03`.** 1998 of the 3113 files hold a tile
+  id of 2048 or more, which only a 13-bit code can carry. The notes' board
+  rules (flag bit, count in the low byte, `0x100` for a double run, runs up
+  to 64) decode all 3113 boards to exactly 4096 tiles, with the section
+  that follows starting on the next byte.
+- **Section shape.** Links end with `#`; the baddy section ends with
+  `FF FF FF` plus a line end; NPCs end with `#`; chests end with `#`. The
+  real files stop right after the chest `#`: when a level has no signs there
+  is no sign section and no empty line, so the sign reader runs into the end
+  of the file. Links, chests and NPC coordinates are whole tiles (a link's
+  two tiles and a chest's own tile carry matching board ids).
+- **A baddy at x = 0 is a baddy.** Only a first byte of `0x80` or more ends the
+  baddy section (as `level-binary-client.md` says). Two levels have baddies at
+  x = 0; the reference `grv1.py` stops there and then misreads the NPCs.
+- **Sign index `0x1F` (-1) in a chest means "no sign".** 343 of 375 chests.
+- **Link arrivals can be expressions.** Besides numbers, `playerx`,
+  `playery`, 14 levels write `playery+10`, `playerx-15`, `playery-1.5`, and
+  one writes a stray word. Before, such a link was dropped. Now it is kept;
+  the signed number is stored as `Link::x_offset` / `y_offset`, and a stray
+  word is read as "keep the player's coordinate". The offline engine adds the
+  offset. Whether a real client evaluates `playery+10` is open: no capture
+  shows it.
+- **The sign decoder was wrong.** Seihai decoded signs with the retracted
+  `char + 89` rule, which loses punctuation and line breaks. It now uses the
+  one packed alphabet (`byte - 32` index, glyph codes, `#K(n)` escapes) from
+  `formats/sign-text.md`, checked against the real-sign vectors in that note.
+  The two supplied levels have no signs; the corpus has 2381 (808 files) whose
+  text uses `#K(n)` for characters the table lacks (`_ = * $ @ ^ |` and
+  Latin-1 letters).
+- **No `HEIGHTS` block** appears in any file (all are `GR-V1.03`; there is no
+  `GR-V1.04` sample), so the block is still read past and not stored.
+- NPC and baddy positions are single bytes and may lie outside the 64 x 64
+  level (NPC x from -32 to 223); the reader keeps them as given.
+
 ### Checking a folder
 
 `seihai --assets <dir> --check-assets [--version V]` resolves and loads the
@@ -117,9 +172,10 @@ Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
   and a 1.39 profile run from the 2.22 folder draws the 2.22 sheet. The
   HUD art differs too: `state.png` here is 224×145, the 1.38+ layout in the
   profile is 224×97.
-- **No `.graal` level ships in the folder** (`maps/bigmap.txt` names some). The
-  `.graal` reader is tested with synthetic files only. The `HEIGHTS` block of
-  `GR-V1.04` is skipped, not stored.
+- **No `.graal` level ships in the 2.22 folder** (`maps/bigmap.txt` names some).
+  Real files came later (see "What real files showed"). The `HEIGHTS` block of
+  `GR-V1.04` is skipped, not stored: no real file has one. The two supplied
+  levels' NPCs name `.gif` art; GIF is not decoded.
 - **GIF and MNG.** Found, not decoded. The folder holds 28 `.mng` and no GIF.
 - **Tiledef matching.** The files parse; how a client matches `prefix` against
   a level name and what types other than 0 and 1 mean (the folder uses 4) is

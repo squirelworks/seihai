@@ -157,6 +157,7 @@ fn main() {
     let mut cli_mode = false;
     let mut list_only = false;
     let mut check_assets = false;
+    let mut level_info: Vec<String> = Vec::new();
     let mut version_chain = false;
     let mut chain_format = seihai::protocol::chain::Format::Text;
     let mut version_given = false;
@@ -198,6 +199,16 @@ fn main() {
             }
             "--list-only" => list_only = true,
             "--check-assets" => check_assets = true,
+            "--level-info" => {
+                i += 1;
+                match args.get(i) {
+                    Some(f) => level_info.push(f.clone()),
+                    None => {
+                        eprintln!("--level-info needs a level file");
+                        std::process::exit(2);
+                    }
+                }
+            }
             "--version-chain" => version_chain = true,
             "--chain-format" => {
                 i += 1;
@@ -277,6 +288,10 @@ fn main() {
                 println!("                             data folder and print what is found; without");
                 println!("                             --version, the five main versions. Exit 1 if a");
                 println!("                             required file is missing or unreadable");
+                println!("       seihai --level-info <file.graal> [--level-info <file> ...]");
+                println!("         --level-info        print sizes, offsets and record counts of a binary");
+                println!("                             .graal/.zelda level (no content). Exit 1 if a file");
+                println!("                             does not parse");
                 println!("       seihai --version-chain [--chain-format text|md|tsv] [--version V]");
                 println!("         --version-chain     print what each client build changed against the");
                 println!("                             build before it (all builds, or just --version)");
@@ -295,6 +310,24 @@ fn main() {
         i += 1;
     }
 
+    // Derived facts about binary level files, print, exit.
+    if !level_info.is_empty() {
+        let mut failed = false;
+        for f in &level_info {
+            let name = std::path::Path::new(f).file_name().map_or_else(|| f.clone(), |n| n.to_string_lossy().into_owned());
+            match std::fs::read(f).map_err(|e| e.to_string()).and_then(|d| seihai::assets::Level::parse_binary_with_layout(&d)) {
+                Ok((level, layout)) => {
+                    println!("{name}");
+                    print!("{}", layout.summary(&level));
+                }
+                Err(e) => {
+                    eprintln!("{name}: {e}");
+                    failed = true;
+                }
+            }
+        }
+        std::process::exit(i32::from(failed));
+    }
     // Load settings and fill defaults.
     let mut settings = Settings::load();
     // Command line, then settings file, then the default (follow).
