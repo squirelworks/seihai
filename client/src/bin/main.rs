@@ -932,7 +932,12 @@ fn main() {
                     if !swings.is_empty() || !hits.is_empty() {
                         let own_cell = net_state.gmap.as_ref().map(|g| g.cell);
                         let mut took = false;
-                        for r in session.receive_all(&net_state.others, own_cell, &swings, &hits) {
+                        // The client's second-of-day clock (UTC) for its once-a-second limit per attacker.
+                        let second = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| (d.as_secs() % 86_400) as u32);
+                        let own_nick = net_state.nickname.clone();
+                        for r in session.receive_all(&net_state.others, own_cell, own_nick.as_deref(), second, &swings, &hits) {
                             match r.outcome {
                                 Ok(half) => {
                                     took = true;
@@ -944,6 +949,9 @@ fn main() {
                                 | seihai::combat::Reject::Swimming
                                 | seihai::combat::Reject::NpcSource
                                 | seihai::combat::Reject::UnknownPower
+                                | seihai::combat::Reject::NoPkZone
+                                | seihai::combat::Reject::Friendly
+                                | seihai::combat::Reject::AttackerBlocked
                                 | seihai::combat::Reject::CentreUnknown)) => {
                                     eprintln!("hit by {:?} ({:?}) refused: {why:?}", r.attacker, r.kind);
                                 }

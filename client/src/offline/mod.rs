@@ -106,6 +106,15 @@ pub struct OfflineSession {
     pub alignment: u8,
     /// The level entry point a respawn returns to; see [`Self::note_entry`].
     pub entry: Option<EntryPoint>,
+    /// The level entered last, whether or not it was saved as the entry
+    /// point: the "level left" of the next [`Self::note_entry`].
+    entered: Option<String>,
+    /// The current level said `noplayerkilling`: sword and packet hits
+    /// from other players do nothing. Cleared when a level loads.
+    pub no_pk: bool,
+    /// Per attacker id: the second of the day it was last judged (see
+    /// `CombatRules::judge_throttle`).
+    pub judged_at: std::collections::HashMap<u16, u32>,
     /// File name of the level loaded last with [`Self::load_level`].
     loaded_file: Option<String>,
 }
@@ -159,6 +168,17 @@ pub fn swim_message(swimming: bool) -> Vec<u8> {
     m
 }
 
+/// The name group of a level name (2.05's save-entry rule): the name without
+/// its folder, lower-cased, up to and including its last `§` or `$`; empty
+/// when it has neither.
+pub fn name_group(level: &str) -> String {
+    let base = level.rsplit(['/', '\\', ':']).next().unwrap_or(level).to_lowercase();
+    match base.rfind(['§', '$']) {
+        Some(i) => base[..i + base[i..].chars().next().map_or(1, char::len_utf8)].to_string(),
+        None => String::new(),
+    }
+}
+
 impl OfflineSession {
     pub fn new() -> Self {
         Self {
@@ -197,6 +217,9 @@ impl OfflineSession {
             combat: crate::combat::CombatState::default(),
             alignment: 50,
             entry: None,
+            entered: None,
+            no_pk: false,
+            judged_at: HashMap::new(),
             loaded_file: None,
         }
     }
@@ -285,12 +308,34 @@ impl OfflineSession {
         self.loaded_file.as_deref().is_some_and(|f| base(f) == base(name))
     }
 
-    /// Remember where the player stands as a level entry point: called on
-    /// every level entry and at login. A respawn goes back here. The rule
-    /// that skips levels of the same name group is not known, so every
-    /// entry is kept.
+    /// A level was entered (or the session started in it): maybe remember
+    /// where the player stands as the entry point a respawn returns to.
+    /// The client saves when no level was left (the first entry), or when
+    /// exactly one of the level left and the new level is in the current
+    /// gmap's level list at an index above 0. (The client multiplies the
+    /// two list indices, -1 for "not in the list", and saves on a negative
+    /// product, so index 0 counts as "same side": a quirk, kept.) Otherwise
+    /// builds with [`DeathRules::entry_name_group`] (2.05) save only when
+    /// the two names are in different name groups ([`name_group`]); later
+    /// builds do not save. A session without death rules saves every entry.
     pub fn note_entry(&mut self, level: &str) {
-        self.entry = Some(EntryPoint { level: level.to_string(), x: self.player_x, y: self.player_y, dir: self.player_dir });
+        let old = self.entered.replace(level.to_string());
+        let save = match self.life.rules().copied() {
+            None => true,
+            Some(rules) => match old.as_deref().filter(|o| !o.is_empty()) {
+                None => true,
+                Some(old) => {
+                    let list = |n: &str| match &self.gmap {
+                        Some(g) => g.map.list_index(n).map_or(-1, |i| i as i64),
+                        None => -1,
+                    };
+                    list(level) * list(old) < 0 || (rules.entry_name_group && name_group(old) != name_group(level))
+                }
+            },
+        };
+        if save {
+            self.entry = Some(EntryPoint { level: level.to_string(), x: self.player_x, y: self.player_y, dir: self.player_dir });
+        }
     }
 
     /// A movement or action key while dead: respawn if the lock is over.
@@ -445,6 +490,7 @@ impl OfflineSession {
         self.current_level = Some(level);
         self.opened_chests.clear();
         self.reading = None;
+        self.no_pk = false;
         self.level_serial += 1;
         Ok(())
     }
@@ -1489,10 +1535,97 @@ mod tests {
         let want = EntryPoint { level: "a.nw".into(), x: 12.5, y: 20.0, dir: DIR_WEST };
         assert_eq!(to, RespawnTo::Saved(want));
         assert_eq!((s.player_x, s.player_y, s.player_dir), (12.5, 20.0, DIR_WEST));
-        // A later entry replaces it.
+        // A later entry of the same name group (plain names share the empty
+        // group) does not replace it in the 2.05 rules.
         s.player_x = 3.0;
         s.note_entry("b.nw");
-        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("b.nw", 3.0)));
+        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("a.nw", 12.5)));
+        // A different group does.
+        s.note_entry("cave$1.nw");
+        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("cave$1.nw", 3.0)));
+    }
+
+    #[test]
+    fn name_groups_are_the_name_up_to_the_last_delimiter() {
+        assert_eq!(name_group("Cave$1.nw"), "cave$");
+        assert_eq!(name_group("cave$2.nw"), "cave$");
+        assert_eq!(name_group("a§b§c.nw"), "a§b§");
+        assert_eq!(name_group("levels/Town§x.graal"), "town§");
+        assert_eq!(name_group("town.nw"), "", "no delimiter: the empty group");
+        assert_eq!(name_group("a.nw"), name_group("b.nw"));
+        assert_ne!(name_group("a$1.nw"), name_group("b$1.nw"));
+    }
+
+    fn gmap_world(names: &str) -> crate::gmap::GmapWorld {
+        let text = format!("GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n{names}\nLEVELNAMESEND\n");
+        crate::gmap::GmapWorld::new("w.gmap".into(), crate::gmap::Gmap::parse(&text).unwrap(), (0, 0))
+    }
+
+    #[test]
+    fn the_first_entry_is_always_saved() {
+        let mut s = mortal();
+        s.player_x = 7.0;
+        s.note_entry("a.nw");
+        assert_eq!(s.entry.as_ref().map(|e| e.x), Some(7.0));
+    }
+
+    #[test]
+    fn entering_or_leaving_a_gmap_saves_even_in_the_same_name_group() {
+        // The list is [first, second]: "second" is at index 1, "outside" is not in it.
+        let mut s = mortal();
+        s.gmap = Some(gmap_world("first.nw,second.nw"));
+        s.player_x = 1.0;
+        s.note_entry("outside.nw");
+        s.player_x = 2.0;
+        s.note_entry("second.nw");
+        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("second.nw", 2.0)), "into the gmap");
+        s.player_x = 3.0;
+        s.note_entry("outside.nw");
+        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("outside.nw", 3.0)), "out of it");
+        // Both in the list (indices 0 and 1, or 1 and 1): the product is not
+        // negative, so the group test decides: same group, not saved.
+        s.player_x = 4.0;
+        s.note_entry("second.nw");
+        s.player_x = 5.0;
+        s.note_entry("first.nw");
+        assert_eq!(s.entry.as_ref().map(|e| e.x), Some(4.0));
+    }
+
+    #[test]
+    fn index_zero_of_the_gmap_list_counts_as_the_same_side() {
+        // The client multiplies the indices; 0 times -1 is 0, not negative.
+        let mut s = mortal();
+        s.gmap = Some(gmap_world("first.nw,second.nw"));
+        s.player_x = 1.0;
+        s.note_entry("outside.nw");
+        s.player_x = 2.0;
+        s.note_entry("first.nw");
+        assert_eq!(s.entry.as_ref().map(|e| e.x), Some(1.0), "the quirk: entering at index 0 does not save");
+    }
+
+    #[test]
+    fn later_builds_have_no_name_group_test() {
+        use crate::protocol::DEATH_21;
+        let mut s = OfflineSession::new();
+        s.life.set_rules(Some(DEATH_21));
+        s.player_x = 1.0;
+        s.note_entry("a$1.nw");
+        s.player_x = 2.0;
+        s.note_entry("b$1.nw");
+        assert_eq!(s.entry.as_ref().map(|e| e.x), Some(1.0), "different groups, still not saved");
+    }
+
+    #[test]
+    fn the_name_group_test_is_the_2_05_builds_only() {
+        use crate::protocol::ClientVersion as V;
+        assert!(V::V205.death_rules().unwrap().entry_name_group);
+        for v in [V::V217, V::V222, V::V231] {
+            assert!(!v.death_rules().unwrap().entry_name_group, "{}", v.label());
+        }
+        for l in ["2.1", "2.12", "2.13", "2.14", "2.15", "2.16", "2.3"] {
+            let p = crate::protocol::by_label(l).unwrap_or_else(|| panic!("{l}"));
+            assert!(!p.life.death.unwrap().entry_name_group, "{l}");
+        }
     }
 
     #[test]
