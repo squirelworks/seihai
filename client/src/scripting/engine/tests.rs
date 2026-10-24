@@ -354,6 +354,33 @@ fn random_is_in_range_and_deterministic_per_seed() {
     }
 }
 
+#[test]
+fn onwall_reads_the_level_collision_and_is_true_off_the_board() {
+    let (mut w, id) = npc("if (created) { this.a = onwall(3.5, 4.2); this.b = onwall(5, 5); this.c = onwall(-1, 2); this.d = onwall(64, 2); }");
+    let mut walls = vec![false; 64 * 64];
+    walls[4 * 64 + 3] = true;
+    w.core.walls = Some(walls);
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.a"), Val::Num(1.0));
+    assert_eq!(var(&w, id, "this.b"), Val::Num(0.0));
+    assert_eq!(var(&w, id, "this.c"), Val::Num(1.0));
+    assert_eq!(var(&w, id, "this.d"), Val::Num(1.0));
+}
+
+#[test]
+fn playersays_matches_only_during_a_chat_event() {
+    let (mut w, id) = npc("if (playerchats && playersays(Hello)) { message exact; }\nif (playerchats && playersays2(open)) { message has; }\nif (created) { if (playersays(Hello)) message early; }");
+    w.core.player.chat = "hello".into();
+    w.fire(id, "created", &[]);
+    assert!(messages(&mut w).is_empty());
+    w.chat("HELLO");
+    assert_eq!(messages(&mut w), vec!["exact"]);
+    w.chat("please open it");
+    assert_eq!(messages(&mut w), vec!["has"]);
+    w.chat("hello there");
+    assert!(messages(&mut w).is_empty());
+}
+
 // ---- control flow ----
 
 #[test]
@@ -778,4 +805,67 @@ fn real_world_style_scripts() {
     w.touch(0.0, 0.0);
     assert_eq!(w.touch(4.5, 4.5), 1);
     assert_eq!(w.core.player.rupees, 10.0);
+}
+
+/// Smoke test over a local corpus of real GS1 scripts (NUL-separated text
+/// in the file named by `SEIHAI_SCRIPT_CORPUS`). The corpus is not part of
+/// the repository, so this is ignored by default:
+/// `SEIHAI_SCRIPT_CORPUS=scripts.txt cargo test -p seihai corpus -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn corpus_parses_and_runs_without_panicking() {
+    let Ok(path) = std::env::var("SEIHAI_SCRIPT_CORPUS") else {
+        return;
+    };
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut scripts = 0;
+    let mut with_diag = 0;
+    let mut shown = 0;
+    let mut diag_kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut unknown: std::collections::BTreeMap<String, usize> = Default::default();
+    for src in text.split('\0').filter(|s| !s.trim().is_empty()) {
+        scripts += 1;
+        let parsed = super::parse(src, Era::V205);
+        if !parsed.diagnostics.is_empty() {
+            with_diag += 1;
+            for d in &parsed.diagnostics {
+                *diag_kinds.entry(d.msg.clone()).or_default() += 1;
+            }
+            let want = std::env::var("SEIHAI_CORPUS_SHOW").unwrap_or_default();
+            if !want.is_empty() && parsed.diagnostics.iter().any(|d| d.msg.contains(&want)) && shown < 8 {
+                shown += 1;
+                println!("--- {:?}\n    {:?}", src.trim(), parsed.diagnostics);
+            }
+        }
+        let mut w = ScriptWorld::new(Era::V205);
+        let id = w.add(ObjSpec::npc("a.png", 10.0, 10.0, src));
+        for l in w.take_log() {
+            if let Some(i) = l.find("unknown command") {
+                let _ = i;
+            }
+        }
+        for ev in ["created", "playerenters", "playertouchsme", "timeout", "wasshot", "playerendsreading", "compusdied"] {
+            w.fire(id, ev, &[]);
+        }
+        w.tick(120_000);
+        for l in w.take_log() {
+            if let Some(f) = l.split("unknown function `").nth(1) {
+                *unknown.entry(format!("fn {}", f.split('`').next().unwrap_or(""))).or_default() += 1;
+            }
+            if let Some(rest) = l.split("`").nth(1) {
+                if l.contains("ignored (unknown command)") {
+                    let name = rest.split_whitespace().next().unwrap_or("").to_string();
+                    // Stray image names and single letters are level-file debris.
+                    if name.len() > 1 && !name.contains('.') {
+                        *unknown.entry(name).or_default() += 1;
+                    }
+                }
+            }
+        }
+    }
+    let mut top: Vec<_> = unknown.into_iter().collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1));
+    println!("corpus: {scripts} scripts, {with_diag} with parse diagnostics");
+    println!("diagnostics: {diag_kinds:?}");
+    println!("most common unknown commands: {:?}", &top[..top.len().min(25)]);
 }

@@ -224,6 +224,10 @@ pub struct Core {
     /// The server announced an NPC server.
     pub npc_server: bool,
     pub(super) pending: VecDeque<Pending>,
+    /// Collision of the current level: 64 by 64 tiles, row by row, true
+    /// where blocked. `None` until the host provides it (then nothing is
+    /// a wall).
+    pub walls: Option<Vec<bool>>,
     rng: u64,
 }
 
@@ -279,6 +283,7 @@ impl ScriptWorld {
                 online: false,
                 npc_server: false,
                 pending: VecDeque::new(),
+                walls: None,
                 rng: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
             },
             objects: Vec::new(),

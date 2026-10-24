@@ -44,6 +44,9 @@ impl SessionScripts {
                 }
             }
         }
+        self.world.core.walls = session.current_level.as_ref().zip(session.tiletypes.as_ref()).map(|(l, t)| {
+            (0..64 * 64).map(|i| l.kind_at(t, (i % 64) as f32 + 0.5, (i / 64) as f32 + 0.5) == crate::assets::TileKind::Blocking).collect()
+        });
         self.sync_player(session);
         self.world.start_all();
         self.world.broadcast("playerenters");
@@ -355,6 +358,23 @@ mod tests {
         // 2.05 has no sendtoserver: it was gated out and only logged.
         assert!(!sc.unhandled.iter().any(|e| matches!(e, Effect::SendToServer { .. })));
         assert!(sc.world.take_log().iter().any(|l| l.contains("sendtoserver")));
+    }
+
+    #[test]
+    fn onwall_uses_the_levels_collision_table() {
+        let tiles: Vec<u16> = (0..64 * 64).map(|i| if i % 64 == 10 { 1 } else { 0 }).collect();
+        let mut s = OfflineSession::new();
+        s.current_level = Some(Level::from_board(&tiles));
+        let mut types = crate::assets::TileTypes { types: [0; 4096] };
+        types.types[1] = 22;
+        s.tiletypes = Some(types);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        let mut w = sc.world;
+        let id = w.add(ObjSpec::npc("a.png", 0.0, 0.0, "if (created) { this.a = onwall(10.5, 3); this.b = onwall(11.5, 3); }"));
+        w.fire(id, "created", &[]);
+        assert_eq!(w.obj(id).unwrap().vars["this.a"], crate::scripting::engine::Val::Num(1.0));
+        assert_eq!(w.obj(id).unwrap().vars["this.b"], crate::scripting::engine::Val::Num(0.0));
     }
 
     #[test]

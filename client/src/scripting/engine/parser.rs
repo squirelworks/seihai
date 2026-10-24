@@ -185,7 +185,7 @@ impl<'a> Parser<'a> {
             }
             Tok::Ident(w) => {
                 self.next();
-                self.ident_stmt(w, t.line)
+                self.ident_stmt(w, t.line, t.start)
             }
             _ => {
                 self.diag("unexpected token");
@@ -218,7 +218,7 @@ impl<'a> Parser<'a> {
         v
     }
 
-    fn ident_stmt(&mut self, w: String, line: u32) -> Option<Stmt> {
+    fn ident_stmt(&mut self, w: String, line: u32, start: usize) -> Option<Stmt> {
         match w.as_str() {
             "if" => {
                 if !self.expect_op("(") {
@@ -309,13 +309,13 @@ impl<'a> Parser<'a> {
                 self.recover();
                 Some(Stmt::Block(Vec::new()))
             }
-            _ => self.name_stmt(w, line),
+            _ => self.name_stmt(w, line, start),
         }
     }
 
     /// A statement that starts with a name that is not a keyword: a
     /// command, an assignment, a call, or something unknown.
-    fn name_stmt(&mut self, w: String, line: u32) -> Option<Stmt> {
+    fn name_stmt(&mut self, w: String, line: u32, start: usize) -> Option<Stmt> {
         let nxt = self.peek().tok.clone();
         let assigns = matches!(nxt, Tok::Op("=" | "+=" | "-=" | "*=" | "/=" | "++" | "--" | "["));
         if !assigns {
@@ -334,12 +334,38 @@ impl<'a> Parser<'a> {
             self.end_stmt();
             return Some(Stmt::Call { name: w, args });
         }
+        // Scripts taken from level files often run the first argument into
+        // the command name (`hurt1;`, `shootarrowdown;`). Accept that when
+        // a command name is followed at once by a number or a name from
+        // its first argument's table.
+        if let Some(cmd) = self.glued_command(&w) {
+            self.peeked = None;
+            self.lx.pos = start + cmd.name.len();
+            self.lx.line = line;
+            return Some(self.command(cmd, line));
+        }
         // Not a command here. Keep its text and move on.
         self.unpeek();
         let raw = self.lx.raw_arg(b";}");
         self.end_stmt();
         let reason = if vocab::command(&w).is_some() { "not available in this version" } else { "unknown command" };
         Some(Stmt::Unknown { name: w, raw, reason, line })
+    }
+
+    /// The longest command in this era that `w` starts with, if what
+    /// follows reads as its first argument.
+    fn glued_command(&self, w: &str) -> Option<&'static Cmd> {
+        vocab::COMMANDS
+            .iter()
+            .filter(|c| c.since <= self.era && w.len() > c.name.len() && w.starts_with(c.name))
+            .filter(|c| {
+                let rest = &w[c.name.len()..];
+                let first = c.sig.chars().next();
+                rest.starts_with(|ch: char| ch.is_ascii_digit() || ch == '-')
+                    && first.is_some_and(|l| !vocab::is_text_letter(l))
+                    || first.is_some_and(|l| vocab::named_constant(l, rest).is_some())
+            })
+            .max_by_key(|c| c.name.len())
     }
 
     fn command(&mut self, cmd: &Cmd, line: u32) -> Stmt {
@@ -458,7 +484,8 @@ impl<'a> Parser<'a> {
                     lhs = self.in_tail(lhs);
                     continue;
                 }
-                Tok::Op("==") => (BinOp::Eq, 4, false),
+                // In a condition a single `=` compares, as it does in level scripts.
+                Tok::Op("==") | Tok::Op("=") => (BinOp::Eq, 4, false),
                 Tok::Op("!=") => (BinOp::Ne, 4, false),
                 Tok::Op("<") => (BinOp::Lt, 5, false),
                 Tok::Op(">") => (BinOp::Gt, 5, false),
@@ -711,6 +738,25 @@ mod tests {
         assert_eq!(parse_expr("this.a + 1", Era::V21).unwrap().to_string(), "(+ this.a 1)");
         assert!(parse_expr("1 +", Era::V21).is_none());
         assert!(parse_expr("1 2", Era::V21).is_none());
+    }
+
+    #[test]
+    fn commands_glued_to_their_first_argument() {
+        assert_eq!(g("hurt1;"), "(cmd hurt 1)\n");
+        assert_eq!(g("putexplosion10,38,22;"), "(cmd putexplosion 10 38 22)\n");
+        assert_eq!(g("shootarrowdown;"), "(cmd shootarrow 2)\n");
+        assert_eq!(g("setplayerdirleft;"), "(cmd setplayerdir 1)\n");
+        // A text-first command is not split, and neither is a plain unknown.
+        assert!(g("message1;").starts_with("(unknown message1"));
+        assert!(g("hurtful;").starts_with("(unknown hurtful"));
+        // Longest command wins: `setlevel2` over `setlevel`.
+        assert_eq!(g("setlevel2 a.nw,1,2;"), "(cmd setlevel2 \"a.nw\" 1 2)\n");
+    }
+
+    #[test]
+    fn a_single_equals_in_a_condition_compares() {
+        assert_eq!(g("if (a && this.d=0) hide;"), "(if (&& a (== this.d 0)) (cmd hide))\n");
+        assert_eq!(g("x = 1;"), "(= x 1)\n");
     }
 
     #[test]

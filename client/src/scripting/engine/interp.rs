@@ -504,6 +504,23 @@ impl<'a> Run<'a> {
                 Val::Num(text.find(&part).map_or(-1.0, |b| text[..b].chars().count() as f64))
             }
             "ascii" => Val::Num(s(0).chars().next().map_or(0.0, |c| c as u32 as f64)),
+            "onwall" => {
+                let (x, y) = (n(0).floor(), n(1).floor());
+                let blocked = match &self.core.walls {
+                    _ if !(0.0..64.0).contains(&x) || !(0.0..64.0).contains(&y) => true,
+                    Some(w) => w.get(y as usize * 64 + x as usize).copied().unwrap_or(false),
+                    None => false,
+                };
+                blocked.into()
+            }
+            "playersays" | "playersays2" => {
+                if self.event != "playerchats" {
+                    return Val::Num(0.0);
+                }
+                let said = self.core.player.chat.trim().to_lowercase();
+                let want = s(0).trim().to_lowercase();
+                (if name == "playersays" { said == want } else { said.contains(&want) }).into()
+            }
             _ => Val::default(),
         }
     }

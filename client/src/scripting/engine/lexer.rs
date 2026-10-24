@@ -144,6 +144,16 @@ impl<'a> Lexer<'a> {
                     i += 1;
                 }
             }
+            // Flag names may start with a digit (`2wallgizone`): a number
+            // run straight into letters is a name.
+            if self.b.get(i).is_some_and(|d| d.is_ascii_alphabetic() || *d == b'_') {
+                while i < self.b.len() && (self.b[i].is_ascii_alphanumeric() || self.b[i] == b'_') {
+                    i += 1;
+                }
+                let text = self.src[self.pos..i].to_ascii_lowercase();
+                self.pos = i;
+                return mk(Tok::Ident(text), i);
+            }
             let n = self.src[self.pos..i].parse().unwrap_or(0.0);
             self.pos = i;
             return mk(Tok::Num(n), i);
@@ -267,6 +277,11 @@ mod tests {
         assert_eq!(toks("\"hi there\""), vec![Tok::Str("hi there".into())]);
         assert_eq!(toks("#c"), vec![Tok::Str("#c".into())]);
         assert_eq!(toks("#v(this.a+1)"), vec![Tok::Str("#v(this.a+1)".into())]);
+    }
+
+    #[test]
+    fn names_may_start_with_a_digit() {
+        assert_eq!(toks("2wallgizone 12 3x"), vec![Tok::Ident("2wallgizone".into()), Tok::Num(12.0), Tok::Ident("3x".into())]);
     }
 
     #[test]

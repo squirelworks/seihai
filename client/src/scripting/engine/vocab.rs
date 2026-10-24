@@ -446,6 +446,11 @@ pub static BUILTINS: &[Builtin] = &[
     Builtin { name: "indexof", args: &[T, T], since: V202 },
     Builtin { name: "ascii", args: &[T], since: V21 },
     Builtin { name: "arraylen", args: &[T], since: V200 },
+    // Level collision at a point in tiles; true off the board.
+    Builtin { name: "onwall", args: &[N, N], since: V200 },
+    // Chat tests, true only during `playerchats`. [inferred: whole line / contained text]
+    Builtin { name: "playersays", args: &[T], since: V200 },
+    Builtin { name: "playersays2", args: &[T], since: V200 },
 ];
 
 pub fn builtin_fn(name: &str, era: Era) -> Option<&'static Builtin> {
