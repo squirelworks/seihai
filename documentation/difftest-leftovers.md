@@ -67,3 +67,9 @@ not measurable in this lab without a Seihai asset folder that holds `gm2x2.gmap`
 `TAMPERCHECK` and `SHOWIMGPLAYER` are still opt-in (`--send-tampercheck`, `--send-showimg`). They are the only
 `high` rows in the ranked report. With them on, the first id 24 now goes at the end of the post-login frame like
 the real 2.31 client's. Whether they should become defaults is not decided here.
+
+## Maintainer answers (2026-10-25)
+
+- **Tamper check and id 24 as defaults:** undecided. Leave them opt-in (`--send-tampercheck`, `--send-showimg`) for now.
+- **Request `walk.gani` and step sounds:** only if Seihai does not already have them. Do not re-request files that are present.
+- **Bomb and bow weapon ids:** not settled by the capture. Leave open; do not invent a mapping.
