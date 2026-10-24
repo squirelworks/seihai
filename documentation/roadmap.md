@@ -14,7 +14,7 @@ Single code path. Versions are profile rows, not branches.
 
 - [x] Gmaps. Ids 49 and 186, cell props 43/44, and the crossing behaviour captured in the lab: grid model and `.gmap` reader, edge crossing and wrapped coordinate, cell-prop frame gated by profile (with 46 or the 2.22 tamper check in front), 186 applied at its cell, neighbour levels for collision and drawing, `PLI_ADJACENTLEVEL`. Still open under gmaps: 185 board heights, the `gr.x`/`gr.y` flags, neighbours' NPCs/links/chests, cached-level crossings, the 171/172 map screens, and a run against a real server. See `documentation/protocol.md`, "Gmaps".
 - [ ] Cached level links. The 30-plus-46 form.
-- [ ] Script-initiated warps. Needs the script engine below.
+- [ ] Script-initiated warps. The engine now runs `setlevel`/`setlevel2` and the offline client follows them; online they are logged and ignored until the wire form is captured.
 - [ ] Remaining fields. The unresolved id 24 and 46 meanings, and the field order for id 178 when a real service sends it.
 - [ ] Early builds. A real 2.00-era listserver reply, which is still unobserved.
 
@@ -27,7 +27,7 @@ Single code path. Versions are profile rows, not branches.
 
 ## 4. Content and scripting
 
-- [ ] Script engine. The NPC and weapon script vocabulary, with a per-version delta table already mined from the builds.
+- [x] Script engine. A first working GS1 interpreter in `client/src/scripting/engine/`: lexer, parser, flat-node runtime, deterministic 50 ms tick/timeout scheduler, the command surface with per-version vocabulary gating, level NPCs and weapons hooked into the offline session, unknown commands logged and ignored. Still open: `board[]`/`tiles[]` reads, string lists, `with`/`join`, online NPC script props, weapon-key input and timed `move`. See `documentation/seihaiscript.md`, "Implemented GS1 engine".
 - [ ] Assets. Loaders for levels, tiles, gani animations, images and sounds, from the 2.22 data folder that works for every client.
 - [ ] File transfer and caching. The downloaded-file rules the real clients follow.
 

@@ -32,6 +32,26 @@ The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode 
 - Timeout / scheduling primitives
 - GUI control objects (later phase)
 
+## Implemented GS1 engine
+
+`client/src/scripting/engine/` is a first working GS1 interpreter. It is written from observed behaviour and its own design.
+
+**Pipeline.** `parse(src, era)` never fails: it returns a `Script` plus diagnostics, and an unknown or not-yet-introduced command becomes an `Unknown` statement that is logged and ignored when run. The tree compiles to a flat node list with jump targets. Every event runs that list from the top; `if (created)`-style blocks test the event flag. `sleep` remembers the next node and the next `timeout` event resumes there.
+
+**Language.** `if`/`else`, `while`, `for`, `break`/`continue`/`return`, assignment and `++`/`--`, the usual numeric, comparison and logical operators (a single `=` in a condition compares), numeric and string variables, arrays (`setarray`), message codes (`#c #n #a #L #F #v #s`, and from 2.02 `#t #e #T`, from 2.03 `#p`), and the built-in functions `abs int sin cos arctan random strequals strlen startswith indexof ascii arraylen onwall playersays playersays2`. Scopes: `this.` is per object, `level.` clears on a level change, `server.` is global, `client.`/`local.`/plain names are flags.
+
+**Commands.** About 150 are recognised, each with a signature and the version that introduced it. Commands that change the world are returned as `Effect` values for the host to apply (messages, warps, sounds, images, weapon grants, player movement, flags, `sendtoserver`); the offline client applies the ones it can and prints the rest to stderr. The visual-effect commands do nothing when online without an NPC server, as the original does.
+
+**Version gating.** `Era` follows the client version: 2.00 baseline, then 2.01 (`hitobjects`, `playerdies`...), 2.02 (string functions, `local.`), 2.03 (`triggeraction`, `action*` events, `move` with time), 2.04 (`replaceani`, tile defs, `attachplayertoobj`...), 2.05 (`loadmap`, `setbacktile2`, `updateterrain`) and 2.1 and later (`ascii`, `playerhp`...). A command or event from a later era is parsed as unknown on an earlier one.
+
+**Scheduler.** Ticks are 50 ms. Timeouts round up to a tick and fire in order of tick, then creation. The same script and the same seed produce the same run. Limits: 10,000 loop passes, 200,000 steps per run, call depth 64, expression depth 400, parser depth 200. `callnpc`, `callweapon`, `triggeraction` and `movementfinished` are queued and run after the caller finishes (at most 1,000 per drain).
+
+**Touch.** `playertouchsme` is edge-triggered against the NPC's rectangle (2 by 2 tiles by default; `setshape 1,w,h` is in pixels), tested with the player's foot point.
+
+**Host.** `scripting::engine::host::SessionScripts` wires an offline session to the engine. Scripts run by default; `--no-scripts` turns them off.
+
+**Not done.** `board[x,y]` and `tiles[x,y]` reads return 0; no string lists or `with`/`join`; online NPC script props are not decoded; no weapon-key input for `weaponfired`; `move` is instant; script warps are ignored online; sound, image and network effects are only logged. Assumptions that still need the lab: case-insensitive `==`/`strequals`, quote stripping, the touch geometry, and `playersays` matching rules.
+
 ## Architecture
 
 ```
