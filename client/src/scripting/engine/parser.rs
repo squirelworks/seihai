@@ -1,0 +1,760 @@
+//! Parser for GS1 source.
+//!
+//! Never fails: a bad statement becomes a diagnostic and is skipped, and
+//! a name that is not a command in the chosen era becomes
+//! [`Stmt::Unknown`], which does nothing when run.
+//!
+//! Text arguments (`message`, `setimg`, `setplayerprop #c,hi`) are taken
+//! as raw text up to the next comma or `;`. Number arguments are
+//! expressions. Text arguments of built-in functions are raw text too,
+//! except that a plain scope-prefixed variable (`this.name`) is read as
+//! that variable, so `strequals(this.mode,fight)` works.
+
+use super::ast::*;
+use super::lexer::{Lexer, Spanned, Tok};
+use super::vocab::{self, ArgKind, Cmd, Era};
+
+/// Deepest nesting of blocks and expressions the parser follows.
+const MAX_DEPTH: usize = 200;
+
+/// Parse `src` with the vocabulary of `era`.
+pub fn parse(src: &str, era: Era) -> Script {
+    let mut p = Parser::new(src, era);
+    let mut body = Vec::new();
+    loop {
+        match p.peek().tok.clone() {
+            Tok::Eof => break,
+            Tok::Op("}") => {
+                p.diag("unmatched `}`");
+                p.next();
+            }
+            _ => {
+                if let Some(s) = p.stmt() {
+                    body.push(s);
+                }
+            }
+        }
+    }
+    Script { body, diagnostics: p.diags }
+}
+
+struct Parser<'a> {
+    lx: Lexer<'a>,
+    peeked: Option<Spanned>,
+    era: Era,
+    diags: Vec<Diag>,
+    depth: usize,
+    len: usize,
+}
+
+impl<'a> Parser<'a> {
+    fn new(src: &'a str, era: Era) -> Self {
+        Parser { lx: Lexer::new(src), peeked: None, era, diags: Vec::new(), depth: 0, len: src.len() }
+    }
+
+    fn peek(&mut self) -> &Spanned {
+        if self.peeked.is_none() {
+            self.peeked = Some(self.lx.next());
+        }
+        self.peeked.as_ref().unwrap()
+    }
+
+    fn next(&mut self) -> Spanned {
+        match self.peeked.take() {
+            Some(t) => t,
+            None => self.lx.next(),
+        }
+    }
+
+    /// Give a peeked token back to the lexer so raw text can be read.
+    fn unpeek(&mut self) {
+        if let Some(t) = self.peeked.take() {
+            self.lx.pos = t.start;
+            self.lx.line = t.line;
+        }
+    }
+
+    fn line(&mut self) -> u32 {
+        self.peek().line
+    }
+
+    fn diag(&mut self, msg: &str) {
+        let line = self.line();
+        self.diags.push(Diag { line, msg: msg.to_string() });
+    }
+
+    fn is_op(&mut self, op: &str) -> bool {
+        matches!(&self.peek().tok, Tok::Op(o) if *o == op)
+    }
+
+    fn eat_op(&mut self, op: &str) -> bool {
+        if self.is_op(op) {
+            self.next();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expect_op(&mut self, op: &str) -> bool {
+        if self.eat_op(op) {
+            true
+        } else {
+            self.diag(&format!("expected `{op}`"));
+            false
+        }
+    }
+
+    fn at_stmt_end(&mut self) -> bool {
+        matches!(self.peek().tok, Tok::Op(";") | Tok::Op("}") | Tok::Eof)
+    }
+
+    /// Skip to the end of the current statement: past the next `;`, or up
+    /// to a `}` or the end of input.
+    fn recover(&mut self) {
+        loop {
+            match self.peek().tok.clone() {
+                Tok::Eof | Tok::Op("}") => return,
+                Tok::Op(";") => {
+                    self.next();
+                    return;
+                }
+                _ => {
+                    self.next();
+                }
+            }
+        }
+    }
+
+    /// `;`, or nothing before `}` and the end of input.
+    fn end_stmt(&mut self) {
+        if self.eat_op(";") || self.at_stmt_end() {
+            return;
+        }
+        self.diag("expected `;`");
+        self.recover();
+    }
+
+    fn enter(&mut self) -> bool {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            self.diag("nesting too deep; the rest of the script is dropped");
+            self.peeked = None;
+            self.lx.pos = self.len;
+            return false;
+        }
+        true
+    }
+
+    fn leave(&mut self) {
+        self.depth -= 1;
+    }
+
+    // ---- statements ----
+
+    fn stmt(&mut self) -> Option<Stmt> {
+        if !self.enter() {
+            self.leave();
+            return None;
+        }
+        let r = self.stmt_inner();
+        self.leave();
+        r
+    }
+
+    fn stmt_inner(&mut self) -> Option<Stmt> {
+        let t = self.peek().clone();
+        match t.tok {
+            Tok::Eof => None,
+            Tok::Op("{") => Some(Stmt::Block(self.block())),
+            Tok::Op(";") => {
+                self.next();
+                Some(Stmt::Block(Vec::new()))
+            }
+            Tok::Ident(w) => {
+                self.next();
+                self.ident_stmt(w, t.line)
+            }
+            _ => {
+                self.diag("unexpected token");
+                self.recover();
+                Some(Stmt::Block(Vec::new()))
+            }
+        }
+    }
+
+    fn block(&mut self) -> Vec<Stmt> {
+        self.next(); // `{`
+        let mut v = Vec::new();
+        loop {
+            match self.peek().tok.clone() {
+                Tok::Op("}") => {
+                    self.next();
+                    break;
+                }
+                Tok::Eof => {
+                    self.diag("missing `}`");
+                    break;
+                }
+                _ => {
+                    if let Some(s) = self.stmt() {
+                        v.push(s);
+                    }
+                }
+            }
+        }
+        v
+    }
+
+    fn ident_stmt(&mut self, w: String, line: u32) -> Option<Stmt> {
+        match w.as_str() {
+            "if" => {
+                if !self.expect_op("(") {
+                    self.recover();
+                    return Some(Stmt::Block(Vec::new()));
+                }
+                let cond = self.expr();
+                self.expect_op(")");
+                let then = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                let els = if matches!(&self.peek().tok, Tok::Ident(e) if e == "else") {
+                    self.next();
+                    Some(Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new()))))
+                } else {
+                    None
+                };
+                Some(Stmt::If { cond, then, els })
+            }
+            "while" => {
+                if !self.expect_op("(") {
+                    self.recover();
+                    return Some(Stmt::Block(Vec::new()));
+                }
+                let cond = self.expr();
+                self.expect_op(")");
+                let body = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                Some(Stmt::While { cond, body })
+            }
+            "for" => {
+                if !self.expect_op("(") {
+                    self.recover();
+                    return Some(Stmt::Block(Vec::new()));
+                }
+                let init = self.simple_stmt().map(Box::new);
+                self.expect_op(";");
+                let cond = if self.is_op(";") { None } else { Some(self.expr()) };
+                self.expect_op(";");
+                let step = self.simple_stmt().map(Box::new);
+                self.expect_op(")");
+                let body = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                Some(Stmt::For { init, cond, step, body })
+            }
+            "function" => {
+                let name = match self.peek().tok.clone() {
+                    Tok::Ident(n) => {
+                        self.next();
+                        n
+                    }
+                    _ => {
+                        self.diag("function needs a name");
+                        self.recover();
+                        return Some(Stmt::Block(Vec::new()));
+                    }
+                };
+                let mut params = Vec::new();
+                if self.eat_op("(") {
+                    while let Tok::Ident(p) = self.peek().tok.clone() {
+                        self.next();
+                        params.push(p);
+                        if !self.eat_op(",") {
+                            break;
+                        }
+                    }
+                    self.expect_op(")");
+                }
+                if !self.is_op("{") {
+                    self.diag("function needs a `{` body");
+                    self.recover();
+                    return Some(Stmt::Block(Vec::new()));
+                }
+                let body = self.block();
+                Some(Stmt::Function { name, params, body })
+            }
+            "return" => {
+                let v = if self.at_stmt_end() { None } else { Some(self.expr()) };
+                self.end_stmt();
+                Some(Stmt::Return(v))
+            }
+            "break" => {
+                self.end_stmt();
+                Some(Stmt::Break)
+            }
+            "continue" => {
+                self.end_stmt();
+                Some(Stmt::Continue)
+            }
+            "else" => {
+                self.diag("`else` without `if`");
+                self.recover();
+                Some(Stmt::Block(Vec::new()))
+            }
+            _ => self.name_stmt(w, line),
+        }
+    }
+
+    /// A statement that starts with a name that is not a keyword: a
+    /// command, an assignment, a call, or something unknown.
+    fn name_stmt(&mut self, w: String, line: u32) -> Option<Stmt> {
+        let nxt = self.peek().tok.clone();
+        let assigns = matches!(nxt, Tok::Op("=" | "+=" | "-=" | "*=" | "/=" | "++" | "--" | "["));
+        if !assigns {
+            if let Some(cmd) = vocab::command_in(&w, self.era) {
+                return Some(self.command(cmd, line));
+            }
+        }
+        if assigns {
+            let target = self.var_tail(w);
+            let s = self.assign_tail(target);
+            self.end_stmt();
+            return Some(s);
+        }
+        if matches!(nxt, Tok::Op("(")) {
+            let args = self.call_args(&w);
+            self.end_stmt();
+            return Some(Stmt::Call { name: w, args });
+        }
+        // Not a command here. Keep its text and move on.
+        self.unpeek();
+        let raw = self.lx.raw_arg(b";}");
+        self.end_stmt();
+        let reason = if vocab::command(&w).is_some() { "not available in this version" } else { "unknown command" };
+        Some(Stmt::Unknown { name: w, raw, reason, line })
+    }
+
+    fn command(&mut self, cmd: &Cmd, line: u32) -> Stmt {
+        let sig: Vec<char> = cmd.sig.chars().collect();
+        let mut args = Vec::new();
+        let mut i = 0;
+        while !self.at_stmt_end() {
+            let letter = sig.get(i).copied().unwrap_or('S');
+            if vocab::is_text_letter(letter) {
+                self.unpeek();
+                args.push(Arg::Text(self.lx.raw_arg(b",;}")));
+            } else {
+                args.push(Arg::Num(self.arg_expr(letter)));
+            }
+            i += 1;
+            if !self.eat_op(",") {
+                break;
+            }
+        }
+        self.end_stmt();
+        Stmt::Command { name: cmd.name.to_string(), args, line }
+    }
+
+    /// A number argument. For `D C I B L` a bare name from the matching
+    /// table (`left`, `red`, `bomb`, ...) becomes its number.
+    fn arg_expr(&mut self, letter: char) -> Expr {
+        if let Tok::Ident(n) = self.peek().tok.clone() {
+            if let Some(v) = vocab::named_constant(letter, &n) {
+                self.next();
+                return Expr::Num(v);
+            }
+        }
+        self.expr()
+    }
+
+    /// Variable name already read; read its optional `[index, ...]`.
+    fn var_tail(&mut self, name: String) -> VarRef {
+        let mut index = Vec::new();
+        if self.eat_op("[") {
+            loop {
+                index.push(self.expr());
+                if !self.eat_op(",") {
+                    break;
+                }
+            }
+            self.expect_op("]");
+        }
+        VarRef { name, index }
+    }
+
+    fn assign_tail(&mut self, target: VarRef) -> Stmt {
+        let op = match self.peek().tok.clone() {
+            Tok::Op("=") => AssignOp::Set,
+            Tok::Op("+=") => AssignOp::Add,
+            Tok::Op("-=") => AssignOp::Sub,
+            Tok::Op("*=") => AssignOp::Mul,
+            Tok::Op("/=") => AssignOp::Div,
+            Tok::Op("++") => {
+                self.next();
+                return Stmt::IncDec { target, delta: 1.0 };
+            }
+            Tok::Op("--") => {
+                self.next();
+                return Stmt::IncDec { target, delta: -1.0 };
+            }
+            _ => {
+                self.diag("expected an assignment");
+                self.recover();
+                return Stmt::Block(Vec::new());
+            }
+        };
+        self.next();
+        let value = self.expr();
+        Stmt::Assign { target, op, value }
+    }
+
+    /// The init and step parts of `for`: an assignment or `x++`, or nothing.
+    fn simple_stmt(&mut self) -> Option<Stmt> {
+        match self.peek().tok.clone() {
+            Tok::Ident(n) => {
+                self.next();
+                let target = self.var_tail(n);
+                Some(self.assign_tail(target))
+            }
+            _ => None,
+        }
+    }
+
+    // ---- expressions ----
+
+    fn expr(&mut self) -> Expr {
+        if !self.enter() {
+            self.leave();
+            return Expr::Num(0.0);
+        }
+        let e = self.binary(1);
+        self.leave();
+        e
+    }
+
+    fn binary(&mut self, min: u8) -> Expr {
+        let mut lhs = self.unary();
+        loop {
+            let t = self.peek().tok.clone();
+            let (op, prec, right) = match &t {
+                Tok::Op("||") => (BinOp::Or, 1, false),
+                Tok::Op("&&") => (BinOp::And, 2, false),
+                Tok::Ident(w) if w == "in" => {
+                    if 3 < min {
+                        break;
+                    }
+                    self.next();
+                    lhs = self.in_tail(lhs);
+                    continue;
+                }
+                Tok::Op("==") => (BinOp::Eq, 4, false),
+                Tok::Op("!=") => (BinOp::Ne, 4, false),
+                Tok::Op("<") => (BinOp::Lt, 5, false),
+                Tok::Op(">") => (BinOp::Gt, 5, false),
+                Tok::Op("<=") => (BinOp::Le, 5, false),
+                Tok::Op(">=") => (BinOp::Ge, 5, false),
+                Tok::Op("+") => (BinOp::Add, 6, false),
+                Tok::Op("-") => (BinOp::Sub, 6, false),
+                Tok::Op("*") => (BinOp::Mul, 7, false),
+                Tok::Op("/") => (BinOp::Div, 7, false),
+                Tok::Op("%") => (BinOp::Mod, 7, false),
+                Tok::Op("^") => (BinOp::Pow, 8, true),
+                _ => break,
+            };
+            if prec < min {
+                break;
+            }
+            self.next();
+            let rhs = self.binary(if right { prec } else { prec + 1 });
+            lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
+        }
+        lhs
+    }
+
+    /// After `in`: `|lo,hi|` or `{a,b,c}`.
+    fn in_tail(&mut self, e: Expr) -> Expr {
+        let e = Box::new(e);
+        if self.eat_op("|") {
+            let lo = Box::new(self.binary(4));
+            self.expect_op(",");
+            let hi = Box::new(self.binary(4));
+            self.expect_op("|");
+            Expr::InRange { e, lo, hi }
+        } else if self.eat_op("{") {
+            let mut list = Vec::new();
+            while !self.is_op("}") && !matches!(self.peek().tok, Tok::Eof) {
+                list.push(self.binary(4));
+                if !self.eat_op(",") {
+                    break;
+                }
+            }
+            self.expect_op("}");
+            Expr::InList { e, list }
+        } else {
+            self.diag("`in` needs |lo,hi| or {list}");
+            Expr::InList { e, list: Vec::new() }
+        }
+    }
+
+    fn unary(&mut self) -> Expr {
+        match self.peek().tok.clone() {
+            Tok::Op("-") => {
+                self.next();
+                match self.unary() {
+                    Expr::Num(n) => Expr::Num(-n),
+                    e => Expr::Unary(UnOp::Neg, Box::new(e)),
+                }
+            }
+            Tok::Op("!") => {
+                self.next();
+                Expr::Unary(UnOp::Not, Box::new(self.unary()))
+            }
+            Tok::Op("+") => {
+                self.next();
+                self.unary()
+            }
+            _ => self.primary(),
+        }
+    }
+
+    fn primary(&mut self) -> Expr {
+        let t = self.peek().clone();
+        match t.tok {
+            Tok::Num(n) => {
+                self.next();
+                Expr::Num(n)
+            }
+            Tok::Str(s) => {
+                self.next();
+                Expr::Str(s)
+            }
+            Tok::Op("(") => {
+                self.next();
+                let e = self.expr();
+                self.expect_op(")");
+                e
+            }
+            Tok::Ident(w) => {
+                self.next();
+                if w == "true" {
+                    return Expr::Num(1.0);
+                }
+                if w == "false" {
+                    return Expr::Num(0.0);
+                }
+                if self.is_op("(") {
+                    let args = self.call_args(&w);
+                    return Expr::Call { name: w, args };
+                }
+                Expr::Var(self.var_tail(w))
+            }
+            _ => {
+                self.diag("expected an expression");
+                Expr::Num(0.0)
+            }
+        }
+    }
+
+    /// `(a, b, ...)` after a function name. Built-ins read their text
+    /// arguments raw.
+    fn call_args(&mut self, name: &str) -> Vec<Expr> {
+        self.next(); // `(`
+        let kinds: &[ArgKind] = vocab::BUILTINS.iter().find(|b| b.name == name).map_or(&[], |b| b.args);
+        let mut args = Vec::new();
+        if self.eat_op(")") {
+            return args;
+        }
+        loop {
+            if kinds.get(args.len()) == Some(&ArgKind::Text) {
+                self.unpeek();
+                let raw = self.lx.raw_arg(b",)");
+                let quoted = self.lx.last_quoted;
+                args.push(text_arg(&raw, quoted, self.era));
+            } else {
+                args.push(self.expr());
+            }
+            if !self.eat_op(",") {
+                break;
+            }
+        }
+        self.expect_op(")");
+        args
+    }
+}
+
+const SCOPES: &[&str] = &["this.", "client.", "server.", "level.", "local."];
+
+/// A text argument of a built-in: a plain scope-prefixed variable is read
+/// as that variable; anything else is text.
+fn text_arg(raw: &str, quoted: bool, era: Era) -> Expr {
+    let plain_name = |s: &str| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.');
+    let lower = raw.to_ascii_lowercase();
+    if !quoted && SCOPES.iter().any(|s| lower.starts_with(s)) && plain_name(&lower) {
+        return Expr::Var(VarRef { name: lower, index: Vec::new() });
+    }
+    // `this.a[3]` indexed form.
+    if !quoted && SCOPES.iter().any(|s| lower.starts_with(s)) && lower.ends_with(']') && lower.contains('[') {
+        let mut p = Parser::new(&lower, era);
+        let e = p.primary();
+        if p.diags.is_empty() {
+            return e;
+        }
+    }
+    Expr::Str(raw.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn g(src: &str) -> String {
+        parse(src, Era::V21).to_string()
+    }
+
+    #[test]
+    fn event_blocks_and_commands() {
+        let s = g("if (created) { setimg door.png; setshape 1,32,32; }\nif (playertouchsme) { hide; sleep 5; show; }");
+        assert_eq!(
+            s,
+            "(if created (block (cmd setimg \"door.png\") (cmd setshape 1 32 32)))\n\
+             (if playertouchsme (block (cmd hide) (cmd sleep 5) (cmd show)))\n"
+        );
+    }
+
+    #[test]
+    fn text_arguments_are_raw_and_split_on_commas() {
+        assert_eq!(g("message Hello, world :);"), "(cmd message \"Hello\" \"world :)\")\n");
+        assert_eq!(g("setplayerprop #c,Hi #v(this.n) there;"), "(cmd setplayerprop \"#c\" \"Hi #v(this.n) there\")\n");
+        assert_eq!(g("message \"quoted, text\";"), "(cmd message \"quoted, text\")\n");
+    }
+
+    #[test]
+    fn precedence_and_associativity() {
+        assert_eq!(g("x = 1 + 2 * 3;"), "(= x (+ 1 (* 2 3)))\n");
+        assert_eq!(g("x = (1 + 2) * 3;"), "(= x (* (+ 1 2) 3))\n");
+        assert_eq!(g("x = 2 ^ 3 ^ 2;"), "(= x (^ 2 (^ 3 2)))\n");
+        assert_eq!(g("x = a < b && c || d;"), "(= x (|| (&& (< a b) c) d))\n");
+        assert_eq!(g("x = -y + !z;"), "(= x (+ (neg y) (! z)))\n");
+        assert_eq!(g("x = 10 - 4 - 3;"), "(= x (- (- 10 4) 3))\n");
+    }
+
+    #[test]
+    fn assignment_forms() {
+        assert_eq!(
+            g("this.hp = 3; this.hp += 2; x -= 1; y *= 2; z /= 4; i++; j--;"),
+            "(= this.hp 3)\n(+= this.hp 2)\n(-= x 1)\n(*= y 2)\n(/= z 4)\n(++ i)\n(-- j)\n"
+        );
+    }
+
+    #[test]
+    fn arrays_and_indices() {
+        assert_eq!(g("this.a[3] = 7; board[x,y] = 1; setarray this.list,5;"), "(= (idx this.a 3) 7)\n(= (idx board x y) 1)\n(cmd setarray \"this.list\" 5)\n");
+        assert_eq!(g("x = this.a[i+1];"), "(= x (idx this.a (+ i 1)))\n");
+    }
+
+    #[test]
+    fn control_flow() {
+        assert_eq!(g("if (a) hide; else show;"), "(if a (cmd hide) (cmd show))\n");
+        assert_eq!(g("if (a) { x=1; } else if (b) { x=2; } else { x=3; }"), "(if a (block (= x 1)) (if b (block (= x 2)) (block (= x 3))))\n");
+        assert_eq!(g("while (i < 3) i++;"), "(while (< i 3) (++ i))\n");
+        assert_eq!(g("for (i = 0; i < 3; i++) { x += i; }"), "(for (= i 0) (< i 3) (++ i) (block (+= x i)))\n");
+        assert_eq!(g("for (;;) break;"), "(for _ _ _ (break))\n");
+    }
+
+    #[test]
+    fn functions_and_calls() {
+        assert_eq!(
+            g("function bump(n) { return n + 1; }\nx = bump(2);\nbump(3);"),
+            "(fn bump (n) (return (+ n 1)))\n(= x (call bump 2))\n(call bump 3)\n"
+        );
+        assert_eq!(g("function f() { }"), "(fn f ())\n");
+    }
+
+    #[test]
+    fn in_ranges_and_lists() {
+        assert_eq!(g("if (x in |0,64|) hide;"), "(if (in x range 0 64) (cmd hide))\n");
+        assert_eq!(g("if (2 in {1,2,3}) hide;"), "(if (in 2 list 1 2 3) (cmd hide))\n");
+    }
+
+    #[test]
+    fn builtin_text_arguments() {
+        assert_eq!(g("if (strequals(#c,hello)) hide;"), "(if (call strequals \"#c\" \"hello\") (cmd hide))\n");
+        assert_eq!(g("if (strequals(this.mode,fight)) hide;"), "(if (call strequals this.mode \"fight\") (cmd hide))\n");
+        assert_eq!(g("if (strequals(\"this.mode\",x)) hide;"), "(if (call strequals \"this.mode\" \"x\") (cmd hide))\n");
+        assert_eq!(g("x = strlen(#v(this.a));"), "(= x (call strlen \"#v(this.a)\"))\n");
+        assert_eq!(g("x = random(1, 6) + abs(-2);"), "(= x (+ (call random 1 6) (call abs -2)))\n");
+    }
+
+    #[test]
+    fn named_constants_in_typed_arguments() {
+        assert_eq!(g("setplayerdir left;"), "(cmd setplayerdir 1)\n");
+        assert_eq!(g("setplayerdir dir + 1;"), "(cmd setplayerdir (+ dir 1))\n");
+        assert_eq!(g("setskincolor red;"), "(cmd setskincolor 4)\n");
+        assert_eq!(g("lay bomb;"), "(cmd lay 8)\n");
+        assert_eq!(g("putcomp frog,10,12;"), "(cmd putcomp 5 10 12)\n");
+        assert_eq!(g("carryobject vase;"), "(cmd carryobject 2)\n");
+    }
+
+    #[test]
+    fn comments_and_case() {
+        assert_eq!(g("// c\nIF (Created) { /* x */ HIDE; }"), "(if created (block (cmd hide)))\n");
+    }
+
+    #[test]
+    fn unknown_and_gated_commands_are_kept_not_fatal() {
+        assert_eq!(g("frobnicate 1,2;"), "(unknown frobnicate \"1,2\" unknown command)\n");
+        let s = parse("hitobjects 1,2,3; tokenize2 a,b;", Era::V200);
+        assert_eq!(
+            s.to_string(),
+            "(unknown hitobjects \"1,2,3\" not available in this version)\n(unknown tokenize2 \"a,b\" not available in this version)\n"
+        );
+        assert!(s.diagnostics.is_empty());
+        assert_eq!(parse("hitobjects 1,2,3;", Era::V201).to_string(), "(cmd hitobjects 1 2 3)\n");
+    }
+
+    #[test]
+    fn missing_semicolons_before_a_brace_are_accepted() {
+        assert_eq!(g("if (a) { hide }"), "(if a (block (cmd hide)))\n");
+    }
+
+    #[test]
+    fn errors_are_diagnostics_and_parsing_continues() {
+        let s = parse("if created) { hide; }\nshow;\n} hide;", Era::V21);
+        assert!(!s.diagnostics.is_empty());
+        assert!(s.to_string().contains("(cmd show)"));
+        assert!(s.to_string().contains("(cmd hide)"));
+        let s = parse("if (a) { hide;", Era::V21);
+        assert!(s.diagnostics.iter().any(|d| d.msg.contains("missing `}`")));
+        assert!(s.to_string().contains("(cmd hide)"));
+    }
+
+    #[test]
+    fn deep_nesting_is_cut_off_without_overflowing() {
+        let src = "{".repeat(5000) + "hide;";
+        let s = parse(&src, Era::V21);
+        assert!(s.diagnostics.iter().any(|d| d.msg.contains("too deep")));
+        let src = format!("x = {}1{};", "(".repeat(5000), ")".repeat(5000));
+        let s = parse(&src, Era::V21);
+        assert!(s.diagnostics.iter().any(|d| d.msg.contains("too deep")));
+    }
+
+    #[test]
+    fn diagnostics_carry_line_numbers() {
+        let s = parse("hide;\nhide;\nx = ;\n", Era::V21);
+        assert_eq!(s.diagnostics[0].line, 3);
+    }
+
+    #[test]
+    fn garbage_never_panics() {
+        for src in ["", ";;;", "{", "}", "(((", "if", "if (", "for (", "function", "x = ", "x[", "message", "a b c d", "\"unterminated", "#", "@@@", "x in |", "x = a in {1,"] {
+            let _ = parse(src, Era::V21);
+            let _ = parse(src, Era::V200);
+        }
+    }
+
+    #[test]
+    fn sample_level_npc_script() {
+        let src = "// Door NPC\nif (created) {\n  setimg door.png;\n  setshape 1,32,32;\n}\nif (playertouchsme) {\n  if (!client.keyfound) {\n    say2 The door is locked.;\n  } else {\n    hide;\n    setlevel2 house.nw,32,60;\n  }\n}\n";
+        assert_eq!(
+            g(src),
+            "(if created (block (cmd setimg \"door.png\") (cmd setshape 1 32 32)))\n\
+             (if playertouchsme (block (if (! client.keyfound) (block (cmd say2 \"The door is locked.\")) (block (cmd hide) (cmd setlevel2 \"house.nw\" 32 60)))))\n"
+        );
+    }
+}

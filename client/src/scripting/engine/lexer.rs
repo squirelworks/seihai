@@ -39,11 +39,13 @@ pub struct Lexer<'a> {
     b: &'a [u8],
     pub pos: usize,
     pub line: u32,
+    /// Whether the last [`Lexer::raw_arg`] result had its quotes removed.
+    pub last_quoted: bool,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
-        Lexer { src, b: src.as_bytes(), pos: 0, line: 1 }
+        Lexer { src, b: src.as_bytes(), pos: 0, line: 1, last_quoted: false }
     }
 
     pub fn at_end(&mut self) -> bool {
@@ -188,6 +190,21 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
         let mut depth = 0i32;
         let mut i = self.pos;
+        // A whole argument in quotes may hold commas and semicolons.
+        if self.b.get(i) == Some(&b'"') {
+            if let Some(close) = self.b[i + 1..].iter().position(|&c| c == b'"') {
+                let mut j = i + 1 + close + 1;
+                while j < self.b.len() && matches!(self.b[j], b' ' | b'\t') {
+                    j += 1;
+                }
+                if j >= self.b.len() || stops.contains(&self.b[j]) {
+                    self.line += self.b[i..j].iter().filter(|&&c| c == b'\n').count() as u32;
+                    self.pos = j;
+                    self.last_quoted = true;
+                    return self.src[i + 1..i + 1 + close].to_string();
+                }
+            }
+        }
         while i < self.b.len() {
             let c = self.b[i];
             if depth == 0 && stops.contains(&c) {
@@ -212,7 +229,9 @@ impl<'a> Lexer<'a> {
         }
         self.pos = i;
         let text = self.src[start..i].trim();
+        self.last_quoted = false;
         if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') && !text[1..text.len() - 1].contains('"') {
+            self.last_quoted = true;
             text[1..text.len() - 1].to_string()
         } else {
             text.to_string()

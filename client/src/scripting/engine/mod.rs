@@ -5,8 +5,13 @@
 //! This is written from observed behaviour and the cleaned
 //! Graal_analysis notes, not from any other implementation.
 
+pub mod ast;
 pub mod lexer;
+pub mod parser;
 pub mod value;
 pub mod vocab;
 
 pub use value::Val;
+pub use ast::Script;
+pub use parser::parse;
+pub use vocab::Era;
