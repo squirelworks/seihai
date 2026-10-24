@@ -39,7 +39,8 @@ fn main() {
     let mut list_only = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
-    let mut follow_serverwarp = true;
+    // None: not given on the command line, so the settings file decides.
+    let mut cli_serverwarp: Option<bool> = None;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -71,7 +72,8 @@ fn main() {
             "--list-only" => list_only = true,
             "--send-tampercheck" => send_tampercheck = true,
             "--send-showimg" => send_showimg = true,
-            "--no-serverwarp" => follow_serverwarp = false,
+            "--no-serverwarp" => cli_serverwarp = Some(false),
+            "--serverwarp" => cli_serverwarp = Some(true),
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -109,6 +111,8 @@ fn main() {
                 println!("         --no-serverwarp     do not follow a PLO_SERVERWARP (178); by default");
                 println!("                             Seihai reconnects to the host and port it names");
                 println!("                             and logs in again, as the real client does");
+                println!("                             (settings file: follow_serverwarp=0)");
+                println!("         --serverwarp        follow it even if the settings file says off");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -119,6 +123,8 @@ fn main() {
 
     // Load settings and fill defaults.
     let mut settings = Settings::load();
+    // Command line, then settings file, then the default (follow).
+    let follow_serverwarp = settings.follow_serverwarp_with(cli_serverwarp);
     if assets.is_none() {
         assets = settings.assets.clone();
     }
@@ -850,7 +856,7 @@ fn main() {
         // the real client.
         if let Some(w) = net_state.server_warp.take() {
             if !follow_serverwarp {
-                eprintln!("server warp to {:?} not followed (--no-serverwarp)", w.name);
+                eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.name);
             } else if let Some(old) = conn.as_ref() {
                 let _ = old.shutdown();
                 conn = None;

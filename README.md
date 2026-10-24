@@ -92,6 +92,21 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
 | `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
+| `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
+| `--serverwarp` | Follow server warps even if the settings file turns them off |
+
+### Settings file
+
+Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
+
+One option is meant to be edited by hand:
+
+```
+# Do not follow a server warp (default: 1, follow it)
+follow_serverwarp=0
+```
+
+`follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
 
 ## Features
 

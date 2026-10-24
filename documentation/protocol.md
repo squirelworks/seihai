@@ -238,7 +238,9 @@ what a real service sends is still unobserved. 2.22 was not tried, nor a host
 name instead of an IP, nor a port above 65535.
 
 Seihai (`layouts::ServerWarp`, `net::login_gserver`): decodes the four fields
-(fewer than four: ignored), and unless `--no-serverwarp` is given closes the
+(fewer than four: ignored), and unless it is turned off (`--no-serverwarp`, or
+`follow_serverwarp=0` in the settings file; `--serverwarp` overrides the file)
+closes the
 connection and logs in again to field 2 and 3 with a new key, the same
 credentials and a fresh session (language, tamper check if enabled, the login
 46). A port that is not 1 to 65535 or an empty host counts as a failed
