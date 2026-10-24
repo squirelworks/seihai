@@ -5,7 +5,13 @@
 //! everything else is recorded as unhandled.
 
 use super::extras::{
-    parse_ghost_icon, parse_level_mod_time, parse_map_spec, parse_signature, parse_text_list, MapSpec,
+    parse_ghost_icon, parse_level_mod_time, parse_map_spec, parse_signature, parse_start_message,
+    parse_text_list, signature_action, MapSpec, SignatureAction,
+};
+use super::layouts::{
+    parse_board_heights, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
+    parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
+    parse_shoot, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
 };
 use super::profile::IdSet;
 use super::props::parse_player_props_in;
@@ -305,6 +311,47 @@ pub struct SessionState {
     /// `PLO_LISTPROCESSES` (182) requests seen. Seihai never answers with
     /// a process list.
     pub process_list_requests: usize,
+    /// The last `PLO_PLAYERWARP2` (49).
+    pub player_warp2: Option<PlayerWarp2>,
+    /// The gmap named by the last 49, if any. Seihai has no gmap support, so
+    /// the level stays the one `PLO_LEVELNAME` names.
+    pub gmap_name: Option<String>,
+    /// The last `PLO_PROFILE` (75).
+    pub profile: Option<ProfileCard>,
+    /// Level and id of the last `PLO_NPCDEL2` (150), and how many arrived.
+    pub last_npc_del: Option<(String, usize)>,
+    pub npc_dels: usize,
+    /// `PLO_HIDENPCS` (151) seen: the client removes NPC ids 1 to 999 of the
+    /// active level.
+    pub hide_npcs: usize,
+    /// `PLO_SAY2` (153): the last NPC sign text.
+    pub say2: Option<String>,
+    /// Frozen by `PLO_FREEZEPLAYER2` (154) until `PLO_UNFREEZEPLAYER` (155).
+    pub frozen: bool,
+    /// `PLO_UPGRADEURL` (169).
+    pub upgrade_url: Option<String>,
+    /// `PLO_GHOSTMODE` (170) and `PLO_GHOSTTEXT` (173).
+    pub ghost_mode: bool,
+    pub ghost_text: Option<String>,
+    /// `PLO_SHOOT` (175) messages for a player in the active level, and
+    /// `PLO_MOVE`/`PLO_MOVE2` (165, 189) and `PLO_SHOWIMGNPC` (166) counts.
+    pub shoots: usize,
+    pub npc_moves: usize,
+    pub npc_showimgs: usize,
+    /// `PLO_KINGDOMSMODE` (176) or `PLO_NEWWORLDMODE` (177).
+    pub server_mode: Option<ServerMode>,
+    /// `PLO_SERVERWARP` (178), fields as sent; Seihai does not follow it.
+    pub server_warp: Option<ServerWarp>,
+    /// `PLO_UNKNOWN181` (181): the last player and toggle.
+    pub player_toggle: Option<(u16, bool)>,
+    /// `PLO_HASPROCESSRUNNING` (183) requests. Never answered.
+    pub process_running_requests: usize,
+    /// `PLO_TAKESCREENSHOT` (184) names the client would save. Seihai does
+    /// not take them.
+    pub screenshot_requests: Vec<String>,
+    /// The last `PLO_BOARDHEIGHTS` (185) and `PLO_BOARDMODIFY2` (186).
+    pub board_heights: Option<BoardHeights>,
+    pub board_modify2: Option<BoardModify2>,
     pub unhandled: HashMap<u8, usize>,
     splitter: Splitter,
 }
@@ -321,6 +368,12 @@ impl SessionState {
             other_prop_ids: Some(p.props.other),
             ..Default::default()
         }
+    }
+
+    /// What the real client would do with the last `PLO_SIGNATURE` (25).
+    /// Seihai only reports it; it does not quit.
+    pub fn signature_action(&self) -> Option<SignatureAction> {
+        self.signature.map(signature_action)
     }
 
     /// True if this client version would act on message `id`. A raw block
@@ -568,9 +621,92 @@ impl SessionState {
                     self.level_mod_time = Some((level.clone(), t));
                 }
             }
-            41 => self.start_message = Some(latin1(&msg.payload)),
+            41 => self.start_message = Some(parse_start_message(&msg.payload).0),
             44 => self.has_npc_server = true,
             47 => self.staff_guilds = parse_text_list(&msg.payload),
+            49 => {
+                // PLO_PLAYERWARP2 (2.1 test builds, 2.17+).
+                if let Some(w) = parse_player_warp2(&msg.payload) {
+                    self.player_x = Some(w.x);
+                    self.player_y = Some(w.y);
+                    if w.is_gmap() {
+                        // The client swaps a gmap name for its cell's level;
+                        // Seihai has no gmaps, so wait for PLO_LEVELNAME.
+                        self.gmap_name = Some(w.level.clone());
+                    } else {
+                        self.gmap_name = None;
+                        if !w.level.is_empty() {
+                            self.enter_level(w.level.clone());
+                        }
+                        self.warps.push(w.level.clone());
+                    }
+                    self.player_warp2 = Some(w);
+                }
+            }
+            75 => {
+                if let Some(c) = parse_profile(&msg.payload) {
+                    self.profile = Some(c);
+                }
+            }
+            150 => {
+                if let Some(d) = parse_npc_del2(&msg.payload) {
+                    self.last_npc_del = Some(d);
+                    self.npc_dels += 1;
+                }
+            }
+            151 => self.hide_npcs += 1,
+            153 => self.say2 = Some(latin1(&msg.payload)),
+            154 => self.frozen = true,
+            155 => self.frozen = false,
+            165 | 189 => {
+                // The client needs an id above 0.
+                if parse_npc_id_rest(&msg.payload).is_some_and(|(id, _)| id > 0) {
+                    self.npc_moves += 1;
+                }
+            }
+            166 => {
+                if parse_npc_id_rest(&msg.payload).is_some() {
+                    self.npc_showimgs += 1;
+                }
+            }
+            169 => self.upgrade_url = Some(latin1(&msg.payload)),
+            170 => self.ghost_mode = parse_flag(&msg.payload) == Some(true),
+            173 => self.ghost_text = Some(latin1(&msg.payload)),
+            175 => {
+                if parse_shoot(&msg.payload).is_some() {
+                    self.shoots += 1;
+                }
+            }
+            176 => self.server_mode = Some(ServerMode::Kingdoms),
+            177 => self.server_mode = Some(ServerMode::NewWorld),
+            178 => {
+                if let Some(w) = parse_server_warp(&msg.payload) {
+                    self.server_warp = Some(w);
+                }
+            }
+            181 => {
+                if let Some(t) = parse_player_toggle(&msg.payload) {
+                    self.player_toggle = Some(t);
+                }
+            }
+            183 => self.process_running_requests += 1,
+            184 => {
+                if let Some(name) = parse_screenshot_name(&msg.payload) {
+                    if self.screenshot_requests.len() < 16 {
+                        self.screenshot_requests.push(name);
+                    }
+                }
+            }
+            185 => {
+                if let Some(h) = parse_board_heights(&msg.payload) {
+                    self.board_heights = Some(h);
+                }
+            }
+            186 => {
+                if let Some(m) = parse_board_modify2(&msg.payload) {
+                    self.board_modify2 = Some(m);
+                }
+            }
             156 => {
                 let name = latin1(&msg.payload);
                 if !name.is_empty() {
@@ -1167,7 +1303,7 @@ mod tests {
         assert_eq!(old.ignored.get(&171), Some(&1));
         let mut new = SessionState::for_version(ClientVersion::V222);
         new.apply_body(&[msg(171, b"a.txt,b.png,1,2"), msg(174, b"!")].concat());
-        assert_eq!(new.bigmap.as_ref().map(|m| (m.x, m.y)), Some((1, 2)));
+        assert_eq!(new.bigmap.as_ref().map(|m| (m.x, m.y)), Some((1.0, 2.0)));
         assert!(new.ghost_icon);
     }
 
@@ -1200,5 +1336,211 @@ mod tests {
         let mut all = SessionState::default();
         all.apply_body(&other(7, &[15 + 0x20, 0x20 + 20, 1 + 0x20, 0x23, 16 + 0x20, 0x20 + 8]));
         assert_eq!(all.others[0].y, 4.0);
+    }
+
+    // ---- decompile layouts (2.17.1 / 2.22 / 2.31) ----
+
+    fn gc(v: u8) -> u8 {
+        v + 0x20
+    }
+
+    /// Every id above 48 that the 2.22 receive dispatcher handles, with a
+    /// payload shaped as the decompile describes, reaches `SessionState`
+    /// and none is counted as unhandled.
+    #[test]
+    fn decompiled_layouts_reach_the_session() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        st.apply_body(&msg(6, b"gm_nw.nw"));
+        let mut body = Vec::new();
+        // 49: x 30.5, y 12, z, gmap cell (1,0), then a gmap name.
+        body.extend(msg(49, &[&[gc(61), gc(24), gc(50), gc(1), gc(0)][..], b"gm2x2.gmap"].concat()));
+        body.extend(msg(75, &[&[gc(4)][..], b"acct", &[gc(5)], b"hello"].concat()));
+        body.extend(msg(150, &[&[gc(4)][..], b"l.nw", &[gc(0), gc(0), gc(9)]].concat()));
+        body.extend(msg(151, b""));
+        body.extend(msg(153, b"sign text"));
+        body.extend(msg(154, b""));
+        body.extend(msg(165, &[gc(0), gc(0), gc(3), b'm']));
+        body.extend(msg(166, &[gc(0), gc(0), gc(3), b'p']));
+        body.extend(msg(169, b"http://up.example"));
+        body.extend(msg(170, b"!"));
+        body.extend(msg(173, b"ghost"));
+        body.extend(msg(175, &[gc(0), gc(5), b's']));
+        body.extend(msg(176, b""));
+        body.extend(msg(178, b"x,Name,host,14900"));
+        body.extend(msg(181, &[gc(0), gc(8), gc(1)]));
+        body.extend(msg(183, b"proc.exe"));
+        body.extend(msg(184, b"shot.png"));
+        body.extend(msg(185, &[gc(0), gc(0), gc(0), gc(0), gc(0), gc(0), gc(50), gc(64)]));
+        body.extend(msg(186, &[gc(0), gc(0), gc(1), gc(2), gc(1), gc(1), gc(0), gc(7)]));
+        st.apply_body(&body);
+        assert!(st.unhandled.is_empty(), "{:?}", st.unhandled);
+        assert!(st.ignored.is_empty(), "{:?}", st.ignored);
+
+        assert_eq!(st.gmap_name.as_deref(), Some("gm2x2.gmap"));
+        // A gmap name is not a level: the level stays the one 6 named.
+        assert_eq!(st.level_name.as_deref(), Some("gm_nw.nw"));
+        assert_eq!((st.player_x, st.player_y), (Some(30.5), Some(12.0)));
+        assert_eq!(st.player_warp2.as_ref().map(|w| (w.gmap_x, w.gmap_y)), Some((1, 0)));
+        let p = st.profile.as_ref().unwrap();
+        assert_eq!((p.account.as_str(), p.lines.as_slice()), ("acct", &["hello".to_string()][..]));
+        assert_eq!((st.last_npc_del.clone(), st.npc_dels, st.hide_npcs), (Some(("l.nw".to_string(), 9)), 1, 1));
+        assert_eq!(st.say2.as_deref(), Some("sign text"));
+        assert!(st.frozen);
+        assert_eq!((st.npc_moves, st.npc_showimgs, st.shoots), (1, 1, 1));
+        assert_eq!(st.upgrade_url.as_deref(), Some("http://up.example"));
+        assert!(st.ghost_mode);
+        assert_eq!(st.ghost_text.as_deref(), Some("ghost"));
+        assert_eq!(st.server_mode, Some(ServerMode::Kingdoms));
+        assert_eq!(st.server_warp.as_ref().map(|w| w.field2.as_str()), Some("host"));
+        assert_eq!(st.player_toggle, Some((8, true)));
+        assert_eq!(st.process_running_requests, 1);
+        assert_eq!(st.screenshot_requests, vec!["shot.png"]);
+        assert_eq!(st.board_heights.as_ref().map(|h| h.cells.clone()), Some(vec![0.5]));
+        assert_eq!(st.board_modify2.as_ref().map(|m| m.tiles.clone()), Some(vec![7]));
+        // Unfreeze, and a plain level name in 49 enters that level.
+        st.apply_body(&[msg(155, b""), msg(49, &[&[gc(2), gc(4), gc(50), gc(0), gc(0)][..], b"b.nw"].concat())].concat());
+        assert!(!st.frozen);
+        assert_eq!(st.level_name.as_deref(), Some("b.nw"));
+        assert_eq!(st.gmap_name, None);
+    }
+
+    /// Ids a version has no handler for are dropped, per the decompiled
+    /// dispatch tables: 186 arrives with 2.22, 44 and 189/84 move at 2.31,
+    /// 2.17 has none of 186/189/84.
+    #[test]
+    fn layout_ids_follow_the_version_gates() {
+        let handled = |v: ClientVersion, id: u8| SessionState::for_version(v).handles(id);
+        for id in [186u8, 189, 84] {
+            assert!(!handled(ClientVersion::V217, id), "2.17 id {id}");
+        }
+        assert!(handled(ClientVersion::V222, 186) && !handled(ClientVersion::V222, 189) && !handled(ClientVersion::V222, 84));
+        assert!(handled(ClientVersion::V231, 189) && handled(ClientVersion::V231, 84) && handled(ClientVersion::V231, 186));
+        assert!(handled(ClientVersion::V217, 44) && handled(ClientVersion::V222, 44) && !handled(ClientVersion::V231, 44));
+        // 2.05 has none of 169 to 189.
+        for id in 169..=189u8 {
+            assert!(!handled(ClientVersion::V205, id), "2.05 id {id}");
+        }
+        // And a dropped message leaves the state alone.
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        st.apply_body(&msg(189, &[gc(0), gc(0), gc(3), b'm']));
+        assert_eq!(st.ignored.get(&189), Some(&1));
+        assert_eq!(st.npc_moves, 0);
+        // 2.31 ignores 44.
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&msg(44, b""));
+        assert!(!st.has_npc_server);
+        assert_eq!(st.ignored.get(&44), Some(&1));
+    }
+
+    /// Bad payloads leave every new field alone.
+    #[test]
+    fn bad_layout_payloads_change_nothing() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        for id in [49u8, 75, 150, 165, 166, 175, 178, 181, 184, 185, 186, 189] {
+            st.apply_body(&msg(id, b""));
+        }
+        st.apply_body(&msg(184, b"shot.jpg"));
+        st.apply_body(&msg(165, &[gc(0), gc(0), gc(0), b'm'])); // id 0
+        assert!(st.player_warp2.is_none() && st.profile.is_none() && st.last_npc_del.is_none());
+        assert!(st.server_warp.is_none() && st.player_toggle.is_none() && st.screenshot_requests.is_empty());
+        assert!(st.board_heights.is_none() && st.board_modify2.is_none());
+        assert_eq!((st.npc_moves, st.npc_showimgs, st.shoots, st.npc_dels), (0, 0, 0, 0));
+        assert!(st.unhandled.is_empty());
+    }
+
+    /// The signature rule is reported, not enforced.
+    #[test]
+    fn signature_value_reports_the_client_rule() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        assert_eq!(st.signature_action(), None);
+        st.apply_body(&msg(25, b"i"));
+        assert_eq!(st.signature_action(), Some(SignatureAction::Ignore));
+        st.apply_body(&msg(25, b"!"));
+        assert_eq!(st.signature_action(), Some(SignatureAction::Quit));
+        st.apply_body(&msg(25, b" "));
+        assert_eq!(st.signature_action(), Some(SignatureAction::QuitUnlessLoopback));
+    }
+
+    fn id_set(s: &str) -> IdSet {
+        let mut set = IdSet::EMPTY;
+        for part in s.split(',') {
+            let (lo, hi) = part.split_once('-').unwrap_or((part, part));
+            set = set.with_range(lo.parse().unwrap(), hi.parse().unwrap());
+        }
+        set
+    }
+
+    fn table_version(label: &str) -> Option<ClientVersion> {
+        let l = label.to_ascii_lowercase();
+        Some(match l.split(|c| c == ' ' || c == '(').next()? {
+            "2.00" => ClientVersion::V200,
+            "2.01" => ClientVersion::V201,
+            "2.02" if l.contains("rev2") => ClientVersion::V202R2,
+            "2.02" => ClientVersion::V202,
+            "2.03" => ClientVersion::V203,
+            "2.04" => ClientVersion::V204,
+            "2.05" => ClientVersion::V205,
+            "2.17.1" => ClientVersion::V217,
+            "2.22" => ClientVersion::V222,
+            "2.31" => ClientVersion::V231,
+            "newmain" => ClientVersion::V142,
+            _ => return None,
+        })
+    }
+
+    /// The per-build tables read from the 2.00 to 2.31 binaries
+    /// (`decomp_plo_handled.tsv`, `decomp_pli_sent.tsv`) agree with the
+    /// profile rows: same handled server ids, same sendable client ids.
+    /// The 2.1 test builds are skipped (the 2.1 row is inferred and wider).
+    #[test]
+    fn profile_sets_match_the_decompiled_tables() {
+        let mut plo_rows = 0;
+        for line in include_str!("decomp_plo_handled.tsv").lines().skip(1) {
+            let c: Vec<&str> = line.split('\t').collect();
+            let Some(v) = table_version(c[0]) else { continue };
+            let want = id_set(c[3]);
+            assert_eq!(want.len(), c[2].parse::<usize>().unwrap(), "{}: count column", c[0]);
+            assert_eq!(v.profile().protocol.plo, want, "plo {}", c[0]);
+            plo_rows += 1;
+        }
+        let mut pli_rows = 0;
+        for line in include_str!("decomp_pli_sent.tsv").lines().skip(1) {
+            let c: Vec<&str> = line.split('\t').collect();
+            let Some(v) = table_version(c[0]) else { continue };
+            assert_eq!(v.profile().protocol.pli, id_set(c[1]), "pli {}", c[0]);
+            pli_rows += 1;
+        }
+        // 19 handled-id rows and 8 client-send rows (the 2.1 test builds are skipped).
+        assert_eq!((plo_rows, pli_rows), (19, 8));
+        // The 2.1 test builds' handled set is inside the 2.1 row.
+        for line in include_str!("decomp_plo_handled.tsv").lines().skip(1) {
+            let c: Vec<&str> = line.split('\t').collect();
+            if c[0].starts_with("2.1 test") {
+                let want = id_set(c[3]);
+                assert_eq!(ClientVersion::V210.profile().protocol.plo.and(want), want, "{}", c[0]);
+            }
+        }
+    }
+
+    /// Every id from every version, with payloads of awkward lengths and
+    /// bytes, leaves every session intact (no panic).
+    #[test]
+    fn no_layout_panics_any_id_any_version() {
+        let mut payloads: Vec<Vec<u8>> = vec![vec![], vec![0xff; 300], vec![0x7f; 5000]];
+        for n in 1..=14usize {
+            payloads.push(vec![0x20; n]);
+            payloads.push(vec![0xff; n]);
+            payloads.push((0..n as u8).map(|i| 0x20 + i).collect());
+        }
+        for v in ClientVersion::all_versions() {
+            for id in 0..=255u8 {
+                for p in &payloads {
+                    let mut st = SessionState::for_version(*v);
+                    st.apply(&Message { id, payload: p.clone() });
+                    // And through the splitter, with a raw-data prefix.
+                    st.apply_body(&[&[id.wrapping_add(0x20)][..], p, b"\n"].concat());
+                }
+            }
+        }
     }
 }

@@ -11,9 +11,11 @@ pub mod extras;
 mod frame;
 mod gen3;
 mod gen5;
+pub mod layouts;
 mod list;
 mod profile;
 mod props;
+pub mod tampercheck;
 mod version;
 
 pub use board::BoardModify;
@@ -33,6 +35,7 @@ pub use profile::{
     by_label, profile, Basis, Files, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
     VersionProfile, PROFILES,
 };
+pub use tampercheck::{TamperImage, TamperSender, TamperWords};
 pub use version::{ClientVersion, EncryptionGen};
 
 use std::io::{self, Write};

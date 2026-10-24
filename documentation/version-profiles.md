@@ -9,7 +9,7 @@ that row instead of matching on versions.
 
 | Group | Fields | Used by |
 |---|---|---|
-| Protocol | client type, encryption generation, listserver (port, token), server→client ids handled, client→server ids sent, language and tampercheck after login, UDP | login, listserver fetch, dispatch, send helpers |
+| Protocol | client type, encryption generation, listserver (port, token), server→client ids handled, client→server ids sent, language after login, tampercheck (opt-in: constant and re-send rule), UDP | login, listserver fetch, dispatch, send helpers |
 | Props | ids the own-player and other-player prop parsers accept, NPC prop max, old bow form of prop 10, precise positions | prop parsing |
 | Files | modtime in `PLO_FILE`, large files, `LARGEFILESIZE`, default image extension | file replies |
 | Levels | `.graal`, `.nw`, `.gmap`, level heights | F5 level picker |
@@ -76,3 +76,5 @@ behaviour.
 - Key bindings, emoticons, ganis, log window and ghost mode are recorded but
   not implemented.
 - Client→server and server→client sets for 2.1–2.16 and 2.3 are inferred (no binary); 2.22 ids 36, 42 and 45 are unmatched in the binary, so 2.22 does not send 36 or 45.
+- 2.31 keeps PLI 44 in its send set (a real 2.31 client answered the server's process-list request with it); Seihai never sends it.
+- 2.3 (inferred) has no tamper-check constant, so `--send-tampercheck` sends nothing for it.

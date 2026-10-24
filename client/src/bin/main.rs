@@ -13,7 +13,7 @@
 use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot};
 use seihai::net::Connection;
 use seihai::offline::OfflineSession;
-use seihai::protocol::{ChatKind, ClientVersion, SessionState};
+use seihai::protocol::{ChatKind, ClientVersion, SessionState, TamperSender};
 use seihai::settings::Settings;
 use seihai::ui;
 use seihai::render::{
@@ -37,6 +37,7 @@ fn main() {
     let mut i = 0;
     let mut cli_mode = false;
     let mut list_only = false;
+    let mut send_tampercheck = false;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -66,6 +67,7 @@ fn main() {
                 }
             }
             "--list-only" => list_only = true,
+            "--send-tampercheck" => send_tampercheck = true,
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -95,6 +97,9 @@ fn main() {
                 println!("       seihai --online host:port --list-only [--account A --password-env VAR] [--version 2.22]");
                 println!("         --list-only         fetch and print the server list from a listserver,");
                 println!("                             then exit; no login to a gserver, no prompt");
+                println!("         --send-tampercheck  as 2.17, 2.22 and 2.31: send PLI_TAMPERCHECK (39) after");
+                println!("                             login, and again as that build does (default: off;");
+                println!("                             GServer-v2 ignores it)");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -168,6 +173,9 @@ fn main() {
     let mut session = OfflineSession::new();
     let mut net_state = SessionState::default();
     let mut conn: Option<Connection> = None;
+    // Opt-in tamper check (`--send-tampercheck`): the build's constant.
+    let mut tamper: Option<TamperSender> = None;
+    let mut tamper_clock = Instant::now();
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
     // True while the level on screen was built from the server's board.
@@ -258,9 +266,19 @@ fn main() {
                         }
                     } else {
                         eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
-                        if let Err(e) = c.send_post_login(version, "English") {
+                        if send_tampercheck {
+                            tamper = TamperSender::for_version(version);
+                            if tamper.is_none() {
+                                eprintln!(
+                                    "--send-tampercheck: {} has no tamper-check value; not sent",
+                                    version.label()
+                                );
+                            }
+                        }
+                        if let Err(e) = c.send_post_login_with(version, "English", tamper.as_ref()) {
                             eprintln!("post-login send failed: {e}");
                         }
+                        tamper_clock = Instant::now();
                         match c.spawn_reader() {
                             Ok(rx) => frames = Some(rx),
                             Err(e) => eprintln!("reader failed: {e}"),
@@ -579,6 +597,17 @@ fn main() {
                 if let Some(name) = &net_state.level_name {
                     if loaded_level.as_ref() != Some(name) {
                         entered = true;
+                        // The first level after login is not a "level change":
+                        // the login send already covers it.
+                        if loaded_level.is_some() {
+                            if let (Some(t), Some(c)) = (tamper.as_mut(), conn.as_mut()) {
+                                if t.level_changed() {
+                                    if let Err(e) = c.send_tampercheck(t) {
+                                        eprintln!("tamper-check send failed: {e}");
+                                    }
+                                }
+                            }
+                        }
                         // The server sends the file name, e.g. "onlinestartlocal.nw".
                         let file = if name.ends_with(".nw") {
                             name.clone()
@@ -770,6 +799,18 @@ fn main() {
             warp_since = None;
             session.cancel_warp();
             eprintln!("warp not answered");
+        }
+        // 2.31 sends the tamper check again every 3.2 s.
+        {
+            let dt = tamper_clock.elapsed();
+            tamper_clock = Instant::now();
+            if let (Some(t), Some(c)) = (tamper.as_mut(), conn.as_mut()) {
+                if t.advance(dt) {
+                    if let Err(e) = c.send_tampercheck(t) {
+                        eprintln!("tamper-check send failed: {e}");
+                    }
+                }
+            }
         }
         // Developer mode does not survive a lost connection.
         was_online |= conn.is_some();

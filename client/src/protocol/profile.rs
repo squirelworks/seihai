@@ -21,6 +21,7 @@
 //! values come from release notes and server source and should be checked
 //! when a build turns up.
 
+use super::tampercheck::{TamperInfo, TamperResend, TamperWords};
 use super::version::{ClientVersion, EncryptionGen};
 
 /// A set of message or prop ids (0 to 255).
@@ -164,9 +165,13 @@ pub struct Protocol {
     pub pli: IdSet,
     /// `PLI_LANGUAGE` (37) right after login.
     pub sends_language: bool,
-    /// `PLI_TAMPERCHECK` (39) after the language. Seihai cannot fill it
-    /// yet, so this is a record only.
+    /// `PLI_TAMPERCHECK` (39) after the language.
     pub tampercheck: bool,
+    /// The build's tamper-check constant and re-send rule. `Some` for every
+    /// build with `tampercheck`; `words` is `None` where the constant was
+    /// never captured (2.3). Seihai sends it only when asked
+    /// (`--send-tampercheck`); see [`super::tampercheck`].
+    pub tamper: Option<TamperInfo>,
     /// Peer-to-peer UDP channel present.
     pub udp: bool,
     /// UDP off by default (`noudp=true` in the shipped config).
@@ -387,10 +392,10 @@ const PLI_217: IdSet = PLI_205.with_range(39, 41).with_range(43, 45);
 /// 2.22: 2.17 without 36, 45 and 81 (no send site was matched for 36 and
 /// 45; 81 is not sent), so 0–24, 26–30, 32–35, 37–41, 43, 44 and 80.
 const PLI_222: IdSet = PLI_217.without_all(&[36, 45, 81]);
-/// 2.31: 2.22 minus PUTNPC (21) and the process-list reply (44), plus
-/// ENTERLEVEL (46). The TOML's `pli_changes` note lists only 21 and 46, but
-/// its `pli_sent` list (which this follows) has no 44 either.
-const PLI_231: IdSet = PLI_222.without_all(&[21, 44]).with(46);
+/// 2.31: 2.22 minus PUTNPC (21), plus ENTERLEVEL (46). A real 2.31 client
+/// answered the server's process-list request with PLI 44 (lab capture), so
+/// 44 stays, as in the TOML's `pli_sent` list.
+const PLI_231: IdSet = PLI_222.without(21).with(46);
 
 // Own-player prop sets (`PLO_PLAYERPROPS`).
 const OWN_133: IdSet = IdSet::range(0, 33);
@@ -432,6 +437,23 @@ const fn other_upto(max: u8) -> IdSet {
     OTHER_205.and(IdSet::range(0, max).with_all(&[50, 51]))
 }
 
+// Tamper-check constants (CRC words A and B), from the 2026-10-24 decompile
+// reading; the encoded bytes match the lab captures of the real clients.
+const TAMPER_217: TamperInfo = TamperInfo {
+    words: Some(TamperWords { a: 0xab63_7cbe, b: 0x3e48_dc0c }),
+    resend: TamperResend::Never,
+};
+const TAMPER_222: TamperInfo = TamperInfo {
+    words: Some(TamperWords { a: 0x5dcb_77f6, b: 0xbc73_6311 }),
+    resend: TamperResend::OnLevelChange,
+};
+const TAMPER_231: TamperInfo = TamperInfo {
+    words: Some(TamperWords { a: 0x9ecd_4bc0, b: 0xecea_65e2 }),
+    resend: TamperResend::Timer,
+};
+/// 2.3: no binary, so no constant; it is taken to re-send like 2.31.
+const TAMPER_230: TamperInfo = TamperInfo { words: None, resend: TamperResend::Timer };
+
 /// The base every row starts from: a 2.05 rev 2 client.
 const BASE: VersionProfile = VersionProfile {
     version: ClientVersion::V205,
@@ -447,6 +469,7 @@ const BASE: VersionProfile = VersionProfile {
         pli: PLI_205,
         sends_language: true,
         tampercheck: false,
+        tamper: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -561,6 +584,7 @@ const GEN5: VersionProfile = VersionProfile {
         plo: PLO_222,
         pli: PLI_222,
         tampercheck: true,
+        tamper: Some(TAMPER_222),
         udp_off_by_default: true,
         ..NEW_2_1.protocol
     },
@@ -960,6 +984,7 @@ pub static PROFILES: &[VersionProfile] = &[
             plo: PLO_217,
             pli: PLI_217,
             tampercheck: true,
+            tamper: Some(TAMPER_217),
             ..NEW_2_1.protocol
         },
         props: Props {
@@ -985,7 +1010,7 @@ pub static PROFILES: &[VersionProfile] = &[
         label: "2.3",
         token: "GNW14015",
         basis: Basis::Inferred,
-        protocol: Protocol { plo: PLO_231, pli: PLI_231, ..GEN5.protocol },
+        protocol: Protocol { plo: PLO_231, pli: PLI_231, tamper: Some(TAMPER_230), ..GEN5.protocol },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -1001,7 +1026,7 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V231,
         label: "2.31",
         token: "GNW28015",
-        protocol: Protocol { plo: PLO_231, pli: PLI_231, ..GEN5.protocol },
+        protocol: Protocol { plo: PLO_231, pli: PLI_231, tamper: Some(TAMPER_231), ..GEN5.protocol },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -1125,6 +1150,12 @@ mod tests {
             if p.protocol.tampercheck {
                 assert!(p.protocol.pli.contains(39), "{}", p.label);
             }
+            // The tamper-check record exists exactly where the build sends it,
+            // and every build that was read from a binary carries its words.
+            assert_eq!(p.protocol.tamper.is_some(), p.protocol.tampercheck, "{}", p.label);
+            if p.protocol.tampercheck && p.basis == Basis::Binary {
+                assert!(p.protocol.tamper.unwrap().words.is_some(), "{}", p.label);
+            }
         }
     }
 
@@ -1240,7 +1271,8 @@ mod tests {
         assert!(pli(ClientVersion::V222).contains(21));
         assert!(!pli(ClientVersion::V231).contains(21));
         assert!(pli(ClientVersion::V231).contains(46));
-        assert!(!pli(ClientVersion::V231).contains(44));
+        // A real 2.31 client answers the process-list request with 44.
+        assert!(pli(ClientVersion::V231).contains(44));
         assert_eq!(pli(ClientVersion::V230), pli(ClientVersion::V231));
         // 2.17's listserver default is 14922.
         assert_eq!(ClientVersion::V217.listserver_port(), 14922);

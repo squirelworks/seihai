@@ -13,7 +13,7 @@ pub use udp::{
 
 use crate::protocol::{
     bz2_compress, choose_comp, encode_pos_classic, read_zlib_frame, write_frame, write_gstring,
-    write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5,
+    write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5, TamperSender,
     Gen5Comp, IdSet, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
 };
 use crate::protocol::parse_list_reply;
@@ -248,16 +248,46 @@ impl Connection {
     }
 
     /// Send what `version` sends straight after its login line:
-    /// `PLI_LANGUAGE` (37) for 2.05 and later. 2.17+ would follow it with
-    /// `PLI_TAMPERCHECK` (39), which Seihai cannot fill yet.
+    /// `PLI_LANGUAGE` (37) for 2.05 and later. The tamper check (39) that
+    /// 2.17+ follow it with is not sent; see [`Self::send_post_login_with`].
     pub fn send_post_login(&mut self, version: ClientVersion, language: &str) -> io::Result<()> {
-        if !version.profile().protocol.sends_language {
+        self.send_post_login_with(version, language, None)
+    }
+
+    /// As [`Self::send_post_login`], and with `tamper` the build's
+    /// `PLI_TAMPERCHECK` (39) goes out as the second message of the same
+    /// frame, as the real 2.17/2.22/2.31 clients send it. Opt-in: pass
+    /// `None` to send the language only.
+    pub fn send_post_login_with(
+        &mut self,
+        version: ClientVersion,
+        language: &str,
+        tamper: Option<&TamperSender>,
+    ) -> io::Result<()> {
+        let mut msgs = Vec::new();
+        if version.profile().protocol.sends_language {
+            let mut msg = vec![37 + 0x20];
+            msg.extend_from_slice(&to_latin1(language));
+            msg.push(b'\n');
+            msgs.push(msg);
+        }
+        if let Some(m) = tamper.and_then(|t| t.message()) {
+            msgs.push(m);
+        }
+        if msgs.is_empty() {
             return Ok(());
         }
-        let mut msg = vec![37 + 0x20];
-        msg.extend_from_slice(&to_latin1(language));
-        msg.push(b'\n');
-        self.send_messages(&[msg])
+        self.send_messages(&msgs)
+    }
+
+    /// Send `PLI_TAMPERCHECK` (39) again (a re-send the build makes: see
+    /// [`TamperSender::advance`] and [`TamperSender::level_changed`]).
+    /// Refused like any id outside the logged-in version's send set.
+    pub fn send_tampercheck(&mut self, tamper: &TamperSender) -> io::Result<()> {
+        match tamper.message() {
+            Some(m) => self.send_messages(&[m]),
+            None => Ok(()),
+        }
     }
 
     /// Send `PLI_PLAYERPROPS` (2) with X (15), Y (16) and SPRITE (17).
@@ -683,6 +713,118 @@ mod tests {
         conn.send_post_login(ClientVersion::V205, "English").unwrap();
         let body = read_frame(&mut server);
         assert_eq!(body[0], 37 + 0x20);
+    }
+
+    /// Split a gen-3 frame body into messages and undo the insertion, as
+    /// GServer does.
+    fn gen3_messages(key: u8, body: &[u8]) -> Vec<Vec<u8>> {
+        let mut g = Gen3::new(key);
+        body.split_inclusive(|&b| b == b'\n').map(|m| g.decode(m).unwrap()).collect()
+    }
+
+    fn lang_msg() -> Vec<u8> {
+        let mut m = vec![37 + 0x20];
+        m.extend_from_slice(b"English\n");
+        m
+    }
+
+    /// Tamper check off (the default): the first frame is the language only.
+    /// On: PLI 39 follows it in the same frame, with the build's 10 bytes.
+    #[test]
+    fn tampercheck_is_opt_in_and_second_in_the_frame() {
+        // 2.17, gen 3.
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V217, 0x31, "ab", "cd").unwrap();
+        conn.send_post_login(ClientVersion::V217, "English").unwrap();
+        let _ = read_frame(&mut srv);
+        assert_eq!(gen3_messages(0x31, &read_frame(&mut srv)), vec![lang_msg()]);
+
+        let (mut conn, mut srv) = pair();
+        let t = TamperSender::for_version(ClientVersion::V217).unwrap();
+        conn.login_versioned(ClientVersion::V217, 0x31, "ab", "cd").unwrap();
+        conn.send_post_login_with(ClientVersion::V217, "English", Some(&t)).unwrap();
+        let _ = read_frame(&mut srv);
+        let msgs = gen3_messages(0x31, &read_frame(&mut srv));
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0], lang_msg());
+        assert_eq!(msgs[1][0], 39 + 0x20);
+        assert_eq!(&msgs[1][1..11], &[0x2a, 0x7b, 0xad, 0x19, 0x5e, 0x23, 0x12, 0x43, 0xd8, 0x2c]);
+        assert_eq!(msgs[1][11], b'\n');
+
+        // 2.22, gen 5: language then the 10 raw bytes.
+        let (mut conn, mut srv) = pair();
+        let t = TamperSender::for_version(ClientVersion::V222).unwrap();
+        conn.login_versioned(ClientVersion::V222, 0x2B, "ab", "cd").unwrap();
+        conn.send_post_login_with(ClientVersion::V222, "English", Some(&t)).unwrap();
+        let _ = read_frame(&mut srv);
+        let raw = read_raw(&mut srv);
+        let mut g = Gen5::new(0x2B);
+        let body = crate::protocol::read_frame(
+            &mut [&(raw.len() as u16).to_be_bytes()[..], &raw].concat().as_slice(),
+            &mut g,
+        )
+        .unwrap();
+        let mut want = lang_msg();
+        want.extend_from_slice(&[b'G', 0x25, 0x0e, 0x4d, 0x0f, 0x96, 0x2b, 0x03, 0xed, 0xe6, 0x31, b'\n']);
+        assert_eq!(body, want);
+    }
+
+    /// A re-send goes out as one message of its own, and only for a version
+    /// whose send set has id 39.
+    #[test]
+    fn tampercheck_resend_and_gate() {
+        let (mut conn, mut srv) = pair();
+        let t = TamperSender::for_version(ClientVersion::V231).unwrap();
+        conn.login_versioned(ClientVersion::V231, 0x10, "ab", "cd").unwrap();
+        conn.send_tampercheck(&t).unwrap();
+        let _ = read_frame(&mut srv);
+        let raw = read_raw(&mut srv);
+        let mut g = Gen5::new(0x10);
+        let body = crate::protocol::read_frame(
+            &mut [&(raw.len() as u16).to_be_bytes()[..], &raw].concat().as_slice(),
+            &mut g,
+        )
+        .unwrap();
+        assert_eq!(&body[..1], b"G");
+        assert_eq!(body.len(), 12);
+
+        // 2.05 has no id 39: refused, nothing on the wire.
+        let (mut conn, _srv) = pair();
+        conn.login_versioned(ClientVersion::V205, 0x10, "ab", "cd").unwrap();
+        let t = TamperSender::for_version(ClientVersion::V222).unwrap();
+        assert!(conn.send_tampercheck(&t).is_err());
+        // A version that cannot send 39 gets language only from post-login.
+        assert!(conn.send_post_login_with(ClientVersion::V205, "English", Some(&t)).is_err());
+    }
+
+    /// 2.00: type 0, the key byte, `GNW24011`, then plain account and
+    /// password (length-biased). Gen 3 after that, and no PLI 37/39.
+    #[test]
+    fn v200_login_line() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V200, 0x55, "acct", "pw").unwrap();
+        let login = read_frame(&mut srv);
+        let mut want = vec![0x20, 0x55 + 0x20];
+        want.extend_from_slice(b"GNW24011");
+        want.extend_from_slice(&[4 + 0x20]);
+        want.extend_from_slice(b"acct");
+        want.extend_from_slice(&[2 + 0x20]);
+        want.extend_from_slice(b"pw\n");
+        assert_eq!(login, want);
+        // The key byte is `key & 0x7F` as a GCHAR.
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V200, 0xD5, "a", "b").unwrap();
+        assert_eq!(read_frame(&mut srv)[1], 0x55 + 0x20);
+        // 2.00 sends no language, so post-login sends nothing; 37 and 39 are refused.
+        conn.send_post_login(ClientVersion::V200, "English").unwrap();
+        assert!(conn.send_messages(&[lang_msg()]).is_err());
+        let mut t39 = vec![39 + 0x20];
+        t39.extend_from_slice(&[0x20; 10]);
+        t39.push(b'\n');
+        assert!(conn.send_messages(&[t39]).is_err());
+        // Ids it can send go through (UPDATEFILE 34 is the newest).
+        assert!(conn.send_messages(&[vec![34 + 0x20, b'\n']]).is_ok());
+        assert!(conn.send_messages(&[vec![35 + 0x20, b'\n']]).is_err());
     }
 
     // ---- listserver reply and address fallback ----
