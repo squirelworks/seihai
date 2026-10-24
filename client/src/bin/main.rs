@@ -10,7 +10,8 @@
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
 
-use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot, Level};
+use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot, Gani, GaniPlayer, Level};
+use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
 use seihai::offline::OfflineSession;
@@ -109,6 +110,8 @@ fn main() {
     let mut no_scripts = false;
     // None: not given on the command line, so the settings file decides.
     let mut cli_serverwarp: Option<bool> = None;
+    // None: not given on the command line, so the settings file decides.
+    let mut cli_sound: Option<bool> = None;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -143,6 +146,8 @@ fn main() {
             "--no-serverwarp" => cli_serverwarp = Some(false),
             "--serverwarp" => cli_serverwarp = Some(true),
             "--no-scripts" => no_scripts = true,
+            "--no-sound" => cli_sound = Some(false),
+            "--sound" => cli_sound = Some(true),
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -188,6 +193,11 @@ fn main() {
                 println!("                   version has it)");
                 println!("         --no-scripts        do not run the client-side GS1 scripts of level NPCs");
                 println!("                             and weapons (default: they run)");
+                println!("         --no-sound          do not play sound effects (GANI PLAYSOUND cues);");
+                println!("                             by default they play from <assets>/sounds when");
+                println!("                             the build has an audio device backend");
+                println!("                             (settings file: sound=0)");
+                println!("         --sound             play them even if the settings file says off");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -200,6 +210,8 @@ fn main() {
     let mut settings = Settings::load();
     // Command line, then settings file, then the default (follow).
     let follow_serverwarp = settings.follow_serverwarp_with(cli_serverwarp);
+    // Command line, then settings file, then the default (on).
+    let sound_on = settings.sound_with(cli_sound);
     if assets.is_none() {
         assets = settings.assets.clone();
     }
@@ -416,6 +428,35 @@ fn main() {
         eprintln!("no pics1.png in {}", root.pics1().display());
         return;
     }
+
+    // Sound effects: optional. With no sounds folder, no audio device, or
+    // `--no-sound`, the client runs the same and plays nothing.
+    let sound_clock = Instant::now();
+    let mut sound = if sound_on {
+        let (out, why) = seihai::sound::default_backend();
+        let dir = root.sounds_dir();
+        match &dir {
+            Some(d) => eprintln!("sound: {why}; sounds from {}", d.display()),
+            None => eprintln!("sound: no sounds folder in {}; sound is silent", root.root.display()),
+        }
+        SoundEngine::new(out, dir, true)
+    } else {
+        SoundEngine::off()
+    };
+    if sound.is_enabled() {
+        // The animations whose PLAYSOUND cues are played: footsteps and
+        // water, one frame per step taken.
+        for (name, swim) in [("walk.gani", false), ("swim.gani", true)] {
+            if let Some(path) = root.find_gani(name) {
+                match Gani::load(&path) {
+                    Ok(g) if swim => session.set_swim_gani(GaniPlayer::new(g)),
+                    Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
+                    Err(e) => eprintln!("sound: cannot read {name}: {e}"),
+                }
+            }
+        }
+    }
+    let mut sound_serial = session.level_serial;
 
     let sheet_data = match std::fs::read(root.pics1()) {
         Ok(d) => d,
@@ -1050,6 +1091,24 @@ fn main() {
                 moved = true;
                 last_step = Instant::now();
             }
+        }
+        // Sound: GANI cues from the steps just taken. Leaving a level stops
+        // looped effects.
+        if sound.is_enabled() {
+            if session.level_serial != sound_serial {
+                sound_serial = session.level_serial;
+                sound.stop_all_loops();
+            }
+            let now = sound_clock.elapsed().as_millis() as u64;
+            let listener = (
+                session.player_x + seihai::assets::LISTENER_DX,
+                session.player_y + seihai::assets::LISTENER_DY,
+            );
+            for ev in session.take_sound_events() {
+                sound.play(&ev, listener, now);
+            }
+        } else {
+            session.sound_events.clear();
         }
         // Client-side scripts: load the level's NPCs when a level arrives,
         // touch events after a step, timeouts on the clock.

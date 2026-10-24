@@ -28,6 +28,7 @@ Single code path. Versions are profile rows, not branches.
 ## 4. Content and scripting
 
 - [x] Script engine. A first working GS1 interpreter in `client/src/scripting/engine/`: lexer, parser, flat-node runtime, deterministic 50 ms tick/timeout scheduler, the command surface with per-version vocabulary gating, level NPCs and weapons hooked into the offline session, unknown commands logged and ignored. Still open: `board[]`/`tiles[]` reads, string lists, `with`/`join`, online NPC script props, weapon-key input and timed `move`. See `documentation/seihaiscript.md`, "Implemented GS1 engine".
+- [x] Audio playback. A sound engine (`client/src/sound/`) behind a `SoundOut` trait: WAV decoder (PCM and IMA ADPCM), 8-voice cap, `+` loop prefix, pan, once-per-frame-entry GANI `PLAYSOUND` cues from `walk.gani`/`swim.gani`, missing files logged once. Null backend by default; the device backend is the `audio-rodio` feature, not built or run yet. `--no-sound` and `sound=0`. Still open: GS1 `play`, built-in effects, volume falloff, music, fetching missing sounds. See `documentation/audio.md`.
 - [ ] Assets. Loaders for levels, tiles, gani animations, images and sounds, from the 2.22 data folder that works for every client.
 - [ ] File transfer and caching. The downloaded-file rules the real clients follow.
 

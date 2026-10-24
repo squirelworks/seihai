@@ -19,6 +19,10 @@ pub struct Settings {
     /// the key is absent, which is the default: follow, as the real client
     /// does. `follow_serverwarp=0` turns it off.
     pub follow_serverwarp: Option<bool>,
+    /// Play sound effects. `None` means the key is absent, which is the
+    /// default: on, when the asset folder has sounds. `sound=0` turns it
+    /// off.
+    pub sound: Option<bool>,
     /// Name of the server in `last_server`, for the window title.
     pub last_server_name: Option<String>,
     /// Game server for versions with no listserver (1.33–1.39).
@@ -55,6 +59,7 @@ impl Settings {
                     "offline" => s.offline = Some(v == "1"),
                     // An unreadable value leaves the default (follow).
                     "follow_serverwarp" => s.follow_serverwarp = parse_bool(&v),
+                    "sound" => s.sound = parse_bool(&v),
                     "last_server_name" => s.last_server_name = Some(v),
                     "direct_server" => s.direct_server = Some(v),
                     k => {
@@ -103,6 +108,9 @@ impl Settings {
         if let Some(f) = self.follow_serverwarp {
             out.push_str(&format!("follow_serverwarp={}\n", u8::from(f)));
         }
+        if let Some(f) = self.sound {
+            out.push_str(&format!("sound={}\n", u8::from(f)));
+        }
         if let Some(n) = &self.last_server_name {
             out.push_str(&format!("last_server_name={n}\n"));
         }
@@ -121,6 +129,15 @@ impl Settings {
     /// `--serverwarp`.
     pub fn follow_serverwarp_with(&self, cli: Option<bool>) -> bool {
         cli.or(self.follow_serverwarp).unwrap_or(true)
+    }
+}
+
+impl Settings {
+    /// Whether sound effects are on. The command line wins over the
+    /// settings file, and the file wins over the default (on). `cli` is
+    /// `Some(false)` for `--no-sound` and `Some(true)` for `--sound`.
+    pub fn sound_with(&self, cli: Option<bool>) -> bool {
+        cli.or(self.sound).unwrap_or(true)
     }
 }
 
@@ -240,5 +257,48 @@ mod tests {
         assert_eq!(back.account.as_deref(), Some("a"));
         // An unset option stays unset, so the file stays as it was.
         assert!(!Settings::parse("account=a\n").to_text().contains("follow_serverwarp"));
+    }
+
+    #[test]
+    fn sound_is_on_by_default() {
+        let s = Settings::parse("account=a\n");
+        assert_eq!(s.sound, None);
+        assert!(s.sound_with(None));
+    }
+
+    #[test]
+    fn sound_off_values_turn_it_off() {
+        for v in ["0", "false", "no", "off", "OFF"] {
+            let s = Settings::parse(&format!("sound={v}\n"));
+            assert_eq!(s.sound, Some(false), "{v}");
+            assert!(!s.sound_with(None), "{v}");
+        }
+        for v in ["1", "true", "yes", "on"] {
+            assert!(Settings::parse(&format!("sound = {v}\n")).sound_with(None), "{v}");
+        }
+        // An unreadable value leaves the default.
+        let s = Settings::parse("sound=loud\n");
+        assert_eq!(s.sound, None);
+        assert!(s.sound_with(None));
+    }
+
+    #[test]
+    fn sound_precedence_is_cli_then_file_then_default() {
+        let off = Settings::parse("sound=0\n");
+        let on = Settings::parse("sound=1\n");
+        let none = Settings::parse("");
+        assert!(!off.sound_with(Some(false)) && !on.sound_with(Some(false)) && !none.sound_with(Some(false)));
+        assert!(off.sound_with(Some(true)) && on.sound_with(Some(true)) && none.sound_with(Some(true)));
+        assert!(!off.sound_with(None));
+        assert!(on.sound_with(None) && none.sound_with(None));
+    }
+
+    #[test]
+    fn sound_round_trips_through_the_file_text() {
+        let s = Settings::parse("account=a\nsound=0\n");
+        let text = s.to_text();
+        assert!(text.contains("sound=0\n"), "{text}");
+        assert_eq!(Settings::parse(&text).sound, Some(false));
+        assert!(!Settings::parse("account=a\n").to_text().contains("sound"));
     }
 }
