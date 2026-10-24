@@ -52,13 +52,19 @@ without a recorded frame send nothing.
 | `UDPPORT` (31) in the props | The real clients bind a UDP socket and name its port. Seihai binds none (the UDP channel is not wired into the game loop), and a port nobody listens on would be a false claim. |
 | `OSTYPE` value | The real clients said `wind`. Seihai says `wind` as well: it is the one value seen, and servers know it. A Linux or macOS value was never observed. |
 | the real process list | See above. |
-| `WANTFILE -.gif` | The 2.22 and 2.31 clients also asked for a file named `-.gif` in this frame (non-gmap logins) or the next (2.22 gmap login). What triggers it is not known; the captures never vary it. It stays a known difference. |
 | the order of the gmap file and `ADJACENTLEVEL` messages inside the frame | Seihai sends those in their own frames; bundling is the next change (frame bundling, divergence 10). |
 | `PLI_ENTERLEVEL` (46) and the `gr.x`/`gr.y` flags inside the frame | Separate items (15 c and d). |
+
+The `-.gif` request seen in these frames is a weapon image: the lab server gave a
+weapon the image `-`, and the clients add `.gif` to an image name with no extension.
+Seihai does the same for weapon images (it first asked for `-`). What is still
+different: the real clients also ask for `wbowi1.png`, which no weapon of the lab
+server names (the server sends the default-weapon ids 7 and 8 as well); which
+default weapon gives which image is not known, so Seihai does not ask for it.
 
 ## Tests
 
 `protocol::login::tests` pin the image order, the icon names, the process list text,
 the byte layout of the 2.22 props (including the `TEXTCODEPAGE` 1252 bytes seen in the
 capture), the 2.17 cut-off at `PLANGUAGE`, that the frame goes out once and only after 182,
-and which builds send it.
+and which builds send it. A weapon image without an extension gets `.gif`.

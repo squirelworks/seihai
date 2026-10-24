@@ -102,8 +102,16 @@ pub fn wear_images(own_props: &[u8], accepted: Option<&IdSet>) -> Vec<String> {
 }
 
 /// The image of each weapon, in the order the server added them.
+///
+/// A name with no extension gets `.gif`: the lab's server gave a weapon the
+/// image `-`, and the real 2.22 and 2.31 clients asked for `-.gif`.
 pub fn weapon_images(weapons: &[Weapon]) -> Vec<String> {
-    weapons.iter().filter_map(|w| w.image.clone()).filter(|s| !s.is_empty()).collect()
+    weapons
+        .iter()
+        .filter_map(|w| w.image.clone())
+        .filter(|s| !s.is_empty())
+        .map(|s| if s.contains('.') { s } else { format!("{s}.gif") })
+        .collect()
 }
 
 /// The icon file for a status name: `plisticon` and the lower-case name
@@ -333,6 +341,13 @@ mod tests {
         assert_eq!(out[asked.len() + 1][0], PLI_PLAYERPROPS + 0x20);
         assert!(!b.due(&st), "once");
         assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()]).is_empty());
+    }
+
+    #[test]
+    fn a_weapon_image_without_an_extension_gets_gif() {
+        let w = |n: &str, i: &str| Weapon { name: n.into(), image: Some(i.into()), script: None };
+        let list = [w("a", "wbomb1.png"), w("b", "-"), w("c", "")];
+        assert_eq!(weapon_images(&list), ["wbomb1.png", "-.gif"]);
     }
 
     #[test]
