@@ -69,9 +69,9 @@ A small tool that reads the .tsv tables and a capture file and shows the decoded
 
 ### 12. Remaining fields
 
-- Id 24 meaning (still unknown).
-- Id 46 meaning beyond the observed GCHAR 1.
-- Id 178 field order when a real service sends it (lab text was synthetic).
+- Id 24 meaning: settled for 2.17.1 and later (`remaining-fields.md`).
+- Id 46 meaning beyond the observed GCHAR 1: settled as far as a client can settle it.
+- Id 178 field order when a real service sends it: the reading side is settled; the real service's text is still unobserved.
 
 If a lab capture or decompile note settles one of these, wire it. If not, leave a note and move on.
 
