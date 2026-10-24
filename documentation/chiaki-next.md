@@ -4,7 +4,7 @@ This is for after the current differential testing PR is open and merged. Do not
 
 ## Order
 
-Do these in order. Finish one PR and wait for merge before starting the next.
+Do these in order. Open the PR for one item, then start the next. Do not wait for merge. The reviewer will catch up.
 
 ### 1. Cached level links
 
@@ -90,4 +90,4 @@ Read-only first. Only with explicit approval each time. Do not connect to a publ
 - Release build must work.
 - Update `documentation/plannedmilestones.md` when an item is done.
 - If something is blocked on a missing capture or an unresolved rule, write a short note and skip it. Do not invent the missing data.
-- Do not start the next item until the current PR is merged.
+- Do not wait for merge. Open the PR and continue to the next item.
