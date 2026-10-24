@@ -952,6 +952,113 @@ mod tests {
         server.join().unwrap();
     }
 
+    /// Plain zlib frame to the client, as the 2.05 to 2.17 listservers send.
+    fn send_plain(srv: &mut TcpStream, body: &[u8]) {
+        srv.write_all(&write_zlib_frame(body).unwrap()).unwrap();
+    }
+
+    /// Accept a pre-2.22 listserver login: ONE plain zlib frame holding id 0
+    /// `newmain` and id 1 account and password. Returns the frame body.
+    fn accept_plain_listserver(listener: &TcpListener) -> (TcpStream, Vec<u8>) {
+        let (mut srv, _) = listener.accept().unwrap();
+        let login = read_frame(&mut srv);
+        (srv, login)
+    }
+
+    /// 2.17 lab flow: the login is one plain frame with id 0 and id 1, the
+    /// reply is two plain frames (list, then ids 2, 3 and 5), and the
+    /// connection stays open afterwards.
+    #[test]
+    fn fetch_server_list_217_two_plain_frames() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, login) = accept_plain_listserver(&listener);
+            // Id 0 `newmain`, then id 1 with the account and password,
+            // both gstrings, in the same frame. No id 7, no key.
+            assert_eq!(login, b" newmain\n!\"ab\"cd\n");
+            send_plain(&mut srv, &svrlist_body());
+            std::thread::sleep(Duration::from_millis(100));
+            send_plain(&mut srv, &tail_body());
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V217, "ab", "cd").unwrap();
+        assert!(t.elapsed() < Duration::from_secs(3));
+        assert_eq!(reply.servers.len(), 1);
+        assert_eq!(reply.servers[0].name, "Mock");
+        assert_eq!(reply.status.as_deref(), Some("Welcome, ab.\n2 online"));
+        assert_eq!(reply.site_url.as_deref(), Some("https://site.example"));
+        assert_eq!(reply.upgrade_url.as_deref(), Some("https://upgrade.example"));
+        assert!(reply.error.is_none());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// The same plain flow when only the list frame arrives: the 500 ms
+    /// bound applies to plain frames too.
+    #[test]
+    fn fetch_server_list_217_without_second_frame_is_bounded() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, _) = accept_plain_listserver(&listener);
+            send_plain(&mut srv, &svrlist_body());
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V217, "ab", "cd").unwrap();
+        let took = t.elapsed();
+        assert!(took >= Duration::from_millis(400), "returned too early: {took:?}");
+        assert!(took < Duration::from_secs(3), "waited too long: {took:?}");
+        assert_eq!(reply.servers.len(), 1);
+        assert!(reply.status.is_none());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// 2.05 uses the same plain flow, and a listserver error text ends the
+    /// reply without waiting for a second frame.
+    #[test]
+    fn fetch_server_list_205_error_ends_reply() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, login) = accept_plain_listserver(&listener);
+            assert_eq!(login, b" newmain\n!\"ab\"cd\n");
+            send_plain(&mut srv, b"$Bad account or password.\n");
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V205, "ab", "cd").unwrap();
+        assert!(t.elapsed() < Duration::from_millis(400));
+        assert!(reply.servers.is_empty());
+        assert_eq!(reply.error.as_deref(), Some("Bad account or password."));
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// The list is fetched on the port the profile names: 14921 for 2.05,
+    /// 14922 for 2.17 and 2.22, 14923 for 1.41. Versions with no listserver
+    /// (1.33 to 1.39) borrow 2.05's.
+    #[test]
+    fn listserver_port_follows_the_profile() {
+        assert_eq!(ClientVersion::V205.listserver_port(), 14921);
+        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V222.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V141.listserver_port(), 14923);
+        assert_eq!(ClientVersion::V139.listserver_port(), 14921);
+    }
+
     /// A dead first address must not stop a working second one.
     #[test]
     fn connect_any_falls_back_to_next_address() {
