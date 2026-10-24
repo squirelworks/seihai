@@ -43,6 +43,14 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Public-server checks. Approved for read-only checks, then chat, warps and file transfer, with a few normal lines and no uploads. Attempted 2026-10-25: the build box's network gave no answer on listserver ports 14921, 14922 and 14923, so nothing was observed and no code changed. What was tried, the port facts and the checklist are in `documentation/public-checks.md`.
 - [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
+## Remaining
+
+- Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
+- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist). No implementation started.
+- Public-server checks: blocked from the build box. Checklist in `documentation/public-checks.md`.
+- Early builds: real 2.00-era listserver reply still unobserved.
+
+
 ## Completed (prior phases)
 
 ### Phase 1 — Protocol & Minimal Client

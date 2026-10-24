@@ -10,13 +10,13 @@ What remains after the current gmaps / script engine / differential testing work
 
 ## Next
 
+- Remaining fields (item 12): ids 24, 46 and 178 implementation is in Seihai #39 (rebased). Once rebased and mergeable, land it. Notes are in Graal_analysis batch g.
+- Differential-testing divergences (item 15): rectangle level links, login player props, 2.22 position flags, early id 46, asset requests, walk speed. Running in the private lab; one PR per divergence.
 - Damage and respawn leftovers: knockback, the per-player field in the packet path, bombs/arrows/baddies powers, the end-of-respawn save (`documentation/damage-respawn.md`).
-- Audio playback. GANI frames carry a sound field; nothing consumes it.
-- Chat popups, buddy/ignore/mute files.
-- Damage formula and the respawn "same name group" rule.
 - File transfer leftovers: the `GWEBL001` level cache, the login set of `UPDATEFILE`s and the file-index scan order (`documentation/file-cache.md`).
 - Early builds. A real 2.00-era listserver reply, which is still unobserved. Skipped (item 13): nothing new observed.
 - Public-server checks. Approved (read-only, then chat, warps and file transfer), but the build box could not reach any listserver port on 2026-10-25, so nothing was observed. Checklist and port facts in `documentation/public-checks.md`; run it from a network that reaches ports 14921 to 14923.
+- Level editor: notes are in Graal_analysis `tools/level-editor/` (item 16). Seihai tracking checklist is ready; no implementation started.
 
 ## Done
 
