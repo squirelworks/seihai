@@ -78,6 +78,7 @@ fn main() {
                 session.player_dir,
                 dx,
                 dy,
+                session.in_water,
             ),
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
