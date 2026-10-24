@@ -130,6 +130,14 @@ impl SessionScripts {
         self.apply(session);
     }
 
+    /// The player's death started: `playerdies` on every object (the event
+    /// exists from 2.01 on; the world drops it for older scripts).
+    pub fn player_dies(&mut self, session: &mut OfflineSession) {
+        self.sync_player(session);
+        self.world.broadcast("playerdies");
+        self.apply(session);
+    }
+
     /// The player typed a chat line.
     pub fn chat(&mut self, session: &mut OfflineSession, text: &str) {
         self.sync_player(session);
@@ -183,6 +191,10 @@ impl SessionScripts {
                     s.pending_link = Some((level, px, py));
                 }
                 Effect::Hurt { half_hearts } => {
+                    // A dead player cannot be hurt.
+                    if s.life.is_dead() {
+                        continue;
+                    }
                     let per_half = 100.0 / s.max_hearts.max(1) as f64;
                     s.player_health = (s.player_health as f64 - half_hearts * per_half).round().clamp(0.0, 100.0) as i32;
                 }
@@ -250,6 +262,34 @@ mod tests {
         SIGN 5 5\n\
         Read me\n\
         SIGNEND\n";
+
+    #[test]
+    fn a_dead_player_cannot_be_hurt() {
+        let mut s = session(DOOR);
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "town.nw");
+        s.set_hearts_half(0);
+        s.tick_life(0);
+        assert!(s.life.is_dead());
+        let before = s.player_health;
+        s.player_x = 30.0 - FOOT_DX + 0.5;
+        s.player_y = 30.0 - FOOT_DY + 0.5;
+        sc.touch(&mut s);
+        assert_eq!(s.player_health, before, "the touch script's hurt 2 did nothing");
+    }
+
+    #[test]
+    fn playerdies_reaches_the_scripts() {
+        let mut s = OfflineSession::new();
+        s.current_level =
+            Some(Level::parse("GLEVNW01\nNPC - 1 1\nif (playerdies) { message gone; }\nNPCEND\n").unwrap());
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "x.nw");
+        assert!(s.last_message.is_none());
+        sc.player_dies(&mut s);
+        assert_eq!(s.last_message.as_deref(), Some("gone"));
+    }
 
     #[test]
     fn level_load_runs_created_and_playerenters() {

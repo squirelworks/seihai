@@ -20,7 +20,7 @@ Single code path. Versions are profile rows, not branches.
 
 ## 3. Gameplay the client decides on its own
 
-- [ ] Health and death. The 1.5 s timer, input lock, dead status bit, respawn hearts by AP, and the victim-sent claim packet.
+- [x] Health and death. The 2.05 death sequence from the profile (`life.death`): 1.5 s timer, input lock to tick 27, dead bit in STATUS from tick 28, respawn hearts by AP, respawn at the saved level entry point, and the victim-sent `PLI_CLAIMPKER` (14). Still open: the damage formula and the same-name-group rule (item 7), the dead gani, whether the real client sends CURPOWER on damage, the order of the respawn frame, and a lab run. See `documentation/health-death.md`.
 - [ ] Combat. Sword hits are judged by the victim's client, with a reach of 0–4 tiles, a lateral limit under 2, and AP 100 immune.
 - [ ] Swimming, emotes and chat. Head-only swim blit is done; emotes are local only. Chat popups and the buddy, ignore and mute files remain.
 - [ ] Unresolved rules. The damage formula and the respawn "same name group" rule.

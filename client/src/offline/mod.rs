@@ -7,6 +7,7 @@
 use crate::assets::{GaniPlayer, Level, TileKind, TileTypes};
 use crate::dev::DevMode;
 use crate::gmap::{Crossing, GmapWorld, Resolved};
+use crate::life::{respawn_half_hearts, Life, LifeEvent};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
@@ -86,6 +87,41 @@ pub struct OfflineSession {
     /// Counts levels loaded with [`OfflineSession::load_level`], so a
     /// caller can tell when its per-level state (scripts) is stale.
     pub level_serial: u64,
+    /// The death sequence (timer, input lock, dead bit). It has no rules
+    /// until the game loop gives it its version's (see
+    /// [`Life::set_rules`]), so a bare session never dies.
+    pub life: Life,
+    /// Alignment points (AP, 0–100): decide the hearts after a respawn.
+    /// Starts at 50, the GServer default account; the server's
+    /// `PLPROP_ALIGNMENT` replaces it online.
+    pub alignment: u8,
+    /// The level entry point a respawn returns to; see [`Self::note_entry`].
+    pub entry: Option<EntryPoint>,
+    /// File name of the level loaded last with [`Self::load_level`].
+    loaded_file: Option<String>,
+}
+
+/// Where the player last entered a level: the point a respawn goes back to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntryPoint {
+    pub level: String,
+    pub x: f32,
+    pub y: f32,
+    pub dir: u8,
+}
+
+/// Where a respawn put the player.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RespawnTo {
+    /// The saved level entry point. The caller loads the level when it is
+    /// not the current one and, online, re-sends the level at `(x, y)`.
+    Saved(EntryPoint),
+    /// Nothing saved and online: the profile's default position in the
+    /// current level. Online, the current level is re-sent there.
+    Default { x: f32, y: f32 },
+    /// Nothing saved and offline: the player stays where they are. What the
+    /// real client does here is not documented (see `health-death.md`).
+    InPlace,
 }
 
 /// What an interact press did.
@@ -146,7 +182,135 @@ impl OfflineSession {
             arrival_tile: None,
             swim_sent: false,
             level_serial: 0,
+            life: Life::default(),
+            alignment: 50,
+            entry: None,
+            loaded_file: None,
         }
+    }
+
+    /// Current hearts in half hearts, from the health percentage and
+    /// `max_hearts`. 0 only when the health is 0.
+    pub fn hearts_half(&self) -> i32 {
+        if self.player_health <= 0 {
+            return 0;
+        }
+        ((self.player_health as f64 * self.max_hearts as f64 / 100.0).round() as i32).clamp(1, self.max_hearts.max(1))
+    }
+
+    /// Set the hearts in half hearts (clamped to the maximum). A positive
+    /// value never rounds down to 0 health, so rounding cannot kill.
+    pub fn set_hearts_half(&mut self, half: i32) {
+        let max = self.max_hearts.max(1);
+        let half = half.clamp(0, max);
+        self.player_health = if half == 0 {
+            0
+        } else {
+            ((half as f64 / max as f64 * 100.0).round() as i32).clamp(1, 100)
+        };
+    }
+
+    /// New maximum in half hearts. Current hearts stay as they are, up to
+    /// the new maximum.
+    pub fn set_max_hearts_half(&mut self, max: i32) {
+        let cur = self.hearts_half();
+        self.max_hearts = max.clamp(0, 80);
+        self.set_hearts_half(cur);
+    }
+
+    /// Hearts and AP the server gave: MAXPOWER (heart containers), CURPOWER
+    /// (hearts × 2, so half hearts) and ALIGNMENT. Max first, so a CURPOWER
+    /// in the same message is read against the new maximum.
+    pub fn apply_server_power(&mut self, max_power: Option<u8>, cur_power: Option<u8>, alignment: Option<u8>) {
+        if let Some(m) = max_power {
+            self.set_max_hearts_half(i32::from(m) * 2);
+        }
+        if let Some(c) = cur_power {
+            self.set_hearts_half(i32::from(c));
+        }
+        if let Some(a) = alignment {
+            self.alignment = a.min(100);
+        }
+    }
+
+    /// Take damage in half hearts from `attacker` (a player id) or from
+    /// nothing known. A player who is dead cannot be hurt. Returns false
+    /// when the hit did nothing. The death itself starts at the next
+    /// [`Self::tick_life`].
+    pub fn damage_half(&mut self, half: i32, attacker: Option<u16>) -> bool {
+        if self.life.is_dead() || half <= 0 {
+            return false;
+        }
+        let left = self.hearts_half() - half;
+        self.set_hearts_half(left.max(0));
+        self.life.note_attacker(attacker);
+        true
+    }
+
+    /// Advance the death sequence by `ms` and return what happened. At the
+    /// start of a death the player faces down. Controls stay locked until
+    /// the timer is past the profile's limit (see [`Self::controls_locked`]).
+    pub fn tick_life(&mut self, ms: u64) -> Vec<LifeEvent> {
+        let zero = self.player_health <= 0 || self.hearts_half() <= 0;
+        self.life.tick(ms, zero);
+        let events = self.life.take_events();
+        if events.iter().any(|e| matches!(e, LifeEvent::Died { .. })) {
+            self.player_dir = DIR_SOUTH;
+            self.reading = None;
+        }
+        events
+    }
+
+    /// The player cannot act: dead and the timer not yet past the lock.
+    pub fn controls_locked(&self) -> bool {
+        self.life.input_locked()
+    }
+
+    /// True when the level loaded last is the one named `name` (a file name,
+    /// with or without `.nw`, any case).
+    pub fn is_loaded(&self, name: &str) -> bool {
+        let base = |n: &str| n.strip_suffix(".nw").or_else(|| n.strip_suffix(".NW")).unwrap_or(n).to_ascii_lowercase();
+        self.loaded_file.as_deref().is_some_and(|f| base(f) == base(name))
+    }
+
+    /// Remember where the player stands as a level entry point: called on
+    /// every level entry and at login. A respawn goes back here. The rule
+    /// that skips levels of the same name group is not known, so every
+    /// entry is kept.
+    pub fn note_entry(&mut self, level: &str) {
+        self.entry = Some(EntryPoint { level: level.to_string(), x: self.player_x, y: self.player_y, dir: self.player_dir });
+    }
+
+    /// A movement or action key while dead: respawn if the lock is over.
+    /// Hearts follow the profile's table by AP, the position is the saved
+    /// entry point (or the default), and the death sequence ends. `online`
+    /// picks the default when nothing was saved. `None` when the player
+    /// could not respawn.
+    pub fn respawn(&mut self, online: bool) -> Option<RespawnTo> {
+        let rules = *self.life.rules()?;
+        if !self.life.respawn() {
+            return None;
+        }
+        let hearts = respawn_half_hearts(&rules, self.alignment, self.max_hearts);
+        self.set_hearts_half(hearts.max(1));
+        let to = match self.entry.clone() {
+            Some(e) => {
+                self.player_x = e.x;
+                self.player_y = e.y;
+                self.player_dir = e.dir;
+                RespawnTo::Saved(e)
+            }
+            None if online => {
+                let (x, y) = (f32::from(rules.default_x2) / 2.0, f32::from(rules.default_y2) / 2.0);
+                self.player_x = x;
+                self.player_y = y;
+                self.player_dir = DIR_SOUTH;
+                RespawnTo::Default { x, y }
+            }
+            None => RespawnTo::InPlace,
+        };
+        self.refresh_water();
+        Some(to)
     }
 
     /// The feet, in tiles: the collision point used by [`Self::try_move`].
@@ -168,6 +332,9 @@ impl OfflineSession {
     /// Interact with what the player faces: open a closed chest (2×2
     /// tiles), or read a sign (2×1 tiles). A chest is tried first.
     pub fn interact(&mut self) -> Interaction {
+        if self.life.is_dead() {
+            return Interaction::Nothing;
+        }
         let Some(level) = &self.current_level else {
             return Interaction::Nothing;
         };
@@ -261,6 +428,7 @@ impl OfflineSession {
 
     /// Load a .nw level from disk.
     pub fn load_level<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<(), String> {
+        self.loaded_file = path.as_ref().file_name().map(|n| n.to_string_lossy().into_owned());
         let level = Level::load(path)?;
         self.current_level = Some(level);
         self.opened_chests.clear();
@@ -618,7 +786,7 @@ impl OfflineSession {
     /// warp, say) may walk out. Nothing moves while a warp is pending.
     /// Returns the emitted `PlayerUpdate` if the move succeeded.
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
-        if dx == 0.0 && dy == 0.0 {
+        if dx == 0.0 && dy == 0.0 || self.life.is_dead() {
             return None;
         }
         // Facing from dominant axis.
@@ -1171,6 +1339,182 @@ mod tests {
         assert_eq!(s.level_serial, 2);
         assert!(s.load_level(dir.join("missing.nw")).is_err());
         assert_eq!(s.level_serial, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- health and death --------------------------------------------------
+
+    use crate::life::LifeEvent;
+    use crate::protocol::DEATH_205;
+
+    fn mortal() -> OfflineSession {
+        let mut s = OfflineSession::new();
+        s.life.set_rules(Some(DEATH_205));
+        s.current_level = Some(level(|_, _| OPEN));
+        s.tiletypes = Some(types());
+        s
+    }
+
+    fn die(s: &mut OfflineSession, attacker: Option<u16>) -> Vec<LifeEvent> {
+        assert!(s.damage_half(s.max_hearts, attacker));
+        s.tick_life(0)
+    }
+
+    #[test]
+    fn half_hearts_round_trip_and_never_round_to_zero() {
+        let mut s = OfflineSession::new();
+        assert_eq!((s.max_hearts, s.hearts_half()), (6, 6));
+        for h in 0..=6 {
+            s.set_hearts_half(h);
+            assert_eq!(s.hearts_half(), h);
+        }
+        s.set_max_hearts_half(60);
+        s.set_hearts_half(1);
+        assert!(s.player_health >= 1, "1 of 60 half hearts is still alive");
+        assert_eq!(s.hearts_half(), 1);
+    }
+
+    #[test]
+    fn hearts_zero_starts_the_death_and_faces_down() {
+        let mut s = mortal();
+        s.player_dir = DIR_EAST;
+        assert!(s.damage_half(2, Some(9)));
+        assert!(s.tick_life(50).is_empty(), "4 half hearts left");
+        let ev = die(&mut s, Some(9));
+        assert_eq!(ev, vec![LifeEvent::Died { attacker: Some(9) }]);
+        assert!(s.life.is_dead());
+        assert_eq!(s.player_dir, DIR_SOUTH);
+    }
+
+    #[test]
+    fn no_rules_means_no_death() {
+        let mut s = OfflineSession::new();
+        s.damage_half(100, Some(1));
+        assert!(s.tick_life(5000).is_empty());
+        assert!(!s.life.is_dead() && !s.controls_locked());
+        assert_eq!(s.player_health, 0);
+    }
+
+    #[test]
+    fn nothing_moves_or_interacts_while_dead() {
+        let mut s = mortal();
+        die(&mut s, None);
+        let (x, y) = (s.player_x, s.player_y);
+        assert!(s.try_move(0.5, 0.0).is_none());
+        assert_eq!((s.player_x, s.player_y), (x, y));
+        assert_eq!(s.interact(), Interaction::Nothing);
+        assert!(s.controls_locked());
+        // The lock is over after the timer passes 27 ticks (1.4 s).
+        s.tick_life(27 * 50);
+        assert!(s.controls_locked());
+        s.tick_life(50);
+        assert!(!s.controls_locked());
+        assert!(s.try_move(0.5, 0.0).is_none(), "dead until a respawn, even unlocked");
+    }
+
+    #[test]
+    fn a_dead_player_cannot_be_hurt() {
+        let mut s = mortal();
+        die(&mut s, None);
+        assert!(!s.damage_half(2, Some(3)));
+    }
+
+    #[test]
+    fn respawn_waits_for_the_lock() {
+        let mut s = mortal();
+        die(&mut s, None);
+        s.tick_life(27 * 50);
+        assert!(s.respawn(true).is_none());
+        assert!(s.life.is_dead());
+    }
+
+    #[test]
+    fn respawn_hearts_follow_ap() {
+        // (ap, max half hearts) -> half hearts after the respawn.
+        for (ap, max, want) in [(0, 20, 6), (19, 20, 6), (20, 20, 10), (39, 8, 8), (40, 20, 20), (100, 12, 12)] {
+            let mut s = mortal();
+            s.set_max_hearts_half(max);
+            s.set_hearts_half(max);
+            s.alignment = ap;
+            die(&mut s, None);
+            s.tick_life(28 * 50);
+            let _ = s.life.take_events();
+            assert!(s.respawn(false).is_some(), "ap {ap}");
+            assert_eq!(s.hearts_half(), want, "ap {ap} max {max}");
+            assert!(!s.life.is_dead());
+        }
+    }
+
+    #[test]
+    fn respawn_goes_to_the_saved_entry_point() {
+        let mut s = mortal();
+        s.player_x = 12.5;
+        s.player_y = 20.0;
+        s.player_dir = DIR_WEST;
+        s.note_entry("a.nw");
+        s.player_x = 40.0;
+        s.player_y = 41.0;
+        die(&mut s, None);
+        s.tick_life(28 * 50);
+        let to = s.respawn(true).unwrap();
+        let want = EntryPoint { level: "a.nw".into(), x: 12.5, y: 20.0, dir: DIR_WEST };
+        assert_eq!(to, RespawnTo::Saved(want));
+        assert_eq!((s.player_x, s.player_y, s.player_dir), (12.5, 20.0, DIR_WEST));
+        // A later entry replaces it.
+        s.player_x = 3.0;
+        s.note_entry("b.nw");
+        assert_eq!(s.entry.as_ref().map(|e| (e.level.as_str(), e.x)), Some(("b.nw", 3.0)));
+    }
+
+    #[test]
+    fn respawn_without_an_entry_point() {
+        let mut s = mortal();
+        die(&mut s, None);
+        s.tick_life(28 * 50);
+        s.player_x = 5.0;
+        assert_eq!(s.respawn(true), Some(RespawnTo::Default { x: 30.5, y: 30.0 }));
+        assert_eq!((s.player_x, s.player_y, s.player_dir), (30.5, 30.0, DIR_SOUTH));
+        let mut s = mortal();
+        die(&mut s, None);
+        s.tick_life(28 * 50);
+        s.player_x = 5.0;
+        assert_eq!(s.respawn(false), Some(RespawnTo::InPlace));
+        assert_eq!(s.player_x, 5.0, "offline with nothing saved: not moved");
+    }
+
+    #[test]
+    fn dying_twice_in_a_row() {
+        let mut s = mortal();
+        for _ in 0..2 {
+            let ev = die(&mut s, Some(4));
+            assert_eq!(ev, vec![LifeEvent::Died { attacker: Some(4) }]);
+            s.tick_life(28 * 50);
+            assert!(s.respawn(false).is_some());
+            let _ = s.life.take_events();
+        }
+    }
+
+    #[test]
+    fn server_power_and_ap_apply() {
+        let mut s = OfflineSession::new();
+        // MAXPOWER 5 hearts, CURPOWER 7 half hearts, AP 60.
+        s.apply_server_power(Some(5), Some(7), Some(60));
+        assert_eq!((s.max_hearts, s.hearts_half(), s.alignment), (10, 7, 60));
+        s.apply_server_power(None, Some(0), None);
+        assert_eq!(s.player_health, 0);
+        s.apply_server_power(None, None, Some(250));
+        assert_eq!(s.alignment, 100);
+    }
+
+    #[test]
+    fn is_loaded_ignores_extension_and_case() {
+        let dir = std::env::temp_dir().join(format!("seihai-loaded-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Town.nw"), "GLEVNW01\n").unwrap();
+        let mut s = OfflineSession::new();
+        assert!(!s.is_loaded("town"));
+        s.load_level(dir.join("Town.nw")).unwrap();
+        assert!(s.is_loaded("town.nw") && s.is_loaded("TOWN") && !s.is_loaded("other.nw"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

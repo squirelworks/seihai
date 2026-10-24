@@ -392,6 +392,9 @@ fn main() {
         let path = root.level(&name);
         if let Err(e) = session.load_level(&path) {
             eprintln!("failed to load level: {e}");
+        } else {
+            // The level the session starts in is the first entry point.
+            session.note_entry(&name);
         }
     }
     if root.tiledefs().is_file() {
@@ -401,6 +404,8 @@ fn main() {
     }
 
     let profile = version.profile();
+    // The death sequence of this build (none for builds before 2.05).
+    session.life.set_rules(profile.life.death);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -546,6 +551,9 @@ fn main() {
     let mut dirty = true;
 
     let mut last_step = Instant::now();
+    // STATUS (prop 18) as the server last gave it; the dead bit is toggled on it.
+    let mut status_base = 0u8;
+    let mut life_clock = Instant::now();
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open()
@@ -778,6 +786,15 @@ fn main() {
                     session.player_dir = d;
                 }
                 session.opened_chests.extend(net_state.opened_chests.drain(..));
+                // Hearts, AP and STATUS the server gave.
+                if let Some(st) = net_state.own_status.take() {
+                    status_base = st;
+                }
+                session.apply_server_power(
+                    net_state.own_max_power.take(),
+                    net_state.own_cur_power.take(),
+                    net_state.own_alignment.take(),
+                );
                 if entered || (warped && session.warp_pending.is_some()) {
                     // Arrival: the server's position is final. Links stay
                     // quiet until the player moves off it.
@@ -796,6 +813,10 @@ fn main() {
                     if session.arrive(session.player_x, session.player_y) {
                         net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
                     }
+                    // Every level entry (and login) is where a respawn returns to.
+                    if let Some(n) = net_state.current_level_name() {
+                        session.note_entry(&n);
+                    }
                 } else if warped {
                     session.refresh_water();
                 }
@@ -813,12 +834,77 @@ fn main() {
             }
         }
 
+        // Health and death: the 50 ms death timer, the claim and the dead
+        // bit on the wire, and the respawn on a movement or action key.
+        {
+            let dt = life_clock.elapsed().as_millis() as u64;
+            life_clock = Instant::now();
+            let mut events = session.tick_life(dt);
+            let keys_down = !input.is_open()
+                && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
+                    .iter()
+                    .any(|k| window.is_key_down(*k))
+                || !input.is_open()
+                    && [minifb::Key::A, minifb::Key::Space]
+                        .iter()
+                        .any(|k| window.is_key_pressed(*k, minifb::KeyRepeat::No));
+            if session.life.can_respawn() && keys_down {
+                let online = conn.is_some();
+                if let Some(to) = session.respawn(online) {
+                    eprintln!("respawn: {to:?}");
+                    // Online the level is sent again at the respawn point,
+                    // as an ordinary level warp (no PLI 30 form).
+                    let dest = match &to {
+                        seihai::offline::RespawnTo::Saved(e) => Some(e.level.clone()),
+                        seihai::offline::RespawnTo::Default { .. } => net_state.current_level_name(),
+                        seihai::offline::RespawnTo::InPlace => None,
+                    };
+                    if let (Some(dest), Some(c)) = (dest.as_deref(), conn.as_mut()) {
+                        session.begin_warp(dest);
+                        warp_since = Some(Instant::now());
+                        let (x, y, dir) = (session.player_x, session.player_y, session.player_dir);
+                        if let Err(e) = c.send_link(version, None, x, y, dir, dest, tamper.as_mut()) {
+                            eprintln!("send failed: {e}");
+                            session.cancel_warp();
+                            conn = None;
+                        }
+                    } else if let (seihai::offline::RespawnTo::Saved(e), None) = (&to, &conn) {
+                        if !session.is_loaded(&e.level) && session.load_level(root.level(&e.level)).is_err() {
+                            eprintln!("respawn: no local {}", e.level);
+                        }
+                        session.arrive(e.x, e.y);
+                    }
+                    events.extend(session.life.take_events());
+                    dirty = true;
+                }
+            }
+            for ev in events {
+                match ev {
+                    seihai::life::LifeEvent::Died { attacker } => {
+                        eprintln!("died (attacker {attacker:?})");
+                        if !no_scripts {
+                            scripts.player_dies(&mut session);
+                        }
+                        dirty = true;
+                    }
+                    seihai::life::LifeEvent::StatusDead => eprintln!("dead bit sent"),
+                    seihai::life::LifeEvent::Respawned { .. } => {}
+                }
+                let msgs = seihai::life::messages_for(ev, version, status_base);
+                if let (false, Some(c)) = (msgs.is_empty(), conn.as_mut()) {
+                    if let Err(e) = c.send_messages(&msgs) {
+                        eprintln!("send failed: {e}");
+                    }
+                }
+            }
+        }
         // Arrow keys move the player half a tile per step, at most one
         // step every 50 ms.
         let mut moved = false;
         // A or Space: close the reading panel, or interact with what the
         // player faces.
         let interact = !input.is_open()
+            && !session.life.is_dead()
             && (window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No)
                 || window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No));
         if interact {
@@ -836,7 +922,7 @@ fn main() {
             }
             dirty = true;
         }
-        if !input.is_open() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if window.is_key_down(minifb::Key::Left) {
                 dx -= 0.5;
@@ -920,6 +1006,9 @@ fn main() {
                     level_from_board = !root.level(n).is_file();
                 }
                 loaded_level = now;
+                if let Some(n) = &loaded_level {
+                    session.note_entry(n);
+                }
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req);
             } else if let Some(c) = conn.as_mut() {
@@ -972,6 +1061,7 @@ fn main() {
                             if session.arrive(x, y) {
                                 net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
                             }
+                            session.note_entry(&dest);
                             eprintln!("warped to {dest}");
                         } else {
                             eprintln!("no local {dest}");

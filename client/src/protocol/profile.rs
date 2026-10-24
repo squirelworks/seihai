@@ -280,6 +280,56 @@ pub struct Ui {
     pub gs1_commands: u16,
 }
 
+/// How a build's own client handles the player's death.
+///
+/// Read from the 2.05 rev 2 decompile (`decomp-findings-2026-10-24/
+/// 01-death-respawn.md`, `constants-205.tsv`); the tick is 50 ms. Later
+/// builds are taken as the same (inferred) and the builds before 2.05
+/// have no row, because their handler was not traced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeathRules {
+    /// The death timer counts up one per tick and stops here (30 = 1.5 s).
+    pub timer_cap: u16,
+    /// Controls are ignored while the timer is at or below this (27); the
+    /// first tick past it (28) lets the player act and respawn.
+    pub input_lock_until: u16,
+    /// The dead bit (0x08) goes into the STATUS prop (18) once the timer
+    /// reaches this (28, 1.4 s). Before it, others see no death.
+    pub status_bit_from: u16,
+    /// Respawn hearts: below `low_ap_below` AP the player gets
+    /// `low_hearts`; below `mid_ap_below` AP min(`mid_hearts_cap`, max
+    /// hearts); otherwise max hearts.
+    pub low_ap_below: u8,
+    pub mid_ap_below: u8,
+    pub low_hearts: u8,
+    pub mid_hearts_cap: u8,
+    /// Position used when no level entry point was saved and the client is
+    /// online: x 30.5, y 30.0 in the current level, facing down. Kept in
+    /// half tiles (61 and 60), the wire scale.
+    pub default_x2: u8,
+    pub default_y2: u8,
+}
+
+/// The 2.05 rev 2 values.
+pub const DEATH_205: DeathRules = DeathRules {
+    timer_cap: 30,
+    input_lock_until: 27,
+    status_bit_from: 28,
+    low_ap_below: 20,
+    mid_ap_below: 40,
+    low_hearts: 3,
+    mid_hearts_cap: 5,
+    default_x2: 61,
+    default_y2: 60,
+};
+
+/// Health and death.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Health {
+    /// The client-side death sequence, where it was traced.
+    pub death: Option<DeathRules>,
+}
+
 /// Everything that makes one client version itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VersionProfile {
@@ -295,6 +345,7 @@ pub struct VersionProfile {
     pub props: Props,
     pub files: Files,
     pub levels: Levels,
+    pub life: Health,
     pub ui: Ui,
 }
 
@@ -514,6 +565,7 @@ const BASE: VersionProfile = VersionProfile {
         heights: false,
         cached_links: true,
     },
+    life: Health { death: Some(DEATH_205) },
     ui: Ui {
         server_list: ServerList::Single,
         chat_recall: true,
@@ -553,6 +605,7 @@ const CLASSIC: VersionProfile = VersionProfile {
         heights: false,
         cached_links: false,
     },
+    life: Health { death: None },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
         chat_recall: false,
@@ -785,6 +838,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 134,
@@ -814,6 +868,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 142,
@@ -839,6 +894,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 144,
@@ -865,6 +921,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -891,6 +948,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -917,6 +975,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 148,
@@ -943,6 +1002,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
+        life: Health { death: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 157,
