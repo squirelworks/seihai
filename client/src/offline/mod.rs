@@ -1204,6 +1204,39 @@ mod tests {
         assert_eq!(s2.pending_link, Some(("c.nw".into(), s2.player_x, 2.5)));
     }
 
+    /// A Z3-V1 level read from disk drives the same link rules: a negative
+    /// arrival (`-1` in the file) keeps the player's coordinate on that axis.
+    #[test]
+    fn zelda_level_links_work_in_the_engine() {
+        use crate::assets::{ZeldaLevel, ZeldaLink, ZeldaMagic};
+        let z = ZeldaLevel {
+            magic: ZeldaMagic::V103,
+            board: vec![0; 4096],
+            links: vec![
+                ZeldaLink { dest: "b.zelda".into(), x: 40.0, y: 0.0, width: 4.0, height: 64.0, new_x: 1.5, new_y: -1.0 },
+                ZeldaLink { dest: "c.zelda".into(), x: 0.0, y: 50.0, width: 64.0, height: 2.0, new_x: -1.0, new_y: 2.0 },
+            ],
+            computers: vec![],
+            signs: vec![],
+            layout: Default::default(),
+        };
+        let dir = std::env::temp_dir().join(format!("seihai-zelda-engine-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.zelda");
+        std::fs::write(&path, z.to_bytes().unwrap()).unwrap();
+        let mut s = session_at(level(|_, _| OPEN), 41.0, 20.0);
+        s.load_level(&path).unwrap();
+        s.armed = true;
+        assert!(s.check_links());
+        assert_eq!(s.pending_link, Some(("b.zelda".into(), 1.5, s.player_y)));
+        let mut s2 = session_at(level(|_, _| OPEN), 12.0, 50.5);
+        s2.load_level(&path).unwrap();
+        s2.armed = true;
+        assert!(s2.check_links());
+        assert_eq!(s2.pending_link, Some(("c.zelda".into(), s2.player_x, 2.0)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// B has a link back to A across its west edge, and the arrival spot
     /// from A's link is inside it.
     fn level_b() -> Level {

@@ -208,6 +208,20 @@ fn a_table_reads_what_the_decoder_leaves_raw_and_marks_the_tail() {
     assert_eq!(b.raw, vec![0x21, 0x41, 0x42], "a message with leftover bytes shows its hex");
 }
 
+/// Id 24's byte 9 is the full-list marker with no images; 46 is a literal 1.
+#[test]
+fn id_24_shows_the_marker_and_46_is_settled() {
+    let v = view_of(&session(0x2b), None, Filter { sel: vec![Sel::parse("24")], dir: Some(Dir::C2S), ..Filter::default() }, true, false);
+    let r = &v.rows[0];
+    assert_eq!(r.source, Source::Decoder);
+    assert_eq!(r.fields[0], ("full".to_string(), "yes".to_string()));
+    assert_eq!(r.fields[1], ("images".to_string(), "(none)".to_string()));
+    assert!(r.unknown.is_empty(), "{:?}", r.unknown);
+    assert_eq!(r.layout.as_deref(), Some("images:showimg"));
+    let v = view_of(&session(0x2b), None, Filter { sel: vec![Sel::parse("46")], dir: Some(Dir::C2S), ..Filter::default() }, true, false);
+    assert!(v.rows[0].unknown.is_empty(), "{:?}", v.rows[0].unknown);
+}
+
 #[test]
 fn an_id_with_no_layout_shows_raw_hex_and_says_so() {
     let v = view_of(&session(0x2b), None, Filter { sel: vec![Sel::parse("120")], ..Filter::default() }, true, false);
@@ -222,9 +236,29 @@ fn an_id_with_no_layout_shows_raw_hex_and_says_so() {
     assert!(text.contains("layout: (not in the tables for this version)"));
 }
 
+/// The built-in tables with id 24 replaced by a one-field row whose status
+/// is unknown (id 24 itself is settled now; the test needs an unknown field
+/// on an id the trace decoder names).
+fn table_with_unknown_24() -> Tables {
+    let mut t = Tables::builtin();
+    t.rows.retain(|r| !(r.dir == Dir::C2S && r.id == 24));
+    t.rows.extend(
+        parse_layouts("dir\tid\tname\tidx\tfield\tencoding\tfrom\tto\tstatus\tnote\nC>S\t24\tSHOWIMGPLAYER\t1\tvalue\tgchar\t-\t-\tunknown\tn\n")
+            .unwrap(),
+    );
+    t
+}
+
 #[test]
 fn unknown_fields_in_the_table_are_marked_even_when_the_decoder_named_them() {
-    let v = view_of(&session(0x2b), None, Filter { sel: vec![Sel::parse("24")], dir: Some(Dir::C2S), ..Filter::default() }, true, false);
+    let loaded = load(&session(0x2b), None, true).unwrap();
+    let opts = ViewOptions {
+        filter: Filter { sel: vec![Sel::parse("24")], dir: Some(Dir::C2S), ..Filter::default() },
+        show_layout: true,
+        raw_all: false,
+        mask: true,
+    };
+    let v = build_view(&loaded, &table_with_unknown_24(), &opts);
     let r = &v.rows[0];
     assert_eq!(r.source, Source::Decoder);
     assert!(r.unknown.iter().any(|u| u.contains("`value` is unknown")));
@@ -446,7 +480,7 @@ fn layout_targets_resolve_by_id_and_by_name() {
 
 #[test]
 fn layout_formats_are_valid() {
-    let t = Tables::builtin();
+    let t = table_with_unknown_24();
     let reps: Vec<_> = resolve_layout_target(&t, "24", None).into_iter().map(|(d, i)| layout_report(&t, d, i)).collect();
     assert!(!reps.is_empty());
     let j = render_layouts(&reps, Format::Json);
@@ -454,7 +488,8 @@ fn layout_formats_are_valid() {
     assert!(doc.as_array().unwrap().len() >= 1);
     let tsv = render_layouts(&reps, Format::Tsv);
     assert!(tsv.lines().all(|l| l.split('\t').count() == 11), "{tsv}");
-    // Packet 24 in the client direction has the unknown `value` field.
+    // Packet 24 in the client direction has the unknown `value` field (in
+    // this test's table).
     let c = reps.iter().find(|r| r.dir == Dir::C2S).unwrap();
     assert!(render_layouts(&[c.clone()], Format::Text).contains("? 1  value"), "{}", render_layouts(&[c.clone()], Format::Text));
 }

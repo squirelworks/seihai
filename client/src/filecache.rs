@@ -228,7 +228,7 @@ pub fn download_dir(profile: &VersionProfile, name: &str) -> Vec<&'static str> {
             return vec!["maps"];
         }
     }
-    if matches!(ext, ".nw" | ".graal") {
+    if matches!(ext, ".nw" | ".graal" | ".zelda") {
         return vec!["levels"];
     }
     let sub = if base.starts_with("bomy") || base.starts_with("b_") {
@@ -317,7 +317,7 @@ impl DownloadStore {
             ".png" | ".gif" | ".mng" => r.image(name),
             ".gani" => r.gani(name),
             ".wav" => r.sound(name),
-            ".nw" | ".graal" | ".gmap" => r.level(name),
+            ".nw" | ".graal" | ".zelda" | ".gmap" => r.level(name),
             _ => None,
         }?;
         let same = found.file_name().and_then(|f| f.to_str()).is_some_and(|f| f.eq_ignore_ascii_case(&last));
@@ -352,7 +352,7 @@ impl DownloadStore {
     pub fn store(&mut self, name: &str, data: &[u8], mod_time: Option<u32>) -> io::Result<Stored> {
         let rel = clean_name(name).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unsafe file name"))?;
         let ext = rel.rfind('.').map(|i| rel[i..].to_ascii_lowercase()).unwrap_or_default();
-        let is_level = matches!(ext.as_str(), ".nw" | ".graal" | ".gmap");
+        let is_level = matches!(ext.as_str(), ".nw" | ".graal" | ".zelda" | ".gmap");
         self.memory.insert(key(name), MemoryFile { data: data.to_vec(), mod_time });
         if !self.save_to_disk && !is_level {
             return Ok(Stored::Memory);

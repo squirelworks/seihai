@@ -41,6 +41,9 @@ pub enum Enc {
     Comma,
     /// A player prop stream (decoded by the trace decoder, not here).
     Props,
+    /// The text of ids 24 and 32 (image records; decoded by the trace
+    /// decoder, not here). Takes the rest of the payload.
+    Showimg,
     /// The rest as bytes.
     Raw,
     /// No payload.
@@ -61,6 +64,7 @@ impl Enc {
             "text" => Enc::Text,
             "comma" => Enc::Comma,
             "props" => Enc::Props,
+            "showimg" => Enc::Showimg,
             "raw" => Enc::Raw,
             "none" => Enc::None,
             _ => return Option::None,
@@ -80,6 +84,7 @@ impl Enc {
             Enc::Text => "text",
             Enc::Comma => "comma",
             Enc::Props => "props",
+            Enc::Showimg => "showimg",
             Enc::Raw => "raw",
             Enc::None => "none",
         }
@@ -357,7 +362,7 @@ pub fn lint(t: &Tables) -> Vec<String> {
                     break;
                 }
             }
-            let takes_rest = |e: Enc| matches!(e, Enc::Text | Enc::Comma | Enc::Raw | Enc::GstringList | Enc::Props);
+            let takes_rest = |e: Enc| matches!(e, Enc::Text | Enc::Comma | Enc::Raw | Enc::GstringList | Enc::Props | Enc::Showimg);
             if let Some(i) = rows.iter().position(|r| takes_rest(r.enc)) {
                 if i + 1 < rows.len() {
                     out.push(format!("{} {id} {}: field {} takes the rest of the payload but is not last", dir.label(), v.label(), rows[i].field));

@@ -234,6 +234,12 @@ pub struct Files {
 pub struct Levels {
     /// `.graal` (GR-V1.0x) levels.
     pub graal: bool,
+    /// Z3-V1 (`.zelda`) levels: `Z3-V1.03` and `Z3-V1.04`, read by magic.
+    /// Every client binary from 1st Graal to 2.31 compares its level magic
+    /// with these two (read from the binaries' strings and decompiles); the
+    /// file's extension decides nothing. Seihai also opens a bare level name
+    /// as `.zelda` after `.graal`, which is its own choice.
+    pub zelda: bool,
     /// `.nw` (GLEVNW01) levels.
     pub nw: bool,
     /// `.gmap` overworlds.
@@ -473,6 +479,9 @@ impl VersionProfile {
         }
         if self.levels.graal {
             v.push(".graal");
+        }
+        if self.levels.zelda {
+            v.push(".zelda");
         }
         if self.levels.gmap {
             v.push(".gmap");
@@ -823,7 +832,9 @@ mod tests {
         assert!(!profile(ClientVersion::V205).ui.minimap);
         assert!(profile(ClientVersion::V217).ui.minimap);
         assert!(!profile(ClientVersion::V231).ui.editor);
-        assert_eq!(profile(ClientVersion::V139).level_extensions(), vec![".graal"]);
+        assert_eq!(profile(ClientVersion::V139).level_extensions(), vec![".graal", ".zelda"]);
+        // Every build reads Z3-V1 by magic (strings of every client binary).
+        assert!(PROFILES.iter().all(|p| p.levels.zelda));
         assert_eq!(
             profile(ClientVersion::V205).window_title(Some("Classic")),
             "Graal 2.05 - Classic"

@@ -505,7 +505,10 @@ fn describe_c2s(ver: ClientVersion, id: i32, p: &[u8], mask: &mut Masker) -> (St
             (Some(m), Some(name)) => vec![f("modtime", mask.val(m)), f("file", latin1(name))],
             _ => generic(p),
         },
-        24 | 46 => vec![f("value", p.first().map_or("-".into(), |&b| gchar(b).to_string())), f("len", p.len().to_string())],
+        // PLI_SHOWIMGPLAYER: the sender's weapon-script image list, as
+        // changes (or, from the marker on, the full list).
+        24 => showimg_fields(p),
+        46 => vec![f("value", p.first().map_or("-".into(), |&b| gchar(b).to_string())), f("len", p.len().to_string())],
         37 => vec![f("language", latin1(p))],
         39 => vec![f("len", p.len().to_string()), f("crc", format!("{:08x}", crc32(p)))],
         // PLI_PROCESSLIST: the client's process list, different every run
@@ -514,6 +517,18 @@ fn describe_c2s(ver: ClientVersion, id: i32, p: &[u8], mask: &mut Masker) -> (St
         _ => generic(p),
     };
     (name, fields)
+}
+
+/// The id 24 / 32 text as `full` and an `images` summary; the bytes stay
+/// visible as `hex` when they are short.
+fn showimg_fields(text: &[u8]) -> Fields {
+    let up = crate::protocol::parse_showimg_update(text);
+    let mut v = vec![f("full", if up.full { "yes" } else { "no" })];
+    v.push(f("images", crate::protocol::describe_showimg_update(&up)));
+    if !text.is_empty() && text.len() <= 32 {
+        v.push(f("hex", hex(text)));
+    }
+    v
 }
 
 fn fnum(v: f32) -> String {
@@ -593,7 +608,11 @@ fn describe_s2c(ver: ClientVersion, id: i32, p: &[u8], mask: &mut Masker) -> (St
         },
         9 => describe_props(ver, p, mask),
         32 => match parse_showimg_relay(p) {
-            Some((pid, rest)) => vec![f("from", mask.pid(pid)), f("hex", hex(&rest))],
+            Some((pid, rest)) => {
+                let mut v = vec![f("from", mask.pid(pid))];
+                v.extend(showimg_fields(&rest));
+                v
+            }
             None => generic(p),
         },
         178 => match parse_server_warp(p) {
