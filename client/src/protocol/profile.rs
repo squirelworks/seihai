@@ -323,11 +323,74 @@ pub const DEATH_205: DeathRules = DeathRules {
     default_y2: 60,
 };
 
-/// Health and death.
+/// How a build's client judges and sends hits from other players (the
+/// victim's side of combat). Sources: `decomp-findings-2026-10-24/
+/// 04-sword-hitbox.md`, `01-death-respawn.md`, `constants-205.tsv` (2.05
+/// rev 2, derived), and Graal_analysis `protocol/packet-layouts.md` "Hits".
+/// Later builds take the same row as an inference, the builds before 2.05
+/// have none because their handler was not traced. Distances are in half
+/// tiles, the wire scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatRules {
+    /// The attacker's sprite number (SPRITE prop 17 is `dir + 4 * S`) is a
+    /// sword swing from `swing_sprite_first` to `swing_sprite_last`
+    /// (animation steps 9 to 13). Outside it a sword cannot hit.
+    pub swing_sprite_first: u8,
+    pub swing_sprite_last: u8,
+    /// Seihai's own swing, one animation step each, in ticks of 50 ms.
+    /// **Placeholder, not a client value**: the real frame times come from
+    /// the sword gani file, which Seihai does not play yet.
+    pub swing_step_ticks: u16,
+    /// The victim must be `reach_min_half` to `reach_max_half` ahead of the
+    /// attacker in the direction the attacker faces (0 to 4 tiles,
+    /// inclusive) ...
+    pub reach_min_half: u8,
+    pub reach_max_half: u8,
+    /// ... and strictly less than `lateral_below_half` to the side (under
+    /// 2 tiles).
+    pub lateral_below_half: u8,
+    /// A victim with exactly this alignment (AP) cannot be hit by a sword.
+    pub immune_ap: u8,
+    /// Hurt mode (mode 3) lasts this many ticks; a hurt player cannot be
+    /// hurt again until it ends (40 ticks, 2 s).
+    pub hurt_ticks: u16,
+    /// Sprite number others see while the player is hurt (S = 32).
+    pub hurt_sprite: u8,
+    /// `PLO_HURTPLAYER` (40) applies only when its attacker is within this
+    /// many half tiles of the victim (10 tiles).
+    pub hurtplayer_range_half: u8,
+    /// A hit by id 40 or 46 takes at most this many half hearts (1 heart).
+    pub packet_hit_cap_half: u8,
+    /// **Placeholder** for the unresolved damage formula (item 7): half
+    /// hearts a sword hit takes per point of the attacker's sword power
+    /// (the notes infer "sword power divided by 2 in hearts", not
+    /// confirmed from a capture), at least one half heart.
+    pub sword_half_per_power: u8,
+}
+
+/// The 2.05 rev 2 values.
+pub const COMBAT_205: CombatRules = CombatRules {
+    swing_sprite_first: 6,
+    swing_sprite_last: 10,
+    swing_step_ticks: 2,
+    reach_min_half: 0,
+    reach_max_half: 8,
+    lateral_below_half: 4,
+    immune_ap: 100,
+    hurt_ticks: 40,
+    hurt_sprite: 32,
+    hurtplayer_range_half: 20,
+    packet_hit_cap_half: 2,
+    sword_half_per_power: 1,
+};
+
+/// Health, death and combat.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Health {
     /// The client-side death sequence, where it was traced.
     pub death: Option<DeathRules>,
+    /// How hits from other players are judged, where it was traced.
+    pub combat: Option<CombatRules>,
 }
 
 /// Everything that makes one client version itself.
@@ -565,7 +628,7 @@ const BASE: VersionProfile = VersionProfile {
         heights: false,
         cached_links: true,
     },
-    life: Health { death: Some(DEATH_205) },
+    life: Health { death: Some(DEATH_205), combat: Some(COMBAT_205) },
     ui: Ui {
         server_list: ServerList::Single,
         chat_recall: true,
@@ -605,7 +668,7 @@ const CLASSIC: VersionProfile = VersionProfile {
         heights: false,
         cached_links: false,
     },
-    life: Health { death: None },
+    life: Health { death: None, combat: None },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
         chat_recall: false,
@@ -838,7 +901,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 134,
@@ -868,7 +931,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 142,
@@ -894,7 +957,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 144,
@@ -921,7 +984,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -948,7 +1011,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -975,7 +1038,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 148,
@@ -1002,7 +1065,7 @@ pub static PROFILES: &[VersionProfile] = &[
             ..BASE.props
         },
         levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
-        life: Health { death: None },
+        life: Health { death: None, combat: None },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 157,

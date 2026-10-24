@@ -1,6 +1,7 @@
 //! Seihai — open Graal Reborn-compatible client
 
 pub mod assets;
+pub mod combat;
 pub mod dev;
 pub mod difftest;
 pub mod gmap;
