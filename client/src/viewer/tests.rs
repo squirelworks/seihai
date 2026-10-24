@@ -375,6 +375,7 @@ fn tables_dir_replaces_the_layouts_and_adds_the_chain() {
     // A folder with neither file keeps the built-ins.
     let e = tmp("empty");
     assert_eq!(Tables::load_dir(&e).unwrap().rows.len(), Tables::builtin().rows.len());
+    assert!(!Tables::load_dir(&e).unwrap().chain.is_empty(), "the built-in chain stays");
     let _ = (std::fs::remove_dir_all(&d), std::fs::remove_dir_all(&e));
 }
 
@@ -402,6 +403,10 @@ fn layout_report_follows_the_chain_and_marks_versions_without_a_layout() {
     assert_eq!(rep.runs[0].from, "1.33");
     assert!(!rep.runs[0].handled);
     assert!(rep.changes.iter().any(|c| c.starts_with("added in")), "{:?}", rep.changes);
+    // The built-in chain agrees: one of its protocol rows names +49 at the step the profiles add it.
+    assert!(!rep.chain.is_empty());
+    let added = rep.changes.iter().find_map(|c| c.strip_prefix("added in ")).unwrap();
+    assert!(rep.chain.iter().any(|c| c.label == added && c.detail.contains("+49")), "{:?}", rep.chain);
     // Consecutive versions with the same state are one run.
     assert!(rep.runs.len() < ClientVersion::all_versions().len());
     let text = render_layouts(&[rep], Format::Text);

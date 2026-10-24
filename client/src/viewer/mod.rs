@@ -370,7 +370,7 @@ pub struct LayoutReport {
     pub runs: Vec<Run>,
     /// `+`/`-` steps along the chain, from the profiles.
     pub changes: Vec<String>,
-    /// Rows of `version-chain.tsv` that name the id (empty without that file).
+    /// Rows of the version chain that name the id.
     pub chain: Vec<ChainRow>,
 }
 

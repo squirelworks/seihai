@@ -157,6 +157,8 @@ fn main() {
     let mut cli_mode = false;
     let mut list_only = false;
     let mut check_assets = false;
+    let mut version_chain = false;
+    let mut chain_format = seihai::protocol::chain::Format::Text;
     let mut version_given = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
@@ -196,6 +198,19 @@ fn main() {
             }
             "--list-only" => list_only = true,
             "--check-assets" => check_assets = true,
+            "--version-chain" => version_chain = true,
+            "--chain-format" => {
+                i += 1;
+                chain_format = match args.get(i).map(String::as_str) {
+                    Some("text") => seihai::protocol::chain::Format::Text,
+                    Some("md") => seihai::protocol::chain::Format::Markdown,
+                    Some("tsv") => seihai::protocol::chain::Format::Tsv,
+                    other => {
+                        eprintln!("--chain-format needs text, md or tsv (got {})", other.unwrap_or("nothing"));
+                        std::process::exit(2);
+                    }
+                };
+            }
             "--send-tampercheck" => send_tampercheck = true,
             "--send-showimg" => send_showimg = true,
             "--no-serverwarp" => cli_serverwarp = Some(false),
@@ -262,6 +277,9 @@ fn main() {
                 println!("                             data folder and print what is found; without");
                 println!("                             --version, the five main versions. Exit 1 if a");
                 println!("                             required file is missing or unreadable");
+                println!("       seihai --version-chain [--chain-format text|md|tsv] [--version V]");
+                println!("         --version-chain     print what each client build changed against the");
+                println!("                             build before it (all builds, or just --version)");
                 println!("       seihai capture show FILE [--version V] [--dir c2s|s2c] [--id N,NAME] [--time A..B]");
                 println!("                               [--frame A..B] [--format text|tsv|json] [--raw] [--layouts]");
                 println!("       seihai capture layout ID|NAME [--dir c2s|s2c] [--version V]");
@@ -295,6 +313,12 @@ fn main() {
         if let Some(p) = &settings.password {
             password = p.clone();
         }
+    }
+    // Print what each build changed against the one before, then exit.
+    if version_chain {
+        let only = version_given.then_some(version);
+        print!("{}", seihai::protocol::chain::render(chain_format, only));
+        return;
     }
     // Use the version saved by the GUI if no CLI --version was given.
     if version == ClientVersion::V205 {

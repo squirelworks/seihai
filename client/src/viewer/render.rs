@@ -247,7 +247,7 @@ fn layouts_text(reports: &[LayoutReport]) -> String {
             let _ = writeln!(s, "  profiles: {c}");
         }
         for c in &rep.chain {
-            let _ = writeln!(s, "  chain file: step {} ({}) {}: {}", c.step, c.label, c.field, c.detail);
+            let _ = writeln!(s, "  chain: step {} ({}) {}: {}", c.step, c.label, c.field, c.detail);
         }
         let mut layout_no = 0;
         let mut shown: Vec<(usize, Vec<super::LayoutRow>)> = Vec::new();

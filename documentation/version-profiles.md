@@ -2,7 +2,7 @@
 
 Picking a version in the launcher makes Seihai act as that client, not only
 speak its protocol generation. Each version has one row in
-`client/src/protocol/profile.rs` (`PROFILES`), and the rest of the client reads
+`client/src/protocol/profile.rs` (`PROFILES`, resolved from `chain.rs`), and the rest of the client reads
 that row instead of matching on versions.
 
 ## What a row holds
@@ -20,9 +20,11 @@ There are 26 rows: 2.02 rev 2, 2.03 and 2.04 are rows of their own, because
 each differs on the wire from the build before (LANGUAGE at 2.02 rev 2,
 TRIGGERACTION and PLO 48/165 at 2.03, SHOWIMGNPC and prop 42 at 2.04).
 
-A row is built from a generation template (`CLASSIC` for 1.33–1.39, `BASE`
-for 2.05, `NEW_2_1` for 2.1–2.17, `GEN5` for 2.22+) with only the differences
-spelled out, so a new version is a few lines.
+The rows are the resolved **version chain** (`client/src/protocol/chain.rs`):
+1.33 is written out in full, and every later build is a small delta against the
+build before it, so a new version is one step with only what changed. A
+generated per-step handler-change table (`seihai --version-chain`) lists those
+changes, each step's source and what is still unknown. See `version-chain.md`.
 
 ## What changes when you pick a version
 

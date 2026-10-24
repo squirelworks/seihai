@@ -136,6 +136,7 @@ Text from the capture is written with control characters (including ESC) as
 $ seihai capture layout 49
 S>C 49  PLAYERWARP2
   profiles: added in 2.1
+  chain: step 16 (2.1) plo (server ids handled): +49 PLAYERWARP2, +169 UPGRADEURL, +170 GHOSTMODE, ... (59 -> 66 ids)
   1.33 .. 2.05   not handled
   2.1 .. 2.16    handled, no layout in the tables (fields undecoded)
   2.17 .. 2.31   handled, layout below  [layout 1]
@@ -156,9 +157,9 @@ The argument is an id (reported for each direction that has the id) or a name
 Each stretch of consecutive versions with the same state is one line. The state
 is whether the build's profile handles the id (`plo` for server packets, `pli`
 for client packets: `protocol/profile.rs`) and which layout rows apply. The
-`profiles:` lines are the steps where the id enters or leaves those sets. If a
-`version-chain.tsv` is given with `--tables`, the rows of its `plo` and `pli`
-steps that name the id are printed as `chain file:` lines as well.
+`profiles:` lines are the steps where the id enters or leaves those sets. The `chain:` lines are the rows
+of the version chain (`documentation/version-chain.tsv`) whose `plo` or `pli`
+change names the id, so the two can be compared by eye.
 
 A handled id with no layout row is printed as such. The viewer does not guess a
 layout for it. PLO 101 and 102 (the board and the file) arrive as the raw
@@ -193,8 +194,11 @@ not a copy of a neighbour. An id the table does not list has no layout. Adding a
 row is the way to teach the viewer a layout; no code change is needed for the
 encodings above.
 
-`version-chain.tsv` (`step label token basis kind area field detail`) is optional.
-Without it the viewer reads the handled-id sets from the built-in profiles.
+`version-chain.tsv` (`step label token basis kind area field detail`) is the
+generated handler-change table (`seihai --version-chain --chain-format tsv`).
+The built-in copy is generated at run time from the profiles, so it cannot go
+stale; `--tables DIR` can supply another file. The handled-id sets in `layout`
+come from the profiles themselves.
 
 ## Checks
 
