@@ -43,6 +43,15 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Public-server checks. Read-only first, and only with approval each time.
 - [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
+## Remaining
+
+- Remaining fields (ids 24, 46, 178): implementation in Seihai #39. Notes in Graal_analysis batch g.
+- Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
+- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist). No implementation started.
+- Public-server checks: blocked from the build box. Checklist in Seihai #38.
+- Early builds: real 2.00-era listserver reply still unobserved.
+
+
 ## Completed (prior phases)
 
 ### Phase 1 — Protocol & Minimal Client
