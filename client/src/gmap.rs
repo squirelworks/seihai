@@ -15,11 +15,12 @@
 //! Everything version-dependent comes from [`GmapRules`], which is read from
 //! the version profile, never from the version number.
 
-use crate::protocol::{
-    encode_pos_classic, encode_pos_precise, ClientVersion, IdSet, TamperSender,
-};
 use crate::assets::Level;
-use std::collections::HashMap;
+use crate::offline::OfflineSession;
+use crate::protocol::{
+    encode_pos_classic, encode_pos_precise, ClientVersion, IdSet, SessionState, TamperSender,
+};
+use std::collections::{HashMap, HashSet};
 
 /// Tiles along one side of a level, and so of a gmap cell.
 pub const CELL_TILES: i32 = 64;
@@ -436,6 +437,115 @@ pub fn adjacent_requests(
         .collect()
 }
 
+/// Where [`sync_world`] finds files. The GUI backs it with the asset
+/// folder; tests with maps in memory.
+pub trait WorldLoader {
+    /// The text of the `.gmap` file `name`, if it is available locally.
+    fn gmap_text(&self, name: &str) -> Option<String>;
+    /// The level file `name`, if it is available locally.
+    fn level(&self, name: &str) -> Option<Level>;
+}
+
+/// What the network side has to do after [`sync_world`].
+#[derive(Debug, Default, PartialEq)]
+pub struct WorldRequests {
+    /// The `.gmap` is not local: ask the server for this file (`WANTFILE`).
+    /// Returned once per file.
+    pub gmap_file: Option<String>,
+    /// `PLI_ADJACENTLEVEL` messages for neighbours the server has not sent
+    /// yet, to go out in one frame. Each level is asked for once.
+    pub messages: Vec<Vec<u8>>,
+}
+
+/// Apply the 186 blocks the session took since the last call to the levels
+/// the walking side holds: the player's and the loaded neighbours.
+pub fn apply_board_mods(session: &mut OfflineSession, net: &mut SessionState) {
+    let mods = net.take_board_mods();
+    if mods.is_empty() {
+        return;
+    }
+    let current = net.current_level_name().map(|n| n.to_ascii_lowercase());
+    for (level, m) in mods {
+        if current.as_deref() == Some(level.as_str()) {
+            if let Some(l) = session.current_level.as_mut() {
+                l.apply_board_modify2(&m);
+            }
+        } else if let Some(w) = session.gmap.as_mut() {
+            if let Some(cell) = w.map.cell_of(&level) {
+                if let Some(l) = w.levels.get_mut(&cell) {
+                    l.apply_board_modify2(&m);
+                }
+            }
+        }
+    }
+}
+
+/// Bring the walking session's gmap world in line with what the server has
+/// said: the grid (from a local file, or a request for the server's), the
+/// player's cell, the neighbouring levels (a local file, else the board the
+/// server sent) and a `PLI_ADJACENTLEVEL` for each neighbour the server has
+/// not sent. Off a gmap, or for a profile without gmaps, the world is
+/// dropped. `asked` remembers what was already requested.
+pub fn sync_world(
+    session: &mut OfflineSession,
+    net: &mut SessionState,
+    rules: &GmapRules,
+    loader: &dyn WorldLoader,
+    asked: &mut HashSet<String>,
+) -> WorldRequests {
+    let mut req = WorldRequests::default();
+    apply_board_mods(session, net);
+    let Some(g) = net.gmap.as_ref().filter(|_| rules.enabled) else {
+        session.leave_gmap();
+        return req;
+    };
+    if g.map.is_none() {
+        let grid = loader.gmap_text(&g.name).and_then(|t| Gmap::parse(&t));
+        if let Some(m) = grid {
+            net.set_gmap_grid(m);
+        }
+    }
+    let g = net.gmap.as_ref().expect("checked above");
+    let Some(map) = g.map.as_ref() else {
+        if asked.insert(format!("file:{}", g.name.to_ascii_lowercase())) {
+            req.gmap_file = Some(g.name.clone());
+        }
+        return req;
+    };
+    let cell = g.cell;
+    match session.gmap.as_mut() {
+        Some(w) if w.name.eq_ignore_ascii_case(&g.name) => {
+            if w.cell != cell {
+                // The server moved the player (a warp inside the gmap).
+                w.levels.clear();
+                w.cell = cell;
+            }
+        }
+        _ => session.enter_gmap(g.name.clone(), map.clone(), cell),
+    }
+    let around = map.neighbours(cell);
+    let w = session.gmap.as_mut().expect("just set");
+    w.levels.retain(|c, _| around.contains(c));
+    for c in w.missing() {
+        let Some(name) = map.level_at(c.0, c.1) else { continue };
+        let level = loader
+            .level(name)
+            .or_else(|| net.board_of(name).map(|b| Level::from_board(b)));
+        if let Some(l) = level {
+            w.levels.insert(c, l);
+        }
+    }
+    if rules.adjacent {
+        for &(x, y) in &around {
+            let Some(name) = map.level_at(x, y) else { continue };
+            if net.board_of(name).is_none() && asked.insert(format!("adj:{}", name.to_ascii_lowercase())) {
+                req.messages.push(adjacent_level_message(0, name));
+            }
+        }
+    }
+    req
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,5 +784,153 @@ mod tests {
         assert!(adjacent_requests(&off, &g, (0, 0), &none).is_empty());
         let disabled = GmapRules { enabled: false, ..r };
         assert!(adjacent_requests(&disabled, &g, (0, 0), &none).is_empty());
+    }
+
+    // ---- sync_world ----
+
+    struct Files {
+        grid: Option<String>,
+        levels: HashMap<String, Level>,
+    }
+
+    impl WorldLoader for Files {
+        fn gmap_text(&self, _: &str) -> Option<String> {
+            self.grid.clone()
+        }
+        fn level(&self, name: &str) -> Option<Level> {
+            self.levels.get(name).cloned()
+        }
+    }
+
+    fn msg(id: u8, payload: &[u8]) -> Vec<u8> {
+        [&[id + 0x20][..], payload, b"\n"].concat()
+    }
+
+    fn login(net: &mut SessionState) {
+        let p = [&[0x20 + 116, 0x20 + 61, 0x20 + 50, 0x20, 0x20][..], b"g.gmap"].concat();
+        net.apply_body(&[msg(49, &p), msg(6, b"gm_nw.nw"), msg(6, b"g.gmap")].concat());
+    }
+
+    fn flat(mark: u16) -> Level {
+        Level::from_board(&vec![mark; 64 * 64])
+    }
+
+    #[test]
+    fn world_waits_for_the_gmap_file_and_asks_once() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let files = Files { grid: None, levels: HashMap::new() };
+        let mut asked = HashSet::new();
+        let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(r.gmap_file.as_deref(), Some("g.gmap"));
+        assert!(r.messages.is_empty() && session.gmap.is_none());
+        let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(r, WorldRequests::default(), "asked only once");
+    }
+
+    #[test]
+    fn world_loads_neighbours_and_asks_the_server_for_the_rest() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let mut files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        files.levels.insert("gm_ne.nw".into(), flat(1));
+        let mut asked = HashSet::new();
+        let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        // The grid came from the local file and went to the session too.
+        assert!(net.gmap.as_ref().unwrap().map.is_some());
+        let w = session.gmap.as_ref().unwrap();
+        assert_eq!(w.cell, (0, 0));
+        assert!(w.levels.contains_key(&(1, 0)), "from the local file");
+        assert!(!w.levels.contains_key(&(0, 1)));
+        // 35 for the three neighbours, once.
+        assert_eq!(r.messages.len(), 3);
+        assert!(r.messages[0].ends_with(b"gm_ne.nw\n"));
+        assert!(sync_world(&mut session, &mut net, &rules, &files, &mut asked).messages.is_empty());
+        // The server's answer for gm_sw (name, board, gmap) fills the gap.
+        let mut board = vec![100 + 0x20, 0x20, 64 + 0x20, 2 + 0x20, b'\n', 101 + 0x20];
+        board.extend((0..64 * 64).flat_map(|_| 7u16.to_le_bytes()));
+        board.push(b'\n');
+        net.apply_body(&[msg(6, b"gm_sw.nw"), board, msg(6, b"g.gmap")].concat());
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        let sw = session.gmap.as_ref().unwrap().levels.get(&(0, 1)).expect("built from the server board");
+        assert_eq!(sw.tile_id_at(5, 5), Some(7));
+    }
+
+    #[test]
+    fn world_follows_a_crossing_and_keeps_only_neighbours() {
+        let mut net = SessionState::for_version(ClientVersion::V231);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V231);
+        let mut files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        for n in ["gm_nw.nw", "gm_ne.nw", "gm_sw.nw", "gm_se.nw"] {
+            files.levels.insert(n.into(), flat(2));
+        }
+        let mut asked = HashSet::new();
+        session.current_level = files.level("gm_nw.nw");
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        // Walk east across the edge: the session and the net follow.
+        session.player_x = 63.5;
+        session.player_y = 10.0;
+        session.tiletypes = None;
+        assert!(session.try_move(0.5, 0.0).is_some());
+        let c = session.take_gmap_crossing().unwrap();
+        net.set_gmap_cell(c.to);
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(net.current_level_name().as_deref(), Some("gm_ne.nw"));
+        let w = session.gmap.as_ref().unwrap();
+        assert_eq!(w.cell, (1, 0));
+        assert!(w.levels.contains_key(&(0, 0)) && w.levels.contains_key(&(0, 1)) && w.levels.contains_key(&(1, 1)));
+        assert_eq!(w.levels.len(), 3);
+    }
+
+    #[test]
+    fn world_is_dropped_off_a_gmap_or_without_gmap_rules() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        let mut asked = HashSet::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert!(session.gmap.is_some());
+        let off = GmapRules { enabled: false, ..rules };
+        sync_world(&mut session, &mut net, &off, &files, &mut asked);
+        assert!(session.gmap.is_none());
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        net.apply_body(&msg(49, &[&[0x20 + 2, 0x20 + 4, 0x20 + 50, 0x20, 0x20][..], b"b.nw"].concat()));
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert!(session.gmap.is_none(), "a plain 49 leaves the gmap");
+    }
+
+    /// 186 reaches the walking side's copy of the right level.
+    #[test]
+    fn board_mods_reach_the_current_and_neighbour_levels() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let mut files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        files.levels.insert("gm_ne.nw".into(), flat(1));
+        session.current_level = Some(flat(1));
+        let mut asked = HashSet::new();
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        let block = |mx: u8| {
+            let mut p = vec![0x20 + mx, 0x20, 0x20 + 62, 0x20 + 2, 0x20 + 4, 0x20 + 1];
+            for _ in 0..4 {
+                p.extend([0x20, 0x20 + 9]);
+            }
+            msg(186, &p)
+        };
+        net.apply_body(&[block(0), block(1)].concat());
+        apply_board_mods(&mut session, &mut net);
+        let own = session.current_level.as_ref().unwrap();
+        assert_eq!((own.tile_id_at(61, 2), own.tile_id_at(62, 2), own.tile_id_at(63, 2)), (Some(1), Some(9), Some(9)));
+        let ne = session.gmap.as_ref().unwrap().levels.get(&(1, 0)).unwrap();
+        assert_eq!((ne.tile_id_at(62, 2), ne.tile_id_at(0, 3)), (Some(9), Some(1)));
     }
 }

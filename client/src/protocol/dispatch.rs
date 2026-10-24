@@ -187,6 +187,25 @@ pub struct OtherPlayer {
     pub nick: Option<String>,
     /// Chat bubble text (CURCHAT, prop 12). Empty clears it.
     pub chat: Option<String>,
+    /// The gmap cell (props 43/44) the player is in, once the server has
+    /// said. `x` and `y` are local to it. `None`: no cell sent, the same
+    /// cell as ours.
+    pub cell: Option<(i32, i32)>,
+}
+
+impl OtherPlayer {
+    /// The player's position in the coordinates of the cell `own` (tiles):
+    /// `x`/`y` plus 64 per cell of distance. With no cell sent, or off a
+    /// gmap, the position as it is.
+    pub fn position_from(&self, own: Option<(i32, i32)>) -> (f32, f32) {
+        match (self.cell, own) {
+            (Some(c), Some(o)) => (
+                self.x + ((c.0 - o.0) * crate::gmap::CELL_TILES) as f32,
+                self.y + ((c.1 - o.1) * crate::gmap::CELL_TILES) as f32,
+            ),
+            _ => (self.x, self.y),
+        }
+    }
 }
 
 /// Where a chat line came from.
@@ -940,6 +959,7 @@ impl SessionState {
                     dir: 2,
                     nick: None,
                     chat: None,
+                    cell: None,
                 });
                 self.others.len() - 1
             }
@@ -953,6 +973,10 @@ impl SessionState {
         }
         if let Some(v) = u.dir {
             o.dir = v;
+        }
+        if u.cell_x.is_some() || u.cell_y.is_some() {
+            let (cx, cy) = o.cell.unwrap_or((0, 0));
+            o.cell = Some((u.cell_x.unwrap_or(cx), u.cell_y.unwrap_or(cy)));
         }
         if u.nick.is_some() {
             o.nick = u.nick;
@@ -1032,6 +1056,9 @@ struct OtherUpdate {
     dir: Option<u8>,
     nick: Option<String>,
     chat: Option<String>,
+    /// GMAPLEVELX (43) and GMAPLEVELY (44).
+    cell_x: Option<i32>,
+    cell_y: Option<i32>,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -1048,6 +1075,8 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             15 => u.x = prop.gchar().map(|v| v as f32 / 2.0),
             16 => u.y = prop.gchar().map(|v| v as f32 / 2.0),
             17 => u.dir = prop.gchar().map(|v| v % 4),
+            43 => u.cell_x = prop.gchar().map(i32::from),
+            44 => u.cell_y = prop.gchar().map(i32::from),
             50 => u.left |= prop.gchar() == Some(0),
             51 => u.left = true,
             // X2/Y2: precise position, GSHORT.
@@ -1940,5 +1969,23 @@ mod tests {
         st.apply_body(&msg(186, &p));
         assert_eq!(st.board.as_ref().unwrap()[2 * 64 + 2], 7);
         assert_eq!(st.board_mods_dropped, 1);
+    }
+
+    /// Props 43 and 44 of another player give its cell, one axis at a time;
+    /// its position is then drawn relative to ours.
+    #[test]
+    fn other_player_cell_props() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(7, &[15 + 0x20, 10 + 0x20, 16 + 0x20, 20 + 0x20]));
+        assert_eq!(st.others[0].cell, None);
+        assert_eq!(st.others[0].position_from(Some((0, 0))), (5.0, 10.0));
+        st.apply_body(&other(7, &[43 + 0x20, 1 + 0x20]));
+        assert_eq!(st.others[0].cell, Some((1, 0)));
+        st.apply_body(&other(7, &[44 + 0x20, 1 + 0x20, 15 + 0x20, 2 + 0x20]));
+        assert_eq!(st.others[0].cell, Some((1, 1)));
+        // Cell (1,1) seen from cell (0,0): 64 tiles east and south.
+        assert_eq!(st.others[0].position_from(Some((0, 0))), (65.0, 74.0));
+        assert_eq!(st.others[0].position_from(Some((1, 1))), (1.0, 10.0));
+        assert_eq!(st.others[0].position_from(None), (1.0, 10.0));
     }
 }

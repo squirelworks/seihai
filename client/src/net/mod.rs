@@ -138,6 +138,16 @@ impl EnterLevelSender {
         Ok(sent)
     }
 
+    /// The player crossed a gmap edge and the crossing frame
+    /// ([`crate::gmap::crossing_frame`]) already carried the 46 when the
+    /// profile sends one: the server's answer naming `name` owes none. Call
+    /// when the frame went out; `sent` says whether it held a 46.
+    pub fn crossing(&mut self, name: &str, sent: bool) {
+        self.level = Some(name.to_string());
+        self.pending = false;
+        self.sent += usize::from(sent);
+    }
+
     /// [`Self::note_level`] and, when a 46 is owed, [`Self::send_pending`]
     /// with nothing after it. Sends the owed 46 at once and alone.
     pub fn level_entered(&mut self, conn: &mut Connection, name: &str) -> io::Result<bool> {
@@ -498,6 +508,26 @@ impl Connection {
         msgs.extend(then.iter().cloned());
         self.send_messages(&msgs)?;
         Ok(true)
+    }
+
+    /// Send the frame a client sends when it walks across a gmap edge:
+    /// [`crate::gmap::crossing_frame`] (46 for 2.3 and 2.31, the tamper check
+    /// for 2.22 when `tamper` is given, then the props with the cell prop and
+    /// the wrapped coordinate). Returns whether a 46 went out. Sends nothing
+    /// for a profile without gmaps.
+    pub fn send_gmap_crossing(
+        &mut self,
+        version: ClientVersion,
+        c: &crate::gmap::Crossing,
+        tamper: Option<&mut TamperSender>,
+    ) -> io::Result<bool> {
+        let msgs = crate::gmap::crossing_frame(version, c, tamper);
+        if msgs.is_empty() {
+            return Ok(false);
+        }
+        let with_46 = msgs.iter().any(|m| m.first() == Some(&(PLI_ENTERLEVEL + 0x20)));
+        self.send_messages(&msgs)?;
+        Ok(with_46)
     }
 
     /// Send `PLI_TAMPERCHECK` (39) again (a re-send the build makes: see
@@ -1414,6 +1444,65 @@ mod tests {
             };
             assert_eq!(body[0], 2 + 0x20, "{}", v.label());
         }
+    }
+
+    // --- gmap crossings ---
+
+    fn east_crossing() -> crate::gmap::Crossing {
+        crate::gmap::Crossing { from: (0, 0), to: (1, 0), local_x: 0.0, local_y: 30.5 }
+    }
+
+    /// The frame a 2.31 client sends at a crossing is one gen-5 frame: 46,
+    /// then the props with the cell prop and the wrapped X2. The server's
+    /// answer to the new level then owes no second 46.
+    #[test]
+    fn crossing_frame_on_the_wire_231() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x44, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x44);
+        let mut el = EnterLevelSender::for_version(ClientVersion::V231);
+        assert!(el.at_login(&mut conn).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        el.note_level("gm_nw.nw");
+        let mut t = TamperSender::for_version(ClientVersion::V231);
+        let sent = conn.send_gmap_crossing(ClientVersion::V231, &east_crossing(), t.as_mut()).unwrap();
+        assert!(sent);
+        el.crossing("gm_ne.nw", sent);
+        let body = gen5_body(&mut srv, &mut g);
+        let props = vec![2 + 0x20, 43 + 0x20, 1 + 0x20, 78 + 0x20, 0x20, 0x20, b'\n'];
+        assert_eq!(body, [&ENTER[..], &props[..]].concat());
+        // The server's answer names the new level: nothing more is owed.
+        assert!(!el.note_level("gm_ne.nw"));
+        assert!(!el.is_pending());
+        assert_eq!(el.sent, 2);
+    }
+
+    /// 2.22 has no 46; with the tamper check opted in it goes first, and
+    /// without it the frame is the props alone.
+    #[test]
+    fn crossing_frame_on_the_wire_222() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x45, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x45);
+        let mut t = TamperSender::for_version(ClientVersion::V222);
+        assert!(!conn.send_gmap_crossing(ClientVersion::V222, &east_crossing(), t.as_mut()).unwrap());
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!(body[0], 39 + 0x20);
+        assert_eq!(body[12], 2 + 0x20, "props follow the 12-byte tamper message");
+        assert_eq!(&body[13..16], &[43 + 0x20, 1 + 0x20, 15 + 0x20]);
+        assert!(!conn.send_gmap_crossing(ClientVersion::V222, &east_crossing(), None).unwrap());
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!(body, [&[2 + 0x20, 43 + 0x20, 1 + 0x20, 15 + 0x20, 0x20][..], b"\n"].concat());
+    }
+
+    /// A profile without gmaps writes nothing at a crossing.
+    #[test]
+    fn crossing_frame_is_not_sent_without_gmaps() {
+        let (mut conn, _srv) = pair();
+        conn.login_versioned(ClientVersion::V205, 0x46, "ab", "cd").unwrap();
+        assert!(!conn.send_gmap_crossing(ClientVersion::V205, &east_crossing(), None).unwrap());
     }
 
     // --- Lab batch c wiring (2026-10-24) ---
