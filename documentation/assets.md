@@ -51,7 +51,7 @@ name to a file. It takes the data folder and a version profile.
 
 | Kind | Folders tried, in order | Name rules |
 |------|-------------------------|-----------|
-| Level, gmap | `levels/` (downloads), root, `maps/` | A name with an extension must be one the profile opens (`levels.nw`, `.graal`, `.gmap`). A bare name takes the profile's extensions in turn. |
+| Level, gmap | `levels/` (downloads), root, `maps/` | A name with an extension must be one the profile opens (`levels.nw`, `.graal`, `.zelda`, `.gmap`). A bare name takes the profile's extensions in turn (`.nw`, `.graal`, `.zelda`, `.gmap`, those the build opens). A missing `.zelda` name is not swapped for a `.graal` one. |
 | GANI | `gani/`, `levels/ganis/`, `levels/bomys/`, `levels/`, root | `.gani` added to a bare name. None at all where the profile's `ui.ganis` is false (1.39 is one). |
 | Image | the folder hint (`bodies`, `heads`), `levels/`, root, every `levels/<category>/`, the same categories under root, `maps/` | Bare name: `files.image_ext` first (`.gif` below 2.1, `.png` after), then `.png`, `.gif`, `.mng`. A `.gif` or `.png` name falls back to the other extension (the folder ships PNG only). |
 | Sound | `sounds/`, `levels/sounds/`, `levels/`, root | `.wav` added to a bare name; a leading `+` (loop) is dropped. |
@@ -71,7 +71,7 @@ table. Sound effects keep their own case-insensitive index inside `SoundEngine`.
 ### `.graal` levels
 
 `Level::load` now reads the sections after the board of `GR-V1.00` to
-`GR-V1.04` (and `Z3-V1.03/04`) as Graal_analysis `formats/level-binary.md` and
+`GR-V1.04` as Graal_analysis `formats/level-binary.md` and
 `level-binary-client.md` describe them: links (the name may contain spaces),
 baddies (three raw bytes and a verse line, ended by `FF FF FF`), NPCs
 (`x+32, y+32, image#script`, line breaks as `0xA7`), chests from `GR-V1.01`
@@ -139,6 +139,114 @@ What this settled:
 - NPC and baddy positions are single bytes and may lie outside the 64 x 64
   level (NPC x from -32 to 223); the reader keeps them as given.
 
+### `.zelda` (Z3-V1) levels
+
+`Z3-V1.03` and `Z3-V1.04` files have their own reader, `client/src/assets/zelda.rs`
+(`ZeldaLevel::parse`, `to_level`, `to_bytes`). `Level::load` and
+`Level::parse_binary_with_layout` hand every `Z3-V1` magic to it; the `.graal`
+section reader no longer sees them. The layout, settled against the Java Zelda
+Online source, the 1st Graal and 1.39 clients (decompiles, derived facts only)
+and 139 distinct real files (663 copies) from the old client builds:
+
+```text
+char[8]  magic      Z3-V1.03 | Z3-V1.04      (Z3-V1.02: Java client only, 11-bit codes)
+bits     board      4096 tiles, 12-bit codes, the GR-V1 run rules
+text     links      `dest x y w h newx newy` lines up to `#`
+binary   computers  3 raw bytes x y type, the rest of the line, up to a first byte >= 0x80
+text     signs      `x+32 y+32 text` lines up to an empty line or the end
+```
+
+- **No NPC and no chest section.** "Computer" is the Zelda Online word for a
+  baddy. A computer record is `x y type` and a line end. In `Z3-V1.03` the line
+  is empty (this is what the notes call "no verse line", and also the 4-byte
+  record of the Java source); in `Z3-V1.04` it is the verse text
+  `sight\hurt\attack`. The terminator is `FF FF FF` and a line end. `x` and `y`
+  are raw bytes (tiles), not the +32 of signs. A `0x0A` among the three bytes is
+  data (2 real records have one), so the reader takes three bytes before it looks
+  for the line end, as the 1.39 loader does and as the Java source's fixed four
+  bytes do. Types are 0 to 6 in every real file; the Java source names them
+  (soldier green, blue, red, shot soldier, swamp soldier, jumping hare, octopus);
+  later builds' names for the same numbers are not claimed.
+- **Links use decimals.** `Z3-V1.03` links are written `31.0 42.0 2.0 1.0 43.5 41.0`
+  (124 of 207 distinct `1.03` links have a decimal point in x, y, width or
+  height; all are whole tiles). Both Delphi clients and the Java source read
+  six floating-point numbers. A **negative arrival coordinate keeps the player's
+  own** (`-1` in 151 links of the distinct files): 1st Graal and the Java source
+  both set a "constant" flag from `< 0`.
+- **The reader follows the clients' loop, not only the notes.** The
+  double-run flag stays set until a double run completes (the `.graal` reader
+  clears it on the next control code; no real file shows the difference, 0 of
+  663). A run that overruns the board is an error. The first `FF` record ends
+  the computers; the sign loop ends at an empty line.
+- **Strict, and honest about unknowns.** `ZeldaLayout` records offsets, counts
+  and every `anomalies` line (a section without its `#` or terminator, text
+  after a `1.03` record, a bad link line, bytes after the signs). A clean file
+  reaches the end of the file exactly: all 663 real copies do. Computer text and
+  sign bytes are kept as stored (`Computer::extra`, `ZeldaSign::raw`).
+- **The extension decides nothing.** The clients read the magic. Of the 139
+  distinct `Z3-V1` files, 31 `Z3-V1.04` files sit under a `.graal` name (all of
+  1st Graal's levels) and 1 `Z3-V1.03` file under `.editor`. In the other
+  direction 694 distinct `.zelda`-named files are `GR-V1.00` to `GR-V1.03`
+  (2nd Graal to 15th Graal ship 68 to 368 of them per build). `Level::load`
+  dispatches on the magic for all of them.
+- **Profile gate.** `levels.zelda` is true for every row. Every client binary
+  in the Drive set (1st Graal, 1.28b2 to 1.41, 2.0 to 2.31, the NewMain and NW
+  betas) compares the level magic with `Z3-V1.03` and `Z3-V1.04` and with no
+  other `Z3-V1` revision. `Z3-V1.02` is read by no Graal client and is in no real
+  file; Seihai still decodes it (11 bits) for the Java client's files and says so
+  in the layout report. The resolver opens a `.zelda` name for every profile and
+  tries `.zelda` for a bare name after `.graal`; that order is Seihai's. No
+  binary says whether a build tries `.zelda` for a bare name.
+- **`seihai --level-info FILE`** prints the Z3-V1 layout (sections with offsets,
+  record counts, computer types, negative arrivals, anomalies) and exits 1 if the
+  file has an anomaly. **`--check-assets`** now also reads every `.zelda` and
+  `.graal` file under the folder by magic, lists up to 20 that do not read
+  clean, and prints counts.
+- **Engine.** The converted `Level` has the board, links, signs and the computers
+  as baddies, so the offline engine's link rules and the F5 picker work on
+  `.zelda` files (`zelda_level_links_work_in_the_engine`). Baddies are still not
+  simulated.
+
+Two things changed for `.graal` and `.nw` levels on the way:
+
+- **Negative link arrivals.** `link_coord` read `-1` as the arrival
+  coordinate `-1`. It now means "keep the player's coordinate", like `playerx`.
+  805 of 5381 distinct `GR-V1` links in the Drive set use it. This rests on the
+  1st Graal and Java rule above; whether 2.x clients treat `-1` the same is not
+  checked.
+- **The old reader's Z3-V1 faults**, found by replaying the old section reader
+  over the real files: it dropped every link with a decimal x, y, width or
+  height (124 links, 47 distinct `1.03` files) and misread the computers of all
+  31 distinct `1.03` files that have any (it consumed 3 bytes per record and
+  left the line end to start the next record).
+
+Real files, aggregates only:
+
+- `SEIHAI_DRIVE_CLIENTS=<folder holding the build folders>`:
+  `real_z3_files_match_the_format_notes` (every `Z3-V1` file under it reads
+  clean, with the derived facts above; the structure survives `to_bytes`) and
+  `real_drive_builds_level_scan_is_clean` (`--check-assets`' scan on every build
+  folder that has levels).
+- The player world has no `.zelda` file and no `Z3-V1` file: 3113 `GR-V1.03` under
+  `.graal`, 9 `GR-V1.03` under `.nw`, 3347 `GLEVNW01` `.nw`.
+
+Not settled:
+
+- **Which build tries `.zelda` for a bare name**, and whether a missing `.zelda`
+  link falls back to the `.graal` of the same stem (1 to 3 links per build would
+  need it; no binary says).
+- **Sign glyph codes 82 to 88.** The Java source reads codes 82 to 88 as `#1` to
+  `#4` glyph pairs; the shared alphabet has other characters there. 5 of the 120
+  distinct real `Z3-V1` signs contain code 82 or 83. Their text under the shared
+  alphabet was not compared with the Java reading. Seihai uses the shared
+  alphabet.
+- **1st Graal reads computers a line at a time**, so a record with `0x0A` as x or y
+  would end its section early; no 1st Graal file has one (the 2 real cases are in
+  `Z3-V1.03` files). Not run.
+- **What `Z3-V1.04` verse text means for types other than the Java ones**, and
+  the fields a `Z3-V1.04` computer may carry beyond three verses (none seen).
+- **`Z3-V1.02`** has no sample; its 11-bit rule is the Java source's.
+
 ### Checking a folder
 
 `seihai --assets <dir> --check-assets [--version V]` resolves and loads the
@@ -148,7 +256,9 @@ offline tiledefs) and prints them. The list per build is
 `expected_files(profile)` in `client/src/assets/coverage.rs`; it follows the
 profile (no GANIs for 1.39, `.nw` only where `levels.nw`, the 24-name 1.39
 sound list below the GANI builds and the 15-name 2.05 list from there, the
-offline tiledefs from 2.17).
+offline tiledefs from 2.17). It then reads every `.zelda` and `.graal` file under
+the folder by magic (a `Z3-V1` file must parse to its end with no anomaly), lists
+up to 20 failures and prints counts in a note.
 
 Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
 
