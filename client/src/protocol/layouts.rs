@@ -124,21 +124,62 @@ pub enum ServerMode {
     NewWorld,
 }
 
-/// `PLO_SERVERWARP` (178): comma text with at least 4 fields; fields 1, 2
-/// and 3 are used and field 0 is ignored. They go to the client's
-/// connect-to-other-server routine; which is the server name and what the
-/// other two are is **not resolved**, so they are kept in order.
+/// `PLO_SERVERWARP` (178): comma text with at least 4 fields, e.g.
+/// `labtwo,labtwo,127.0.0.2,14803`. Field 0 is unused, field 1 is the
+/// server's name (not needed to connect), field 2 is the host and field 3
+/// the port. A real 2.31 client closed its connection and logged in again
+/// to field 2 and 3 with a new key and the same credentials, with no
+/// listserver step. Reordered host and port made it fail to connect, a
+/// wrong field 0 did nothing, and a 3-field payload was ignored entirely
+/// (lab, 2026-10-24). Whether field 1 is used for anything else (a title,
+/// say) is unresolved. The sample text came from the open-source listserver
+/// reimplementation, so a real service's text is still unobserved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerWarp {
-    pub field1: String,
-    pub field2: String,
-    pub field3: String,
+    /// Field 1.
+    pub name: String,
+    /// Field 2.
+    pub host: String,
+    /// Field 3, as sent.
+    pub port: String,
+}
+
+impl ServerWarp {
+    /// `host:port` to connect to, if field 3 is a port (decimal, 1 to
+    /// 65535) and field 2 is a host. The real client failed to connect when
+    /// the two were swapped, so anything else is `None`.
+    pub fn address(&self) -> Option<String> {
+        let host = self.host.trim();
+        let port = self.port.trim();
+        if host.is_empty() || host.contains(char::is_whitespace) {
+            return None;
+        }
+        let n: u16 = port.parse().ok().filter(|&n| n != 0)?;
+        if host.contains(':') {
+            // A bare IPv6 address needs brackets in `host:port`.
+            Some(format!("[{host}]:{n}"))
+        } else {
+            Some(format!("{host}:{n}"))
+        }
+    }
 }
 
 pub fn parse_server_warp(payload: &[u8]) -> Option<ServerWarp> {
     let f = split_quoted(&latin1(payload));
-    let [_, a, b, c, ..] = &f[..] else { return None };
-    Some(ServerWarp { field1: a.clone(), field2: b.clone(), field3: c.clone() })
+    let [_, name, host, port, ..] = &f[..] else { return None };
+    let port = port.trim_end_matches(['\r', '\n']).to_string();
+    Some(ServerWarp { name: name.clone(), host: host.clone(), port })
+}
+
+/// `PLO_SHOWIMG` (32): `GSHORT` sender id, then the sender's `PLI_SHOWIMGPLAYER`
+/// payload unchanged. GServer-v2 forwards the payload as it came (a real
+/// 2.31 client's is the one byte 9) to every other player in the level
+/// without looking inside, so the bytes are kept opaque. A payload of any
+/// length, empty included, is fine; fewer than the 2 id bytes is not a
+/// message (lab, 2026-10-24).
+pub fn parse_showimg_relay(payload: &[u8]) -> Option<(u16, Vec<u8>)> {
+    let id = read_gshort(payload)?;
+    Some((id, payload[2..].to_vec()))
 }
 
 /// `PLO_TAKESCREENSHOT` (184): a file name; the client accepts only the
@@ -329,10 +370,51 @@ mod tests {
         assert_eq!(parse_player_toggle(&t[..2]), None);
     }
 
+    /// The lab wire text, field 0 ignored, a 3-field payload ignored, and the
+    /// reordered forms the real client could not connect with give no address.
+    #[test]
+    fn server_warp_lab_text_and_field_order() {
+        let w = parse_server_warp(b"labtwo,labtwo,127.0.0.2,14803").unwrap();
+        assert_eq!((w.name.as_str(), w.address().as_deref()), ("labtwo", Some("127.0.0.2:14803")));
+        // Field 0 is not the host; field 1 is not needed to connect.
+        let w = parse_server_warp(b"127.0.0.9,labtwo,127.0.0.2,14803").unwrap();
+        assert_eq!(w.address().as_deref(), Some("127.0.0.2:14803"));
+        let w = parse_server_warp(b"x,zzznoserver,127.0.0.2,14803").unwrap();
+        assert_eq!(w.address().as_deref(), Some("127.0.0.2:14803"));
+        // Host and port swapped, or name, host, port order: no address.
+        assert_eq!(parse_server_warp(b"x,labtwo,14803,127.0.0.2").unwrap().address(), None);
+        assert_eq!(parse_server_warp(b"x,127.0.0.2,14803,labtwo").unwrap().address(), None);
+        // Only three fields: ignored completely.
+        assert_eq!(parse_server_warp(b"x,labtwo,127.0.0.2"), None);
+        // Ports out of range, empty host, trailing newline, extra fields.
+        for bad in ["0", "65536", "-1", "", "14803 x"] {
+            let w = ServerWarp { name: "n".into(), host: "h".into(), port: bad.into() };
+            assert_eq!(w.address(), None, "{bad:?}");
+        }
+        let w = ServerWarp { name: "n".into(), host: "".into(), port: "1".into() };
+        assert_eq!(w.address(), None);
+        let w = parse_server_warp(b"x,n,host.example,14900\n,extra").unwrap();
+        assert_eq!(w.address().as_deref(), Some("host.example:14900"));
+        let w = parse_server_warp(b"x,n,::1,14900").unwrap();
+        assert_eq!(w.address().as_deref(), Some("[::1]:14900"));
+    }
+
+    #[test]
+    fn showimg_relay_is_an_id_and_opaque_bytes() {
+        // Sender id 2, then the real client's one byte: 9.
+        assert_eq!(parse_showimg_relay(&[0x20, 2 + 0x20, 9 + 0x20]), Some((2, vec![9 + 0x20])));
+        // Empty payload, and a long one, are kept as sent.
+        assert_eq!(parse_showimg_relay(&[0x20, 3 + 0x20]), Some((3, vec![])));
+        assert_eq!(parse_showimg_relay(&[0x20, 3 + 0x20, 0, 255, b'\n', b'x']).unwrap().1.len(), 4);
+        // Too short for the id.
+        assert_eq!(parse_showimg_relay(&[]), None);
+        assert_eq!(parse_showimg_relay(&[0x20]), None);
+    }
+
     #[test]
     fn server_warp_uses_fields_1_to_3() {
         let w = parse_server_warp(b"x,Main Server,127.0.0.1,14900").unwrap();
-        assert_eq!((w.field1.as_str(), w.field2.as_str(), w.field3.as_str()), ("Main Server", "127.0.0.1", "14900"));
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("Main Server", "127.0.0.1", "14900"));
         assert_eq!(parse_server_warp(b"a,b,c"), None);
         assert!(parse_server_warp(b"\"a,b\",\"c, d\",e,f,g").is_some());
     }

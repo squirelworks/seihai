@@ -11,7 +11,7 @@ use super::extras::{
 use super::layouts::{
     parse_board_heights, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
     parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
-    parse_shoot, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
+    parse_shoot, parse_showimg_relay, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
 };
 use super::profile::IdSet;
 use super::props::parse_player_props_in;
@@ -340,7 +340,12 @@ pub struct SessionState {
     pub npc_showimgs: usize,
     /// `PLO_KINGDOMSMODE` (176) or `PLO_NEWWORLDMODE` (177).
     pub server_mode: Option<ServerMode>,
-    /// `PLO_SERVERWARP` (178), fields as sent; Seihai does not follow it.
+    /// `PLO_SHOWIMG` (32) relays: how many, and the last one as sender id
+    /// and opaque payload. Seihai draws nothing for it.
+    pub showimg_relays: usize,
+    pub last_showimg: Option<(u16, Vec<u8>)>,
+    /// `PLO_SERVERWARP` (178), decoded: name, host and port. The last one
+    /// received; the client takes it with `take()` and reconnects.
     pub server_warp: Option<ServerWarp>,
     /// `PLO_UNKNOWN181` (181): the last player and toggle.
     pub player_toggle: Option<(u16, bool)>,
@@ -667,6 +672,12 @@ impl SessionState {
             166 => {
                 if parse_npc_id_rest(&msg.payload).is_some() {
                     self.npc_showimgs += 1;
+                }
+            }
+            32 => {
+                if let Some(r) = parse_showimg_relay(&msg.payload) {
+                    self.showimg_relays += 1;
+                    self.last_showimg = Some(r);
                 }
             }
             169 => self.upgrade_url = Some(latin1(&msg.payload)),
@@ -1391,7 +1402,7 @@ mod tests {
         assert!(st.ghost_mode);
         assert_eq!(st.ghost_text.as_deref(), Some("ghost"));
         assert_eq!(st.server_mode, Some(ServerMode::Kingdoms));
-        assert_eq!(st.server_warp.as_ref().map(|w| w.field2.as_str()), Some("host"));
+        assert_eq!(st.server_warp.as_ref().map(|w| w.host.as_str()), Some("host"));
         assert_eq!(st.player_toggle, Some((8, true)));
         assert_eq!(st.process_running_requests, 1);
         assert_eq!(st.screenshot_requests, vec!["shot.png"]);
@@ -1446,6 +1457,38 @@ mod tests {
         assert!(st.board_heights.is_none() && st.board_modify2.is_none());
         assert_eq!((st.npc_moves, st.npc_showimgs, st.shoots, st.npc_dels), (0, 0, 0, 0));
         assert!(st.unhandled.is_empty());
+    }
+
+    /// 32 is `GSHORT id` plus opaque bytes: the real clients' one-byte 9, any
+    /// other payload and an empty one are kept; a payload too short for the
+    /// id changes nothing and does not panic.
+    #[test]
+    fn showimg_relay_is_kept_opaque() {
+        for v in [ClientVersion::V222, ClientVersion::V231] {
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&msg(32, &[gc(0), gc(2), gc(9)]));
+            assert_eq!((st.showimg_relays, st.last_showimg.clone()), (1, Some((2, vec![gc(9)]))), "{v:?}");
+            st.apply_body(&msg(32, &[gc(0), gc(3)]));
+            assert_eq!(st.last_showimg, Some((3, vec![])));
+            st.apply_body(&msg(32, &[gc(9)]));
+            st.apply_body(&msg(32, b""));
+            assert_eq!(st.showimg_relays, 2);
+            assert!(st.unhandled.is_empty(), "{:?}", st.unhandled);
+        }
+    }
+
+    /// 178 is decoded with the lab's field order; a 3-field text is ignored,
+    /// and a later good one replaces the earlier.
+    #[test]
+    fn server_warp_is_decoded_and_three_fields_are_ignored() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&msg(178, b"labtwo,labtwo,127.0.0.2"));
+        assert!(st.server_warp.is_none());
+        st.apply_body(&msg(178, b"labtwo,labtwo,127.0.0.2,14803"));
+        let w = st.server_warp.take().unwrap();
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("labtwo", "127.0.0.2", "14803"));
+        assert_eq!(w.address().as_deref(), Some("127.0.0.2:14803"));
+        assert!(st.server_warp.is_none());
     }
 
     /// The signature rule is reported, not enforced.

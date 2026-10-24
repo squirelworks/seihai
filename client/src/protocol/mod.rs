@@ -15,6 +15,7 @@ pub mod layouts;
 mod list;
 mod profile;
 mod props;
+pub mod showimg;
 pub mod tampercheck;
 mod version;
 
@@ -35,6 +36,7 @@ pub use profile::{
     by_label, profile, Basis, Files, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
     VersionProfile, PROFILES,
 };
+pub use showimg::{showimg_message, ShowImgInfo, ShowImgSender};
 pub use tampercheck::{TamperImage, TamperSender, TamperWords};
 pub use version::{ClientVersion, EncryptionGen};
 

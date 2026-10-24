@@ -21,6 +21,8 @@
 //! values come from release notes and server source and should be checked
 //! when a build turns up.
 
+use super::showimg::ShowImgInfo;
+use std::time::Duration;
 use super::tampercheck::{TamperInfo, TamperResend, TamperWords};
 use super::version::{ClientVersion, EncryptionGen};
 
@@ -172,6 +174,11 @@ pub struct Protocol {
     /// never captured (2.3). Seihai sends it only when asked
     /// (`--send-tampercheck`); see [`super::tampercheck`].
     pub tamper: Option<TamperInfo>,
+    /// When the build sends `PLI_SHOWIMGPLAYER` (24) with its constant 9;
+    /// `Some` only for the builds observed doing it (2.22 and 2.31).
+    /// Seihai sends it only when asked (`--send-showimg`); see
+    /// [`super::showimg`].
+    pub showimg: Option<ShowImgInfo>,
     /// Peer-to-peer UDP channel present.
     pub udp: bool,
     /// UDP off by default (`noudp=true` in the shipped config).
@@ -454,6 +461,11 @@ const TAMPER_231: TamperInfo = TamperInfo {
 /// 2.3: no binary, so no constant; it is taken to re-send like 2.31.
 const TAMPER_230: TamperInfo = TamperInfo { words: None, resend: TamperResend::Timer };
 
+// Id 24 (lab, real clients, 2026-10-24): 2.22 about every 5.1 s while another
+// player is in the level, 2.31 every 5.13 s always.
+const SHOWIMG_222: ShowImgInfo = ShowImgInfo { period: Duration::from_millis(5100), needs_others: true };
+const SHOWIMG_231: ShowImgInfo = ShowImgInfo { period: Duration::from_millis(5130), needs_others: false };
+
 /// The base every row starts from: a 2.05 rev 2 client.
 const BASE: VersionProfile = VersionProfile {
     version: ClientVersion::V205,
@@ -470,6 +482,7 @@ const BASE: VersionProfile = VersionProfile {
         sends_language: true,
         tampercheck: false,
         tamper: None,
+        showimg: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -585,6 +598,7 @@ const GEN5: VersionProfile = VersionProfile {
         pli: PLI_222,
         tampercheck: true,
         tamper: Some(TAMPER_222),
+        showimg: Some(SHOWIMG_222),
         udp_off_by_default: true,
         ..NEW_2_1.protocol
     },
@@ -1014,7 +1028,14 @@ pub static PROFILES: &[VersionProfile] = &[
         label: "2.3",
         token: "GNW14015",
         basis: Basis::Inferred,
-        protocol: Protocol { plo: PLO_231, pli: PLI_231, tamper: Some(TAMPER_230), ..GEN5.protocol },
+        // 2.3: no id 24 observation, so none is sent.
+        protocol: Protocol {
+            plo: PLO_231,
+            pli: PLI_231,
+            tamper: Some(TAMPER_230),
+            showimg: None,
+            ..GEN5.protocol
+        },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -1030,7 +1051,13 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V231,
         label: "2.31",
         token: "GNW28015",
-        protocol: Protocol { plo: PLO_231, pli: PLI_231, tamper: Some(TAMPER_231), ..GEN5.protocol },
+        protocol: Protocol {
+            plo: PLO_231,
+            pli: PLI_231,
+            tamper: Some(TAMPER_231),
+            showimg: Some(SHOWIMG_231),
+            ..GEN5.protocol
+        },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
