@@ -18,9 +18,31 @@ use crate::protocol::{
 };
 use crate::protocol::parse_list_reply;
 use std::io::{self, BufRead, BufReader, Write};
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// How long one address gets to accept a connection.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// After the server list arrives, how long to wait for the status text,
+/// site URL and upgrade URL that some listservers send in a later frame.
+const LIST_TAIL_WAIT: Duration = Duration::from_millis(500);
+
+/// Try each address in order and return the first stream that connects.
+/// Fails with the last error, or `NotFound` if `addrs` is empty.
+fn connect_any(addrs: &[SocketAddr], timeout: Duration) -> io::Result<TcpStream> {
+    let mut last = None;
+    for a in addrs {
+        match TcpStream::connect_timeout(a, timeout) {
+            Ok(s) => return Ok(s),
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "host name resolved to no addresses")
+    }))
+}
 
 /// TCP connection to a listserver or gserver.
 pub struct Connection {
@@ -40,8 +62,14 @@ pub struct Connection {
 
 impl Connection {
     /// Connect to `host:port`.
+    ///
+    /// The name is resolved with the system resolver and every address it
+    /// returns is tried in turn, each with [`CONNECT_TIMEOUT`], so a dead
+    /// first address (an unreachable IPv6 one, say) does not hide a
+    /// working second one. The last error is returned if none connects.
     pub fn connect(addr: &str) -> io::Result<Self> {
-        let stream = TcpStream::connect(addr)?;
+        let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
+        let stream = connect_any(&addrs, CONNECT_TIMEOUT)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None })
     }
@@ -124,9 +152,14 @@ impl Connection {
 
     /// Log in to a listserver and collect its reply.
     ///
-    /// Reads frames until one carries servers or an error, the server
-    /// closes, or five frames have gone by. 1.33–1.39 have no listserver,
-    /// so they fetch the list as 2.05.
+    /// Reads frames until an error text arrives, the server closes, or
+    /// five frames have gone by. Real listservers send the server list in
+    /// one frame and the status text, site URL and upgrade URL in a
+    /// second. Once servers are in, this keeps reading for up to
+    /// [`LIST_TAIL_WAIT`] in total, stops as soon as the status is in, and
+    /// treats a timeout or any read error at that point as the end of the
+    /// reply, so an open connection never makes it hang.
+    /// 1.33–1.39 have no listserver, so they fetch the list as 2.05.
     pub fn fetch_server_list(
         addr: &str,
         version: ClientVersion,
@@ -137,13 +170,20 @@ impl Connection {
         let mut conn = Self::connect(addr)?;
         conn.login_listserver(version, random_key(), account, password)?;
         let mut reply = ListReply::default();
+        let mut tail_deadline: Option<Instant> = None;
         for _ in 0..5 {
-            let body = match conn.read_body() {
-                Ok(b) => b,
-                Err(e) if reply.status.is_some() => {
-                    let _ = e;
+            if let Some(deadline) = tail_deadline {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
                     break;
                 }
+                let _ = conn.stream.set_read_timeout(Some(left));
+            }
+            let body = match conn.read_body() {
+                Ok(b) => b,
+                // Past the server list (or the status), a timeout, close or
+                // bad frame just ends the reply.
+                Err(_) if reply.status.is_some() || !reply.servers.is_empty() => break,
                 Err(e) => return Err(e),
             };
             let part = parse_list_reply(&body);
@@ -152,8 +192,11 @@ impl Connection {
             reply.site_url = part.site_url.or(reply.site_url);
             reply.error = part.error.or(reply.error);
             reply.upgrade_url = part.upgrade_url.or(reply.upgrade_url);
-            if !reply.servers.is_empty() || reply.error.is_some() {
+            if reply.error.is_some() || (!reply.servers.is_empty() && reply.status.is_some()) {
                 break;
+            }
+            if !reply.servers.is_empty() && tail_deadline.is_none() {
+                tail_deadline = Some(Instant::now() + LIST_TAIL_WAIT);
             }
         }
         Ok(reply)
@@ -640,5 +683,151 @@ mod tests {
         conn.send_post_login(ClientVersion::V205, "English").unwrap();
         let body = read_frame(&mut server);
         assert_eq!(body[0], 37 + 0x20);
+    }
+
+    // ---- listserver reply and address fallback ----
+
+    fn gs(s: &str) -> Vec<u8> {
+        let mut v = vec![s.len() as u8 + 0x20];
+        v.extend_from_slice(s.as_bytes());
+        v
+    }
+
+    /// Body of an id 0 server list with one server, as the real listserver
+    /// sends it: id, count, field count, then 8 gstrings.
+    fn svrlist_body() -> Vec<u8> {
+        let mut b = vec![0x20, 1 + 0x20, 8 + 0x20];
+        for f in ["P Mock", "English", "desc", "http://x", "Version: 1", "3", "127.0.0.1", "14802"] {
+            b.extend(gs(f));
+        }
+        b.push(b'\n');
+        b
+    }
+
+    /// Body with id 2 status, id 3 site URL and id 5 upgrade URL.
+    fn tail_body() -> Vec<u8> {
+        b"\"Welcome, ab.\r2 online\n#https://site.example\n%https://upgrade.example\n".to_vec()
+    }
+
+    fn send_gen5(srv: &mut TcpStream, out: &mut Gen5, body: &[u8]) {
+        let z = zlib_compress(body).unwrap();
+        srv.write_all(&write_frame(Gen5Comp::Zlib, &out.encode(z, Gen5Comp::Zlib))).unwrap();
+    }
+
+    /// Accept a 2.22 listserver login, return the connection and the key
+    /// the client picked (second byte of the plain id 7 frame).
+    fn accept_listserver(listener: &TcpListener) -> (TcpStream, u8) {
+        let (mut srv, _) = listener.accept().unwrap();
+        let hs = read_frame(&mut srv);
+        assert_eq!(hs[0], 7 + 0x20);
+        let key = hs[1] - 0x20;
+        let _login = read_raw(&mut srv);
+        (srv, key)
+    }
+
+    /// Server list in frame one, status and URLs in frame two, and the
+    /// connection stays open afterwards. The fetch must return all of it
+    /// and must not wait for a close.
+    #[test]
+    fn fetch_server_list_reads_second_frame() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, key) = accept_listserver(&listener);
+            let mut out = Gen5::new(key);
+            send_gen5(&mut srv, &mut out, &svrlist_body());
+            std::thread::sleep(Duration::from_millis(100));
+            send_gen5(&mut srv, &mut out, &tail_body());
+            // Keep the socket open until the client is done.
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
+        assert!(t.elapsed() < Duration::from_secs(3));
+        assert_eq!(reply.servers.len(), 1);
+        assert_eq!(reply.servers[0].name, "Mock");
+        assert_eq!(reply.servers[0].port, 14802);
+        assert_eq!(reply.status.as_deref(), Some("Welcome, ab.\n2 online"));
+        assert_eq!(reply.site_url.as_deref(), Some("https://site.example"));
+        assert_eq!(reply.upgrade_url.as_deref(), Some("https://upgrade.example"));
+        assert!(reply.error.is_none());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// Only the server list ever arrives and the connection stays open:
+    /// the fetch returns the servers after the short wait, with no status.
+    #[test]
+    fn fetch_server_list_does_not_hang_without_second_frame() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, key) = accept_listserver(&listener);
+            let mut out = Gen5::new(key);
+            send_gen5(&mut srv, &mut out, &svrlist_body());
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
+        let took = t.elapsed();
+        assert!(took >= Duration::from_millis(400), "returned too early: {took:?}");
+        assert!(took < Duration::from_secs(3), "waited too long: {took:?}");
+        assert_eq!(reply.servers.len(), 1);
+        assert!(reply.status.is_none() && reply.site_url.is_none() && reply.upgrade_url.is_none());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// One frame with servers and status (the lab listserver) returns at
+    /// once, without the tail wait.
+    #[test]
+    fn fetch_server_list_single_frame_returns_at_once() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, key) = accept_listserver(&listener);
+            let mut out = Gen5::new(key);
+            let mut body = svrlist_body();
+            body.extend(tail_body());
+            send_gen5(&mut srv, &mut out, &body);
+            let _ = done_rx.recv();
+        });
+
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
+        assert!(t.elapsed() < Duration::from_millis(400));
+        assert_eq!(reply.servers.len(), 1);
+        assert_eq!(reply.upgrade_url.as_deref(), Some("https://upgrade.example"));
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// A dead first address must not stop a working second one.
+    #[test]
+    fn connect_any_falls_back_to_next_address() {
+        let live = TcpListener::bind("127.0.0.1:0").unwrap();
+        // Bind and drop to get a local port with nothing listening.
+        let dead = {
+            let l = TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap()
+        };
+        let addrs = [dead, live.local_addr().unwrap()];
+        let s = connect_any(&addrs, Duration::from_secs(2)).unwrap();
+        assert_eq!(s.peer_addr().unwrap(), live.local_addr().unwrap());
+        let (_srv, _) = live.accept().unwrap();
+
+        assert!(connect_any(&[dead], Duration::from_secs(2)).is_err());
+        assert_eq!(
+            connect_any(&[], Duration::from_secs(1)).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
     }
 }

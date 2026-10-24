@@ -5,6 +5,7 @@
 //!
 //! Usage:
 //!   seihai --assets <dir> [--level <name.nw>]
+//!   seihai --online host:port --list-only [--account A --password-env VAR --version 2.22]
 //!
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
@@ -35,6 +36,7 @@ fn main() {
     let mut version = ClientVersion::V205;
     let mut i = 0;
     let mut cli_mode = false;
+    let mut list_only = false;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -63,6 +65,7 @@ fn main() {
                     password = p.clone();
                 }
             }
+            "--list-only" => list_only = true,
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -89,6 +92,9 @@ fn main() {
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
                 println!("         --password-env VAR  read the password from environment variable VAR");
                 println!("                             (keeps it off the command line)");
+                println!("       seihai --online host:port --list-only [--account A --password-env VAR] [--version 2.22]");
+                println!("         --list-only         fetch and print the server list from a listserver,");
+                println!("                             then exit; no login to a gserver, no prompt");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -116,6 +122,44 @@ fn main() {
     if version == ClientVersion::V205 {
         if let Some(v) = &settings.version {
             version = ClientVersion::from_label(v).unwrap_or(ClientVersion::V205);
+        }
+    }
+    // List-only: ask the listserver, print, exit. Never prompts and never
+    // logs in to a gserver. Exit 0 on a list, 1 on a failure, 2 on bad use.
+    if list_only {
+        let Some(addr) = &online else {
+            eprintln!("--list-only needs --online host:port (a listserver)");
+            std::process::exit(2);
+        };
+        match Connection::fetch_server_list(addr, version, &account, &password) {
+            Ok(reply) => {
+                if let Some(err) = &reply.error {
+                    eprintln!("listserver error: {err}");
+                    std::process::exit(1);
+                }
+                if let Some(status) = &reply.status {
+                    println!("{status}");
+                }
+                if let Some(url) = &reply.site_url {
+                    println!("Site: {url}");
+                }
+                if let Some(url) = &reply.upgrade_url {
+                    println!("Upgrade: {url}");
+                }
+                if reply.servers.is_empty() {
+                    println!("no servers in reply");
+                } else {
+                    println!("Servers:");
+                    for (i, e) in reply.servers.iter().enumerate() {
+                        println!("{}", e.display_line(i));
+                    }
+                }
+                return;
+            }
+            Err(e) => {
+                eprintln!("listserver failed: {e}");
+                std::process::exit(1);
+            }
         }
     }
     // Do not auto-fill online from settings. The GUI is the waiting area.

@@ -72,6 +72,14 @@ export SEIHAI_PASSWORD=...
 ./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22
 ```
 
+To see what a listserver offers without logging in to anything:
+
+```bash
+./target/release/seihai --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22 --list-only
+```
+
+Host names are resolved with the system resolver, and every address it returns is tried in turn (5 s each). If your resolver gives wrong or no answers for a name, use the server's IP address in `--online` instead.
+
 | Flag | Meaning |
 |------|---------|
 | `--assets`, `-a` | Folder containing `pics1.png` |
@@ -80,6 +88,7 @@ export SEIHAI_PASSWORD=...
 | `--account` | Account name |
 | `--password` | Password (visible in the process list; prefer `--password-env`) |
 | `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
+| `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 
 ## Features

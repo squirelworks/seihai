@@ -30,6 +30,19 @@ pub struct ServerEntry {
     pub players: Option<u16>,
 }
 
+impl ServerEntry {
+    /// One line for a server picker or listing: index, kind letter (`-`
+    /// for silver), name, `host:port`, version and player count.
+    pub fn display_line(&self, index: usize) -> String {
+        let kind = if self.kind.is_empty() { "-" } else { self.kind.as_str() };
+        let players = self.players.map_or_else(|| "?".to_string(), |n| n.to_string());
+        format!(
+            "  {index}) [{kind}] {}  {}:{}  {}  players: {players}",
+            self.name, self.host, self.port, self.version
+        )
+    }
+}
+
 /// Everything a listserver sent in one reply body.
 #[derive(Debug, Clone, Default)]
 pub struct ListReply {
@@ -82,6 +95,10 @@ pub fn parse_svrlist(payload: &[u8]) -> Vec<ServerEntry> {
             url: fields[3].clone(),
             version: fields[4].clone(),
             players: fields[5].trim().parse().ok(),
+            // Kept exactly as received. A public listserver has been seen
+            // sending a host with a leading dot (".163.252.231.43"); that
+            // is how the server stored it, not a parse error, so it is
+            // not repaired here.
             host: fields[6].clone(),
             port: fields[7].trim().parse().unwrap_or(0),
         });
@@ -170,5 +187,22 @@ mod tests {
         let raw = Gen5::new(102).decode(frame[1..].to_vec(), Gen5Comp::Zlib);
         let body = crate::protocol::zlib_decompress(&raw).unwrap();
         check_lab_reply(&parse_list_reply(&body));
+    }
+
+    #[test]
+    fn display_line_shows_all_columns() {
+        let e = ServerEntry {
+            kind: "P".into(),
+            name: "Mock".into(),
+            version: "Version: 1".into(),
+            host: "127.0.0.1".into(),
+            port: 14802,
+            players: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(e.display_line(2), "  2) [P] Mock  127.0.0.1:14802  Version: 1  players: 3");
+        let silver = ServerEntry { players: None, ..Default::default() };
+        assert!(silver.display_line(0).starts_with("  0) [-] "));
+        assert!(silver.display_line(0).ends_with("players: ?"));
     }
 }
