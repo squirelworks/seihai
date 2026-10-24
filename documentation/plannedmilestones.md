@@ -11,7 +11,6 @@ What remains after the current gmaps / script engine / differential testing work
 ## Next
 
 - Audio playback. GANI frames carry a sound field; nothing consumes it.
-- Chat popups, buddy/ignore/mute files.
 - Damage formula and the respawn "same name group" rule.
 - Asset loaders from the 2.22 data folder that work for every client.
 - File transfer caching rules the real clients follow.
@@ -39,3 +38,4 @@ What remains after the current gmaps / script engine / differential testing work
 - Cached level links: PLI 30 (`LEVELWARPMOD`) with the mod time from a per-session level cache, 46 and the props in the same frame, gated by profile
 - Health and death: 1.5 s death timer, input lock, dead status bit from tick 28, respawn hearts by AP and at the saved entry point, victim-sent `PLI_CLAIMPKER` (14), gated by `life.death` in the profile (`documentation/health-death.md`)
 - Combat: the victim's client judges sword swings (reach 0 to 4 tiles, side under 2, AP 100 immune, no hit while dead, hurt or swimming) and `PLO_HURTPLAYER` (40); hurt mode (40 ticks); the S key swings and broadcasts the swing sprite; hits that the victim would refuse are not sent; gated by `life.combat` in the profile (`documentation/combat.md`)
+- Chat popups, buddy, ignore and mute lists: chat bubbles over the speaker for 3 s (a placeholder; the one documented number is the 3 s of script-set chat text), `buddyaccounts.txt`, `ignoredaccounts.txt` and `mutedaccounts.txt` in the settings directory (one account per line, case-insensitive, atomic save), ignore and mute hide chat, bubbles, toalls and PMs, `/mute` sends `PLI_MUTEPLAYER` (43) only where the profile has it (`documentation/chat-lists.md`)

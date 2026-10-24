@@ -96,6 +96,19 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
 
+### Chat commands and list files
+
+In the chat bar (Enter) these are commands, not chat. A name is an account name or a nickname, in any case.
+
+| Command | Effect |
+|---------|--------|
+| `/ignore NAME`, `/unignore NAME` | Hide that player's bubbles, chat, toalls and PMs. Local only: nothing is sent |
+| `/buddy NAME`, `/unbuddy NAME` | Mark the player in the player list (Tab). Local only: nothing is sent |
+| `/mute NAME`, `/unmute NAME` | As ignore, and sends `PLI_MUTEPLAYER` (43) for a player in the level. Only on versions that send it (2.17 and later); at most 5 sends per session |
+| `/lists`, `/lists buddy` | Show the lists |
+
+The lists are plain text files in the settings directory (`~/.config/seihai/`, the folder `seihai.conf` is in): `buddyaccounts.txt`, `ignoredaccounts.txt` and `mutedaccounts.txt`. One account name per line; case does not matter; blank lines, `#` comments and any line ending are fine; a name that is already there is kept once. They hold names only, never a password. A file is replaced whole (written aside, then renamed), and removed when its list becomes empty. Edit them by hand while Seihai is not running; they are read when it connects. `buddyaccounts.txt` and `ignoredaccounts.txt` are the real client's names; the mute file is Seihai's own.
+
 ### Settings file
 
 Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
@@ -116,6 +129,7 @@ follow_serverwarp=0
 - Listserver login and server list
 - Player sprites, chests, signs, and NPC images (requested if missing)
 - Chat bar, PMs, player list, and debug overlay
+- Chat bubbles that expire, and buddy, ignore and mute lists (chat bar commands `/ignore`, `/buddy`, `/mute`, `/lists`)
 - Resizable window, scaled 2× by default
 
 ## Known issues

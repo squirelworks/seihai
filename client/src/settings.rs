@@ -161,6 +161,16 @@ fn config_path() -> PathBuf {
     }
 }
 
+/// The settings directory: the folder `seihai.conf` is in. The buddy,
+/// ignore and mute list files live here too.
+pub fn config_dir() -> PathBuf {
+    config_path()
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 impl AsRef<Path> for Settings {
     fn as_ref(&self) -> &Path {
         Path::new("seihai.conf")

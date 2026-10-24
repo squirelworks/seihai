@@ -4,6 +4,7 @@
 //! Everything draws onto a finished scene with the 5×7 font, so the
 //! overlays work the same offline and online.
 
+use crate::chatlists::{ChatFilter, Identity, NameList};
 use crate::protocol::{ChatKind, ChatLine, OtherPlayer};
 use crate::render::font::{text_width, CELL_H, CELL_W};
 use crate::render::{Framebuffer, TILE_PX};
@@ -223,20 +224,48 @@ pub fn draw_other_labels(fb: &mut Framebuffer, others: &[OtherPlayer], cam: (i32
     }
 }
 
-/// Player list window in the top-right corner.
-pub fn draw_player_list(fb: &mut Framebuffer, me: &str, others: &[OtherPlayer]) {
-    let line_h = CELL_H + 2;
+/// The rows of the player list: a title, ourselves, then each other
+/// player with `[buddy]`, `[ignored]` and `[muted]` marks from the lists.
+/// A buddy mark is also the online marker: only players in the level
+/// are listed.
+pub fn player_list_rows(me: &str, others: &[OtherPlayer], buddy: &NameList, filter: &ChatFilter) -> Vec<String> {
     let mut rows = vec![format!("Players ({})", others.len() + 1), format!("  {me} (you)")];
     for o in others {
         let name = o.nick.clone().unwrap_or_default();
-        rows.push(format!("  {name} #{} {:.1},{:.1}", o.id, o.x, o.y));
+        let who = Identity { account: o.account.clone(), nick: o.nick.clone() };
+        let mut row = format!("  {name} #{} {:.1},{:.1}", o.id, o.x, o.y);
+        if who.account.as_deref().or(who.nick.as_deref()).is_some_and(|k| buddy.contains(k)) {
+            row.push_str(" [buddy]");
+        }
+        if filter.ignored(&who) {
+            row.push_str(" [ignored]");
+        }
+        if filter.muted(&who) {
+            row.push_str(" [muted]");
+        }
+        rows.push(row);
     }
+    rows
+}
+
+/// Player list window in the top-right corner.
+pub fn draw_player_list(fb: &mut Framebuffer, me: &str, others: &[OtherPlayer], buddy: &NameList, filter: &ChatFilter) {
+    let line_h = CELL_H + 2;
+    let rows = player_list_rows(me, others, buddy, filter);
     let w = rows.iter().map(|r| text_width(r)).max().unwrap_or(0).min(fb.width as i32 - 16) + 8;
     let x = fb.width as i32 - w - 4;
     let y = 72;
     fb.shade_rect(x, y, w, rows.len() as i32 * line_h + 6, 90);
     for (i, r) in rows.iter().enumerate() {
-        let colour = if i == 0 { [0xFF, 0xE0, 0x70] } else { [0xFF, 0xFF, 0xFF] };
+        let colour = if i == 0 {
+            [0xFF, 0xE0, 0x70]
+        } else if r.contains("[ignored]") || r.contains("[muted]") {
+            [0xFF, 0x70, 0x70]
+        } else if r.contains("[buddy]") {
+            [0x90, 0xFF, 0x90]
+        } else {
+            [0xFF, 0xFF, 0xFF]
+        };
         fb.draw_text(x + 4, y + 4 + i as i32 * line_h, &fit(r, w - 8), colour);
     }
 }
@@ -331,6 +360,37 @@ pub fn nearest(others: &[OtherPlayer], x: f32, y: f32) -> Option<&OtherPlayer> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn player_list_marks() {
+        let mk = |id: u16, nick: &str, account: Option<&str>| OtherPlayer {
+            id,
+            x: 1.0,
+            y: 2.0,
+            dir: 2,
+            nick: Some(nick.into()),
+            chat: None,
+            chat_timer: Default::default(),
+            account: account.map(Into::into),
+            cell: None,
+            sprite: None,
+            status: None,
+            ap: None,
+            sword_power: None,
+        };
+        let others = vec![mk(2, "Pal", Some("pal_acct")), mk(3, "Jerk", Some("jerk_acct")), mk(4, "Loud", None), mk(5, "Plain", None)];
+        let mut buddy = NameList::default();
+        buddy.add("PAL_ACCT");
+        let mut f = ChatFilter::default();
+        f.ignore.add("jerk_acct");
+        f.mute.add("loud");
+        let rows = player_list_rows("me", &others, &buddy, &f);
+        assert_eq!(rows[0], "Players (5)");
+        assert!(rows[2].ends_with(" [buddy]"), "{}", rows[2]);
+        assert!(rows[3].ends_with(" [ignored]"), "{}", rows[3]);
+        assert!(rows[4].ends_with(" [muted]"), "{}", rows[4]);
+        assert!(!rows[5].contains('['), "{}", rows[5]);
+    }
 
     #[test]
     fn toall_prefix() {

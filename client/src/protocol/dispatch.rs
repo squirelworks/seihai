@@ -19,6 +19,7 @@ use super::profile::{CombatRules, IdSet};
 use crate::combat::{self, IncomingHit};
 use super::props::parse_player_props_in;
 use super::version::ClientVersion;
+use crate::chatlists::{BubbleTimer, ChatFilter, Identity};
 use std::collections::HashMap;
 
 /// A single logical message after frame decompression.
@@ -189,6 +190,10 @@ pub struct OtherPlayer {
     pub nick: Option<String>,
     /// Chat bubble text (CURCHAT, prop 12). Empty clears it.
     pub chat: Option<String>,
+    /// How long the bubble has left; see [`SessionState::tick_bubbles`].
+    pub chat_timer: BubbleTimer,
+    /// Account name (ACCOUNTNAME, prop 34), when the server has sent it.
+    pub account: Option<String>,
     /// The gmap cell (props 43/44) the player is in, once the server has
     /// said. `x` and `y` are local to it. `None`: no cell sent, the same
     /// cell as ours.
@@ -308,6 +313,15 @@ pub struct SessionState {
     pub disconnect_message: Option<String>,
     /// Chat history, oldest first, at most [`CHAT_HISTORY`] lines.
     pub chat_log: Vec<ChatLine>,
+    /// Ignored and muted players: their chat, bubbles and PMs are dropped.
+    /// Empty by default (nothing hidden); the game loop installs the
+    /// lists with [`SessionState::set_filter`].
+    pub filter: ChatFilter,
+    /// Who each player id was, kept after the player leaves the level so
+    /// a PM from someone who has gone can still be matched.
+    pub identities: HashMap<u16, Identity>,
+    /// Lines and bubbles dropped by the filter.
+    pub hidden: usize,
     /// Chests the server reports as opened, by tile position. The game
     /// loop moves them into the session.
     pub opened_chests: Vec<(i32, i32)>,
@@ -591,8 +605,12 @@ impl SessionState {
                         Some((&n, t)) => t.get(..n.wrapping_sub(0x20) as usize).unwrap_or(t),
                         None => rest,
                     };
-                    let who = self.name_of(from);
-                    self.push_chat(ChatKind::Toall, who, latin1(text));
+                    if self.hides(from) {
+                        self.hidden += 1;
+                    } else {
+                        let who = self.name_of(from);
+                        self.push_chat(ChatKind::Toall, who, latin1(text));
+                    }
                 }
             }
             37 => {
@@ -601,8 +619,12 @@ impl SessionState {
                     let rest = latin1(msg.payload.get(2..).unwrap_or(&[]));
                     let fields = split_quoted(&rest);
                     let text = fields.last().cloned().unwrap_or_default();
-                    let who = self.name_of(from);
-                    self.push_chat(ChatKind::Private, who, text);
+                    if self.hides(from) {
+                        self.hidden += 1;
+                    } else {
+                        let who = self.name_of(from);
+                        self.push_chat(ChatKind::Private, who, text);
+                    }
                 }
             }
             35 => {
@@ -1073,6 +1095,55 @@ impl SessionState {
         }
     }
 
+    /// Install the ignore and mute sets, and take down the bubbles of
+    /// players they now hide.
+    pub fn set_filter(&mut self, filter: ChatFilter) {
+        self.filter = filter;
+        for i in 0..self.others.len() {
+            if self.hides(self.others[i].id) {
+                let o = &mut self.others[i];
+                o.chat = None;
+                o.chat_timer = BubbleTimer::default();
+            }
+        }
+    }
+
+    /// Whether the filter hides player `id`.
+    pub fn hides(&self, id: u16) -> bool {
+        !self.filter.is_empty() && self.identities.get(&id).is_some_and(|w| self.filter.hides(w))
+    }
+
+    /// What is known of the player with this account name or nickname,
+    /// among the players seen so far: (id, identity).
+    pub fn find_identity(&self, name: &str) -> Option<(u16, &Identity)> {
+        // Prefer a player who is here now.
+        let here = self.others.iter().filter_map(|o| self.identities.get(&o.id).map(|w| (o.id, w)));
+        let all = self.identities.iter().map(|(id, w)| (*id, w));
+        here.chain(all).find(|(_, w)| w.is_named(name))
+    }
+
+    /// Whether the player named `name` (account or nickname) is in the
+    /// level now, with their id.
+    pub fn present_id(&self, name: &str) -> Option<u16> {
+        self.others
+            .iter()
+            .find(|o| self.identities.get(&o.id).is_some_and(|w| w.is_named(name)))
+            .map(|o| o.id)
+    }
+
+    /// Advance the chat bubbles by `dt_ms`. Returns true if one ended, so
+    /// the view needs a redraw.
+    pub fn tick_bubbles(&mut self, dt_ms: u32) -> bool {
+        let mut ended = false;
+        for o in &mut self.others {
+            if o.chat_timer.tick(dt_ms) {
+                o.chat = None;
+                ended = true;
+            }
+        }
+        ended
+    }
+
     /// Nickname for a player id, or the id itself.
     fn name_of(&self, id: u16) -> String {
         self.others
@@ -1097,6 +1168,8 @@ impl SessionState {
                     dir: 2,
                     nick: None,
                     chat: None,
+                    chat_timer: BubbleTimer::default(),
+                    account: None,
                     cell: None,
                     sprite: None,
                     status: None,
@@ -1140,11 +1213,30 @@ impl SessionState {
         if u.nick.is_some() {
             o.nick = u.nick;
         }
+        if u.account.is_some() {
+            o.account = u.account;
+        }
+        let ident = self.identities.entry(u.id).or_default();
+        ident.account = o.account.clone().or(ident.account.take());
+        ident.nick = o.nick.clone().or(ident.nick.take());
         if let Some(text) = u.chat {
-            o.chat = Some(text.clone());
-            if !text.is_empty() {
-                let who = self.name_of(u.id);
-                self.push_chat(ChatKind::Say, who, text);
+            if self.hides(u.id) {
+                // Ignored or muted: no bubble and no history line.
+                let o = &mut self.others[i];
+                o.chat = None;
+                o.chat_timer = BubbleTimer::default();
+                if !text.is_empty() {
+                    self.hidden += 1;
+                }
+            } else {
+                let o = &mut self.others[i];
+                o.chat = Some(text.clone());
+                // An empty text clears the bubble; any other starts the timer.
+                o.chat_timer = if text.is_empty() { BubbleTimer::default() } else { BubbleTimer::start() };
+                if !text.is_empty() {
+                    let who = self.name_of(u.id);
+                    self.push_chat(ChatKind::Say, who, text);
+                }
             }
         }
     }
@@ -1218,6 +1310,7 @@ struct OtherUpdate {
     y: Option<f32>,
     dir: Option<u8>,
     nick: Option<String>,
+    account: Option<String>,
     chat: Option<String>,
     /// GMAPLEVELX (43) and GMAPLEVELY (44).
     cell_x: Option<i32>,
@@ -1238,6 +1331,7 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
     for prop in parse_player_props_in(&payload[2..], bow_prop10, accepted) {
         match prop.id {
             0 => u.nick = Some(text(&prop.raw)),
+            34 => u.account = Some(text(&prop.raw)).filter(|a| !a.is_empty()),
             12 => u.chat = Some(text(&prop.raw)),
             15 => u.x = prop.gchar().map(|v| v as f32 / 2.0),
             16 => u.y = prop.gchar().map(|v| v as f32 / 2.0),
@@ -1723,6 +1817,153 @@ mod tests {
                 (ChatKind::Admin, "Server message", "Shutting down"),
             ]
         );
+    }
+
+    /// A player's props: nickname (0) and account (34).
+    fn who_props(nick: &str, account: &str) -> Vec<u8> {
+        let mut v = vec![0x20, 0x20 + nick.len() as u8];
+        v.extend_from_slice(nick.as_bytes());
+        v.extend_from_slice(&[34 + 0x20, 0x20 + account.len() as u8]);
+        v.extend_from_slice(account.as_bytes());
+        v
+    }
+
+    fn say(id: u16, text: &str) -> Vec<u8> {
+        let mut v = vec![12 + 0x20, 0x20 + text.len() as u8];
+        v.extend_from_slice(text.as_bytes());
+        other(id, &v)
+    }
+
+    fn toall(from: u16, text: &str) -> Vec<u8> {
+        [&[13 + 0x20][..], &gs(from), &[0x20 + text.len() as u8], text.as_bytes(), b"\n"].concat()
+    }
+
+    fn pm(from: u16, text: &str) -> Vec<u8> {
+        [&[37 + 0x20][..], &gs(from), format!("\"\",\"{text}\"").as_bytes(), b"\n"].concat()
+    }
+
+    fn ignoring(names: &[&str], muted: &[&str]) -> crate::chatlists::ChatFilter {
+        let mut f = crate::chatlists::ChatFilter::default();
+        for n in names {
+            f.ignore.add(n);
+        }
+        for n in muted {
+            f.mute.add(n);
+        }
+        f
+    }
+
+    #[test]
+    fn account_name_prop_is_read() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(5, &who_props("Nick", "acct5")));
+        assert_eq!(st.others[0].account.as_deref(), Some("acct5"));
+        assert_eq!(st.identities[&5].account.as_deref(), Some("acct5"));
+        assert_eq!(st.identities[&5].nick.as_deref(), Some("Nick"));
+    }
+
+    #[test]
+    fn ignored_players_chat_toall_and_pm_are_dropped() {
+        let mut st = SessionState::default();
+        st.set_filter(ignoring(&["JERK"], &[]));
+        st.apply_body(&other(5, &who_props("Nice Name", "jerk")));
+        st.apply_body(&other(6, &who_props("Friend", "friend")));
+        // Bubble: none for the ignored player, one for the friend.
+        st.apply_body(&say(5, "hello"));
+        st.apply_body(&say(6, "hi"));
+        assert_eq!(st.others[0].chat, None);
+        assert_eq!(st.others[1].chat.as_deref(), Some("hi"));
+        st.apply_body(&toall(5, "buy gold"));
+        st.apply_body(&toall(6, "party"));
+        st.apply_body(&pm(5, "psst"));
+        st.apply_body(&pm(6, "hey"));
+        let got: Vec<_> = st.chat_log.iter().map(|l| (l.kind, l.from.as_str(), l.text.as_str())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (ChatKind::Say, "Friend", "hi"),
+                (ChatKind::Toall, "Friend", "party"),
+                (ChatKind::Private, "Friend", "hey"),
+            ]
+        );
+        assert_eq!(st.hidden, 3, "a bubble, a toall and a PM");
+    }
+
+    #[test]
+    fn pm_from_a_player_who_left_the_level_is_still_filtered() {
+        let mut st = SessionState::default();
+        st.set_filter(ignoring(&["jerk"], &[]));
+        st.apply_body(&other(5, &who_props("J", "jerk")));
+        st.apply_body(&other(5, &[51 + 0x20]));
+        assert!(st.others.is_empty());
+        st.apply_body(&pm(5, "still here"));
+        assert!(st.chat_log.is_empty());
+        assert_eq!(st.hidden, 1);
+    }
+
+    #[test]
+    fn nothing_is_hidden_by_default() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(5, &who_props("J", "jerk")));
+        st.apply_body(&say(5, "yo"));
+        st.apply_body(&pm(5, "pm"));
+        assert_eq!(st.chat_log.len(), 2);
+        assert_eq!(st.hidden, 0);
+    }
+
+    #[test]
+    fn mute_hides_the_same_way_and_new_filter_clears_bubbles() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(7, &who_props("Loud", "loud")));
+        st.apply_body(&say(7, "AAAA"));
+        assert_eq!(st.others[0].chat.as_deref(), Some("AAAA"));
+        // Muting takes the bubble down at once.
+        st.set_filter(ignoring(&[], &["Loud"]));
+        assert_eq!(st.others[0].chat, None);
+        st.apply_body(&say(7, "BBBB"));
+        st.apply_body(&toall(7, "CCCC"));
+        assert_eq!(st.chat_log.len(), 1, "only the first line, from before the mute");
+        // Unmuted: back.
+        st.set_filter(ignoring(&[], &[]));
+        st.apply_body(&say(7, "DDDD"));
+        assert_eq!(st.others[0].chat.as_deref(), Some("DDDD"));
+    }
+
+    #[test]
+    fn nickname_decides_while_no_account_is_known() {
+        let mut st = SessionState::default();
+        st.set_filter(ignoring(&["Jerk"], &[]));
+        st.apply_body(&other(5, &[0x20, 0x24, b'j', b'e', b'r', b'k']));
+        st.apply_body(&say(5, "hi"));
+        assert_eq!(st.others[0].chat, None);
+        // Once the account arrives and differs, the account decides.
+        st.apply_body(&other(5, &[34 + 0x20, 0x20 + 5, b'o', b't', b'h', b'e', b'r']));
+        st.apply_body(&say(5, "hi again"));
+        assert_eq!(st.others[0].chat.as_deref(), Some("hi again"));
+    }
+
+    #[test]
+    fn bubble_is_up_for_three_seconds_then_gone() {
+        use crate::chatlists::BUBBLE_MS;
+        let mut st = SessionState::default();
+        st.apply_body(&other(5, &who_props("A", "a")));
+        st.apply_body(&say(5, "hello"));
+        assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        assert!(!st.tick_bubbles(BUBBLE_MS - 50), "still up");
+        assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        assert!(st.tick_bubbles(50), "this tick takes it down");
+        assert_eq!(st.others[0].chat, None);
+        // The history line stays.
+        assert_eq!(st.chat_log.len(), 1);
+        assert!(!st.tick_bubbles(1000), "nothing more to end");
+        // A new line restarts the clock; an empty text clears at once.
+        st.apply_body(&say(5, "again"));
+        st.tick_bubbles(BUBBLE_MS - 1);
+        st.apply_body(&say(5, "and more"));
+        assert!(!st.tick_bubbles(BUBBLE_MS - 1), "restarted by the newer line");
+        st.apply_body(&other(5, &[12 + 0x20, 0x20]));
+        assert_eq!(st.others[0].chat.as_deref(), Some(""));
+        assert!(!st.tick_bubbles(10), "an emptied bubble has no timer");
     }
 
     #[test]

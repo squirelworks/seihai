@@ -851,6 +851,12 @@ impl Connection {
         self.send_messages(&[msg])
     }
 
+    /// Mute or unmute a player: `PLI_MUTEPLAYER` (43), `GSHORT id`, `GCHAR 1/0`.
+    /// A build whose profile does not send 43 refuses it (`Unsupported`).
+    pub fn send_mute(&mut self, player_id: u16, mute: bool) -> io::Result<()> {
+        self.send_messages(&[crate::chatlists::mute_message(player_id, mute)])
+    }
+
     /// Open a chest: `PLI_OPENCHEST` (20), `c x`, `c y` in whole tiles.
     pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
         let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
