@@ -214,6 +214,11 @@ pub struct Files {
     /// Default image extension. GServer adds `.gif` to bare image names for
     /// clients below 2.1.
     pub image_ext: &'static str,
+    /// A downloaded `.gmap`, and a map-named `.txt`/`.gif`/`.png`/`.mng`,
+    /// is saved in `maps/`. Read in 2.17.1, 2.22 and 2.31; 2.05 has no such
+    /// rule (every download goes under `levels/`). 2.1 to 2.16 are inferred.
+    /// See `filecache::download_dir`.
+    pub download_maps: bool,
 }
 
 /// Level formats.
@@ -646,6 +651,7 @@ const BASE: VersionProfile = VersionProfile {
         large_files: false,
         large_file_size: false,
         image_ext: ".gif",
+        download_maps: false,
     },
     levels: Levels {
         graal: true,
@@ -728,6 +734,7 @@ const NEW_2_1: VersionProfile = VersionProfile {
     files: Files {
         modtime: true,
         image_ext: ".png",
+        download_maps: true,
         ..BASE.files
     },
     ui: Ui {

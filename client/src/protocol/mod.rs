@@ -23,7 +23,7 @@ mod version;
 pub use board::BoardModify;
 pub use compress::{bz2_compress, bz2_decompress};
 pub use dispatch::{
-    latin1, read_gint3, read_gshort, split_messages, sword_power_from_wire, ChatKind, ChatLine, Message, OtherPlayer, SessionState, Splitter,
+    latin1, read_gint3, read_gshort, split_messages, sword_power_from_wire, ChatKind, ChatLine, IncomingFile, Message, OtherPlayer, SessionState, Splitter,
 };
 pub use extras::MapSpec;
 pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};

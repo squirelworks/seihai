@@ -23,6 +23,9 @@ pub struct Settings {
     /// default: on, when the asset folder has sounds. `sound=0` turns it
     /// off.
     pub sound: Option<bool>,
+    /// Save downloaded files to disk (`saveimages` in the real client's
+    /// `graalconfig.txt`). `None` means the key is absent: on.
+    pub save_downloads: Option<bool>,
     /// Name of the server in `last_server`, for the window title.
     pub last_server_name: Option<String>,
     /// Game server for versions with no listserver (1.33–1.39).
@@ -60,6 +63,7 @@ impl Settings {
                     // An unreadable value leaves the default (follow).
                     "follow_serverwarp" => s.follow_serverwarp = parse_bool(&v),
                     "sound" => s.sound = parse_bool(&v),
+                    "save_downloads" => s.save_downloads = parse_bool(&v),
                     "last_server_name" => s.last_server_name = Some(v),
                     "direct_server" => s.direct_server = Some(v),
                     k => {
@@ -108,6 +112,9 @@ impl Settings {
         if let Some(f) = self.follow_serverwarp {
             out.push_str(&format!("follow_serverwarp={}\n", u8::from(f)));
         }
+        if let Some(f) = self.save_downloads {
+            out.push_str(&format!("save_downloads={}\n", u8::from(f)));
+        }
         if let Some(f) = self.sound {
             out.push_str(&format!("sound={}\n", u8::from(f)));
         }
@@ -138,6 +145,13 @@ impl Settings {
     /// `Some(false)` for `--no-sound` and `Some(true)` for `--sound`.
     pub fn sound_with(&self, cli: Option<bool>) -> bool {
         cli.or(self.sound).unwrap_or(true)
+    }
+
+    /// Whether downloaded files are written to disk. The command line
+    /// (`--no-save-downloads`) wins over the settings file, which wins over
+    /// the default (on, as `saveimages` is in the real client).
+    pub fn save_downloads_with(&self, cli: Option<bool>) -> bool {
+        cli.or(self.save_downloads).unwrap_or(true)
     }
 }
 
@@ -257,6 +271,18 @@ mod tests {
         assert_eq!(back.account.as_deref(), Some("a"));
         // An unset option stays unset, so the file stays as it was.
         assert!(!Settings::parse("account=a\n").to_text().contains("follow_serverwarp"));
+    }
+
+    #[test]
+    fn save_downloads_is_on_by_default_and_the_cli_wins() {
+        let none = Settings::parse("");
+        assert_eq!(none.save_downloads, None);
+        assert!(none.save_downloads_with(None));
+        let off = Settings::parse("save_downloads=0\n");
+        assert!(!off.save_downloads_with(None));
+        assert!(off.save_downloads_with(Some(true)));
+        assert!(!none.save_downloads_with(Some(false)));
+        assert_eq!(Settings::parse(&off.to_text()).save_downloads, Some(false));
     }
 
     #[test]

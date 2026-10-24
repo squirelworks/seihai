@@ -460,6 +460,9 @@ pub struct WorldRequests {
     /// The `.gmap` is not local: ask the server for this file (`WANTFILE`).
     /// Returned once per file.
     pub gmap_file: Option<String>,
+    /// The `.gmap` is local: the file-cache rules decide whether to ask the
+    /// server for a newer copy (`UPDATEFILE`). Returned once per file.
+    pub gmap_local: Option<String>,
     /// `PLI_ADJACENTLEVEL` messages for neighbours the server has not sent
     /// yet, to go out in one frame. Each level is asked for once.
     pub messages: Vec<Vec<u8>>,
@@ -510,7 +513,11 @@ pub fn sync_world(
     if g.map.is_none() {
         let grid = loader.gmap_text(&g.name).and_then(|t| Gmap::parse(&t));
         if let Some(m) = grid {
+            let name = g.name.clone();
             net.set_gmap_grid(m);
+            if asked.insert(format!("file:{}", name.to_ascii_lowercase())) {
+                req.gmap_local = Some(name);
+            }
         }
     }
     let g = net.gmap.as_ref().expect("checked above");
@@ -842,6 +849,21 @@ mod tests {
         assert!(r.messages.is_empty() && session.gmap.is_none());
         let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
         assert_eq!(r, WorldRequests::default(), "asked only once");
+    }
+
+    #[test]
+    fn a_local_gmap_is_offered_for_a_check_once() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        let mut asked = HashSet::new();
+        let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(r.gmap_local.as_deref(), Some("g.gmap"));
+        assert_eq!(r.gmap_file, None);
+        let r = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(r.gmap_local, None, "once");
     }
 
     #[test]
