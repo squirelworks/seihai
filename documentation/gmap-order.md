@@ -36,7 +36,7 @@ sends. That belongs to the walk cadence (see `documentation/difftest-leftovers.m
 |---|---|---|---|
 | ADJACENTLEVEL order (2.22 and 2.31) | sw, ne, se | ne, sw, se | sw, ne, se |
 | 2.22 east crossing props | `X=0.5, GMAPLEVELX=1` | `GMAPLEVELX=1, X=0` | `X=0, GMAPLEVELX=1` |
-| 2.22 north, south, west crossing props | `Y/X ... , GMAPLEVEL..` | cell first | coordinate first, values equal |
+| 2.22 west, south, north crossing props | `X=63.5, GMAPLEVELX=0` and the same for Y | cell prop first | coordinate first, same values |
 | server `LEVELNAME` order (low divergence "field level") | gm_sw first | gm_ne first | gm_sw first (divergence gone) |
 
 The ranked report's "props values differ" row for 2.22 no longer lists the crossing props.
