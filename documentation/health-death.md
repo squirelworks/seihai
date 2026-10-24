@@ -19,7 +19,7 @@ documents, the timings from the decompile.
   handler was not traced. With `None`, hearts at 0 do nothing and nothing is
   sent. `ClientVersion::sends_claim()` also needs id 14 in the build's send set.
 - `OfflineSession`: `life`, `alignment` (AP), `entry` (the saved entry point),
-  `damage_half`, `tick_life`, `respawn`, `note_entry`. The game loop in
+  `damage_half`, `tick_life`, `respawn`, `note_entry` (the save rule), `no_pk`. The game loop in
   `bin/main.rs` ticks it, reads the keys and sends the messages.
 
 ## The sequence (tick = 50 ms)
@@ -70,17 +70,39 @@ applied now, so a server that sets hearts to 0 kills the player.
 
 ## Respawn destination
 
-The saved entry point is the level, x, y and direction at the last level entry
-(login, link, server warp, gmap crossing); `note_entry` records it. If nothing
-was saved and the client is online, the player goes to x 30.5, y 30.0 facing
-down in the current level. Offline with nothing saved, the player stays where
-they are.
+The saved entry point is the level, x, y and direction of the **last level
+entry that was saved**; `note_entry` decides. The client does not save every
+entry. It saves when:
+
+1. there was no level before (login or the first entry), or
+2. exactly one of the level left and the new level is in the current gmap's
+   level list. The client multiplies the two list positions (-1 for "not in
+   the list") and saves on a negative product, so a level at position 0 counts
+   like "not in the list" (a quirk Seihai keeps), or
+3. **2.05 only:** otherwise, the two levels are in different **name groups**.
+
+The name group is the level's file name without its folder, lower-cased, up to
+and including its last `§` or `$`; a name with neither is in the empty group,
+so two plain names are always the same group. 2.1 test 2 and every later build
+have no group test: only rules 1 and 2. (2.17.1, 2.22 and 2.31 were read; the
+2.1 test builds are inferred, because the delimiters are not in their
+binaries.) `DeathRules::entry_name_group` is the profile switch.
+
+In practice, with plain level names the respawn point is the level and spot
+of the login, or of the last time the player stepped into or out of a gmap.
+If nothing was saved and the client is online, the player goes to x 30.5,
+y 30.0 facing down in the current level. Offline with nothing saved, the
+player stays where they are.
+
+After a respawn the real client runs the same save routine once more, whether
+or not the level changed (see `damage-respawn.md`, open). Seihai does not.
 
 ## Not done, and why
 
-- **Same-name-group rule** (item 7): the decompile only partly traced when an
-  entry is *not* saved because the old and new levels share a name group.
-  Seihai saves every entry. Not implemented.
+- **Same-name-group rule** is done (above). Open: the order and timing of the
+  gmap list against the level change on arrival (Seihai uses the gmap it holds
+  when `note_entry` runs), the list's order and de-duplication (Seihai takes
+  the named cells in file order), and the end-of-respawn save.
 - **Offline default start level.** The notes name `tutorial_b-4.graal` but no
   position, so it is not used.
 - **Script warps offline** do not update the saved entry point (that code is in
@@ -97,8 +119,11 @@ they are.
   players (`documentation/combat.md`). Script `hurt` and `damage_half` are
   still not gated by it, and knockback and the `playerhurt` script event are
   not done.
-- **Damage amounts.** The formula is unresolved (item 7). `damage_half` takes
-  half hearts from its caller.
-- **Healing** (AP 40 or more only), swim mode and editor/pause exemptions.
+- **Damage amounts** are resolved for sword hits (`combat.md`, "Damage").
+  `damage_half` still takes half hearts from its caller; script `hurt` is not
+  yet routed through the hit rules.
+- **Editor/pause exemption.** A player in the editor or paused state cannot be
+  hurt unless the level is a sparring zone (an NPC script command
+  `sparringzone` sets it). Seihai has neither state.
 - No lab run. A capture of a real client dying (claim, status frames, respawn
   frame) would confirm the layouts and the order.

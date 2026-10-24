@@ -308,6 +308,13 @@ pub struct DeathRules {
     /// half tiles (61 and 60), the wire scale.
     pub default_x2: u8,
     pub default_y2: u8,
+    /// The level-entry save (the point a respawn returns to) skips an entry
+    /// whose level is in the same *name group* as the level left: the name
+    /// without its folder, lower-cased, up to its last `§` or `$`
+    /// (delimiter included; names with neither all share the empty group).
+    /// Only the 2.05 builds have this test; 2.1 test 2 and everything after
+    /// it keep just the gmap rule. See `documentation/health-death.md`.
+    pub entry_name_group: bool,
 }
 
 /// The 2.05 rev 2 values.
@@ -321,7 +328,14 @@ pub const DEATH_205: DeathRules = DeathRules {
     mid_hearts_cap: 5,
     default_x2: 61,
     default_y2: 60,
+    entry_name_group: true,
 };
+
+/// 2.1 test 2 and later: the same death sequence, but the level-entry save
+/// no longer has the name-group test (the delimiter set is not in those
+/// binaries; the 2.17.1, 2.22 and 2.31 entry code was read, the 2.1 tests'
+/// was inferred from the missing constant).
+pub const DEATH_21: DeathRules = DeathRules { entry_name_group: false, ..DEATH_205 };
 
 /// How a build's client judges and sends hits from other players (the
 /// victim's side of combat). Sources: `decomp-findings-2026-10-24/
@@ -361,11 +375,20 @@ pub struct CombatRules {
     pub hurtplayer_range_half: u8,
     /// A hit by id 40 or 46 takes at most this many half hearts (1 heart).
     pub packet_hit_cap_half: u8,
-    /// **Placeholder** for the unresolved damage formula (item 7): half
-    /// hearts a sword hit takes per point of the attacker's sword power
-    /// (the notes infer "sword power divided by 2 in hearts", not
-    /// confirmed from a capture), at least one half heart.
-    pub sword_half_per_power: u8,
+    /// A sword hit takes the attacker's sword power in half hearts, with the
+    /// power limited to plus or minus this (20). The wire value is power + 30
+    /// (10 to 50), and 0 to 4 for the default swords 1 to 4.
+    pub sword_power_limit: u8,
+    /// A negative sword power heals the victim, but only at this AP or more
+    /// (40). Below it the hit hurts (hurt mode) without changing hearts.
+    pub heal_min_ap: u8,
+    /// An attacker whose STATUS (18) has any of these bits (0x22: hidden and
+    /// one untraced) cannot land a sword hit.
+    pub attacker_blocked_status: u8,
+    /// The hit judge handles one swing or hit per attacker per value of the
+    /// client's second-of-day clock; later ones in the same second are
+    /// dropped.
+    pub judge_throttle: bool,
 }
 
 /// The 2.05 rev 2 values.
@@ -381,7 +404,10 @@ pub const COMBAT_205: CombatRules = CombatRules {
     hurt_sprite: 32,
     hurtplayer_range_half: 20,
     packet_hit_cap_half: 2,
-    sword_half_per_power: 1,
+    sword_power_limit: 20,
+    heal_min_ap: 40,
+    attacker_blocked_status: 0x22,
+    judge_throttle: true,
 };
 
 /// Health, death and combat.
@@ -711,6 +737,7 @@ const NEW_2_1: VersionProfile = VersionProfile {
         ..BASE.ui
     },
     basis: Basis::Inferred,
+    life: Health { death: Some(DEATH_21), ..BASE.life },
     ..BASE
 };
 

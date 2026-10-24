@@ -222,7 +222,7 @@ pub fn messages_for(event: LifeEvent, version: ClientVersion, status_base: u8) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{ClientVersion, DEATH_205, PROFILES};
+    use crate::protocol::{ClientVersion, DeathRules, DEATH_205, PROFILES};
 
     fn life() -> Life {
         Life::new(Some(DEATH_205))
@@ -424,9 +424,12 @@ mod tests {
 
     #[test]
     fn profile_gates() {
+        assert_eq!(ClientVersion::V205.death_rules(), Some(DEATH_205));
         for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
             assert!(v.sends_claim(), "{}", v.label());
-            assert_eq!(v.death_rules(), Some(DEATH_205));
+            // Only the save-entry name-group test differs between them.
+            let d = v.death_rules().unwrap();
+            assert_eq!(DeathRules { entry_name_group: true, ..d }, DEATH_205, "{}", v.label());
         }
         for v in [ClientVersion::V133, ClientVersion::V139, ClientVersion::V200, ClientVersion::V204] {
             assert!(!v.sends_claim(), "{}", v.label());

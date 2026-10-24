@@ -67,6 +67,14 @@ pub enum Reject {
     UnknownPower,
     /// The hit takes nothing (power 0).
     NoDamage,
+    /// The level said `noplayerkilling`: no player hits here.
+    NoPkZone,
+    /// The attacker's "(guild)" tag is in the victim's nickname.
+    Friendly,
+    /// The attacker's STATUS shows it hidden (or the untraced 0x20 bit).
+    AttackerBlocked,
+    /// This attacker was already judged in this second.
+    Throttled,
     /// Id 46 is decoded but not applied: where a player's centre is, for its
     /// "within 2 tiles" test, is not in the notes.
     CentreUnknown,
@@ -100,6 +108,8 @@ pub struct Victim {
     /// Alignment points.
     pub ap: u8,
     pub state: Vulnerability,
+    /// The level is a no-player-killing level (script `noplayerkilling`).
+    pub no_pk: bool,
 }
 
 /// A player swinging a sword, as the victim sees it from the props.
@@ -108,8 +118,31 @@ pub struct Swinger {
     pub pose: Pose,
     /// SPRITE (17) as received: `dir + 4 * S`.
     pub sprite: u8,
-    /// SWORDPOWER (8) as last received, if ever.
-    pub sword_power: Option<u8>,
+    /// SWORDPOWER (8) as last received, if ever: -20 to 20, negative heals.
+    pub sword_power: Option<i8>,
+    /// STATUS (18) as last received, if ever.
+    pub status: Option<u8>,
+    /// The attacker's "(guild)" tag is in the victim's nickname
+    /// ([`same_guild`]).
+    pub friendly: bool,
+    /// The attacker was already judged in this second ([`CombatRules::
+    /// judge_throttle`]).
+    pub repeat: bool,
+}
+
+/// The "(guild)" tag of a nickname: from the first `(` to the first `)`
+/// after it, brackets included, when at least one character lies between
+/// them. Nicknames are compared as the client keeps them, case-sensitive.
+pub fn guild_tag(nick: &str) -> Option<&str> {
+    let rest = &nick[nick.find('(')?..];
+    let close = rest.find(')')?;
+    (close >= 2).then(|| &rest[..=close])
+}
+
+/// The victim's client does not let a hit through when the attacker's
+/// "(guild)" tag appears anywhere in the victim's own nickname.
+pub fn same_guild(attacker_nick: &str, victim_nick: &str) -> bool {
+    guild_tag(attacker_nick).is_some_and(|t| victim_nick.contains(t))
 }
 
 fn half_tiles(h: u8) -> f32 {
@@ -153,15 +186,19 @@ pub fn is_swing_sprite(rules: &CombatRules, sprite: u8) -> bool {
     s >= rules.swing_sprite_first && s <= rules.swing_sprite_last
 }
 
-/// Half hearts a sword hit takes: the placeholder rule (see
-/// [`CombatRules::sword_half_per_power`]), at least one.
-pub fn sword_half_hearts(rules: &CombatRules, power: u8) -> i32 {
-    (i32::from(power) * i32::from(rules.sword_half_per_power)).max(1)
+/// Half hearts a sword hit takes: the attacker's sword power, limited to the
+/// profile's plus or minus 20. Negative heals (see [`CombatRules::
+/// heal_min_ap`]); 0 only starts hurt mode.
+pub fn sword_half_hearts(rules: &CombatRules, power: i8) -> i32 {
+    let lim = i32::from(rules.sword_power_limit);
+    i32::from(power).clamp(-lim, lim)
 }
 
-/// The victim's judgement of a sword swing. `Ok` is the half hearts it
-/// takes. The attacker must be on a swing frame, the victim hurtable, its
-/// AP not immune, and in the box in front of the attacker.
+/// The victim's judgement of a sword swing. `Ok` is the signed half hearts
+/// the hit asks for (negative: heal). The attacker must be on a swing
+/// frame, the victim hurtable, its AP not immune, the level not a no-kill
+/// level, the attacker not hidden and not on the victim's guild, and the
+/// victim in the box in front of the attacker.
 pub fn judge_sword(rules: &CombatRules, s: &Swinger, v: &Victim) -> Result<i32, Reject> {
     if !is_swing_sprite(rules, s.sprite) {
         return Err(Reject::NotSwinging);
@@ -169,6 +206,18 @@ pub fn judge_sword(rules: &CombatRules, s: &Swinger, v: &Victim) -> Result<i32, 
     v.state.check()?;
     if v.ap == rules.immune_ap {
         return Err(Reject::Immune);
+    }
+    if v.no_pk {
+        return Err(Reject::NoPkZone);
+    }
+    if rules.judge_throttle && s.repeat {
+        return Err(Reject::Throttled);
+    }
+    if s.friendly {
+        return Err(Reject::Friendly);
+    }
+    if s.status.is_some_and(|st| st & rules.attacker_blocked_status != 0) {
+        return Err(Reject::AttackerBlocked);
     }
     let pose = Pose { dir: sprite_parts(s.sprite).1, ..s.pose };
     in_sword_box(rules, pose, v.x, v.y)?;
@@ -274,6 +323,9 @@ pub fn judge_hurtplayer(rules: &CombatRules, h: &HurtPlayer, attacker_at: Option
         return Err(Reject::NpcSource);
     }
     v.state.check()?;
+    if v.no_pk {
+        return Err(Reject::NoPkZone);
+    }
     let at = attacker_at.ok_or(Reject::TooFar)?;
     if !within(at, (v.x, v.y), rules.hurtplayer_range_half) {
         return Err(Reject::TooFar);
@@ -469,30 +521,55 @@ impl OfflineSession {
         } else {
             Vulnerability::Hurtable
         };
-        Victim { x: self.player_x, y: self.player_y, ap: self.alignment, state }
+        Victim { x: self.player_x, y: self.player_y, ap: self.alignment, state, no_pk: self.no_pk }
     }
 
     /// A hit that was judged good: take the hearts, name the attacker for a
-    /// claim, start hurt mode. Returns the half hearts taken.
+    /// claim, start hurt mode. `half` is signed: a negative one heals, but
+    /// only a victim at the profile's `heal_min_ap` or more; below it the
+    /// hit changes no hearts and still starts hurt mode, as does a power of
+    /// 0. Returns the half hearts taken (negative: healed, 0: none).
     fn take_hit(&mut self, half: i32, attacker: Option<u16>) -> Result<i32, Reject> {
-        if !self.damage_half(half, attacker) {
+        if self.life.is_dead() {
             return Err(Reject::Dead);
         }
+        let heal_min_ap = self.combat.rules().map_or(u8::MAX, |r| r.heal_min_ap);
+        let applied = if half < 0 && self.alignment < heal_min_ap { 0 } else { half };
+        if applied > 0 {
+            self.damage_half(applied, attacker);
+        } else if applied < 0 {
+            let healed = (self.hearts_half() - applied).min(self.max_hearts);
+            self.set_hearts_half(healed);
+        }
         self.combat.start_hurt();
-        Ok(half)
+        Ok(applied)
     }
 
     /// A player's props showed a sword swing: judge it from this side.
-    pub fn receive_sword(&mut self, id: Option<u16>, s: &Swinger) -> HitReport {
+    /// `own_nick` is the victim's nickname (for the guild test) and `second`
+    /// the client's clock as seconds of the day (for the once-a-second
+    /// limit per attacker).
+    pub fn receive_sword(&mut self, id: Option<u16>, s: &Swinger, second: u32) -> HitReport {
         let outcome = match self.combat.rules().copied() {
             None => Err(Reject::NotInBuild),
-            Some(r) => judge_sword(&r, s, &self.victim()).and_then(|h| self.take_hit(h, id)),
+            Some(r) => {
+                let v = self.victim();
+                let mut s = *s;
+                // The client stamps the attacker once the swing, the
+                // victim's state, AP and level have passed, before the
+                // guild and box tests.
+                let reaches = is_swing_sprite(&r, s.sprite) && v.state == Vulnerability::Hurtable && v.ap != r.immune_ap && !v.no_pk;
+                if let (true, true, Some(id)) = (r.judge_throttle, reaches, id) {
+                    s.repeat = self.judged_at.insert(id, second) == Some(second);
+                }
+                judge_sword(&r, &s, &v).and_then(|h| self.take_hit(h, id))
+            }
         };
         HitReport { kind: HitKind::Sword, attacker: id, outcome }
     }
 
     /// A `PLO_HURTPLAYER`. `attacker_at` is where the attacker is, in this
-    /// player's coordinates.
+    /// player's coordinates. A no-player-killing level refuses it.
     pub fn receive_hurtplayer(&mut self, h: &HurtPlayer, attacker_at: Option<(f32, f32)>) -> HitReport {
         let outcome = match self.combat.rules().copied() {
             None => Err(Reject::NotInBuild),
@@ -517,6 +594,8 @@ impl OfflineSession {
         &mut self,
         others: &[OtherPlayer],
         own_cell: Option<(i32, i32)>,
+        own_nick: Option<&str>,
+        second: u32,
         swings: &[u16],
         hits: &[IncomingHit],
     ) -> Vec<HitReport> {
@@ -525,8 +604,16 @@ impl OfflineSession {
             let Some(o) = others.iter().find(|o| o.id == *id) else { continue };
             let Some(sprite) = o.sprite else { continue };
             let (x, y) = o.position_from(own_cell);
-            let s = Swinger { pose: Pose { x, y, dir: o.dir }, sprite, sword_power: o.sword_power };
-            out.push(self.receive_sword(Some(o.id), &s));
+            let friendly = matches!((o.nick.as_deref(), own_nick), (Some(a), Some(v)) if same_guild(a, v));
+            let s = Swinger {
+                pose: Pose { x, y, dir: o.dir },
+                sprite,
+                sword_power: o.sword_power,
+                status: o.status,
+                friendly,
+                repeat: false,
+            };
+            out.push(self.receive_sword(Some(o.id), &s, second));
         }
         for h in hits {
             match h {
@@ -580,11 +667,11 @@ mod tests {
     }
 
     fn victim(x: f32, y: f32) -> Victim {
-        Victim { x, y, ap: 50, state: Vulnerability::Hurtable }
+        Victim { x, y, ap: 50, state: Vulnerability::Hurtable, no_pk: false }
     }
 
     fn swinger(dir: u8, sprite: u8) -> Swinger {
-        Swinger { pose: at(20.0, 20.0, dir), sprite, sword_power: Some(1) }
+        Swinger { pose: at(20.0, 20.0, dir), sprite, sword_power: Some(1), status: None, friendly: false, repeat: false }
     }
 
     // ---- the box: reach 0..=4 ahead, under 2 to the side ----
@@ -642,7 +729,7 @@ mod tests {
     #[test]
     fn the_direction_is_the_one_in_the_sprite() {
         // The pose says north, the sprite says east: the sprite is what was sent.
-        let s = Swinger { pose: at(20.0, 20.0, 0), sprite: sw(8, 3), sword_power: Some(1) };
+        let s = Swinger { sprite: sw(8, 3), ..swinger(0, sw(8, 3)) };
         assert_eq!(judge_sword(&R, &s, &victim(22.0, 20.0)), Ok(1));
         assert_eq!(judge_sword(&R, &s, &victim(18.0, 20.0)), Err(Reject::OutOfReach), "behind an east-facing swing");
         assert_eq!(judge_sword(&R, &s, &victim(20.0, 18.0)), Err(Reject::OffLine), "where a north-facing swing would have hit");
@@ -673,15 +760,60 @@ mod tests {
     }
 
     #[test]
-    fn the_damage_is_the_labelled_placeholder() {
-        // Sword power times `sword_half_per_power`, at least a half heart.
+    fn the_damage_is_the_attackers_sword_power_in_half_hearts() {
         let v = victim(22.0, 20.0);
-        for (power, half) in [(0u8, 1), (1, 1), (2, 2), (4, 4)] {
+        for (power, half) in [(0i8, 0), (1, 1), (2, 2), (4, 4), (20, 20), (-3, -3), (-20, -20)] {
             let s = Swinger { sword_power: Some(power), ..swinger(3, sw(8, 3)) };
-            assert_eq!(judge_sword(&R, &s, &v), Ok(half));
+            assert_eq!(judge_sword(&R, &s, &v), Ok(half), "power {power}");
         }
+        // The profile limit is 20 either way, whatever a server sent.
+        assert_eq!(sword_half_hearts(&R, 100), 20);
+        assert_eq!(sword_half_hearts(&R, -100), -20);
         let unknown = Swinger { sword_power: None, ..swinger(3, sw(8, 3)) };
         assert_eq!(judge_sword(&R, &unknown, &v), Err(Reject::UnknownPower));
+    }
+
+    #[test]
+    fn the_sword_power_byte_decodes_like_the_client_sends_it() {
+        use crate::protocol::sword_power_from_wire as w;
+        // 0 to 4: the default swords send their number; 10 to 50: power + 30.
+        assert_eq!([w(0), w(1), w(4)], [0, 1, 4]);
+        assert_eq!([w(10), w(30), w(31), w(50)], [-20, 0, 1, 20]);
+        assert_eq!(w(200), 20, "a byte past 50 is limited like the sender limits it");
+    }
+
+    #[test]
+    fn a_no_kill_level_a_guild_mate_or_a_hidden_attacker_cannot_hit() {
+        let mut v = victim(22.0, 20.0);
+        v.no_pk = true;
+        assert_eq!(judge_sword(&R, &swinger(3, sw(8, 3)), &v), Err(Reject::NoPkZone));
+        let v = victim(22.0, 20.0);
+        let friend = Swinger { friendly: true, ..swinger(3, sw(8, 3)) };
+        assert_eq!(judge_sword(&R, &friend, &v), Err(Reject::Friendly));
+        for bit in [0x02u8, 0x20, 0x22] {
+            let s = Swinger { status: Some(bit | 0x10), ..swinger(3, sw(8, 3)) };
+            assert_eq!(judge_sword(&R, &s, &v), Err(Reject::AttackerBlocked), "status {bit:#x}");
+        }
+        // Weapons allowed (0x10), male (0x04), spin (0x40): not blockers.
+        let s = Swinger { status: Some(0x54), ..swinger(3, sw(8, 3)) };
+        assert_eq!(judge_sword(&R, &s, &v), Ok(1));
+        let again = Swinger { repeat: true, ..swinger(3, sw(8, 3)) };
+        assert_eq!(judge_sword(&R, &again, &v), Err(Reject::Throttled));
+    }
+
+    #[test]
+    fn the_guild_tag_is_the_first_bracket_pair_and_must_not_be_empty() {
+        assert_eq!(guild_tag("Bob (Red Cross) x"), Some("(Red Cross)"));
+        assert_eq!(guild_tag("Bob (a)"), Some("(a)"));
+        assert_eq!(guild_tag("Bob ()"), None, "nothing between the brackets");
+        assert_eq!(guild_tag("Bob (open"), None);
+        assert_eq!(guild_tag("Bob) ("), None);
+        assert_eq!(guild_tag("Bob"), None);
+        assert!(same_guild("Bob (Red)", "Ann (Red)"));
+        assert!(same_guild("Bob (Red)", "(Red) Ann"), "anywhere in the victim's nickname");
+        assert!(!same_guild("Bob (Red)", "Ann (red)"), "case matters");
+        assert!(!same_guild("Bob", "Ann (Red)"), "no tag on the attacker");
+        assert!(!same_guild("Bob (Red)", "Ann"), "the victim's tag does not count");
     }
 
     // ---- packets ----
@@ -834,19 +966,19 @@ mod tests {
     #[test]
     fn a_sword_hit_takes_hearts_and_starts_hurt_mode() {
         let mut s = session();
-        let r = s.receive_sword(Some(9), &swinger(3, sw(8, 3)));
+        let r = s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 10);
         assert_eq!(r.outcome, Ok(1));
         assert_eq!(s.hearts_half(), 11);
         assert!(s.combat.is_hurt());
         // Hurt for 40 ticks: the same swing again does nothing.
-        let r = s.receive_sword(Some(9), &swinger(3, sw(9, 3)));
+        let r = s.receive_sword(Some(9), &swinger(3, sw(9, 3)), 20);
         assert_eq!(r.outcome, Err(Reject::AlreadyHurt));
         assert_eq!(s.hearts_half(), 11);
         s.tick_combat(39 * 50);
         assert!(s.combat.is_hurt());
         s.tick_combat(50);
         assert!(!s.combat.is_hurt(), "40 ticks, 2 s");
-        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(10, 3))).outcome, Ok(1));
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(10, 3)), 30).outcome, Ok(1));
         assert_eq!(s.hearts_half(), 10);
     }
 
@@ -854,13 +986,13 @@ mod tests {
     fn a_rejected_hit_changes_nothing() {
         let mut s = session();
         s.alignment = 100;
-        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3))).outcome, Err(Reject::Immune));
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 40).outcome, Err(Reject::Immune));
         s.alignment = 50;
         s.player_x = 30.0; // 10 tiles ahead: out of reach
-        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3))).outcome, Err(Reject::OutOfReach));
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 50).outcome, Err(Reject::OutOfReach));
         s.player_x = 22.0;
         s.player_y = 23.0; // 3 tiles to the side
-        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3))).outcome, Err(Reject::OffLine));
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 60).outcome, Err(Reject::OffLine));
         assert_eq!(s.hearts_half(), 12);
         assert!(!s.combat.is_hurt());
     }
@@ -869,7 +1001,7 @@ mod tests {
     fn swimming_players_cannot_be_hit() {
         let mut s = session();
         s.in_water = true;
-        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3))).outcome, Err(Reject::Swimming));
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 70).outcome, Err(Reject::Swimming));
         assert_eq!(s.hearts_half(), 12);
     }
 
@@ -877,7 +1009,7 @@ mod tests {
     fn the_killing_hit_names_the_attacker_for_the_claim() {
         let mut s = session();
         s.set_hearts_half(1);
-        assert_eq!(s.receive_sword(Some(321), &swinger(3, sw(8, 3))).outcome, Ok(1));
+        assert_eq!(s.receive_sword(Some(321), &swinger(3, sw(8, 3)), 0).outcome, Ok(1));
         assert_eq!(s.hearts_half(), 0);
         assert_eq!(s.tick_life(50), vec![LifeEvent::Died { attacker: Some(321) }]);
         let msgs = crate::life::messages_for(LifeEvent::Died { attacker: Some(321) }, ClientVersion::V205, 0);
@@ -888,12 +1020,12 @@ mod tests {
     fn a_dead_player_cannot_be_hit_again() {
         let mut s = session();
         s.set_hearts_half(1);
-        s.receive_sword(Some(1), &swinger(3, sw(8, 3)));
+        s.receive_sword(Some(1), &swinger(3, sw(8, 3)), 0);
         s.tick_life(50);
         assert!(s.life.is_dead());
         s.tick_combat(2_000); // hurt mode over: only death is left to refuse it
         assert!(!s.combat.is_hurt());
-        assert_eq!(s.receive_sword(Some(2), &swinger(3, sw(8, 3))).outcome, Err(Reject::Dead));
+        assert_eq!(s.receive_sword(Some(2), &swinger(3, sw(8, 3)), 0).outcome, Err(Reject::Dead));
         assert_eq!(s.receive_hurtplayer(&hurt(2, 2), Some((22.0, 20.0))).outcome, Err(Reject::Dead));
     }
 
@@ -925,15 +1057,113 @@ mod tests {
     fn no_rules_no_hits() {
         let mut s = OfflineSession::new();
         s.life.set_rules(Some(DEATH_205));
-        assert_eq!(s.receive_sword(Some(1), &swinger(3, sw(8, 3))).outcome, Err(Reject::NotInBuild));
+        assert_eq!(s.receive_sword(Some(1), &swinger(3, sw(8, 3)), 0).outcome, Err(Reject::NotInBuild));
         assert_eq!(s.receive_hurtplayer(&hurt(1, 2), Some((0.0, 0.0))).outcome, Err(Reject::NotInBuild));
         assert!(!s.start_swing());
         assert_eq!(s.sprite_value(), s.player_dir);
     }
 
+    // ---- the hit's effect on hearts ----
+
+    #[test]
+    fn a_sword_hit_takes_the_power_in_half_hearts() {
+        for (power, left) in [(1i8, 11), (3, 9), (20, 0)] {
+            let mut s = session();
+            let r = s.receive_sword(Some(9), &Swinger { sword_power: Some(power), ..swinger(3, sw(8, 3)) }, 0);
+            assert_eq!(r.outcome, Ok(i32::from(power)));
+            assert_eq!(s.hearts_half(), left, "power {power}");
+        }
+    }
+
+    #[test]
+    fn a_power_0_sword_hurts_without_taking_hearts() {
+        let mut s = session();
+        let r = s.receive_sword(Some(9), &Swinger { sword_power: Some(0), ..swinger(3, sw(8, 3)) }, 0);
+        assert_eq!(r.outcome, Ok(0));
+        assert_eq!(s.hearts_half(), 12);
+        assert!(s.combat.is_hurt(), "hurt mode starts anyway");
+    }
+
+    #[test]
+    fn a_negative_sword_heals_only_from_ap_40() {
+        let heal = Swinger { sword_power: Some(-3), ..swinger(3, sw(8, 3)) };
+        let mut s = session();
+        s.set_hearts_half(4);
+        s.alignment = 40;
+        assert_eq!(s.receive_sword(Some(9), &heal, 0).outcome, Ok(-3));
+        assert_eq!(s.hearts_half(), 7);
+        assert!(s.combat.is_hurt());
+        // Healing stops at the maximum.
+        let mut s = session();
+        s.set_hearts_half(11);
+        s.alignment = 90;
+        assert_eq!(s.receive_sword(Some(9), &heal, 0).outcome, Ok(-3));
+        assert_eq!(s.hearts_half(), 12);
+        // Below 40 nothing changes but hurt mode still starts.
+        let mut s = session();
+        s.set_hearts_half(4);
+        s.alignment = 39;
+        assert_eq!(s.receive_sword(Some(9), &heal, 0).outcome, Ok(0));
+        assert_eq!(s.hearts_half(), 4);
+        assert!(s.combat.is_hurt());
+    }
+
+    #[test]
+    fn the_same_attacker_is_judged_once_a_second() {
+        let mut s = session();
+        let a = swinger(3, sw(8, 3));
+        assert_eq!(s.receive_sword(Some(9), &a, 100).outcome, Ok(1));
+        // Same second: dropped by the throttle (and the victim is hurt anyway,
+        // which is checked first, so end hurt mode to see the throttle).
+        s.combat.set_rules(Some(COMBAT_205));
+        assert_eq!(s.receive_sword(Some(9), &a, 100).outcome, Err(Reject::Throttled));
+        // Another attacker, or the next second, goes through.
+        assert_eq!(s.receive_sword(Some(8), &a, 100).outcome, Ok(1));
+        s.combat.set_rules(Some(COMBAT_205));
+        assert_eq!(s.receive_sword(Some(9), &a, 101).outcome, Ok(1));
+    }
+
+    #[test]
+    fn a_refused_swing_does_not_stamp_the_attacker() {
+        let mut s = session();
+        // Out of reach is decided after the stamp, so the stamp is set ...
+        s.player_x = 40.0;
+        let a = swinger(3, sw(8, 3));
+        assert_eq!(s.receive_sword(Some(9), &a, 5).outcome, Err(Reject::OutOfReach));
+        s.player_x = 22.0;
+        assert_eq!(s.receive_sword(Some(9), &a, 5).outcome, Err(Reject::Throttled));
+        // ... but a swing the client never judges (not a swing frame) does not stamp.
+        let mut s = session();
+        assert_eq!(s.receive_sword(Some(7), &swinger(3, sw(2, 3)), 5).outcome, Err(Reject::NotSwinging));
+        assert_eq!(s.receive_sword(Some(7), &a, 5).outcome, Ok(1));
+    }
+
+    #[test]
+    fn no_player_killing_stops_sword_and_packet_hits() {
+        let mut s = session();
+        s.no_pk = true;
+        assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(8, 3)), 0).outcome, Err(Reject::NoPkZone));
+        assert_eq!(s.receive_hurtplayer(&hurt(9, 1), Some((21.0, 20.0))).outcome, Err(Reject::NoPkZone));
+        assert_eq!(s.hearts_half(), 12);
+        s.no_pk = false;
+        assert_eq!(s.receive_hurtplayer(&hurt(9, 1), Some((21.0, 20.0))).outcome, Ok(1));
+    }
+
+    #[test]
+    fn receive_all_applies_the_guild_and_status_rules() {
+        let mut s = session();
+        let mut a = other(10, 20.0, 20.0, 3, sw(7, 3), Some(2));
+        a.nick = Some("Bob (Red)".into());
+        assert_eq!(s.receive_all(&[a.clone()], None, Some("Ann (Red)"), 0, &[10], &[])[0].outcome, Err(Reject::Friendly));
+        assert_eq!(s.receive_all(&[a.clone()], None, Some("Ann (Blue)"), 1, &[10], &[])[0].outcome, Ok(2));
+        let mut s = session();
+        a.status = Some(0x12);
+        assert_eq!(s.receive_all(&[a], None, None, 0, &[10], &[])[0].outcome, Err(Reject::AttackerBlocked));
+    }
+
     // ---- receive_all over real players ----
 
-    fn other(id: u16, x: f32, y: f32, dir: u8, sprite: u8, power: Option<u8>) -> OtherPlayer {
+    fn other(id: u16, x: f32, y: f32, dir: u8, sprite: u8, power: Option<i8>) -> OtherPlayer {
         OtherPlayer {
             id,
             x,
@@ -954,7 +1184,7 @@ mod tests {
         let mut s = session();
         let others = [other(10, 20.0, 20.0, 3, sw(7, 3), Some(2)), other(11, 22.0, 24.0, 0, sw(7, 0), Some(1))];
         let hits = [IncomingHit::Hurt(hurt(11, 2)), IncomingHit::Objects(HitObjects { attacker: 11, half: 2, x: 22.0, y: 20.0, npc: None })];
-        let out = s.receive_all(&others, None, &[10, 11, 99], &hits);
+        let out = s.receive_all(&others, None, None, 0, &[10, 11, 99], &hits);
         let kinds: Vec<_> = out.iter().map(|r| (r.kind, r.attacker, r.outcome)).collect();
         assert_eq!(
             kinds,
@@ -977,11 +1207,11 @@ mod tests {
         s.player_x = 2.0;
         let mut o = other(10, 62.0, 20.0, 3, sw(7, 3), Some(1));
         o.cell = Some((0, 0));
-        assert_eq!(s.receive_all(&[o.clone()], Some((1, 0)), &[10], &[])[0].outcome, Ok(1));
+        assert_eq!(s.receive_all(&[o.clone()], Some((1, 0)), None, 0, &[10], &[])[0].outcome, Ok(1));
         // Without the cell offset the same numbers are 60 tiles apart.
         let mut s = session();
         s.player_x = 2.0;
-        assert_eq!(s.receive_all(&[o], None, &[10], &[])[0].outcome, Err(Reject::OutOfReach));
+        assert_eq!(s.receive_all(&[o], None, None, 0, &[10], &[])[0].outcome, Err(Reject::OutOfReach));
     }
 
     // ---- our own swing ----
@@ -1032,7 +1262,7 @@ mod tests {
         assert!(!s.combat.is_swinging());
         let mut h = session();
         h.player_dir = 1;
-        h.receive_sword(Some(2), &swinger(3, sw(8, 3)));
+        h.receive_sword(Some(2), &swinger(3, sw(8, 3)), 0);
         assert_eq!(h.sprite_value(), 1 + 4 * 32);
         assert!(h.tick_combat(2_000), "hurt mode ends, the sprite goes back");
         assert_eq!(h.sprite_value(), 1);

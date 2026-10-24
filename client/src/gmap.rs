@@ -247,6 +247,14 @@ impl Gmap {
         (!n.is_empty()).then_some(n)
     }
 
+    /// The index of `level` in the gmap's level list: its place among the
+    /// named cells in file order (case-insensitive, first match). The real
+    /// client's list order and de-duplication are not traced, so only
+    /// "not in the list" and "first in the list" can be relied on.
+    pub fn list_index(&self, level: &str) -> Option<usize> {
+        self.names.iter().filter(|n| !n.is_empty()).position(|n| n.eq_ignore_ascii_case(level))
+    }
+
     /// The cell a level is in (case-insensitive; the first match).
     pub fn cell_of(&self, level: &str) -> Option<(i32, i32)> {
         let i = self.names.iter().position(|n| !n.is_empty() && n.eq_ignore_ascii_case(level))?;

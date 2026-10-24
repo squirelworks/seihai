@@ -225,6 +225,8 @@ impl SessionScripts {
                 Effect::SetPlayerProp { code, value } => {
                     s.props.insert(code, value);
                 }
+                // `noplayerkilling`: other players' hits do nothing in this level.
+                Effect::Command { ref name, .. } if name == "noplayerkilling" => s.no_pk = true,
                 other => self.unhandled.push(other),
             }
         }
@@ -262,6 +264,21 @@ mod tests {
         SIGN 5 5\n\
         Read me\n\
         SIGNEND\n";
+
+    #[test]
+    fn noplayerkilling_marks_the_level_until_the_next_one_loads() {
+        let mut s = session("GLEVNW01\nNPC - 10 10\nif (created) { noplayerkilling; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        assert!(!s.no_pk);
+        sc.load_level(&mut s, "pk.nw");
+        assert!(s.no_pk);
+        let dir = std::env::temp_dir().join(format!("seihai-nopk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("next.nw"), "GLEVNW01\n").unwrap();
+        s.load_level(dir.join("next.nw")).unwrap();
+        assert!(!s.no_pk, "a new level starts without the flag");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_dead_player_cannot_be_hurt() {
