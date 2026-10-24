@@ -68,4 +68,21 @@ Only builds with `levels.link_boxes` use the boxes: 2.22 and 2.31, plus the buil
 between and after them in the version chain, taken as the same (inferred). Earlier
 builds keep the foot-point rule; nobody measured them.
 
-Before and after, from the ranked difftest report: see `documentation/difftest.md`.
+## Before and after (lab, real client against Seihai)
+
+`linkgeom2` (22 probes per version, 2.22 and 2.31): a probe counts as agreeing when the real
+client and Seihai either both send the level warp for `lv_c.nw` or both do not.
+
+| Seihai | probes that agree with the real client | probes where Seihai warps |
+|---|---|---|
+| before (foot point) | 16 of 22 | 11 (real client: 15) |
+| after (direction boxes) | 22 of 22 | 15 |
+
+Same result on 2.22 and 2.31.
+
+`door_warp` on 2.22: the real client sends `LEVELWARP lv_c.nw 60 30`, then `LEVELWARPMOD lv_a.nw 14 30` on the
+way back, then `LEVELWARP lv_w.nw` at the edge. Before, Seihai sent only the edge warp (the diff listed the
+`LEVELWARP` to `lv_c.nw` and the `LEVELWARPMOD` as missing, 3 high divergences in all). After, Seihai sends the
+`lv_c.nw` warp with the same `x=60`, `y=30`, the `LEVELWARPMOD` back at `x=14`, `y=30`, and the edge warp, and
+the report has no missing level warp. The edge warp's `x` differs (real 17.5, Seihai 20.5) because the two clients
+walk at different speeds (divergence 9).
