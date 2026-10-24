@@ -506,13 +506,15 @@ pub fn sync_world(
         }
     }
     let g = net.gmap.as_ref().expect("checked above");
-    let Some(map) = g.map.as_ref() else {
+    let Some(map) = g.map.clone() else {
         if asked.insert(format!("file:{}", g.name.to_ascii_lowercase())) {
             req.gmap_file = Some(g.name.clone());
         }
         return req;
     };
-    let cell = g.cell;
+    // The client clamps the cell a 49 gives to the grid.
+    let cell = (g.cell.0.clamp(0, map.width as i32 - 1), g.cell.1.clamp(0, map.height as i32 - 1));
+    let moved = cell != g.cell;
     match session.gmap.as_mut() {
         Some(w) if w.name.eq_ignore_ascii_case(&g.name) => {
             if w.cell != cell {
@@ -524,6 +526,10 @@ pub fn sync_world(
         _ => session.enter_gmap(g.name.clone(), map.clone(), cell),
     }
     let around = map.neighbours(cell);
+    let map = map.clone();
+    if moved {
+        net.set_gmap_cell(cell);
+    }
     let w = session.gmap.as_mut().expect("just set");
     w.levels.retain(|c, _| around.contains(c));
     for c in w.missing() {
@@ -932,5 +938,21 @@ mod tests {
         assert_eq!((own.tile_id_at(61, 2), own.tile_id_at(62, 2), own.tile_id_at(63, 2)), (Some(1), Some(9), Some(9)));
         let ne = session.gmap.as_ref().unwrap().levels.get(&(1, 0)).unwrap();
         assert_eq!((ne.tile_id_at(62, 2), ne.tile_id_at(0, 3)), (Some(9), Some(1)));
+    }
+
+    /// A 49 whose cell is outside the grid is clamped to it, as the real
+    /// client does.
+    #[test]
+    fn a_cell_outside_the_grid_is_clamped() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        let p = [&[0x20 + 116, 0x20 + 61, 0x20 + 50, 0x20 + 5, 0x20 + 9][..], b"g.gmap"].concat();
+        net.apply_body(&[msg(49, &p), msg(6, b"gm_se.nw"), msg(6, b"g.gmap")].concat());
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        sync_world(&mut session, &mut net, &rules, &files, &mut HashSet::new());
+        assert_eq!(net.gmap.as_ref().unwrap().cell, (1, 1));
+        assert_eq!(session.gmap.as_ref().unwrap().cell, (1, 1));
+        assert_eq!(net.current_level_name().as_deref(), Some("gm_se.nw"));
     }
 }

@@ -195,7 +195,7 @@ pub fn parse_screenshot_name(payload: &[u8]) -> Option<String> {
 /// w-1, h-1`, then `w*h` cells of two raw bytes, row-major. A cell is
 /// `(b0 - 0x20 - 50) + (b1 - 0x20) / 128` (a height with a fraction). `mapX`
 /// and `mapY` pick the gmap cell and must lie inside the gmap's grid (the
-/// client checks that, Seihai has no gmap yet). The client's own length
+/// client checks that; Seihai decodes the block and does not apply heights). The client's own length
 /// check is only `w*h + 6` bytes although cells take two each; here all
 /// `2*w*h` bytes must be present.
 #[derive(Debug, Clone, PartialEq)]
@@ -274,8 +274,9 @@ impl BoardModify2 {
     /// Tiles are masked to 12 bits like the 101 board. Returns how many
     /// tiles were written.
     ///
-    /// Not called by the session yet: it needs the gmap cell the player is
-    /// in, and `mapX`/`mapY` other than that cell were never tested.
+    /// The session calls this for the level at `mapX`/`mapY` (see
+    /// `SessionState`); a cell other than the player's own was never tested
+    /// against a real client.
     pub fn apply_to(&self, board: &mut [u16]) -> usize {
         let rows = board.len() / BOARD_SIDE;
         let mut written = 0;

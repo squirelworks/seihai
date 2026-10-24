@@ -498,8 +498,9 @@ impl Connection {
     /// has the id. `then` are messages that go in the same frame right
     /// after it: a real 2.31 client sends 46 immediately before the props
     /// message that carries the cell prop (43/44) and the wrapped
-    /// coordinate. Seihai has no gmap cell prop yet, so callers pass
-    /// nothing and the next walk update is the props frame that follows.
+    /// coordinate ([`crate::gmap::crossing_frame`] builds that frame for a
+    /// crossing). Elsewhere callers pass nothing and the next walk update is
+    /// the props frame that follows.
     ///
     /// Returns `Ok(false)` and sends nothing for a profile without 46.
     pub fn send_enter_level(&mut self, version: ClientVersion, then: &[Vec<u8>]) -> io::Result<bool> {
