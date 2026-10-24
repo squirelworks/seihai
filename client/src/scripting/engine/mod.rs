@@ -6,6 +6,7 @@
 //! Graal_analysis notes, not from any other implementation.
 
 pub mod ast;
+pub mod compile;
 pub mod lexer;
 pub mod parser;
 pub mod value;

@@ -38,6 +38,18 @@ pub fn parse(src: &str, era: Era) -> Script {
     Script { body, diagnostics: p.diags }
 }
 
+/// Parse one expression (the inside of `#v(...)`). `None` if it is not
+/// exactly one well-formed expression.
+pub fn parse_expr(src: &str, era: Era) -> Option<Expr> {
+    let mut p = Parser::new(src, era);
+    let e = p.expr();
+    if p.diags.is_empty() && matches!(p.peek().tok, Tok::Eof) {
+        Some(e)
+    } else {
+        None
+    }
+}
+
 struct Parser<'a> {
     lx: Lexer<'a>,
     peeked: Option<Spanned>,
@@ -689,6 +701,13 @@ mod tests {
         assert_eq!(g("lay bomb;"), "(cmd lay 8)\n");
         assert_eq!(g("putcomp frog,10,12;"), "(cmd putcomp 5 10 12)\n");
         assert_eq!(g("carryobject vase;"), "(cmd carryobject 2)\n");
+    }
+
+    #[test]
+    fn expression_only_parsing() {
+        assert_eq!(parse_expr("this.a + 1", Era::V21).unwrap().to_string(), "(+ this.a 1)");
+        assert!(parse_expr("1 +", Era::V21).is_none());
+        assert!(parse_expr("1 2", Era::V21).is_none());
     }
 
     #[test]
