@@ -23,7 +23,7 @@ mod version;
 pub use board::BoardModify;
 pub use compress::{bz2_compress, bz2_decompress};
 pub use dispatch::{
-    latin1, read_gint3, read_gshort, split_messages, ChatKind, ChatLine, Message, OtherPlayer, SessionState, Splitter,
+    latin1, read_gint3, read_gshort, split_messages, sword_power_from_wire, ChatKind, ChatLine, Message, OtherPlayer, SessionState, Splitter,
 };
 pub use extras::MapSpec;
 pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
@@ -35,7 +35,7 @@ pub use props::{
 };
 pub use profile::{
     by_label, profile, Basis, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
-    VersionProfile, COMBAT_205, DEATH_205, PROFILES,
+    VersionProfile, COMBAT_205, DEATH_205, DEATH_21, PROFILES,
 };
 pub use showimg::{showimg_message, ShowImgInfo, ShowImgSender};
 pub use tampercheck::{TamperImage, TamperSender, TamperWords};

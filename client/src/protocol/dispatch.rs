@@ -180,6 +180,18 @@ impl Splitter {
     }
 }
 
+/// The sword power in a SWORDPOWER (8) byte: 0 to 9 is the power itself (the
+/// default swords 1 to 4 send their number), from 10 it is power + 30, so
+/// -20 to 20 with the image name following. The sender limits the power to
+/// that range; so does this.
+pub fn sword_power_from_wire(v: u8) -> i8 {
+    if v < 10 {
+        v as i8
+    } else {
+        (i16::from(v) - 30).clamp(-20, 20) as i8
+    }
+}
+
 /// Another player seen via `PLO_OTHERPLPROPS`.
 #[derive(Debug, Clone)]
 pub struct OtherPlayer {
@@ -204,7 +216,7 @@ pub struct OtherPlayer {
     pub sprite: Option<u8>,
     pub status: Option<u8>,
     pub ap: Option<u8>,
-    pub sword_power: Option<u8>,
+    pub sword_power: Option<i8>,
 }
 
 impl OtherPlayer {
@@ -1318,7 +1330,7 @@ struct OtherUpdate {
     sprite: Option<u8>,
     status: Option<u8>,
     ap: Option<u8>,
-    sword_power: Option<u8>,
+    sword_power: Option<i8>,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -1339,7 +1351,7 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
                 u.dir = prop.gchar().map(|v| v % 4);
                 u.sprite = prop.gchar();
             }
-            8 => u.sword_power = prop.gchar().map(|v| v.saturating_sub(30)),
+            8 => u.sword_power = prop.gchar().map(sword_power_from_wire),
             18 => u.status = prop.gchar(),
             32 => u.ap = prop.gchar(),
             43 => u.cell_x = prop.gchar().map(i32::from),

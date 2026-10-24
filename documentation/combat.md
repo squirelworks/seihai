@@ -8,8 +8,9 @@ real fight exists yet): `decomp-findings-2026-10-24/04-sword-hitbox.md`,
 `protocol/packet-layouts.md` "Hits" and `02-weapons-combat.md` (ids and
 layouts of 26/40 and 36/46).
 
-This PR is stacked on #27 (health and death, `chiaki/health-death`): a hit
-that takes the last heart starts that death, and the claim names the attacker.
+A hit that takes the last heart starts the death of `health-death.md`, and
+the claim names the attacker. The damage formula and the extra hit gates were
+derived in item 7; `damage-respawn.md` has what is known and open.
 
 ## Where it lives
 
@@ -42,6 +43,10 @@ A sword hit counts when all of these hold (`judge_sword`):
 | attacker's sprite S | 6 to 10 (animation steps 9 to 13) | `NotSwinging` |
 | victim hurtable | not dead (or hearts 0), not in hurt mode, not swimming | `Dead`, `AlreadyHurt`, `Swimming` |
 | victim's AP | not exactly 100 | `Immune` |
+| level | the level has not run the script command `noplayerkilling` | `NoPkZone` |
+| attacker judged | not already judged in this second of the day (once per attacker per second) | `Throttled` |
+| guild | the attacker's `(tag)` is not in the victim's nickname | `Friendly` |
+| attacker's STATUS | bits 0x02 (hidden) and 0x20 clear | `AttackerBlocked` |
 | ahead of the attacker, along its facing | 0 to 4 tiles, both ends count | `OutOfReach` |
 | to the side | strictly under 2 tiles | `OffLine` |
 
@@ -49,6 +54,21 @@ The facing is the one in the sprite's low two bits, which is what was sent.
 Distances are measured between the two players' X/Y props, so any fixed
 offset inside the sprite cancels. On a gmap the other player is placed
 relative to our cell first (`OtherPlayer::position_from`).
+
+### Damage
+
+The hit takes the **attacker's sword power in half hearts** (power 3 is 1.5
+hearts), the power limited to -20..20. The power comes from the attacker's
+SWORDPOWER prop (8): a byte of 0 to 9 is the power itself (the default swords
+1 to 4 send their number), from 10 it is power + 30 followed by the image
+name. A **negative power heals**, but only a victim with **AP 40 or more**;
+below that the hit changes no hearts. A power of 0 changes nothing either. In
+all three cases hurt mode still starts. Healing stops at the maximum hearts.
+The profile holds the numbers (`sword_power_limit`, `heal_min_ap`).
+
+Shield, item levels and the attacker's AP are not in the formula: the victim's
+client reads none of them for a sword hit (checked in 2.05, 2.17.1, 2.22 and
+2.31; the rule is the same in all four).
 
 A hit takes hearts through `damage_half` (so a killing hit names the attacker
 for `PLI_CLAIMPKER`, see `health-death.md`) and starts **hurt mode**: 40 ticks
@@ -61,8 +81,9 @@ nothing about that).
 - `PLO_HURTPLAYER` (40): `GSHORT attacker, GCHAR dx, GCHAR dy, GCHAR power`
   and an optional `GINT3 npc` when 6 or more bytes follow the id. Knockback is
   `(byte - 0x60) / 16` tiles, power `byte - 32` half hearts. It applies when
-  the victim can be hurt and the attacker is within 10 tiles (distance in a
-  straight line); power is capped at one heart. AP is **not** checked: the
+  the victim can be hurt, the level is not `noplayerkilling`, and the attacker
+  is within 10 tiles (distance in a straight line); power is capped at one
+  heart. AP is **not** checked: the
   notes make AP 100 immune to the sword only.
 - `PLO_HITOBJECTS` (46): `GSHORT attacker, GCHAR power*2, GCHAR x*2,
   GCHAR y*2` and an optional `GINT3 npc`. Decoded into `hits`, **not applied**
@@ -90,12 +111,29 @@ nothing about that).
 
 Nothing below is invented as if known; each is a labelled constant or a gap.
 
-- **Damage per sword hit** (item 7, unresolved). The notes say "inferred:
-  sword power divided by 2 in hearts, not confirmed". `CombatRules::
-  sword_half_per_power` = 1 half heart per point of the attacker's sword power
-  (at least 1) is that inference, as a placeholder. The attacker's power is its
-  SWORDPOWER prop (8) minus 30; a player whose power was never sent cannot
-  hurt (`UnknownPower`). Packet hits carry their own power and need no formula.
+- **Damage per sword hit** is resolved (above). Open inside it: the exact
+  knockback of a sword hit, and which of the build's other hurt routines
+  (bombs, arrows, baddies) use which power. `damage-respawn.md` lists them.
+- **Guild test needs both nicknames.** `Friendly` applies only when Seihai
+  knows the attacker's nickname (`OtherPlayer.nick`) and its own. The
+  `(tag)` is the first bracket pair of the attacker's nickname with at least
+  one character inside, matched case-sensitively anywhere in the victim's.
+  The same test guards the packet path in the real client only where the
+  decompile showed it; Seihai applies it to swings only.
+- **The once-a-second limit** uses the second of the day (UTC) of Seihai's
+  own clock, as the client uses the system clock. The client stamps an
+  attacker as soon as the swing, the victim's state, AP and the level pass
+  and before the guild and box tests; Seihai does the same.
+- **Hit range for packets and a per-player "same level" field.** The packet
+  path compares one more per-player field between attacker and victim that is
+  not traced (it may be a level or area marker). Seihai does not check it.
+- **`noplayerkilling`** is the script command that sets the level flag; the
+  client also prints the message `nopkzone` when the player's own attack is
+  refused by it. Seihai prints nothing. The flag ends when a level loads.
+- **Kick animation.** The real client skips a sword hit when the attacker is
+  in its kick animation (2.05, by gani name; 2.17.1 and later by an object id
+  of 3). A kick cannot be seen from the props Seihai receives, so it is not
+  checked.
 - **Swing frame times.** The real times come from the sword gani, which Seihai
   does not play. `swing_step_ticks` = 2 (100 ms per frame, 0.5 s a swing) is
   Seihai's own placeholder, for the swing it sends.
