@@ -227,6 +227,14 @@ pub struct Levels {
     pub gmap: bool,
     /// Level heights in the level file (`PLO_BOARDHEIGHTS`, 2.17+).
     pub heights: bool,
+    /// The build asks for a level it already holds with `PLI_LEVELWARPMOD`
+    /// (30, with the level's mod time) instead of `PLI_LEVELWARP` (0).
+    /// Seen on real 2.22 and 2.31 clients (lab, 2026-10-24); written up for
+    /// 2.05 in Graal_analysis `packet-layouts.md`; taken as the same for
+    /// the builds between and after (inferred). Not claimed for 1.33 to
+    /// 2.04: those binaries send id 30, but no document or capture says
+    /// they use it for cached levels.
+    pub cached_links: bool,
 }
 
 /// The HUD sheet (`state.png`) a build ships. A version's own asset folder
@@ -504,6 +512,7 @@ const BASE: VersionProfile = VersionProfile {
         nw: true,
         gmap: true,
         heights: false,
+        cached_links: true,
     },
     ui: Ui {
         server_list: ServerList::Single,
@@ -542,6 +551,7 @@ const CLASSIC: VersionProfile = VersionProfile {
         nw: false,
         gmap: false,
         heights: false,
+        cached_links: false,
     },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
@@ -774,7 +784,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 35,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 134,
@@ -803,7 +813,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 35,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 142,
@@ -828,7 +838,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 35,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 144,
@@ -854,7 +864,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 40,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -880,7 +890,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 40,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 146,
@@ -906,7 +916,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 40,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 148,
@@ -932,7 +942,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 40,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { nw: false, gmap: false, cached_links: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 157,
@@ -1309,6 +1319,25 @@ mod tests {
         assert_eq!(ClientVersion::V217.listserver_port(), 14922);
         assert_eq!(ClientVersion::V205.listserver_port(), 14921);
         assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
+    }
+
+    /// Cached level links (`PLI_LEVELWARPMOD`): rows with evidence or an
+    /// inferred successor of it, never the builds before 2.05, and always
+    /// with id 30 in the send set.
+    #[test]
+    fn cached_links_by_profile() {
+        for p in PROFILES {
+            if p.levels.cached_links {
+                assert!(p.protocol.pli.contains(crate::net::PLI_LEVELWARPMOD), "{}", p.label);
+                assert!(p.levels.nw, "{}: cached levels need .nw support", p.label);
+            }
+        }
+        for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
+            assert!(v.sends_cached_links(), "{}", v.label());
+        }
+        for v in [ClientVersion::V133, ClientVersion::V139, ClientVersion::V200, ClientVersion::V204] {
+            assert!(!v.sends_cached_links(), "{}", v.label());
+        }
     }
 
     /// 2.02 rev 2, 2.03 and 2.04 each differ from the build before.

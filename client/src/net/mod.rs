@@ -26,6 +26,10 @@ use std::time::{Duration, Instant};
 /// have it in their send set.
 pub const PLI_ENTERLEVEL: u8 = 46;
 
+/// `PLI_LEVELWARPMOD` (30), client to server: the level link a client
+/// sends for a level it already holds.
+pub const PLI_LEVELWARPMOD: u8 = 30;
+
 /// The `PLI_ENTERLEVEL` message: the id and one `GCHAR 1`. The payload was
 /// 1 in every one of the 7 level entries a real 2.31 client made in the lab
 /// (login and 6 gmap crossings); no other value has been seen.
@@ -72,8 +76,7 @@ pub fn enter_level_extras(own_link: bool, at: &PlayerUpdate) -> Vec<Vec<u8>> {
 /// Where 46 sits depends on who started the move (lab, real 2.31):
 /// - a level link whose level the client has cached sends the link request
 ///   (`PLI_LEVELWARPMOD` 30) and 46 in one frame, before the server's
-///   answer. Seihai keeps no level cache and sends `PLI_LEVELWARP` (0), the
-///   case below;
+///   answer ([`link_request_frame`], [`Self::cached_link`]);
 /// - a level link whose level is not cached sends 0, waits for the server's
 ///   level, then sends one frame that starts with 46 and goes on with the
 ///   props;
@@ -150,6 +153,14 @@ impl EnterLevelSender {
         self.sent += usize::from(sent);
     }
 
+    /// A cached link went out for `name` and its frame already carried the
+    /// 46 when the profile sends one ([`link_request_frame`]): the server's
+    /// answer naming `name` owes none. Call when the frame went out;
+    /// `sent` is [`LinkFrame::with_enter_level`].
+    pub fn cached_link(&mut self, name: &str, sent: bool) {
+        self.crossing(name, sent);
+    }
+
     /// [`Self::note_level`] and, when a 46 is owed, [`Self::send_pending`]
     /// with nothing after it. Sends the owed 46 at once and alone.
     pub fn level_entered(&mut self, conn: &mut Connection, name: &str) -> io::Result<bool> {
@@ -168,6 +179,81 @@ pub fn levelwarp_message(x: f32, y: f32, level: &str) -> Vec<u8> {
     msg.extend_from_slice(&to_latin1(level));
     msg.push(b'\n');
     msg
+}
+
+/// `PLI_LEVELWARPMOD` (30): `GINT5` mod time of the cached copy, then
+/// `GCHAR x*2`, `GCHAR y*2` (tiles) and the level name. The same as
+/// [`levelwarp_message`] with the mod time in front (GServer-v2
+/// `msgPLI_LEVELWARP` reads the five bytes first when the id is 30).
+pub fn levelwarpmod_message(mod_time: u32, x: f32, y: f32, level: &str) -> Vec<u8> {
+    let mut msg = vec![PLI_LEVELWARPMOD + 0x20];
+    for shift in [28, 21, 14, 7, 0] {
+        msg.push(((mod_time >> shift) as u8 & 0x7F) + 0x20);
+    }
+    msg.push(((x * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+    msg.push(((y * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+    msg.extend_from_slice(&to_latin1(level));
+    msg.push(b'\n');
+    msg
+}
+
+/// What went into a link-request frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkFrame {
+    pub messages: Vec<Vec<u8>>,
+    /// The tamper check (39) is in the frame.
+    pub with_tamper: bool,
+    /// `PLI_ENTERLEVEL` (46) is in the frame: the cached form on a build
+    /// that sends 46.
+    pub with_enter_level: bool,
+}
+
+/// The frame a client sends when the player walks into a level link.
+///
+/// `cached` is the mod time of the copy the client holds (see
+/// [`SessionState::cached_mod_time`]) and is honoured only for a profile
+/// whose levels have `cached_links`; otherwise the request is the plain
+/// `PLI_LEVELWARP` (0) and nothing else but the tamper check.
+///
+/// Lab, real clients, 2026-10-24:
+/// - not cached (0): the frame is `0` and, on 2.22, `39`. The 46 of a
+///   2.31 client comes later, after the server's answer
+///   ([`EnterLevelSender`]).
+/// - cached (30): 2.31 sends `30`, `46`, then its props, in one frame,
+///   before the server answers; 2.22 sends `30`, `39`. So with a cached
+///   copy the 46 and the props (at the destination `x`, `y`) go in this
+///   frame, for profiles with 46 only. If a profile ever had both the
+///   tamper check and 46 the order here would be 30, 39, 46, props; no
+///   build seen does.
+pub fn link_request_frame(
+    version: ClientVersion,
+    cached: Option<u32>,
+    x: f32,
+    y: f32,
+    dir: u8,
+    level: &str,
+    tamper: Option<&mut TamperSender>,
+) -> LinkFrame {
+    let cached = cached.filter(|_| version.sends_cached_links());
+    let mut messages = vec![match cached {
+        Some(t) => levelwarpmod_message(t, x, y, level),
+        None => levelwarp_message(x, y, level),
+    }];
+    let mut with_tamper = false;
+    if let Some(t) = tamper {
+        if t.level_changed() {
+            if let Some(m) = t.message() {
+                messages.push(m);
+                with_tamper = true;
+            }
+        }
+    }
+    let with_enter_level = cached.is_some() && version.sends_enter_level();
+    if with_enter_level {
+        messages.push(enter_level_message());
+        messages.push(position_message(x, y, dir));
+    }
+    LinkFrame { messages, with_tamper, with_enter_level }
 }
 
 /// A game-server session as [`login_gserver`] sets it up.
@@ -709,8 +795,8 @@ impl Connection {
     /// and does not send 39 after a server-side warp; 2.31 does not send it
     /// on links at all (lab, 2026-10-24). Returns whether 39 went along.
     ///
-    /// Seihai keeps no level cache, so it always asks with id 0; a client
-    /// with the level cached sends `PLI_LEVELWARPMOD` (30) with the mod time.
+    /// This is the form for a level the client does not hold. With a copy,
+    /// use [`Self::send_cached_link_request`].
     pub fn send_link_request(
         &mut self,
         x: f32,
@@ -729,6 +815,26 @@ impl Connection {
         let with_tamper = msgs.len() > 1;
         self.send_messages(&msgs)?;
         Ok(with_tamper)
+    }
+
+    /// A client-initiated level link for `version`, cached or not: the frame
+    /// [`link_request_frame`] builds. `cached` is the copy's mod time; the
+    /// player's `dir` goes into the props that follow 46. Returns what the
+    /// frame held; `with_enter_level` means the caller owes no 46 after the
+    /// server's answer ([`EnterLevelSender::cached_link`]).
+    pub fn send_link(
+        &mut self,
+        version: ClientVersion,
+        cached: Option<u32>,
+        x: f32,
+        y: f32,
+        dir: u8,
+        level: &str,
+        tamper: Option<&mut TamperSender>,
+    ) -> io::Result<LinkFrame> {
+        let frame = link_request_frame(version, cached, x, y, dir, level, tamper);
+        self.send_messages(&frame.messages)?;
+        Ok(frame)
     }
 
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
@@ -1645,6 +1751,110 @@ mod tests {
         let mut t = TamperSender::for_version(ClientVersion::V217).unwrap();
         assert!(!conn.send_link_request(10.0, 20.0, "lv_c.nw", Some(&mut t)).unwrap());
         assert_eq!(gen3_messages(0x17, &read_frame(&mut srv)), vec![warp_msg()]);
+    }
+
+    /// `PLI_LEVELWARPMOD`: the `PLI_LEVELWARP` layout with a GINT5 mod time
+    /// between the id and the position.
+    #[test]
+    fn levelwarpmod_message_layout() {
+        // 1_781_284_436 = 0x6A_2A_... as five 7-bit groups, high first.
+        let t = 1_781_284_436u32;
+        let m = levelwarpmod_message(t, 10.0, 20.0, "lv_c.nw");
+        assert_eq!(m[0], 30 + 0x20);
+        let groups: Vec<u8> = m[1..6].iter().map(|b| b - 0x20).collect();
+        let back = groups.iter().fold(0u64, |a, g| (a << 7) | u64::from(*g));
+        assert_eq!(back, u64::from(t));
+        assert_eq!(&m[6..], &warp_msg()[1..]);
+        assert_eq!(levelwarpmod_message(0, 10.0, 20.0, "lv_c.nw")[1..6], [0x20; 5]);
+    }
+
+    /// The frame of a level link, per profile, level cached or not.
+    /// Lab (real clients, 2026-10-24): 2.31 sends 30, 46, props before the
+    /// server answers; 2.22 sends 30, 39 and never 46; the uncached form
+    /// of both is 0 (and 39 on 2.22) with no 46 in the frame.
+    #[test]
+    fn link_frame_by_profile_cached_and_not() {
+        let t = 1_781_284_436u32;
+        let props = position_message(10.0, 20.0, 2);
+        let cached_msg = levelwarpmod_message(t, 10.0, 20.0, "lv_c.nw");
+
+        // 2.31: uncached = 0 alone; cached = 30, 46, props. No tamper check.
+        let mut tamper = TamperSender::for_version(ClientVersion::V231).unwrap();
+        let f = link_request_frame(ClientVersion::V231, None, 10.0, 20.0, 2, "lv_c.nw", Some(&mut tamper));
+        assert_eq!(f.messages, vec![warp_msg()]);
+        assert!(!f.with_enter_level && !f.with_tamper);
+        let f = link_request_frame(ClientVersion::V231, Some(t), 10.0, 20.0, 2, "lv_c.nw", Some(&mut tamper));
+        assert_eq!(f.messages, vec![cached_msg.clone(), ENTER.to_vec(), props.clone()]);
+        assert!(f.with_enter_level && !f.with_tamper);
+
+        // 2.22: uncached = 0, 39; cached = 30, 39. Never 46, no props.
+        let mut tamper = TamperSender::for_version(ClientVersion::V222).unwrap();
+        let t39 = tamper.message().unwrap();
+        let f = link_request_frame(ClientVersion::V222, None, 10.0, 20.0, 2, "lv_c.nw", Some(&mut tamper));
+        assert_eq!(f.messages, vec![warp_msg(), t39.clone()]);
+        let f = link_request_frame(ClientVersion::V222, Some(t), 10.0, 20.0, 2, "lv_c.nw", Some(&mut tamper));
+        assert_eq!(f.messages, vec![cached_msg.clone(), t39.clone()]);
+        assert!(f.with_tamper && !f.with_enter_level);
+        // Tamper check off (the default): the request alone.
+        let f = link_request_frame(ClientVersion::V222, Some(t), 10.0, 20.0, 2, "lv_c.nw", None);
+        assert_eq!(f.messages, vec![cached_msg.clone()]);
+
+        // 2.05: cached form, nothing else.
+        let f = link_request_frame(ClientVersion::V205, Some(t), 10.0, 20.0, 2, "lv_c.nw", None);
+        assert_eq!(f.messages, vec![cached_msg.clone()]);
+
+        // 2.3 follows 2.31.
+        let f = link_request_frame(ClientVersion::V230, Some(t), 10.0, 20.0, 2, "lv_c.nw", None);
+        assert_eq!(f.messages, vec![cached_msg.clone(), ENTER.to_vec(), props.clone()]);
+
+        // Builds without cached links ask with 0 whatever the cache holds.
+        for v in [ClientVersion::V133, ClientVersion::V139, ClientVersion::V200, ClientVersion::V204] {
+            assert!(!v.sends_cached_links());
+            let f = link_request_frame(v, Some(t), 10.0, 20.0, 2, "lv_c.nw", None);
+            assert_eq!(f.messages, vec![warp_msg()], "{}", v.label());
+            assert!(!f.with_enter_level);
+        }
+        // Every profile: the first message is 0 or 30 by profile and cache,
+        // and a 46 is in the frame only for the cached form with 46 in the
+        // send set.
+        for p in crate::protocol::PROFILES {
+            for cached in [None, Some(t)] {
+                let f = link_request_frame(p.version, cached, 10.0, 20.0, 2, "lv_c.nw", None);
+                let want_mod = cached.is_some() && p.levels.cached_links;
+                assert_eq!(f.messages[0][0], if want_mod { 30 } else { 0 } + 0x20, "{}", p.label);
+                assert_eq!(f.with_enter_level, want_mod && p.protocol.pli.contains(46), "{}", p.label);
+                assert_eq!(f.messages.iter().any(|m| m == &ENTER), f.with_enter_level, "{}", p.label);
+            }
+        }
+    }
+
+    /// Over the wire: one frame, in order, 30 then 46 then the props for 2.31.
+    /// The 46 is then not owed again when the server names the level.
+    #[test]
+    fn cached_link_frame_goes_out_in_one_frame_and_owes_no_second_46() {
+        let t = 1_781_284_436u32;
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x41, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x41);
+        let mut el = EnterLevelSender::for_version(ClientVersion::V231);
+        assert!(!el.note_level("a.nw"));
+        let f = conn.send_link(ClientVersion::V231, Some(t), 10.0, 20.0, 2, "lv_c.nw", None).unwrap();
+        assert!(f.with_enter_level);
+        el.cached_link("lv_c.nw", f.with_enter_level);
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!(
+            body,
+            [levelwarpmod_message(t, 10.0, 20.0, "lv_c.nw"), ENTER.to_vec(), position_message(10.0, 20.0, 2)].concat()
+        );
+        // The server's answer names the level: no 46 is owed.
+        assert!(!el.note_level("lv_c.nw") && !el.is_pending());
+        assert_eq!(el.sent, 1);
+        // Uncached link: 0 alone, and the 46 is owed after the answer.
+        let f = conn.send_link(ClientVersion::V231, None, 10.0, 20.0, 2, "lv_b.nw", None).unwrap();
+        assert!(!f.with_enter_level);
+        assert_eq!(gen5_body(&mut srv, &mut g), levelwarp_message(10.0, 20.0, "lv_b.nw"));
+        assert!(el.note_level("lv_b.nw") && el.is_pending());
     }
 
     /// Own link: 46 then the props (position) in one frame, 46 first. A

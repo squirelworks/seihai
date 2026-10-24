@@ -111,6 +111,13 @@ impl ClientVersion {
         self.profile().protocol.pli.contains(crate::net::PLI_ENTERLEVEL)
     }
 
+    /// The build asks for a level it already holds with `PLI_LEVELWARPMOD`
+    /// (30): its profile says so and its send set has the id.
+    pub fn sends_cached_links(self) -> bool {
+        let p = self.profile();
+        p.levels.cached_links && p.protocol.pli.contains(crate::net::PLI_LEVELWARPMOD)
+    }
+
     /// Listserver port, or the 2.05 one for versions without a listserver.
     pub fn listserver_port(self) -> u16 {
         self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)

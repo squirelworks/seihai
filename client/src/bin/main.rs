@@ -536,6 +536,8 @@ fn main() {
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
+    // Where a cached level link (PLI 30) lands the player; see the link send.
+    let mut cached_arrival: Option<(f32, f32)> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -758,6 +760,13 @@ fn main() {
                 }
                 // Take server positions once, so local walking is not
                 // snapped back by later frames.
+                // A cached link got no PLO_PLAYERWARP: the position is the
+                // one the link request carried (the server's, if it did send
+                // one, wins).
+                if let Some((x, y)) = cached_arrival.take_if(|_| entered) {
+                    net_state.player_x.get_or_insert(x);
+                    net_state.player_y.get_or_insert(y);
+                }
                 let warped = net_state.player_x.is_some() || net_state.player_y.is_some();
                 if let Some(x) = net_state.player_x.take() {
                     session.player_x = x;
@@ -929,11 +938,32 @@ fn main() {
                         // wait; its reply moves the player.
                         session.begin_warp(&dest);
                         warp_since = Some(Instant::now());
-                        // 2.22 sends the tamper check in the same frame.
-                        if let Err(e) = c.send_link_request(x, y, &dest, tamper.as_mut()) {
-                            eprintln!("send failed: {e}");
-                            session.cancel_warp();
-                            conn = None;
+                        // A level the player has been in is asked for with
+                        // PLI 30 and its mod time (profiles with cached
+                        // links), and a 2.31 client then sends 46 and the
+                        // props in the same frame; 2.22 sends the tamper
+                        // check in the same frame instead.
+                        let cached = if version.sends_cached_links() { net_state.cached_mod_time(&dest) } else { None };
+                        let dir = session.player_update().dir;
+                        match c.send_link(version, cached, x, y, dir, &dest, tamper.as_mut()) {
+                            Ok(frame) => {
+                                if let Some(t) = cached {
+                                    eprintln!("cached link to {dest} (mod time {t})");
+                                    net_state.expect_cached_level(&dest);
+                                    // The server sends no PLO_PLAYERWARP for
+                                    // this form: the player lands where the
+                                    // link said.
+                                    cached_arrival = Some((x, y));
+                                    if let Some(el) = enter_level.as_mut() {
+                                        el.cached_link(&dest, frame.with_enter_level);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("send failed: {e}");
+                                session.cancel_warp();
+                                conn = None;
+                            }
                         }
                     } else {
                         // Offline: load the destination if it is local.
@@ -965,6 +995,8 @@ fn main() {
         if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
             warp_since = None;
             session.cancel_warp();
+            cached_arrival = None;
+            net_state.cancel_cached_request();
             eprintln!("warp not answered");
         }
         // 2.31 sends the tamper check again every 3.2 s.
@@ -1006,6 +1038,7 @@ fn main() {
                 frames = None;
                 session.cancel_warp();
                 warp_since = None;
+                cached_arrival = None;
                 let target = w.address();
                 eprintln!("server warp to {:?}: {}", w.name, target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {

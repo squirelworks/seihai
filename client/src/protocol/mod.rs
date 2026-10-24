@@ -12,6 +12,7 @@ mod frame;
 mod gen3;
 mod gen5;
 pub mod layouts;
+pub mod levelcache;
 mod list;
 mod profile;
 mod props;
