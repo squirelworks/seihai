@@ -4,7 +4,7 @@
 //! without a network connection. Behavior is provisional and will
 //! be refined against the original client’s offline/tutorial paths.
 
-use crate::assets::{GaniPlayer, Level, TileKind, TileTypes};
+use crate::assets::{GaniPlayer, Level, Link, TileKind, TileTypes};
 use crate::sound::SoundEvent;
 use crate::dev::DevMode;
 use crate::gmap::{Crossing, GmapWorld, Resolved};
@@ -28,6 +28,29 @@ pub const FOOT_DY: f32 = 2.75;
 /// half as fast.
 pub const WALK_STEP_MS: u64 = 50;
 pub const SWIM_STEP_MS: u64 = 100;
+
+/// The box, as offsets from the player's position in tiles, that the real
+/// 2.22 and 2.31 clients test against level links, by walking direction
+/// (`DIR_NORTH`, `DIR_WEST`, `DIR_SOUTH`, `DIR_EAST`): `(x0, y0, x1, y1)`.
+///
+/// Measured in the private lab on 2026-10-25, with the player put on half-tile
+/// positions and walking into a rectangle link and the edge links; the only
+/// thing the captures show is *where on the half-tile grid the first warp
+/// goes out*, so each edge is a value inside the range the captures allow
+/// (see `documentation/link-geometry.md`):
+///
+/// * a left or right step fires once the leading edge, `x + 0.25` or
+///   `x + 2.75`, is inside the link; the box is as tall as the feet strip
+///   (`y + 2` to `y + 3`);
+/// * an up or down step fires once the leading edge, `y + 0.75` or
+///   `y + 3.25`, is inside the link; the box is one tile wide, centred on
+///   `x + 1.5`.
+pub const LINK_BOX: [(f32, f32, f32, f32); 4] = [
+    (1.0, 0.75, 2.0, 1.25), // north
+    (0.25, 2.0, 0.75, 3.0), // west
+    (1.0, 2.75, 2.0, 3.25), // south
+    (2.25, 2.0, 2.75, 3.0), // east
+];
 
 /// A locally simulated game session (no server).
 #[derive(Debug)]
@@ -86,6 +109,9 @@ pub struct OfflineSession {
     /// False from an arrival until the player has moved: a link cannot
     /// fire on the spot the player was put on.
     armed: bool,
+    /// Test links with [`LINK_BOX`] (the profile's `levels.link_boxes`)
+    /// instead of the legacy foot point.
+    pub link_boxes: bool,
     /// Tile the player arrived on. Links that contain it stay off until
     /// the player steps out of them.
     arrival_tile: Option<(i32, i32)>,
@@ -210,6 +236,7 @@ impl OfflineSession {
             warp_pending: None,
             gmap: None,
             armed: true,
+            link_boxes: false,
             arrival_tile: None,
             swim_sent: false,
             level_serial: 0,
@@ -668,14 +695,24 @@ impl OfflineSession {
         let Some(level) = &self.current_level else {
             return false;
         };
+        let (px0, py0) = (self.player_x, self.player_y);
+        let b = LINK_BOX[usize::from(self.player_dir & 3)];
+        let boxes = self.link_boxes;
+        let hit = |l: &Link| {
+            if boxes {
+                l.overlaps(px0 + b.0, py0 + b.1, px0 + b.2, py0 + b.3)
+            } else {
+                l.contains(px, py)
+            }
+        };
         if let Some(t) = self.arrival_tile {
             // Still on the way out of the arrival link?
-            if level.links.iter().any(|l| l.contains(t.0, t.1) && l.contains(px, py)) {
+            if level.links.iter().any(|l| l.contains(t.0, t.1) && hit(l)) {
                 return false;
             }
             self.arrival_tile = None;
         }
-        self.pending_link = level.links.iter().find(|l| l.contains(px, py)).map(|link| {
+        self.pending_link = level.links.iter().find(|l| hit(l)).map(|link| {
             (
                 link.dest.clone(),
                 link.new_x.unwrap_or(self.player_x + link.x_offset),
@@ -982,7 +1019,6 @@ mod tests {
 
     // ---- tile movement and warp arrival ------------------------------------
 
-    use crate::assets::Link;
 
     const OPEN: u16 = 0;
     const WALL: u16 = 1;
@@ -1250,6 +1286,100 @@ mod tests {
         assert_eq!(walk(&mut s, 0.5, 0.0, 4), 4); // feet x 30.0
         assert!(s.check_links());
         assert_eq!(s.pending_link.as_ref().map(|l| l.0.as_str()), Some("c.nw"));
+    }
+
+    /// A level with the lab's links: a rectangle (10, 28, 2 by 5) and the
+    /// four edge strips, and a session with probe boxes on that walks from
+    /// `(x, y)` in direction `(dx, dy)`; returns the position the first link
+    /// fires at, or `None` after `steps` steps.
+    fn first_fire(x: f32, y: f32, dx: f32, dy: f32, steps: usize) -> Option<(f32, f32)> {
+        let mut lvl = level(|_, _| OPEN);
+        lvl.links.push(link("lv_b.nw", 0, 0, 64, 2, None, Some(60.0)));
+        lvl.links.push(link("lv_c.nw", 10, 28, 2, 5, Some(60.0), Some(30.0)));
+        lvl.links.push(link("lv_w.nw", 0, 62, 64, 2, None, Some(4.0)));
+        lvl.links.push(link("lv_s.nw", 62, 0, 2, 64, Some(4.0), None));
+        let mut s = session_at(lvl, 0.0, 0.0);
+        s.link_boxes = true;
+        s.player_x = x;
+        s.player_y = y;
+        s.arrive(x, y);
+        for _ in 0..steps {
+            s.try_move(dx, dy)?;
+            if s.check_links() {
+                return Some((s.player_x, s.player_y));
+            }
+        }
+        None
+    }
+
+    // The positions below are the real 2.22 and 2.31 clients' first warps in
+    // the lab's `linkgeom` and `linkgeom2` scenarios (the player is put on a
+    // half tile and walks): the warp goes out at the step *after* the last
+    // position the client reported.
+
+    #[test]
+    fn probe_boxes_fire_where_the_real_client_does_on_the_rectangle_link() {
+        // Down at x 8.5 ... 10.5 reached the link after reporting y 24.5.
+        for x in [8.5, 9.0, 9.5, 10.0, 10.5] {
+            assert_eq!(first_fire(x, 20.0, 0.0, 0.5, 40), Some((x, 25.0)), "down at x {x}");
+        }
+        // Up at x 8.5 and 9.5 from y 40 went on after y 32.5.
+        for x in [8.5, 9.5] {
+            assert_eq!(first_fire(x, 40.0, 0.0, -0.5, 40), Some((x, 32.0)), "up at x {x}");
+        }
+        // Left from x 14 after x 12; right from x 6 after x 7.
+        for y in [26.0, 26.5, 27.0, 27.5] {
+            assert_eq!(first_fire(14.0, y, -0.5, 0.0, 40), Some((11.5, y)), "left at y {y}");
+        }
+        for y in [26.5, 27.0, 27.5] {
+            assert_eq!(first_fire(6.0, y, 0.5, 0.0, 40), Some((7.5, y)), "right at y {y}");
+        }
+    }
+
+    #[test]
+    fn probe_boxes_miss_the_rectangle_link_where_the_real_client_does() {
+        // Beside the link (x 8.0 and 11.0 or more going down; 7 and 7.5 and
+        // 11 to 12 in the first lab run).
+        for x in [7.0, 7.5, 8.0, 11.0, 11.5, 12.0] {
+            assert_eq!(first_fire(x, 20.0, 0.0, 0.5, 20), None, "down at x {x}");
+        }
+        assert_eq!(first_fire(11.0, 40.0, 0.0, -0.5, 20), None);
+        // Left and right below the link's bottom edge (y 32 and 33.5).
+        for y in [32.0, 32.5, 33.0, 33.5] {
+            assert_eq!(first_fire(14.0, y, -0.5, 0.0, 20), None, "left at y {y}");
+        }
+        for y in [32.5, 33.0] {
+            assert_eq!(first_fire(6.0, y, 0.5, 0.0, 20), None, "right at y {y}");
+        }
+    }
+
+    #[test]
+    fn probe_boxes_fire_where_the_real_client_does_on_the_edges() {
+        assert_eq!(first_fire(30.0, 56.0, 0.0, 0.5, 40), Some((30.0, 59.0))); // south edge
+        assert_eq!(first_fire(30.0, 6.0, 0.0, -0.5, 40), Some((30.0, 1.0))); // north edge
+        assert_eq!(first_fire(56.0, 30.5, 0.5, 0.0, 40), Some((59.5, 30.5))); // east edge
+    }
+
+    #[test]
+    fn the_foot_point_stays_for_profiles_without_probe_boxes() {
+        // The legacy rule passes by the rectangle link at its far edge.
+        let mut lvl = level(|_, _| OPEN);
+        lvl.links.push(link("lv_c.nw", 10, 28, 2, 5, Some(60.0), Some(30.0)));
+        let mut s = session_at(lvl, 0.0, 0.0);
+        s.player_x = 8.5;
+        s.player_y = 20.0;
+        s.arrive(8.5, 20.0);
+        assert!(!s.link_boxes);
+        let mut fired = None;
+        for _ in 0..40 {
+            s.try_move(0.0, 0.5);
+            if s.check_links() {
+                fired = Some(s.player_y);
+                break;
+            }
+        }
+        // foot y = y + 2.75 reaches row 28 at y 25.5, and foot x = x + 2 = 10.5
+        assert_eq!(fired, Some(25.5));
     }
 
     #[test]

@@ -26,6 +26,7 @@ use super::profile::{
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
+use super::grflags::GrFlagsMode;
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
@@ -110,6 +111,7 @@ pub struct Delta {
     pub tamper: Option<Option<TamperInfo>>,
     pub showimg: Option<Option<ShowImgInfo>>,
     pub login: Option<Option<LoginInfo>>,
+    pub gr_flags: Option<Option<GrFlagsMode>>,
     pub udp: Option<bool>,
     pub udp_off_by_default: Option<bool>,
     // Props.
@@ -131,6 +133,7 @@ pub struct Delta {
     pub gmap: Option<bool>,
     pub heights: Option<bool>,
     pub cached_links: Option<bool>,
+    pub link_boxes: Option<bool>,
     // Health.
     pub death: Option<Option<DeathRules>>,
     pub combat: Option<Option<super::profile::CombatRules>>,
@@ -162,6 +165,7 @@ impl Delta {
         tamper: None,
         showimg: None,
         login: None,
+        gr_flags: None,
         udp: None,
         udp_off_by_default: None,
         own_props: IdDelta::NONE,
@@ -180,6 +184,7 @@ impl Delta {
         gmap: None,
         heights: None,
         cached_links: None,
+        link_boxes: None,
         death: None,
         combat: None,
         server_list: None,
@@ -253,6 +258,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.protocol.tamper = pick(p.protocol.tamper, d.tamper);
     p.protocol.showimg = pick(p.protocol.showimg, d.showimg);
     p.protocol.login = pick(p.protocol.login, d.login);
+    p.protocol.gr_flags = pick(p.protocol.gr_flags, d.gr_flags);
     p.protocol.udp = pick(p.protocol.udp, d.udp);
     p.protocol.udp_off_by_default = pick(p.protocol.udp_off_by_default, d.udp_off_by_default);
 
@@ -274,6 +280,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.levels.gmap = pick(p.levels.gmap, d.gmap);
     p.levels.heights = pick(p.levels.heights, d.heights);
     p.levels.cached_links = pick(p.levels.cached_links, d.cached_links);
+    p.levels.link_boxes = pick(p.levels.link_boxes, d.link_boxes);
 
     p.life.death = pick(p.life.death, d.death);
     p.life.combat = pick(p.life.combat, d.combat);
@@ -315,6 +322,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         tamper: None,
         showimg: None,
         login: None,
+        gr_flags: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -341,7 +349,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         image_ext: ".gif",
         download_maps: false,
     },
-    levels: Levels { graal: true, zelda: true, nw: false, gmap: false, heights: false, cached_links: false },
+    levels: Levels { graal: true, zelda: true, nw: false, gmap: false, heights: false, cached_links: false, link_boxes: false },
     life: Health { death: None, combat: None },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
@@ -721,11 +729,12 @@ pub const CHAIN: &[Step] = &[
             tampercheck: Some(true),
             tamper: Some(Some(TAMPER_217)),
             login: Some(Some(LOGIN_217)),
+            gr_flags: Some(Some(GrFlagsMode::LoginOnly)),
             npc_max: Some(73),
             heights: Some(true),
             ..Delta::NONE
         },
-        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language)",
+        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language, the gr.x and gr.y flags once)",
         unknown: &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
@@ -748,11 +757,13 @@ pub const CHAIN: &[Step] = &[
             tamper: Some(Some(TAMPER_222)),
             showimg: Some(Some(SHOWIMG_222)),
             login: Some(Some(LOGIN_222)),
+            gr_flags: Some(Some(GrFlagsMode::Tracking)),
+            link_boxes: Some(true),
             udp_off_by_default: Some(true),
             server_list: Some(ServerList::Tabs(3)),
             ..Delta::NONE
         },
-        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props",
+        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props, gr.x and gr.y flags kept up to date on every tick, links tested with a per-direction probe box",
         unknown: &[
             Unknown { area: "pli", what: "send sites of ids 36, 42 and 45 were not matched in the binary, so 36 and 45 are not sent" },
             Unknown { area: "framing", what: "a client-originated bz2 frame (0x1000 and over) was never seen" },
@@ -770,6 +781,7 @@ pub const CHAIN: &[Step] = &[
             tamper: Some(Some(TAMPER_230)),
             showimg: Some(None),
             login: Some(None),
+            gr_flags: Some(None),
             own_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             npc_max: Some(77),
@@ -784,6 +796,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "tampercheck", what: "constant of this build; the re-send rule is taken from 2.31" },
             Unknown { area: "showimg", what: "no id 24 observation, so none is sent" },
             Unknown { area: "login", what: "no post-login frame observation, so none is sent" },
+            Unknown { area: "gr flags", what: "no observation of the 2.3 build; none are set (2.31 sets none either)" },
         ],
     },
     Step {
@@ -955,6 +968,14 @@ fn login_text(l: &Option<LoginInfo>) -> String {
     }
 }
 
+fn gr_flags_text(m: &Option<GrFlagsMode>) -> String {
+    match m {
+        None => "none".into(),
+        Some(GrFlagsMode::LoginOnly) => "gr.x and gr.y once, at login".into(),
+        Some(GrFlagsMode::Tracking) => "gr.x and gr.y at login and on every position change".into(),
+    }
+}
+
 fn death_text(d: &Option<DeathRules>) -> String {
     match d {
         None => "none".into(),
@@ -995,6 +1016,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "protocol", "tamper", &pa.tamper, &pb.tamper, tamper_text);
     value_change(&mut o, "protocol", "showimg (id 24)", &pa.showimg, &pb.showimg, showimg_text);
     value_change(&mut o, "protocol", "login frame", &pa.login, &pb.login, login_text);
+    value_change(&mut o, "protocol", "gr flags", &pa.gr_flags, &pb.gr_flags, gr_flags_text);
     value_change(&mut o, "protocol", "udp", &pa.udp, &pb.udp, yes_no);
     value_change(&mut o, "protocol", "udp_off_by_default", &pa.udp_off_by_default, &pb.udp_off_by_default, yes_no);
     let (ra, rb) = (&a.props, &b.props);
@@ -1016,6 +1038,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "levels", "gmap", &la.gmap, &lb.gmap, yes_no);
     value_change(&mut o, "levels", "heights", &la.heights, &lb.heights, yes_no);
     value_change(&mut o, "levels", "cached_links", &la.cached_links, &lb.cached_links, yes_no);
+    value_change(&mut o, "levels", "link_boxes", &la.link_boxes, &lb.link_boxes, yes_no);
     value_change(&mut o, "life", "death", &a.life.death, &b.life.death, death_text);
     value_change(&mut o, "life", "combat", &a.life.combat, &b.life.combat, combat_text);
     let (ua, ub) = (&a.ui, &b.ui);
@@ -1155,8 +1178,10 @@ mod tests {
             let (label, want) = line.split_once('\t').expect("label<TAB>row");
             let p = super::super::profile::by_label(label).unwrap_or_else(|| panic!("no profile {label}"));
             // Fields added after the hand-written rows existed (the post-login
-            // frame, `login`) are not in them: compare without it.
+            // frame `login`, the link probe `link_boxes`) are not in them: compare
+            // without them.
             let got = strip_field(&format!("{p:?}"), "login: ", ", udp:");
+            let got = strip_field(&got, ", link_boxes: ", " }");
             if got != want {
                 let at = got.bytes().zip(want.bytes()).position(|(a, b)| a != b).unwrap_or(got.len().min(want.len()));
                 let ctx = |s: &str| s[at.saturating_sub(60)..(at + 80).min(s.len())].to_string();

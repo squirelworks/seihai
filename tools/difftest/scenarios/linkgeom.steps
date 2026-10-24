@@ -1,0 +1,93 @@
+# Where a level link fires, in every direction, from a fixed start (no timing drift).
+# Each block: a server warp to a chosen spot, then one arrow key held until the
+# link fires. Server warps put the player on a half-tile (the wire has half-tile
+# resolution), and a step is half a tile, so every position is on that grid.
+# lv_a.nw links: lv_c 10 28 2 5 (rectangle), lv_b 0 0 64 2, lv_w 0 62 64 2,
+# lv_s 62 0 2 64. lv_s.nw has the west strip lv_a 0 0 2 64.
+start lv_a.nw 30.00 30.50
+wait 3
+mark m1-Left-14.0_30.5-lv_a.nw
+chat warpto 14.0 30.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark m2-Right-6.0_30.5-lv_a.nw
+chat warpto 6.0 30.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark m3-Down-11.0_20.0-lv_a.nw
+chat warpto 11.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m4-Up-11.0_40.0-lv_a.nw
+chat warpto 11.0 40.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Up 1.2
+wait 1
+mark m5-Down-7.0_20.0-lv_a.nw
+chat warpto 7.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m6-Down-7.5_20.0-lv_a.nw
+chat warpto 7.5 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m7-Down-11.5_20.0-lv_a.nw
+chat warpto 11.5 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m8-Down-12.0_20.0-lv_a.nw
+chat warpto 12.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m9-Down-30.0_56.0-lv_a.nw
+chat warpto 30.0 56.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark m10-Up-30.0_6.0-lv_a.nw
+chat warpto 30.0 6.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Up 1.2
+wait 1
+mark m11-Right-56.0_30.5-lv_a.nw
+chat warpto 56.0 30.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark m12-Left-30.0_30.0-lv_s.nw
+chat warpto 30.0 30.0 lv_s.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+wait 2
