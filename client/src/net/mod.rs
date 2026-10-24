@@ -101,11 +101,13 @@ pub struct EnterLevelSender {
     pending: bool,
     /// How many 46 messages were sent.
     pub sent: usize,
+    /// The login 46 goes in the post-login frame ([`Self::owe_login`]).
+    login_owed: bool,
 }
 
 impl EnterLevelSender {
     pub fn for_version(version: ClientVersion) -> Self {
-        Self { version, level: None, pending: false, sent: 0 }
+        Self { version, level: None, pending: false, sent: 0, login_owed: false }
     }
 
     /// Send 46 for the login. Call once, right after the post-login frame.
@@ -113,6 +115,28 @@ impl EnterLevelSender {
         let sent = conn.send_enter_level(self.version, &[])?;
         self.sent += usize::from(sent);
         Ok(sent)
+    }
+
+    /// Hold the login 46 back: a real client sends it inside the frame that
+    /// answers the server's login burst (right after the file checks), not
+    /// on its own at the start. [`Self::take_login`] hands it over.
+    pub fn owe_login(&mut self) {
+        self.login_owed = true;
+    }
+
+    /// Whether the login 46 is still owed.
+    pub fn login_owed(&self) -> bool {
+        self.login_owed
+    }
+
+    /// The login 46, once, for the post-login frame. Empty when none is owed
+    /// or the profile has no 46.
+    pub fn take_login(&mut self) -> Vec<Vec<u8>> {
+        if !std::mem::take(&mut self.login_owed) || !self.version.sends_enter_level() {
+            return Vec::new();
+        }
+        self.sent += 1;
+        vec![enter_level_message()]
     }
 
     /// The server put the player in level `name`. True when that is a new
@@ -401,7 +425,10 @@ pub fn login_gserver(
         warnings.push(format!("post-login send failed: {e}"));
     }
     let mut enter_level = EnterLevelSender::for_version(version);
-    if let Err(e) = enter_level.at_login(&mut conn) {
+    if version.profile().protocol.login.is_some() {
+        // The post-login frame carries it (see `protocol::login`).
+        enter_level.owe_login();
+    } else if let Err(e) = enter_level.at_login(&mut conn) {
         warnings.push(format!("enter-level send failed: {e}"));
     }
     Ok(GserverSession { conn, tamper, enter_level, tamper_unavailable, warnings })
@@ -1709,6 +1736,24 @@ mod tests {
         // on a level change.
         let mut t = TamperSender::for_version(ClientVersion::V231).unwrap();
         assert!(!t.level_changed());
+    }
+
+    /// The login 46 can be held back for the post-login frame: it is handed
+    /// over once, and a profile without 46 hands over nothing.
+    #[test]
+    fn the_login_46_is_owed_until_the_post_login_frame_takes_it() {
+        let mut el = EnterLevelSender::for_version(ClientVersion::V231);
+        assert!(el.take_login().is_empty(), "nothing owed yet");
+        el.owe_login();
+        assert!(el.login_owed());
+        assert_eq!(el.take_login(), vec![enter_level_message()]);
+        assert!(!el.login_owed());
+        assert!(el.take_login().is_empty(), "once");
+        assert_eq!(el.sent, 1);
+        let mut old = EnterLevelSender::for_version(ClientVersion::V222);
+        old.owe_login();
+        assert!(old.take_login().is_empty(), "2.22 has no 46");
+        assert_eq!(old.sent, 0);
     }
 
     /// A profile without 46 sends nothing at login or on a level change,

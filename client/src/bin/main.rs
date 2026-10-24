@@ -141,6 +141,9 @@ fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files:
     }
 }
 
+/// How long the login 46 waits for the post-login frame before it goes alone.
+const LATE_LOGIN_46: Duration = Duration::from_secs(3);
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     // `seihai capture ...`: the capture viewer and layout explorer. Reads
@@ -434,6 +437,8 @@ fn main() {
     let mut tamper_clock = Instant::now();
     // PLI_ENTERLEVEL (46): login and every level change, for profiles with it.
     let mut enter_level: Option<EnterLevelSender> = None;
+    // When the login happened, for the late login 46 below.
+    let mut login_since = Instant::now();
     // Opt-in PLI_SHOWIMGPLAYER (24) = 9 (`--send-showimg`), on the build's period.
     let mut showimg: Option<ShowImgSender> = None;
     let mut showimg_clock = Instant::now();
@@ -538,6 +543,7 @@ fn main() {
                     tamper = sess.tamper.take();
                     tamper_clock = Instant::now();
                     enter_level = Some(sess.enter_level.clone());
+                    login_since = Instant::now();
                     showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
                     if send_showimg && showimg.is_none() {
                         eprintln!("--send-showimg: {} has no recorded id 24 behaviour; not sent", version.label());
@@ -927,11 +933,27 @@ fn main() {
                 if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
                     let (lx, ly) = (net_state.player_x.unwrap_or(session.player_x), net_state.player_y.unwrap_or(session.player_y));
                     c.set_gmap_cell(net_state.gmap.as_ref().map(|g| g.cell));
-                    let msgs = lb.take(&net_state, &account, |n| files.need(n), || c.first_gr_flags(lx, ly));
+                    let msgs = lb.take(
+                        &net_state,
+                        &account,
+                        |n| files.need(n),
+                        || enter_level.as_mut().map(|el| el.take_login()).unwrap_or_default(),
+                        || c.first_gr_flags(lx, ly),
+                    );
                     if !msgs.is_empty() {
                         if let Err(e) = c.send_messages(&msgs) {
                             eprintln!("login frame send failed: {e}");
                         }
+                    }
+                }
+            }
+            // A server that never ends its burst with PLO_LISTPROCESSES would
+            // leave the login 46 owed for good: send it alone after a while.
+            if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
+                if el.login_owed() && login_since.elapsed() > LATE_LOGIN_46 {
+                    let msgs = el.take_login();
+                    if let Err(e) = c.send_messages(&msgs) {
+                        eprintln!("late enter-level send failed: {e}");
                     }
                 }
             }
@@ -1518,6 +1540,7 @@ fn main() {
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
+                        login_since = Instant::now();
                         showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
                         showimg_clock = Instant::now();
                         match sess.conn.spawn_reader() {
