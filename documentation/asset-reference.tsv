@@ -1,0 +1,29 @@
+world	file	kind	bytes	size	format	details
+Coronia-1	images/pics1.png	png	210232	2048x512	palette 8-bit	plte=256 trns=225 interlace=0 iend=True
+Doomsday-Nov-2002	levels/steps2.wav	wav	4089	22050Hz 1ch 8-bit	format tag 1 (PCM)	data=4045 bytes duration=0.183s blockalign=1
+Doomsday-Nov-2002	levels/water.wav	wav	7072	8000Hz 1ch 16-bit	format tag 1 (PCM)	data=7008 bytes duration=0.438s blockalign=2
+Final-Doomsday	levels/bodies_dd/body.png	png	9169	128x720	palette 4-bit	plte=16 trns=3 interlace=0 iend=True
+Final-Doomsday	levels/heads_dd/head103.png	png	2352	32x560	palette 8-bit	plte=16 trns=10 interlace=0 iend=True
+Final-Doomsday	levels/ganis_dd/idle.gani	gani	7988		text	sprites=117 frames=1 direction_rows=4 playsound=0 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Final-Doomsday	levels/gifs/shield1.png	png	831	96x20	palette 8-bit	plte=32 trns=1 interlace=0 iend=True
+Final-Doomsday	levels/ganis_dd/sit.gani	gani	7871		text	sprites=117 frames=1 direction_rows=4 playsound=0 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Final-Doomsday	levels/sounds_dd/sfx/steps.wav	wav	4089	22050Hz 1ch 8-bit	format tag 1 (PCM)	data=4045 bytes duration=0.183s blockalign=1
+Final-Doomsday	levels/sounds_dd/sfx/steps2.wav	wav	4089	22050Hz 1ch 8-bit	format tag 1 (PCM)	data=4045 bytes duration=0.183s blockalign=1
+Final-Doomsday	levels/ganis_dd/swim.gani	gani	9288		text	sprites=119 frames=8 direction_rows=32 playsound=1 waits=8 sheets=SPRITES:3,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Final-Doomsday	levels/ganis_dd/sword.gani	gani	10377		text	sprites=134 frames=5 direction_rows=20 playsound=1 waits=0 sheets=SPRITES:1,SHIELD:4,SWORD:17,ATTR1:9,HEAD:17,BODY:86
+Final-Doomsday	levels/ganis_dd/walk.gani	gani	10031		text	sprites=117 frames=8 direction_rows=32 playsound=2 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Final-Doomsday	levels/sounds_dd/sfx/water.wav	wav	7052	8000Hz 1ch 16-bit	format tag 1 (PCM)	data=7008 bytes duration=0.438s blockalign=2
+Hyroko	temp/pics1.png	png	210232	2048x512	palette 8-bit	plte=256 trns=225 interlace=0 iend=True
+Maloria-03-04	Levels/Bodies/body.png	png	9169	128x720	palette 4-bit	plte=16 trns=3 interlace=0 iend=True
+Maloria-03-04	Levels/Heads/head118.gif	gif	3256	32x560	palette gct=16	frames=1 version=GIF89a transp=True
+Maloria-03-04	Levels/Ganis/idle.gani	gani	7988		text	sprites=117 frames=1 direction_rows=4 playsound=0 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Maloria-03-04	pics1.png	png	261789	2048x512	palette 8-bit	plte=256 trns=0 interlace=0 iend=True
+Maloria-03-04	Levels/Shields/shield1.gif	gif	269	38x20	palette gct=16	frames=1 version=GIF89a transp=True
+Maloria-03-04	Levels/Shields/shield1.png	png	351	38x20	palette 4-bit	plte=16 trns=3 interlace=0 iend=True
+Maloria-03-04	Levels/Ganis/sit.gani	gani	7871		text	sprites=117 frames=1 direction_rows=4 playsound=0 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Maloria-03-04	Levels/Ganis/swim.gani	gani	9288		text	sprites=119 frames=8 direction_rows=32 playsound=1 waits=8 sheets=SPRITES:3,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Maloria-03-04	Levels/Ganis/sword.gani	gani	10377		text	sprites=134 frames=5 direction_rows=20 playsound=1 waits=0 sheets=SPRITES:1,SHIELD:4,SWORD:17,ATTR1:9,HEAD:17,BODY:86
+Maloria-03-04	Levels/Swords/sword1.gif	gif	1386	128x96	palette gct=16	frames=1 version=GIF89a transp=True
+Maloria-03-04	Levels/Swords/sword1.png	png	1373	128x96	palette 4-bit	plte=16 trns=5 interlace=0 iend=True
+Maloria-03-04	Levels/Ganis/walk.gani	gani	10031		text	sprites=117 frames=8 direction_rows=32 playsound=2 waits=0 sheets=SPRITES:1,SHIELD:4,ATTR1:9,HEAD:17,BODY:86
+Lumina-1	drak_images/pics1c.png	png	165979	1856x512	header and tile mapping only	the only 1856x512 sheet in the corpora
