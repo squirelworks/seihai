@@ -350,7 +350,10 @@ impl<'a> Parser<'a> {
             let letter = sig.get(i).copied().unwrap_or('S');
             if vocab::is_text_letter(letter) {
                 self.unpeek();
-                args.push(Arg::Text(self.lx.raw_arg(b",;}")));
+                // The last argument takes the rest of the statement, commas included.
+                let last = i + 1 >= sig.len();
+                let stops: &[u8] = if last { b";}" } else { b",;}" };
+                args.push(Arg::Text(self.lx.raw_arg(stops)));
             } else {
                 args.push(Arg::Num(self.arg_expr(letter)));
             }
@@ -631,7 +634,7 @@ mod tests {
 
     #[test]
     fn text_arguments_are_raw_and_split_on_commas() {
-        assert_eq!(g("message Hello, world :);"), "(cmd message \"Hello\" \"world :)\")\n");
+        assert_eq!(g("message Hello, world :);"), "(cmd message \"Hello, world :)\")\n");
         assert_eq!(g("setplayerprop #c,Hi #v(this.n) there;"), "(cmd setplayerprop \"#c\" \"Hi #v(this.n) there\")\n");
         assert_eq!(g("message \"quoted, text\";"), "(cmd message \"quoted, text\")\n");
     }
