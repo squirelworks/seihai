@@ -103,3 +103,14 @@ value cannot be two GINT5 words).
 - Implement gen-3 encode/decode against a local capture.
 - Implement login + server-list flow against a local listserver.
 - Implement level-name and basic player-move packets.
+
+## Lab findings 2026-10-24
+
+Real clients (2.17, 2.22, 2.31) against a local lab. No public server.
+
+- **Tampercheck (PLI 39):** 10 raw bytes, per-build constant. 2.17 `2a7bad195e231243d82c`, 2.22 `250e4d0f962b03ede631`, 2.31 `291655b7602e87c9eb82`. Sent after language. 2.22 re-sends on every gmap-edge cross; 2.31 re-sends about every 3.2 s.
+- **2.17 listserver:** one plain zlib frame with two messages (`id 0` + `newmain`, then `id 1` + account/password). Server answers with list, then status/site/donation. Gen-3 after that. Seihai 2.17 matched this flow.
+- **2.22 gmap crossing:** no level-warp packet. Client sets `gr.x`/`gr.y` to the global position (local + 64 × cell). When it wraps, the same props message carries local X/Y = 0 and GMAPLEVELX/Y (props 43/44). Server answers with the new level name, then the gmap name. Seihai currently treats the gmap name in `PLO_PLAYERWARP2` as a level and asks for `name.gmap.nw`.
+- **Buddy / ignore:** local files (`buddyaccounts.txt`, `ignoredaccounts.txt`). No listserver traffic in this lab. Mute is `PLI 43` with player id + 1/0.
+- **Gen-5 XOR:** all 17 real 2.22 client zlib frames (lengths not multiples of 4) decode with the one-step-per-group rule. No bz2 client send was seen.
+- **Missing binaries:** no 2.1.x (2.1–2.16) or 2.3 binaries are recoverable. Those rows stay inferred. Alias 2.1–2.16 to 2.05 or 2.17, and 2.3 to 2.31.
