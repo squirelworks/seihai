@@ -16,6 +16,7 @@ use crate::protocol::{
     write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5, TamperSender,
     Gen5Comp, IdSet, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
 };
+use crate::offline::OfflineSession;
 use crate::protocol::parse_list_reply;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
@@ -260,6 +261,69 @@ pub fn link_request_frame(
         messages.push(position_message(x, y, dir));
     }
     LinkFrame { messages, with_tamper, with_enter_level }
+}
+
+/// What [`start_online_link`] sent and what the caller still owes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkStart {
+    /// The frame that went out.
+    pub frame: LinkFrame,
+    /// The request was `PLI_LEVELWARPMOD`, which gets no `PLO_PLAYERWARP`:
+    /// the player lands here (the server's own position, if it sends one,
+    /// wins).
+    pub cached_arrival: Option<(f32, f32)>,
+    /// The mod time of the copy a cached request named.
+    pub cached_mod_time: Option<u32>,
+}
+
+/// Ask the server for a level change the client started: a level link the
+/// player walked into, or a level script's `setlevel` / `setlevel2`. Both
+/// use the same request (see [`link_request_frame`]); the server's answer
+/// is handled alike.
+///
+/// Does nothing and returns `Ok(None)` while another warp is pending, so a
+/// script that fires again before the server has answered cannot stack a
+/// second request. Otherwise the session is put in the warp-pending state
+/// (links and walking stop until [`OfflineSession::arrive`] or
+/// [`OfflineSession::cancel_warp`]), the frame goes out through `send`, and
+/// a cached request is noted in `net_state`
+/// ([`SessionState::expect_cached_level`]) and in `enter_level`
+/// ([`EnterLevelSender::cached_link`]).
+///
+/// If `send` fails the warp is cancelled again and the error is returned,
+/// so the caller decides what to do with the connection.
+#[allow(clippy::too_many_arguments)]
+pub fn start_online_link(
+    send: impl FnOnce(&[Vec<u8>]) -> io::Result<()>,
+    version: ClientVersion,
+    session: &mut OfflineSession,
+    net_state: &mut SessionState,
+    enter_level: Option<&mut EnterLevelSender>,
+    tamper: Option<&mut TamperSender>,
+    dest: &str,
+    x: f32,
+    y: f32,
+) -> io::Result<Option<LinkStart>> {
+    if session.warp_pending.is_some() {
+        return Ok(None);
+    }
+    session.begin_warp(dest);
+    let cached = if version.sends_cached_links() { net_state.cached_mod_time(dest) } else { None };
+    let dir = session.player_update().dir;
+    let frame = link_request_frame(version, cached, x, y, dir, dest, tamper);
+    if let Err(e) = send(&frame.messages) {
+        session.cancel_warp();
+        return Err(e);
+    }
+    let mut cached_arrival = None;
+    if cached.is_some() {
+        net_state.expect_cached_level(dest);
+        cached_arrival = Some((x, y));
+        if let Some(el) = enter_level {
+            el.cached_link(dest, frame.with_enter_level);
+        }
+    }
+    Ok(Some(LinkStart { frame, cached_arrival, cached_mod_time: cached }))
 }
 
 /// A game-server session as [`login_gserver`] sets it up.

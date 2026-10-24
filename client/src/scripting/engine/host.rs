@@ -428,4 +428,51 @@ mod tests {
         new.load_level(&mut s, "a.nw");
         assert_eq!(new.unhandled.len(), 1);
     }
+
+    // --- Script-initiated warps (setlevel / setlevel2) ---
+
+    /// Run `src` as an NPC's `created` event with the player at (7, 9).
+    fn warp_after(src: &str) -> OfflineSession {
+        let mut s = session(&format!("GLEVNW01\nNPC - 1 1\n{src}\nNPCEND\n"));
+        s.player_x = 7.0;
+        s.player_y = 9.0;
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        s
+    }
+
+    #[test]
+    fn setlevel2_asks_for_the_level_at_the_given_position() {
+        let s = warp_after("if (created) { setlevel2 castle.nw,12.5,3; }");
+        assert_eq!(s.pending_link, Some(("castle.nw".to_string(), 12.5, 3.0)));
+    }
+
+    #[test]
+    fn setlevel_keeps_the_players_position() {
+        // No position: the player's own, whatever the script set before.
+        let s = warp_after("if (created) { setlevel castle.nw; }");
+        assert_eq!(s.pending_link, Some(("castle.nw".to_string(), 7.0, 9.0)));
+        let s = warp_after("if (created) { playerx = 30; playery = 31.5; setlevel castle.nw; }");
+        assert_eq!(s.pending_link, Some(("castle.nw".to_string(), 30.0, 31.5)));
+    }
+
+    #[test]
+    fn a_warp_ends_the_run_and_the_request_is_one() {
+        // The second warp never runs: setlevel2 ends the script.
+        let s = warp_after("if (created) { setlevel2 one.nw,1,1; setlevel2 two.nw,2,2; }");
+        assert_eq!(s.pending_link, Some(("one.nw".to_string(), 1.0, 1.0)));
+    }
+
+    /// Offline nothing changes: the request is the same `pending_link` the
+    /// main loop takes and loads locally, and arriving puts the player at
+    /// the given position.
+    #[test]
+    fn offline_warp_arrives_where_the_script_said() {
+        let mut s = warp_after("if (created) { setlevel2 castle.nw,12,3; }");
+        let (dest, x, y) = s.pending_link.take().unwrap();
+        assert_eq!(dest, "castle.nw");
+        s.arrive(x, y);
+        assert_eq!((s.player_x, s.player_y), (12.0, 3.0));
+        assert!(s.warp_pending.is_none() && s.pending_link.is_none());
+    }
 }
