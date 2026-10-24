@@ -105,6 +105,12 @@ impl ClientVersion {
         self.profile().protocol.tampercheck
     }
 
+    /// The build can send `PLI_ENTERLEVEL` (46): its profile's send set has
+    /// the id (2.3 and 2.31 only). Read from `pli`, not from the version.
+    pub fn sends_enter_level(self) -> bool {
+        self.profile().protocol.pli.contains(crate::net::PLI_ENTERLEVEL)
+    }
+
     /// Listserver port, or the 2.05 one for versions without a listserver.
     pub fn listserver_port(self) -> u16 {
         self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)

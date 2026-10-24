@@ -22,6 +22,75 @@ use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+/// `PLI_ENTERLEVEL` (46), client to server. Only the 2.3 and 2.31 profiles
+/// have it in their send set.
+pub const PLI_ENTERLEVEL: u8 = 46;
+
+/// The `PLI_ENTERLEVEL` message: the id and one `GCHAR 1`. The payload was
+/// 1 in every one of the 7 level entries a real 2.31 client made in the lab
+/// (login and 6 gmap crossings); no other value has been seen.
+pub fn enter_level_message() -> Vec<u8> {
+    vec![PLI_ENTERLEVEL + 0x20, 1 + 0x20, b'\n']
+}
+
+/// The 2.05 "walk" props message: X (15), Y (16) and SPRITE (17).
+pub fn position_message(x: f32, y: f32, dir: u8) -> Vec<u8> {
+    vec![
+        2 + 0x20,
+        15 + 0x20,
+        encode_pos_classic(x).wrapping_add(0x20),
+        16 + 0x20,
+        encode_pos_classic(y).wrapping_add(0x20),
+        17 + 0x20,
+        (dir % 4) + 0x20,
+        b'\n',
+    ]
+}
+
+/// Decides when `PLI_ENTERLEVEL` (46) goes out for one logged-in session:
+/// once at login and once per later level entry, never as a one-shot. A
+/// profile without 46 in its send set never sends it.
+///
+/// A level entry is a new level name. The first level the server names
+/// after login is not one: the login send covers it, as in the real
+/// client, whose first frame after login carries 46.
+#[derive(Debug, Clone)]
+pub struct EnterLevelSender {
+    version: ClientVersion,
+    level: Option<String>,
+    /// How many 46 messages were sent.
+    pub sent: usize,
+}
+
+impl EnterLevelSender {
+    pub fn for_version(version: ClientVersion) -> Self {
+        Self { version, level: None, sent: 0 }
+    }
+
+    /// Send 46 for the login. Call once, right after the post-login frame.
+    pub fn at_login(&mut self, conn: &mut Connection) -> io::Result<bool> {
+        let sent = conn.send_enter_level(self.version, &[])?;
+        self.sent += usize::from(sent);
+        Ok(sent)
+    }
+
+    /// The server put the player in level `name`. Sends 46 when that is a
+    /// new level and not the first one since login.
+    pub fn level_entered(&mut self, conn: &mut Connection, name: &str) -> io::Result<bool> {
+        let first = self.level.is_none();
+        if self.level.as_deref() == Some(name) {
+            return Ok(false);
+        }
+        self.level = Some(name.to_string());
+        if first {
+            return Ok(false);
+        }
+        let sent = conn.send_enter_level(self.version, &[])?;
+        self.sent += usize::from(sent);
+        Ok(sent)
+    }
+}
+
 /// How long one address gets to accept a connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -123,6 +192,13 @@ impl Connection {
     ///   Replies are gen-5 frames keyed with the same key.
     /// - Older: one plain zlib frame with id 0 `newmain` and id 1. There
     ///   is no cipher on this link.
+    /// - 2.00 is not covered by either form. A real 2.00 client sends one
+    ///   plain zlib frame of `GCHAR 0` + `newmain` + LF and nothing else: no
+    ///   account, password, token or key (lab capture 2026-10-24). What a
+    ///   2.00-era listserver sends back is unobserved; the lab only fed
+    ///   2.00 the 2.17-style two plain frames, which it parsed. Seihai
+    ///   does not implement a 2.00 listserver path and does not send this
+    ///   frame; this note is the whole of it.
     pub fn login_listserver(
         &mut self,
         version: ClientVersion,
@@ -280,6 +356,24 @@ impl Connection {
         self.send_messages(&msgs)
     }
 
+    /// Send `PLI_ENTERLEVEL` (46) for `version`, if its profile's send set
+    /// has the id. `then` are messages that go in the same frame right
+    /// after it: a real 2.31 client sends 46 immediately before the props
+    /// message that carries the cell prop (43/44) and the wrapped
+    /// coordinate. Seihai has no gmap cell prop yet, so callers pass
+    /// nothing and the next walk update is the props frame that follows.
+    ///
+    /// Returns `Ok(false)` and sends nothing for a profile without 46.
+    pub fn send_enter_level(&mut self, version: ClientVersion, then: &[Vec<u8>]) -> io::Result<bool> {
+        if !version.sends_enter_level() {
+            return Ok(false);
+        }
+        let mut msgs = vec![enter_level_message()];
+        msgs.extend(then.iter().cloned());
+        self.send_messages(&msgs)?;
+        Ok(true)
+    }
+
     /// Send `PLI_TAMPERCHECK` (39) again (a re-send the build makes: see
     /// [`TamperSender::advance`] and [`TamperSender::level_changed`]).
     /// Refused like any id outside the logged-in version's send set.
@@ -295,18 +389,9 @@ impl Connection {
     /// This is the 2.05 "walk" message: X/Y in half-tiles, SPRITE with
     /// the direction in its low two bits.
     pub fn send_position(&mut self, x: f32, y: f32, dir: u8) -> io::Result<()> {
-        let msg = vec![
-            2 + 0x20,
-            15 + 0x20,
-            encode_pos_classic(x).wrapping_add(0x20),
-            16 + 0x20,
-            encode_pos_classic(y).wrapping_add(0x20),
-            17 + 0x20,
-            (dir % 4) + 0x20,
-            b'\n',
-        ];
-        self.send_messages(&[msg])
+        self.send_messages(&[position_message(x, y, dir)])
     }
+
 
     /// Read server frames on a background thread.
     ///
@@ -1078,5 +1163,106 @@ mod tests {
             connect_any(&[], Duration::from_secs(1)).unwrap_err().kind(),
             io::ErrorKind::NotFound
         );
+    }
+
+    /// Read the next gen-5 frame a 2.31 login's client sent.
+    fn gen5_body(srv: &mut TcpStream, g: &mut Gen5) -> Vec<u8> {
+        let raw = read_raw(srv);
+        crate::protocol::read_frame(&mut [&(raw.len() as u16).to_be_bytes()[..], &raw].concat().as_slice(), g).unwrap()
+    }
+
+    const ENTER: [u8; 3] = [46 + 0x20, 1 + 0x20, b'\n'];
+
+    /// 2.31's send set has 46; no other profile does.
+    #[test]
+    fn enter_level_follows_the_profile_send_set() {
+        assert_eq!(enter_level_message(), ENTER);
+        for p in crate::protocol::PROFILES {
+            assert_eq!(p.version.sends_enter_level(), p.protocol.pli.contains(46), "{}", p.label);
+        }
+        let with: Vec<&str> = crate::protocol::PROFILES
+            .iter()
+            .filter(|p| p.version.sends_enter_level())
+            .map(|p| p.label)
+            .collect();
+        assert_eq!(with, ["2.3", "2.31"]);
+    }
+
+    /// 46 goes first in the frame, then the props message that follows it.
+    #[test]
+    fn enter_level_comes_before_the_props_frame() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x10, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x10);
+        // A props message with a cell prop (43) and a wrapped x2, as a gmap
+        // crossing sends; Seihai has none, so the test only fixes the order.
+        let props = vec![2 + 0x20, 43 + 0x20, 1 + 0x20, 78 + 0x20, 0x20, 0x20, b'\n'];
+        assert!(conn.send_enter_level(ClientVersion::V231, &[props.clone()]).unwrap());
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!([&ENTER[..], &props[..]].concat(), body);
+        assert_eq!(body[0], 46 + 0x20);
+        // Alone, 46 is its own 3-byte frame and a walk update is a later
+        // frame, so 46 is before the props frame in the byte stream too.
+        assert!(conn.send_enter_level(ClientVersion::V231, &[]).unwrap());
+        conn.send_position(10.0, 20.0, 1).unwrap();
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        assert_eq!(gen5_body(&mut srv, &mut g)[0], 2 + 0x20);
+    }
+
+    /// Login sends 46; the first level after it does not; each later level
+    /// change does; the same level again does not.
+    #[test]
+    fn enter_level_once_per_level_entry() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x22, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x22);
+        let mut el = EnterLevelSender::for_version(ClientVersion::V231);
+        assert!(el.at_login(&mut conn).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        assert!(!el.level_entered(&mut conn, "a.nw").unwrap());
+        assert!(!el.level_entered(&mut conn, "a.nw").unwrap());
+        assert_eq!(el.sent, 1);
+        for (i, name) in ["b.nw", "a.nw", "b.nw"].iter().enumerate() {
+            assert!(el.level_entered(&mut conn, name).unwrap());
+            assert!(!el.level_entered(&mut conn, name).unwrap(), "repeat of {name}");
+            assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+            assert_eq!(el.sent, 2 + i);
+        }
+        // The tamper check does not ride along: 2.31 does not re-send it
+        // on a level change.
+        let mut t = TamperSender::for_version(ClientVersion::V231).unwrap();
+        assert!(!t.level_changed());
+    }
+
+    /// A profile without 46 sends nothing at login or on a level change,
+    /// and the connection's own gate refuses a hand-built 46.
+    #[test]
+    fn enter_level_not_sent_without_46() {
+        for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222] {
+            let (mut conn, mut srv) = pair();
+            conn.login_versioned(v, 0x31, "ab", "cd").unwrap();
+            let _ = read_frame(&mut srv);
+            let mut el = EnterLevelSender::for_version(v);
+            assert!(!el.at_login(&mut conn).unwrap(), "{}", v.label());
+            assert!(!el.level_entered(&mut conn, "a.nw").unwrap());
+            assert!(!el.level_entered(&mut conn, "b.nw").unwrap());
+            assert!(!conn.send_enter_level(v, &[position_message(1.0, 2.0, 0)]).unwrap());
+            assert_eq!(el.sent, 0);
+            assert!(conn.send_messages(&[enter_level_message()]).is_err());
+            // Nothing was written: the next frame is the walk we send now.
+            conn.send_position(3.0, 4.0, 2).unwrap();
+            srv.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let body = if v == ClientVersion::V217 {
+                gen3_messages(0x31, &read_frame(&mut srv)).remove(0)
+            } else if v == ClientVersion::V205 {
+                gen3_messages(0x31, &read_frame(&mut srv)).remove(0)
+            } else {
+                let mut g = Gen5::new(0x31);
+                gen5_body(&mut srv, &mut g)
+            };
+            assert_eq!(body[0], 2 + 0x20, "{}", v.label());
+        }
     }
 }

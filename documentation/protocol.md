@@ -111,7 +111,7 @@ versions handle an id is the profile's `plo` set; the tests compare every
 | 183 | HASPROCESSRUNNING | names; the client answers PLI 45 | 2.17+ | `process_running_requests` (never answered) |
 | 184 | TAKESCREENSHOT | file name, `.png` only | 2.17+ | `screenshot_requests` (no screenshot taken) |
 | 185 | BOARDHEIGHTS | GCHAR mapX, mapY, blockX, blockY, w-1, h-1, then w*h cells of 2 bytes: `(b0-0x20-50) + (b1-0x20)/128` | 2.17+ | `board_heights` |
-| 186 | BOARDMODIFY2 | GCHAR mapX, mapY, x, y, w, h, then w*h GSHORT tiles, then an unread trailer | 2.22+ | `board_modify2` |
+| 186 | BOARDMODIFY2 | GCHAR mapX, mapY, x, y, w, h, then w*h GSHORT tiles, then an unread trailer (ignored; a payload one byte short of `6+2*w*h` is dropped silently; a block past column 63 is clipped) | 2.22+ | `board_modify2` |
 
 Ids Seihai answers or sends only on request: none of the above. Seihai still
 does not answer 182 or 183 (process list and "is X running"), and takes no
@@ -152,15 +152,43 @@ account and password as length-biased strings, in one plain zlib frame, then
 gen 3. Account and password are not hidden. No PLI 37 (the row has no
 language), and the send set stops at 34 (no 35 to 39). The row and a wire test
 (`v200_login_line`) cover this. The lab gserver only needs `GNW24011` in its
-allowed versions. Not exercised: 2.00's listserver frames (its host is hidden
-in the exe), so the 2.00 listserver flow here is the 2.05 one, unverified.
+allowed versions. 2.00's listserver client side (lab, 2026-10-24): one plain
+zlib frame of `GCHAR 0` + `newmain` + LF, no account, password, token or key,
+then no second listserver connection; Connect goes straight to the gserver. What
+a real 2.00-era listserver sends back is unobserved (the lab fed it the 2.17-style
+two plain frames, which it parsed). Seihai does not send this frame: the 2.00
+listserver flow here is still the 2.05 one, unverified. Note only.
 
 Still unknown or not implemented, for lack of a capture or a decompile: what
 `x` and `y` in 171/172 position (always 0 in the captures); the SERVERWARP
-field meanings; the trailer of 186; what 2.31's PLI 24 (value 9) and PLI 46
-(value 1) are for (Seihai does not send them); the 2.31 extra step in 156;
+field meanings; what 2.31's PLI 24 (value 9) is for (Seihai does not send it)
+and what PLI 46 (always `GCHAR 1`) tells a server; the 2.31 extra step in 156;
 whether a server checks the tamper value; gmap support (49, 185 and 186 are
 decoded but not applied).
+
+## PLI 46 (ENTERLEVEL) and PLO 186 (BOARDMODIFY2)
+
+Settled by the lab captures in Graal_analysis #33.
+
+- **PLI 46, client to server, 2.3 and 2.31 only** (the profile's send set has
+  it; the code reads the set, not the version). The payload is always
+  `GCHAR 1`. A real 2.31 sends it at login and on every level entry (7 times in
+  the lab: login plus 6 gmap crossings), as the first message of the frame,
+  immediately before the props message that carries the cell prop (43/44) and
+  the wrapped coordinate. It is not a one-shot, and 2.31 does not re-send the
+  tamper check (39) on a crossing. Seihai sends it once after the post-login
+  frame and again whenever the server puts the player in a different level
+  (`EnterLevelSender`). Seihai has no gmaps and sends no cell prop, so the 46
+  goes out alone and the next walk update is the props frame that follows it;
+  `Connection::send_enter_level` can put props messages behind it in the same
+  frame. Not tested in the lab: doors and warps.
+- **PLO 186:** header and `w*h` tiles are applied at the position. Bytes after the
+  tiles are ignored (a whole second record there is not applied). One byte short
+  of `6+2*w*h` is dropped silently, with no disconnect and no partial apply. A
+  block past column 63 is clipped. `BoardModify2::apply_to` does that on a
+  64x64 board. The session does not call it: it keeps the last decoded record
+  only, because applying one needs the gmap cell the player is in (`mapX`/`mapY`
+  other than the current cell were never tested), and Seihai has no gmaps.
 
 ## Implementation Notes
 

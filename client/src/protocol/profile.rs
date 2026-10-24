@@ -769,6 +769,10 @@ pub static PROFILES: &[VersionProfile] = &[
         ..BASE
     },
     VersionProfile {
+        // Listserver (not implemented): a real 2.00 client's first frame is
+        // `GCHAR 0` + `newmain`, with no account (lab, 2026-10-24); the
+        // reply format is unobserved. After the list it opens no second
+        // listserver connection and logs in to the gserver directly.
         version: ClientVersion::V200,
         label: "2.00",
         token: "GNW24011",
