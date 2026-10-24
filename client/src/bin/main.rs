@@ -953,13 +953,21 @@ fn main() {
                 if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
                     let (lx, ly) = (net_state.player_x.unwrap_or(session.player_x), net_state.player_y.unwrap_or(session.player_y));
                     c.set_gmap_cell(net_state.gmap.as_ref().map(|g| g.cell));
-                    let msgs = lb.take(
+                    let mut msgs = lb.take(
                         &net_state,
                         &account,
                         |n| files.need(n),
                         || enter_level.as_mut().map(|el| el.take_login()).unwrap_or_default(),
                         || c.first_gr_flags(lx, ly),
                     );
+                    // The real 2.31 client's first id 24 rides at the end of this frame.
+                    if !msgs.is_empty() {
+                        if let Some(t) = showimg.as_mut() {
+                            if t.advance(Duration::ZERO, !net_state.others.is_empty()) {
+                                msgs.push(showimg_message());
+                            }
+                        }
+                    }
                     if !msgs.is_empty() {
                         if let Err(e) = c.send_messages(&msgs) {
                             eprintln!("login frame send failed: {e}");
@@ -1499,7 +1507,11 @@ fn main() {
         {
             let dt = showimg_clock.elapsed();
             showimg_clock = Instant::now();
-            if let (Some(t), Some(c)) = (showimg.as_mut(), conn.as_mut()) {
+            // Not before the post-login frame: an id 24 ahead of the server's login
+            // burst made the lab server warp the player to its online start level
+            // first (documentation/early-enter-level.md).
+            let held = login_burst.as_ref().is_some_and(|lb| lb.pending()) && login_since.elapsed() <= LATE_LOGIN_46;
+            if let (Some(t), Some(c), false) = (showimg.as_mut(), conn.as_mut(), held) {
                 if t.advance(dt, !net_state.others.is_empty()) {
                     if let Err(e) = c.send_messages(&[showimg_message()]) {
                         eprintln!("showimg send failed: {e}");

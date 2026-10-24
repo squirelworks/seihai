@@ -1,0 +1,93 @@
+world	files	mb	maxdepth	graal	nw	zelda	gmap	gani	img	audio	txt	gs	GRV100	GRV101	GRV102	GRV103	GRV104	GLEVNW01	Z3V102	Z3V103	Z3V104	GRMAP001	GRMAP002	GRNPC001	GRAWP001	GRACC001	GRPKG001	GANI0001	GANI0002	empty_level_files	rare_magic_ext	top_exts
+Alvadore-1	2013	18.3	4	1	1824	0	0	0	183	0	5	0	0	0	0	1	0	1824	0	0	0	0	0	0	0	0	0	0	0	0		.nw=1824;.gif=93;.png=89;.txt=5;.graal=1;.bmp=1
+Arynala-1	126	1.1	3	2	22	0	1	25	71	0	0	0	0	0	0	2	0	22	0	0	0	1	0	0	0	0	0	25	0	0	GRMAP001.gmap=1	.gif=58;.gani=25;.nw=22;.png=7;.db=5;.mng=5
+Atrian-City-1	1323	8.2	2	0	531	0	1	0	0	0	790	0	0	0	0	0	0	532	0	0	0	1	0	370	91	0	0	0	0	0	GLEVNW01.temp=1;GRMAP001.gmap=1	.txt=790;.nw=531;.gmap=1;.temp=1
+Atrius-10-26-06-1	5736	26.1	4	0	4449	0	0	686	0	0	595	0	0	0	0	0	0	4449	0	0	0	2	0	126	170	0	0	651	1	0	GRMAP001.txt=2	.nw=4449;.gani=686;.txt=595;.rtf=3;.html=3
+Atrius-The-Final-Legacy-1	1163	12.6	6	1	972	0	3	0	0	0	183	0	0	0	0	1	0	972	0	0	0	3	0	0	3	0	0	0	0	0	GRMAP001.gmap=3	.nw=972;.txt=183;.arc=4;.gmap=3;.graal=1
+BlackPoint-1	422	6.3	3	0	261	0	2	15	88	0	52	0	0	0	0	0	0	261	0	0	0	2	0	0	0	0	0	15	0	0	GRMAP001.gmap=2	.nw=261;.txt=52;.png=44;.gif=43;.gani=15;.rtf=4
+Cora	2131	16.9	3	1144	571	0	0	4	361	9	37	0	0	0	0	1143	0	571	0	0	0	0	0	0	0	0	0	4	0	0		.graal=1144;.nw=571;.png=314;.gif=46;.txt=37;.wav=6
+Coronia-1	431	2.5	3	0	99	0	0	126	139	23	43	0	0	0	0	0	0	99	0	0	0	0	0	0	0	0	0	123	0	0		.gani=126;.nw=99;.png=83;.gif=56;.txt=43;.wav=23
+Cythus-Med-1	107	17.9	2	0	4	0	0	7	30	0	63	0	0	0	0	0	0	4	0	0	0	0	0	16	28	0	0	7	1	0		.txt=63;.gif=28;.gani=7;.nw=4;.db=2;.png=2
+Dargaro-Space-World-1	32	0.2	4	0	15	0	0	2	0	0	15	0	0	0	0	0	0	15	0	0	0	0	0	4	9	0	0	2	0	0		.nw=15;.txt=15;.gani=2
+Dark-Age	5962	24.5	3	0	41	0	0	1	5879	0	40	0	0	0	0	0	0	42	0	0	0	0	0	2	11	0	0	0	1	0	GLEVNW01(none)=1	.png=5098;.gif=629;.mng=152;.nw=41;.txt=40;(none)=1
+Dark-Diamond-1	2640	24.5	2	10	2328	0	1	25	263	1	11	0	0	0	0	10	0	2328	0	0	0	1	0	0	0	0	0	23	0	0	GRMAP001.gmap=1	.nw=2328;.gif=200;.png=63;.gani=25;.txt=11;.graal=10
+Dark-Horizon-1	811	7.1	2	0	702	0	1	0	0	0	108	0	0	0	0	0	0	702	0	0	0	1	0	5	65	0	0	0	0	0	GRMAP001.gmap=1	.nw=702;.txt=108;.gmap=1
+Delteria-12-6-02	2740	17.9	2	1699	914	0	0	0	4	0	119	0	0	0	0	1697	0	916	0	0	0	0	0	0	0	0	0	0	0	0	GLEVNW01(none)=1;GLEVNW01.graal=1	.graal=1699;.nw=914;.txt=119;.png=2;.jpg=2;.rtf=1
+Doomsday-2001	658	4.2	5	301	10	0	0	9	240	0	72	0	0	0	0	302	0	10	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.03.vip=1	.graal=301;.gif=169;.txt=72;.png=68;.zip=14;.nw=10
+Doomsday-2003	12484	97.5	3	91	4650	0	3	1101	5802	1	609	0	0	0	0	93	0	4648	0	0	0	3	0	0	0	0	0	640	30	0	GLEVNW01(none)=1;GR-V1.03.bak=1;GR-V1.03.nw=1;GRMAP001.gmap=3	.nw=4650;.png=4112;.gif=1501;.gani=1101;.txt=609;.mng=160
+Doomsday-Nov-2002	2023	15.5	3	1245	558	0	0	0	22	69	119	0	0	0	0	1244	0	559	0	0	0	0	0	0	0	0	0	0	0	1	GLEVNW01.graal=1;GR-V1.03.bak=1	.graal=1245;.nw=558;.txt=119;.wav=49;.png=20;.mid=20
+Dragandia	1055	11.2	3	8	695	0	4	0	292	0	55	0	0	0	0	8	0	695	0	0	0	4	0	0	0	0	0	0	0	0	GRMAP001.gmap=4	.nw=695;.png=243;.txt=55;.gif=41;.graal=8;.mng=6
+Elven-Lands-2001	2483	11.2	2	1523	0	0	0	137	707	4	103	0	0	0	0	1523	0	0	0	0	0	0	0	0	0	0	0	0	0	2	GR-V1.03(none)=2	.graal=1523;.gif=673;.gani=137;.txt=103;.png=32;.mid=4
+Elven-Lands-Joey-Revision	6278	35.1	3	0	1691	0	3	4	4437	4	136	0	0	0	0	0	0	1689	0	0	0	3	0	45	72	0	0	4	0	0	GRMAP001.gmap=3	.gif=2423;.png=1912;.nw=1691;.txt=136;.mng=101;.mid=4
+Enigma-12-21-06	13934	80.7	4	3141	3357	0	2	278	6659	163	318	0	0	0	0	3123	0	3365	0	0	0	2	0	32	88	0	0	159	4	27	GLEVNW01(none)=3;GLEVNW01.graal=1;GLEVNW01.png=14;GR-V1.03(none)=1;GR-V1.03.nw=9;GRMAP001.gmap=2	.png=3737;.nw=3357;.graal=3141;.gif=2722;.txt=318;.gani=278
+Enigma-Graal-2004-02-28	4001	35.7	2	1199	2678	0	0	3	111	0	8	0	0	0	0	1207	0	2670	0	0	0	0	0	0	0	0	0	1	0	1	GLEVNW01(none)=2;GR-V1.03.nw=9	.nw=2678;.graal=1199;.png=79;.gif=26;.txt=8;.mng=6
+Era-Full-Backup-Oct-30-2006	11731	44.0	4	0	2695	0	0	98	217	0	8719	0	0	0	0	0	0	2695	0	0	0	0	0	7867	321	0	0	97	0	0		.txt=8719;.nw=2695;.png=183;.gani=98;.gif=33;.db=1
+Faharia-1	567	1.9	1	554	0	0	0	0	0	0	10	0	0	0	0	553	0	0	0	0	0	0	0	0	0	0	0	0	0	1		.graal=554;.txt=10;.rtf=1;(none)=1;.zip=1
+FastLane	239	2.1	3	0	82	0	0	1	124	0	25	0	0	0	0	0	0	82	0	0	0	0	0	0	0	0	0	1	0	0		.gif=119;.nw=82;.txt=25;.doc=6;.png=3;.log=1
+Final-Doomsday	19978	171.2	5	141	9922	0	8	1131	7248	159	1104	0	0	0	0	143	0	9917	0	0	0	8	0	0	0	0	0	669	31	5	GR-V1.03.bak=2;GRMAP001.gmap=8	.nw=9922;.png=6388;.gani=1131;.txt=1104;.gif=436;.mng=391
+Final-Fantasy-Gold-Legend-2-ver-5.0	676	6.5	1	292	0	0	0	0	298	86	0	0	0	0	0	292	0	0	0	0	0	0	0	0	0	0	0	0	0	0		.graal=292;.gif=292;.mid=73;.wav=13;.png=6
+Galactic-Nations	2609	14.8	3	0	18	0	0	33	2427	60	22	0	0	0	0	0	0	18	0	0	0	0	0	0	0	0	0	32	1	0		.png=2074;.gif=262;.mng=91;.mid=53;.doc=49;.gani=33
+Graal-1.1.9-LevelPack	1606	4.7	2	679	0	390	0	0	434	19	0	0	12	214	279	620	0	0	0	11	16	0	0	0	0	0	0	0	0	0	GR-V1.00.editor=3;GR-V1.00.editor1=1;GR-V1.00.zelda=8;GR-V1.01.editor=1;GR-V1.01.forest=8;GR-V1.01.graal=73;GR-V1.01.lost=24;GR-V1.01.zelda=108;GR-V1.02.graal=203;GR-V1.02.lost=30;GR-V1.02.zelda=46;GR-V1.03.editor=1;GR-V1.03.forest=1;GR-V1.03.gone=1;GR-V1.03.lost=12;GR-V1.03.zelda=205;Z3-V1.03.editor=1;Z3-V1.03.zelda=10;Z3-V1.04.graal=3;Z3-V1.04.zelda=13	.graal=679;.gif=434;.zelda=390;.lost=66;.wav=19;.forest=9
+Graal-1.3-LevelPack	5349	17.5	2	3009	0	303	0	0	1788	0	161	0	4	108	170	3095	0	0	0	6	8	0	0	0	0	0	0	0	0	0	GR-V1.00.editor=1;GR-V1.00.zelda=3;GR-V1.01.graal=33;GR-V1.01.lost=8;GR-V1.01.zelda=67;GR-V1.02.graal=163;GR-V1.02.lost=1;GR-V1.02.zelda=6;GR-V1.03.editor=4;GR-V1.03.editor1=1;GR-V1.03.gone=1;GR-V1.03.lost=14;GR-V1.03.sil=49;GR-V1.03.zelda=216;Z3-V1.03.editor=1;Z3-V1.03.zelda=5;Z3-V1.04.graal=2;Z3-V1.04.zelda=6	.graal=3009;.gif=1788;.zelda=303;.txt=161;.sil=49;.lost=23
+GraalClassic-12-9-06	6689	39.0	4	0	3163	0	0	184	0	0	3342	0	0	0	0	0	0	3162	0	0	0	0	0	2875	221	0	0	161	1	1		.txt=3342;.nw=3163;.gani=184
+GraalClassicJanuary2000	3679	9.4	3	1420	0	303	0	0	1788	0	82	0	4	108	170	1507	0	0	0	6	8	0	0	0	0	0	0	0	0	0	GR-V1.00.editor=1;GR-V1.00.zelda=3;GR-V1.01.graal=33;GR-V1.01.lost=8;GR-V1.01.zelda=67;GR-V1.02.graal=163;GR-V1.02.lost=1;GR-V1.02.zelda=6;GR-V1.03.editor=4;GR-V1.03.editor1=1;GR-V1.03.gone=1;GR-V1.03.lost=14;GR-V1.03.sil=49;GR-V1.03.zelda=216;Z3-V1.03.editor=1;Z3-V1.03.zelda=5;Z3-V1.04.graal=2;Z3-V1.04.zelda=6	.gif=1788;.graal=1420;.zelda=303;.txt=82;.sil=49;.lost=23
+GraalRealms-1	197	8.0	3	1	99	0	0	1	23	5	65	0	0	0	0	1	0	99	0	0	0	0	0	0	0	0	0	1	0	0		.nw=99;.txt=65;.png=13;.gif=10;.rtf=3;.wav=3
+Griffin-1	2350	22.1	3	19	2304	0	1	0	15	0	11	0	0	0	0	19	0	2304	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.nw=2304;.graal=19;.png=15;.txt=11;.gmap=1
+Hyroko	485	35.3	3	0	304	0	4	1	73	4	98	0	0	0	0	0	0	304	0	0	0	4	1	0	0	0	0	1	0	0	GRMAP001.gmap=3;GRMAP001.txt=1;GRMAP002.gmap=1	.nw=304;.txt=98;.png=53;.gif=19;.gmap=4;.mid=3
+Joey-Era-Edit	1419	2.9	1	0	1	0	0	0	0	0	1418	0	0	0	0	0	0	1	0	0	0	0	0	668	318	0	0	0	0	0		.txt=1418;.nw=1
+Kuburiki-1	15	0.1	3	0	6	0	0	5	3	0	1	0	0	0	0	0	0	6	0	0	0	0	0	0	0	0	0	2	0	0		.nw=6;.gani=5;.gif=2;.txt=1;.png=1
+Lost-Empire2	337	0.9	2	196	2	0	0	0	133	0	6	0	0	0	0	196	0	2	0	0	0	0	0	0	0	0	0	0	0	0		.graal=196;.gif=133;.txt=6;.nw=2
+Lumina-1	18814	185.7	7	7	888	0	0	2467	12785	1344	1283	0	0	0	0	8	0	887	0	0	0	0	0	0	177	993	0	1845	23	0	GR-V1.03.nw=1	.png=7335;.gif=5168;.gani=2467;.txt=1283;.wav=1205;.nw=888
+Mag-07-1	136	0.7	1	135	0	0	0	0	1	0	0	0	0	0	0	135	0	0	0	0	0	0	0	0	0	0	0	0	0	0		.graal=135;.png=1
+Malhangaia	109	1.0	3	0	38	0	0	28	34	7	2	0	0	0	0	0	0	38	0	0	0	0	0	0	0	0	0	26	0	0		.nw=38;.gani=28;.png=20;.gif=14;.wav=7;.txt=2
+Maloria-03-04	4283	24.5	3	312	881	0	0	492	2463	4	128	0	0	0	0	312	0	881	0	0	0	0	0	0	0	0	0	140	18	0		.gif=1409;.png=1013;.nw=881;.gani=492;.graal=312;.txt=128
+Maloria-12-21-06	3609	34.1	5	0	3079	0	0	390	0	0	139	0	0	0	0	0	0	3078	0	0	0	0	0	12	50	0	0	206	4	1		.nw=3079;.gani=390;.txt=139;.rtf=1
+Maloria-2002	3534	20.7	3	39	802	0	0	479	2204	2	8	0	0	0	0	39	0	802	0	0	0	0	0	0	0	0	0	140	18	0		.gif=1183;.png=980;.nw=802;.gani=479;.mng=41;.graal=39
+Midwinter-Nights	2454	19.9	3	7	389	0	1	0	2020	0	34	0	0	0	0	7	0	389	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.png=1737;.nw=389;.gif=209;.mng=72;.txt=34;.graal=7
+Millenium-2004-04-06	2080	11.1	3	111	117	0	0	53	1743	0	56	0	0	0	0	111	0	118	0	0	0	0	0	0	0	0	0	53	0	0	GLEVNW01.gif=1	.png=1252;.gif=422;.nw=117;.graal=111;.mng=67;.txt=56
+Millenium-2006-10-28	2824	14.0	3	111	116	0	0	53	2512	0	32	0	0	0	0	111	0	117	0	0	0	0	0	0	0	0	0	53	0	0	GLEVNW01.gif=1	.png=1832;.gif=608;.nw=116;.graal=111;.mng=70;.gani=53
+Outworld	513	7.3	3	17	46	0	0	14	338	15	30	0	0	0	0	17	0	46	0	0	0	0	0	0	0	0	0	14	0	0		.png=226;.gif=91;.nw=46;.txt=30;.au=21;.jpg=20
+Playerworld130-1	32	0.2	4	0	15	0	0	2	0	0	15	0	0	0	0	0	0	15	0	0	0	0	0	4	9	0	0	2	0	0		.nw=15;.txt=15;.gani=2
+Providence	1044	8.9	3	141	641	0	1	0	33	31	197	0	0	0	0	142	0	640	0	0	0	1	0	0	0	0	0	0	0	0	GR-V1.03.nw=1;GRMAP001.gmap=1	.nw=641;.txt=197;.graal=141;.mid=31;.gif=27;.png=6
+Renegade	1341	13.7	2	1	722	0	1	62	420	35	92	0	0	0	0	1	0	722	0	0	0	1	0	0	0	0	0	29	0	0	GRMAP001.gmap=1	.nw=722;.gif=263;.png=146;.txt=92;.gani=62;.mid=28
+Rudora	1403	11.4	3	482	737	0	2	0	35	0	143	0	0	0	0	482	0	737	0	0	0	2	0	0	0	0	0	0	0	0	GRMAP001.gmap=2	.nw=737;.graal=482;.txt=143;.png=30;.gif=3;.bmp=2
+S.A.I	1049	27.5	3	0	549	0	1	0	276	0	220	0	0	0	0	0	0	549	0	0	0	1	0	165	25	0	0	0	0	0	GRMAP001.gmap=1	.nw=549;.png=240;.txt=220;.gif=30;.mng=6;.dll=1
+Saber-Of-Power-Gold	1225	9.8	1	453	0	6	0	0	572	176	9	0	0	0	0	459	0	0	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.03.zelda=6	.gif=572;.graal=453;.mid=144;.wav=32;.txt=9;.zelda=6
+Sands-of-Glory-10-26-06	1838	15.3	6	0	1247	0	0	311	0	0	280	0	0	0	0	0	0	1247	0	0	0	0	0	21	205	0	0	300	0	0		.nw=1247;.gani=311;.txt=280
+Server-Interface-Test	1694	12.9	4	1158	110	0	0	18	348	27	20	0	0	0	0	1159	0	117	0	0	0	0	0	0	0	0	0	0	0	0	GLEVNW01.graal=7;GR-V1.03.event=8	.graal=1158;.gif=294;.nw=110;.png=45;.mid=21;.txt=20
+Shangri-La-10-02-06	3422	46.8	5	14	457	0	3	113	1593	129	1104	0	0	0	0	15	0	457	0	0	0	3	0	805	189	0	0	106	0	0	GR-V1.03(none)=1;GRMAP001.gmap=3	.png=1372;.txt=1104;.nw=457;.wav=124;.gif=120;.gani=113
+Shogun-Online	2520	18.6	3	0	470	0	2	27	1944	2	71	0	0	0	0	0	0	470	0	0	0	2	0	0	0	0	0	24	1	0	GRMAP001.gmap=2	.png=1265;.gif=628;.nw=470;.txt=71;.mng=48;.gani=27
+Stonehenge	786	10.1	3	0	583	0	4	12	101	10	55	0	0	0	0	0	0	583	0	0	0	4	0	7	25	0	3	12	0	0	GRMAP001.gmap=4	.nw=583;.png=79;.txt=55;.arc=17;.gif=12;.gani=12
+Termina-Classic-LevelPack-1	3160	12.7	1	3160	0	0	0	0	0	0	0	0	0	27	141	2989	0	0	0	0	2	0	0	0	0	0	0	0	0	0	GR-V1.01.graal=27;GR-V1.02.graal=141;Z3-V1.04.graal=2	.graal=3160
+Thamhic_Release	1449	7.1	5	0	1041	0	1	48	178	0	136	0	0	0	0	0	0	1041	0	0	0	1	0	12	50	0	2	48	0	0	GRMAP001.gmap=1	.nw=1041;.png=173;.txt=136;.gani=48;.arc=23;.db=18
+X-Online-1	1097	4.5	3	205	5	0	0	40	798	2	44	0	0	0	0	205	0	5	0	0	0	0	0	0	0	0	0	0	0	0		.gif=532;.png=242;.graal=205;.txt=44;.gani=40;.mng=23
+Zerati-10-26-06-1	2921	8.9	4	0	889	0	0	5	0	0	2027	0	0	0	0	0	0	889	0	0	0	0	0	1979	39	0	0	4	1	0		.txt=2027;.nw=889;.gani=5
+Zodiac-06-17-07-1	860	6.4	2	0	0	0	0	0	0	0	860	0	0	0	0	0	0	0	0	0	0	0	0	60	554	0	0	0	0	0		.txt=860
+aleria-1	597	5.5	4	0	571	0	1	0	0	0	24	0	0	0	0	0	0	571	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.nw=571;.txt=24;.nfo=1;.gmap=1
+alkarenhyralt_levels	3	0.0	3	0	0	0	0	0	2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0		.png=2;.db=1
+alzar-1	878	8.5	4	0	443	0	1	54	233	0	145	0	0	0	0	0	0	443	0	0	0	1	0	0	0	0	0	53	1	0	GRMAP001.gmap=1	.nw=443;.gif=184;.txt=145;.gani=54;.png=42;.bmp=7
+andor-1	507	3.9	3	409	93	0	1	0	3	1	0	0	0	0	0	409	0	93	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.graal=409;.nw=93;.mng=3;.gmap=1;.mid=1
+andora-planet-22-Dec-2004-1	579	7.0	4	0	500	0	0	7	18	0	52	0	0	0	0	0	0	500	0	0	0	0	0	0	0	0	0	7	0	0		.nw=500;.txt=52;.png=10;.gif=8;.gani=7;. if you want the rest get rc there=1
+bravo-31-December-2002	1320	22.6	3	627	348	0	0	5	38	68	217	0	0	0	0	626	0	348	0	0	0	0	0	0	0	0	0	4	0	0	GLEVNW01.graal=1	.graal=627;.nw=348;.txt=217;.mid=48;.wav=20;.gif=18
+bravo-evolved-12-11-04-1	1383	15.6	3	11	1084	0	4	0	37	4	234	0	0	0	0	11	0	1084	0	0	0	4	0	0	0	0	0	0	0	0	GRMAP001.gmap=4	.nw=1084;.txt=234;.gif=28;.graal=11;.png=9;.doc=7
+dark_nations	1695	19.8	4	11	1550	0	0	0	49	0	76	0	0	0	0	11	0	1544	0	0	0	0	0	0	0	0	0	0	0	4		.nw=1550;.txt=76;.jpg=30;.png=13;.graal=11;.rtf=7
+destiny-1	148	0.7	1	148	0	0	0	0	0	0	0	0	0	0	0	148	0	0	0	0	0	0	0	0	0	0	0	0	0	0		.graal=148
+elemental_kingdoms	1648	12.8	2	1	252	0	11	1027	232	120	3	0	0	0	0	0	0	252	0	0	0	12	0	0	0	0	0	912	6	0	GRMAP001.gmap=11;GRMAP001.graal=1	.gani=1027;.nw=252;.gif=230;.mid=112;.gmap=11;.wav=8
+endora	640	6.6	3	171	321	0	0	0	79	2	63	0	0	0	0	171	0	321	0	0	0	0	0	0	0	0	0	0	0	0		.nw=321;.graal=171;.txt=63;.gif=47;.png=23;.bmp=9
+eternal-12-17-04-1	882	8.0	3	0	824	0	1	0	0	0	57	0	0	0	0	0	0	824	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.nw=824;.txt=57;.gmap=1
+firebrand_kingdom	1271	9.8	2	1	672	0	0	5	583	0	8	0	0	0	0	1	0	672	0	0	0	0	0	0	0	0	0	4	0	0		.nw=672;.gif=383;.png=191;.txt=8;.bmp=5;.gani=5
+fl_development-1	146	1.3	1	17	128	0	0	0	0	0	0	0	0	0	0	17	0	128	0	0	0	0	0	0	0	0	0	0	0	0		.nw=128;.graal=17;.nfo=1
+galrovik-1	343	0.4	1	338	0	0	0	0	0	0	5	0	0	0	0	338	0	0	0	0	0	0	0	0	0	0	0	0	0	0		.graal=338;.txt=5
+graal2001	3563	45.9	3	7	1227	0	0	431	1552	151	179	0	0	0	0	7	0	1240	0	0	0	0	0	0	0	0	0	0	0	0	GLEVNW01.copy=11;GLEVNW01.nwblah=1;GLEVNW01.nwtest!=1	.nw=1227;.png=1109;.gif=431;.gani=431;.txt=179;.wav=126
+jedi	601	4.0	1	275	0	3	0	0	239	84	0	0	0	0	0	278	0	0	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.03.zelda=3	.graal=275;.gif=239;.mid=73;.wav=11;.zelda=3
+kimjonghackedyou	54	1.3	2	1	2	34	0	0	11	0	4	0	0	0	0	32	0	2	0	3	0	0	0	0	0	0	0	0	0	0	GR-V1.03.zelda=31;Z3-V1.03.zelda=3	.zelda=34;.gif=7;.txt=4;.jpg=3;.nw=2;.graal=1
+mantara	176	1.6	1	88	0	1	0	0	79	2	3	0	1	0	20	68	0	0	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.00.graal=1;GR-V1.02.graal=20;GR-V1.03.zelda=1	.graal=88;.png=54;.gif=23;.txt=3;.bmp=1;.mid=1
+mystic-nations-12-22-04-1	254	2.3	3	0	226	0	1	0	0	0	26	0	0	0	0	0	0	226	0	0	0	1	0	0	0	0	0	0	0	0	GRMAP001.gmap=1	.nw=226;.txt=26;.log=1;.gmap=1
+revenge-online-12-2-04	136	2.1	3	0	39	0	0	14	57	0	24	0	0	0	0	0	0	39	0	0	0	0	0	0	0	0	0	12	0	0		.nw=39;.png=31;.txt=24;.gif=21;.gani=14;.mng=4
+seilius-12-16-04	2353	24.1	3	11	2210	0	1	56	25	0	48	0	0	0	0	11	0	2210	0	0	0	1	0	0	0	0	0	54	0	0	GRMAP001.gmap=1	.nw=2210;.gani=56;.txt=48;.png=11;.gif=11;.graal=11
+silverdreams	692	6.8	1	347	144	0	0	6	111	67	16	0	0	0	0	341	0	150	0	0	0	0	0	0	0	0	0	4	0	0	GLEVNW01.graal=7;GR-V1.03.nw=1	.graal=347;.nw=144;.png=101;.mid=56;.txt=16;.wav=10
+twisted	369	2.4	3	1	128	0	1	12	190	0	32	0	0	0	0	1	0	128	0	0	0	1	0	0	0	0	0	12	0	0	GRMAP001.gmap=1	.nw=128;.png=94;.gif=87;.txt=32;.gani=12;.mng=9
+unholynation	1403	7.9	3	1104	147	0	0	59	40	20	31	0	0	0	0	1105	0	147	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.03.un=1	.graal=1104;.nw=147;.gani=59;.gif=37;.txt=31;.wav=15
+utheril-12-17-04	185	1.7	3	2	126	0	0	0	18	0	39	0	0	0	0	2	0	126	0	0	0	0	0	0	0	0	0	0	0	0		.nw=126;.txt=39;.png=17;.graal=2;.gif=1
+valikoria-1	1492	5.2	2	641	0	0	0	0	851	0	0	0	0	0	1	640	0	0	0	0	0	0	0	0	0	0	0	0	0	0	GR-V1.02.graal=1	.gif=827;.graal=641;.png=24
+zodiac_feb15_2008-1	820	8.9	1	0	820	0	0	0	0	0	0	0	0	0	0	0	0	820	0	0	0	0	0	0	0	0	0	0	0	0		.nw=820

@@ -192,6 +192,11 @@ impl LoginBurst {
     }
 
     /// The burst has ended and the frame is still owed.
+    /// The frame has not gone out yet.
+    pub fn pending(&self) -> bool {
+        !self.sent
+    }
+
     pub fn due(&self, state: &SessionState) -> bool {
         !self.sent && state.process_list_requests > 0
     }
@@ -331,6 +336,7 @@ mod tests {
     fn frame_waits_for_the_process_list_request_and_goes_once() {
         let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
         let mut st = burst_state();
+        assert!(b.pending());
         assert!(!b.due(&st));
         assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
         st.process_list_requests = 1;
@@ -350,6 +356,7 @@ mod tests {
         assert_eq!(out[asked.len() + 1], b"flag");
         assert_eq!(out[asked.len() + 2][0], PLI_PROCESSLIST + 0x20);
         assert_eq!(out[asked.len() + 3][0], PLI_PLAYERPROPS + 0x20);
+        assert!(!b.pending(), "sent");
         assert!(!b.due(&st), "once");
         assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
     }
