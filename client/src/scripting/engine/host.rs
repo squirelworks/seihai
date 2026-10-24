@@ -1,0 +1,371 @@
+//! Binds a [`ScriptWorld`] to an offline [`OfflineSession`]: level NPCs
+//! become script objects, the player's numbers are copied in before each
+//! event, and effects are applied back afterwards.
+
+use super::vocab::Era;
+use super::world::{Effect, ObjKind, ObjSpec, ScriptWorld};
+use crate::offline::{OfflineSession, FOOT_DX, FOOT_DY};
+use crate::protocol::ClientVersion;
+
+/// A weapon as the server sent it: name, image and client script.
+pub struct WeaponScript<'a> {
+    pub name: &'a str,
+    pub image: &'a str,
+    pub script: &'a str,
+}
+
+/// Scripts for one running session.
+pub struct SessionScripts {
+    pub world: ScriptWorld,
+    was_reading: bool,
+    /// Effects the session cannot apply itself (sound, network, effects
+    /// on the picture), for the caller to act on.
+    pub unhandled: Vec<Effect>,
+}
+
+impl SessionScripts {
+    pub fn new(version: ClientVersion) -> Self {
+        SessionScripts { world: ScriptWorld::new(Era::for_version(version)), was_reading: false, unhandled: Vec::new() }
+    }
+
+    /// Replace the level's scripts with those of `session`'s current
+    /// level, run `created` on each NPC, then `playerenters` on all
+    /// objects (weapons included).
+    pub fn load_level(&mut self, session: &mut OfflineSession, level_name: &str) {
+        self.world.clear_level();
+        self.world.core.level = level_name.to_string();
+        if let Some(level) = &session.current_level {
+            for (i, n) in level.npcs.iter().enumerate() {
+                let mut spec = ObjSpec::npc(&n.image, n.x as f64, n.y as f64, &n.script).with_tag(i);
+                spec.kind = ObjKind::Npc;
+                let id = self.world.add(spec);
+                if let Some(o) = self.world.obj_mut(id) {
+                    o.visible = n.visible;
+                }
+            }
+        }
+        self.sync_player(session);
+        self.world.start_all();
+        self.world.broadcast("playerenters");
+        self.apply(session);
+    }
+
+    /// Make the world's weapon objects match the weapons the server sent.
+    /// New ones run `created`.
+    pub fn sync_weapons(&mut self, session: &mut OfflineSession, weapons: &[WeaponScript]) {
+        let have: Vec<String> =
+            self.world.ids().into_iter().filter_map(|i| self.world.obj(i)).filter(|o| o.kind == ObjKind::Weapon).map(|o| o.name.clone()).collect();
+        for name in &have {
+            if !weapons.iter().any(|w| w.name == name) {
+                self.world.remove_weapon(name);
+            }
+        }
+        let mut added = false;
+        for w in weapons {
+            if !have.iter().any(|h| h == w.name) {
+                self.world.add(ObjSpec::weapon(w.name, w.image, w.script));
+                added = true;
+            }
+        }
+        if added {
+            self.sync_player(session);
+            self.world.start_all();
+            self.apply(session);
+        }
+    }
+
+    /// Copy the player's state into the world.
+    pub fn sync_player(&mut self, s: &OfflineSession) {
+        let p = &mut self.world.core.player;
+        p.x = s.player_x as f64;
+        p.y = s.player_y as f64;
+        p.dir = s.player_dir as f64;
+        p.hearts = s.player_health as f64 / 100.0 * s.max_hearts as f64 / 2.0;
+        p.hp = p.hearts;
+        p.max_hp = s.max_hearts as f64 / 2.0;
+        p.rupees = s.rupees as f64;
+        p.bombs = s.bombs as f64;
+        p.darts = s.darts as f64;
+        p.sword_power = s.sword_power as f64;
+        p.shield_power = s.shield_power as f64;
+        let set = |st: &mut std::collections::BTreeSet<String>, name: &str, on: bool| {
+            if on {
+                st.insert(name.to_string());
+            } else {
+                st.remove(name);
+            }
+        };
+        set(&mut p.status, "playerswimming", s.in_water);
+        set(&mut p.status, "playerreading", s.reading.is_some());
+        // Player flags set earlier in the session.
+        for (k, v) in &s.flags {
+            if *v && !self.world.core.flags.contains_key(k) {
+                self.world.core.flags.insert(k.clone(), String::new());
+            }
+        }
+    }
+
+    /// The player's feet are where they are: fire `playertouchsme` on
+    /// NPCs just touched. Returns how many fired.
+    pub fn touch(&mut self, session: &mut OfflineSession) -> usize {
+        self.sync_player(session);
+        let n = self.world.touch((session.player_x + FOOT_DX) as f64, (session.player_y + FOOT_DY) as f64);
+        self.apply(session);
+        n
+    }
+
+    /// Advance script time by `ms` and run what falls due. Also notices
+    /// the end of sign reading (`playerendsreading`).
+    pub fn tick(&mut self, session: &mut OfflineSession, ms: u64) {
+        self.sync_player(session);
+        let reading = session.reading.is_some();
+        if self.was_reading && !reading {
+            self.world.broadcast("playerendsreading");
+        }
+        self.was_reading = reading;
+        self.world.tick(ms);
+        self.apply(session);
+    }
+
+    /// The player typed a chat line.
+    pub fn chat(&mut self, session: &mut OfflineSession, text: &str) {
+        self.sync_player(session);
+        self.world.chat(text);
+        self.apply(session);
+    }
+
+    /// Apply the world's pending effects to the session. What the session
+    /// has no place for goes to [`SessionScripts::unhandled`].
+    pub fn apply(&mut self, s: &mut OfflineSession) {
+        for e in self.world.take_effects() {
+            match e {
+                Effect::Message { text, .. } => s.last_message = Some(text),
+                Effect::Say2 { text } => {
+                    if s.reading.is_none() {
+                        s.reading = Some(text);
+                    }
+                }
+                Effect::SaySign { index } => {
+                    let text = s.current_level.as_ref().and_then(|l| usize::try_from(index).ok().and_then(|i| l.signs.get(i))).map(|g| g.text.clone());
+                    if let (Some(t), true) = (text, s.reading.is_none()) {
+                        s.reading = Some(t);
+                    }
+                }
+                Effect::SetVisible { obj, visible, .. } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.visible = visible;
+                    }
+                }
+                Effect::SetImg { obj, file, .. } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.image = file;
+                        n.visible = true;
+                    }
+                }
+                // The world has already moved the object; copy its position.
+                Effect::SetPos { obj, .. } | Effect::Move { obj, .. } => {
+                    let pos = self.world.obj(obj).map(|o| (o.x as f32, o.y as f32));
+                    if let (Some((x, y)), Some(n)) = (pos, self.level_npc(s, obj)) {
+                        n.x = x;
+                        n.y = y;
+                    }
+                }
+                Effect::Destroy { obj } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.visible = false;
+                    }
+                }
+                Effect::SetLevel { level, x, y } => {
+                    let (px, py) = (x.map_or(s.player_x, |v| v as f32), y.map_or(s.player_y, |v| v as f32));
+                    s.pending_link = Some((level, px, py));
+                }
+                Effect::Hurt { half_hearts } => {
+                    let per_half = 100.0 / s.max_hearts.max(1) as f64;
+                    s.player_health = (s.player_health as f64 - half_hearts * per_half).round().clamp(0.0, 100.0) as i32;
+                }
+                Effect::SetPlayerVar { name, value } => match name.as_str() {
+                    "playerx" => s.player_x = value as f32,
+                    "playery" => s.player_y = value as f32,
+                    "playerdir" => s.player_dir = value as u8 % 4,
+                    "playerrupees" => s.rupees = value as i32,
+                    "playerbombs" => s.bombs = value as i32,
+                    "playerdarts" => s.darts = value as i32,
+                    "playerswordpower" => s.sword_power = value.clamp(0.0, 255.0) as u8,
+                    "playershieldpower" => s.shield_power = value.clamp(0.0, 255.0) as u8,
+                    "playerhearts" | "playerhp" => {
+                        s.player_health = (value * 2.0 / s.max_hearts.max(1) as f64 * 100.0).round().clamp(0.0, 100.0) as i32;
+                    }
+                    _ => {}
+                },
+                Effect::SetFlag { name, value } => {
+                    s.flags.insert(name.clone(), true);
+                    if let Some(v) = value.filter(|v| !v.is_empty()) {
+                        s.strings.insert(name, v);
+                    }
+                }
+                Effect::UnsetFlag { name } => {
+                    s.flags.insert(name.clone(), false);
+                    s.strings.remove(&name);
+                }
+                Effect::SetPlayerProp { code, value } => {
+                    s.props.insert(code, value);
+                }
+                other => self.unhandled.push(other),
+            }
+        }
+    }
+
+    fn level_npc<'s>(&self, s: &'s mut OfflineSession, obj: usize) -> Option<&'s mut crate::assets::Npc> {
+        let o = self.world.obj(obj)?;
+        if o.kind != ObjKind::Npc {
+            return None;
+        }
+        s.current_level.as_mut()?.npcs.get_mut(o.tag)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::Level;
+
+    fn session(level_text: &str) -> OfflineSession {
+        let mut s = OfflineSession::new();
+        s.current_level = Some(Level::parse(level_text).unwrap());
+        s
+    }
+
+    const DOOR: &str = "GLEVNW01\n\
+        NPC door.png 10 20\n\
+        if (created) { setshape 1,32,32; }\n\
+        if (playertouchsme) { hide; setlevel2 house.nw,32,60; }\n\
+        NPCEND\n\
+        NPC - 30 30\n\
+        if (playerenters) { message welcome; }\n\
+        if (playertouchsme) { hurt 2; playerrupees += 3; set seen; say2 Ouch!; }\n\
+        NPCEND\n\
+        SIGN 5 5\n\
+        Read me\n\
+        SIGNEND\n";
+
+    #[test]
+    fn level_load_runs_created_and_playerenters() {
+        let mut s = session(DOOR);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "town.nw");
+        assert_eq!(s.last_message.as_deref(), Some("welcome"));
+        assert_eq!(sc.world.ids().len(), 2);
+        assert_eq!(sc.world.core.level, "town.nw");
+    }
+
+    #[test]
+    fn touching_a_door_hides_it_and_asks_for_the_warp() {
+        let mut s = session(DOOR);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "town.nw");
+        s.player_x = 10.0 - FOOT_DX + 0.5;
+        s.player_y = 20.0 - FOOT_DY + 0.5;
+        assert_eq!(sc.touch(&mut s), 1);
+        assert!(!s.current_level.as_ref().unwrap().npcs[0].visible);
+        assert_eq!(s.pending_link, Some(("house.nw".to_string(), 32.0, 60.0)));
+        // Standing still does not fire again.
+        assert_eq!(sc.touch(&mut s), 0);
+    }
+
+    #[test]
+    fn effects_reach_the_session() {
+        let mut s = session(DOOR);
+        s.rupees = 4;
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "town.nw");
+        s.player_x = 30.0 - FOOT_DX + 0.5;
+        s.player_y = 30.0 - FOOT_DY + 0.5;
+        sc.touch(&mut s);
+        assert_eq!(s.rupees, 7);
+        // Two half hearts of six: a third of the bar.
+        assert_eq!(s.player_health, 67);
+        assert_eq!(s.flags.get("seen"), Some(&true));
+        assert_eq!(s.reading.as_deref(), Some("Ouch!"));
+    }
+
+    #[test]
+    fn say_shows_a_level_sign_and_end_of_reading_is_an_event() {
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { say 0; }\nif (playerendsreading) { message closed; }\nNPCEND\nSIGN 5 5\nRead me\nSIGNEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        assert_eq!(s.reading.as_deref(), Some("Read me"));
+        sc.tick(&mut s, 50);
+        assert_eq!(s.last_message, None);
+        s.reading = None;
+        sc.tick(&mut s, 50);
+        assert_eq!(s.last_message.as_deref(), Some("closed"));
+    }
+
+    #[test]
+    fn timeouts_run_through_the_session_clock() {
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { hide; timeout = 2; }\nif (timeout) { show; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        assert!(!s.current_level.as_ref().unwrap().npcs[0].visible);
+        for _ in 0..39 {
+            sc.tick(&mut s, 50);
+        }
+        assert!(!s.current_level.as_ref().unwrap().npcs[0].visible);
+        sc.tick(&mut s, 50);
+        assert!(s.current_level.as_ref().unwrap().npcs[0].visible);
+    }
+
+    #[test]
+    fn a_level_change_replaces_npc_scripts_but_keeps_weapons() {
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { message first; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "Bow", image: "bow.png", script: "if (weaponfired) { message pew; }" }]);
+        sc.load_level(&mut s, "a.nw");
+        assert_eq!(sc.world.ids().len(), 2);
+        s.current_level = Some(Level::parse("GLEVNW01\n").unwrap());
+        sc.load_level(&mut s, "b.nw");
+        assert_eq!(sc.world.ids().len(), 1);
+        sc.world.weapon_fired("Bow");
+        sc.apply(&mut s);
+        assert_eq!(s.last_message.as_deref(), Some("pew"));
+    }
+
+    #[test]
+    fn weapon_sync_adds_removes_and_runs_created_once() {
+        let mut s = session("GLEVNW01\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        let bow = WeaponScript { name: "Bow", image: "", script: "if (created) { set bowready; }" };
+        sc.sync_weapons(&mut s, &[bow]);
+        assert_eq!(s.flags.get("bowready"), Some(&true));
+        s.flags.insert("bowready".into(), false);
+        sc.world.core.flags.clear();
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "Bow", image: "", script: "if (created) { set bowready; }" }]);
+        assert_eq!(s.flags.get("bowready"), Some(&false)); // not run again
+        sc.sync_weapons(&mut s, &[]);
+        assert!(sc.world.ids().is_empty());
+    }
+
+    #[test]
+    fn effects_with_no_session_equivalent_are_handed_back() {
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { play jump.wav; triggeraction 1,1,x,; sendtoserver hi; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        assert!(sc.unhandled.contains(&Effect::Play { file: "jump.wav".into(), looped: false }));
+        assert!(sc.unhandled.iter().any(|e| matches!(e, Effect::TriggerAction { .. })));
+        // 2.05 has no sendtoserver: it was gated out and only logged.
+        assert!(!sc.unhandled.iter().any(|e| matches!(e, Effect::SendToServer { .. })));
+        assert!(sc.world.take_log().iter().any(|l| l.contains("sendtoserver")));
+    }
+
+    #[test]
+    fn version_picks_the_vocabulary() {
+        let src = "GLEVNW01\nNPC - 1 1\nif (created) { hitobjects 1,1,1; }\nNPCEND\n";
+        let mut s = session(src);
+        let mut old = SessionScripts::new(ClientVersion::V200);
+        old.load_level(&mut s, "a.nw");
+        assert!(old.unhandled.is_empty());
+        let mut new = SessionScripts::new(ClientVersion::V222);
+        new.load_level(&mut s, "a.nw");
+        assert_eq!(new.unhandled.len(), 1);
+    }
+}
