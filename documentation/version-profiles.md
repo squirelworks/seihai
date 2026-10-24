@@ -12,7 +12,7 @@ that row instead of matching on versions.
 | Protocol | client type, encryption generation, listserver (port, token), server→client ids handled, client→server ids sent, language after login, tampercheck (opt-in: constant and re-send rule), UDP | login, listserver fetch, dispatch, send helpers |
 | Props | ids the own-player and other-player prop parsers accept, NPC prop max, old bow form of prop 10, precise positions | prop parsing |
 | Files | modtime in `PLO_FILE`, large files, `LARGEFILESIZE`, default image extension | file replies |
-| Levels | `.graal`, `.nw`, `.gmap`, level heights | F5 level picker |
+| Levels | `.graal`, `.nw`, `.gmap`, level heights, cached level links (`PLI 30`) | F5 level picker |
 | UI | server list style (direct, one list, tabs), Up/Down chat recall, HUD art, gserver minimap, built-in editor, ganis, emoticons, configurable keys, log window, ghost mode, server name in the title | launcher, game loop |
 
 There are 26 rows: 2.02 rev 2, 2.03 and 2.04 are rows of their own, because

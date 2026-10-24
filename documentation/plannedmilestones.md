@@ -10,7 +10,6 @@ What remains after the current gmaps / script engine / differential testing work
 
 ## Next
 
-- Cached level links. The 30-plus-46 form.
 - Script-initiated warps. Needs the script engine.
 - Audio playback. GANI frames carry a sound field; nothing consumes it.
 - Health and death. The 1.5 s timer, input lock, dead status bit, respawn hearts by AP, and the victim-sent claim packet.
@@ -39,3 +38,4 @@ What remains after the current gmaps / script engine / differential testing work
 - Tamper check sender
 - PLI 46 on level entry
 - SERVERWARP follow (default on, settings option)
+- Cached level links: PLI 30 (`LEVELWARPMOD`) with the mod time from a per-session level cache, 46 and the props in the same frame, gated by profile

@@ -9,6 +9,7 @@ use super::extras::{
     parse_ghost_icon, parse_level_mod_time, parse_map_spec, parse_signature, parse_start_message,
     parse_text_list, signature_action, MapSpec, SignatureAction,
 };
+use super::levelcache::{same_level, CachedLevel, LevelCache};
 use super::layouts::{
     parse_board_heights, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
     parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
@@ -386,7 +387,28 @@ pub struct SessionState {
     pub board_heights: Option<BoardHeights>,
     pub board_modify2: Option<BoardModify2>,
     pub unhandled: HashMap<u8, usize>,
+    /// Levels the player has left, kept for `PLI_LEVELWARPMOD` (30); see
+    /// [`super::levelcache`].
+    pub level_cache: LevelCache,
+    /// How many level entries were filled from [`Self::level_cache`] because
+    /// the server's answer to a cached link left the data out.
+    pub cache_restores: usize,
+    /// The level a `PLI_LEVELWARPMOD` just asked for: the next level the
+    /// server names, if it is this one, starts from the cached copy.
+    cached_request: Option<String>,
+    /// Parts of the current level that came from the cache and must be
+    /// replaced, not added to, if the server sends them after all (a
+    /// stale copy gets the full data).
+    restored: Restored,
     splitter: Splitter,
+}
+
+/// See [`SessionState::restored`].
+#[derive(Debug, Default, Clone, Copy)]
+struct Restored {
+    board_lines: bool,
+    links: bool,
+    signs: bool,
 }
 
 impl SessionState {
@@ -428,12 +450,18 @@ impl SessionState {
         match msg.id {
             0 => {
                 // PLO_LEVELBOARD — rest is a board line
+                if std::mem::take(&mut self.restored.board_lines) {
+                    self.board_lines.clear();
+                }
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.board_lines.push(s);
                 }
             }
             1 => {
                 // PLO_LEVELLINK
+                if std::mem::take(&mut self.restored.links) {
+                    self.links.clear();
+                }
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.links.push(s);
                 }
@@ -452,6 +480,9 @@ impl SessionState {
             }
             5 => {
                 // PLO_LEVELSIGN
+                if std::mem::take(&mut self.restored.signs) {
+                    self.signs.clear();
+                }
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.signs.push(s);
                 }
@@ -765,6 +796,10 @@ impl SessionState {
                 }
             }
             156 => {
+                // The last message of a level answer: nothing more is coming
+                // for a cached link, so what it left out stays as cached.
+                self.restored = Restored::default();
+                self.cached_request = None;
                 let name = latin1(&msg.payload);
                 if !name.is_empty() {
                     self.active_level = Some(name);
@@ -796,11 +831,16 @@ impl SessionState {
     fn enter_level(&mut self, name: String) {
         let Some(mut g) = self.gmap.take() else {
             if self.level_name.as_deref() != Some(name.as_str()) {
+                self.keep_level_in_cache();
                 self.board = None;
                 self.board_lines.clear();
                 self.links.clear();
                 self.signs.clear();
                 self.chests.clear();
+                self.restored = Restored::default();
+                if self.cached_request.take().is_some_and(|want| same_level(&want, &name)) {
+                    self.restore_from_cache(&name);
+                }
             }
             self.level_name = Some(name);
             return;
@@ -838,6 +878,68 @@ impl SessionState {
             self.level_name = Some(target);
         }
         self.gmap = Some(g);
+    }
+
+    /// Put the level being left into [`Self::level_cache`], when the server
+    /// has sent its board and its mod time. Off a gmap only.
+    fn keep_level_in_cache(&mut self) {
+        let (Some(old), Some((lv, t)), Some(board)) = (&self.level_name, &self.level_mod_time, &self.board) else {
+            return;
+        };
+        if !same_level(old, lv) {
+            return;
+        }
+        self.level_cache.insert(
+            old,
+            CachedLevel {
+                mod_time: *t,
+                board: board.clone(),
+                board_lines: self.board_lines.clone(),
+                links: self.links.clone(),
+                signs: self.signs.clone(),
+            },
+        );
+    }
+
+    /// Fill the new level from the cache (the server's answer to a
+    /// `PLI_LEVELWARPMOD` leaves out what the copy already has).
+    fn restore_from_cache(&mut self, name: &str) {
+        let Some(c) = self.level_cache.get(name).cloned() else {
+            return;
+        };
+        self.board = Some(c.board);
+        self.board_lines = c.board_lines;
+        self.links = c.links;
+        self.signs = c.signs;
+        self.level_mod_time = Some((name.to_string(), c.mod_time));
+        self.restored = Restored { board_lines: true, links: true, signs: true };
+        self.cache_restores += 1;
+    }
+
+    /// The mod time a `PLI_LEVELWARPMOD` into `dest` would carry: the level
+    /// is cached, is not the one the player is in, and play is not on a
+    /// gmap (a gmap keeps its own per-level slots and asks with
+    /// `PLI_ADJACENTLEVEL`). `None` means ask with `PLI_LEVELWARP`.
+    pub fn cached_mod_time(&self, dest: &str) -> Option<u32> {
+        if self.gmap.is_some() || self.level_name.as_deref().is_some_and(|c| same_level(c, dest)) {
+            return None;
+        }
+        self.level_cache.mod_time(dest)
+    }
+
+    /// A `PLI_LEVELWARPMOD` for `dest` went out: when the server names that
+    /// level next, start from the cached copy. Call
+    /// [`Self::cancel_cached_request`] if no answer comes.
+    pub fn expect_cached_level(&mut self, dest: &str) {
+        self.cached_request = Some(dest.to_string());
+    }
+
+    /// The cached link got no answer (or the warp failed): forget the copy,
+    /// so the next link asks with a plain `PLI_LEVELWARP`.
+    pub fn cancel_cached_request(&mut self) {
+        if let Some(dest) = self.cached_request.take() {
+            self.level_cache.remove(&dest);
+        }
     }
 
     /// The level the player is in: on a gmap the one at the player's cell,
@@ -1299,6 +1401,135 @@ mod tests {
         assert_eq!(board.len(), 4096);
         assert_eq!((board[0], board[1], board[600]), (0, 1, 88));
         assert!(state.unhandled.is_empty());
+    }
+
+    /// A level answer as GServer-v2 sends it for a full level: name, board,
+    /// mod time, a link and a sign, then the active level.
+    fn full_answer(name: &str, t: u32, seed: u16, link: &str, sign: &str) -> Vec<u8> {
+        answer(name, Some(t), seed, link, sign)
+    }
+
+    fn answer(name: &str, t: Option<u32>, seed: u16, link: &str, sign: &str) -> Vec<u8> {
+        let n = 1 + 8192 + 1;
+        let mut body = vec![
+            100 + 0x20,
+            ((n >> 14) & 0x7F) as u8 + 0x20,
+            ((n >> 7) & 0x7F) as u8 + 0x20,
+            (n & 0x7F) as u8 + 0x20,
+            b'\n',
+            101 + 0x20,
+        ];
+        for i in 0..4096u16 {
+            body.extend_from_slice(&((i + seed) % 512).to_le_bytes());
+        }
+        body.push(b'\n');
+        let gint5: Vec<u8> = t.map_or(Vec::new(), |t| {
+            msg(39, &[28, 21, 14, 7, 0].iter().map(|s| ((t >> s) as u8 & 0x7F) + 0x20).collect::<Vec<u8>>())
+        });
+        [
+            msg(6, name.as_bytes()),
+            body,
+            gint5,
+            msg(1, link.as_bytes()),
+            msg(5, sign.as_bytes()),
+            msg(156, name.as_bytes()),
+        ]
+        .concat()
+    }
+
+    /// What the server sends for a cached link whose mod time is current:
+    /// the name and the closing messages, no 14, no board, no mod time, no
+    /// links, no signs (lab, 2.31).
+    fn cached_answer(name: &str) -> Vec<u8> {
+        [msg(6, name.as_bytes()), msg(174, &[0x20]), msg(156, name.as_bytes())].concat()
+    }
+
+    /// A level the player left is cached with its mod time; a cached link's
+    /// answer without data restores board, links and signs from it.
+    #[test]
+    fn cached_answer_restores_the_level() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "b.nw 0 0 2 2 1 1", "sign a"));
+        assert!(st.cached_mod_time("b.nw").is_none(), "nothing cached yet");
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "a.nw 0 0 2 2 1 1", "sign b"));
+        assert_eq!(st.level_cache.len(), 1, "a was kept when the player left it");
+        assert_eq!(st.cached_mod_time("a.nw"), Some(1_000));
+        assert_eq!(st.cached_mod_time("A.NW"), Some(1_000));
+        assert_eq!(st.cached_mod_time("a"), Some(1_000));
+        assert!(st.cached_mod_time("b.nw").is_none(), "the level the player is in is not asked for");
+        // Link back to a with the copy.
+        st.expect_cached_level("a.nw");
+        st.apply_body(&cached_answer("a.nw"));
+        assert_eq!(st.level_name.as_deref(), Some("a.nw"));
+        assert_eq!(st.cache_restores, 1);
+        assert_eq!(st.links, vec!["b.nw 0 0 2 2 1 1".to_string()]);
+        assert_eq!(st.signs, vec!["sign a".to_string()]);
+        let board = st.board.as_ref().expect("board from the cache");
+        assert_eq!((board[0], board[1]), (0, 1));
+        assert_eq!(st.level_mod_time, Some(("a.nw".to_string(), 1_000)));
+        // b is cached now, and a (the player is in it) is not offered.
+        assert_eq!(st.cached_mod_time("b.nw"), Some(2_000));
+        assert!(st.cached_mod_time("a.nw").is_none());
+    }
+
+    /// The copy was stale: the server sends the whole level after all. The
+    /// new data replaces the cached links and signs instead of adding to them.
+    #[test]
+    fn full_answer_to_a_cached_link_replaces_the_copy() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "old 0 0 2 2 1 1", "old sign"));
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "x", "y"));
+        st.expect_cached_level("a.nw");
+        st.apply_body(&full_answer("a.nw", 1_500, 7, "new 0 0 2 2 1 1", "new sign"));
+        assert_eq!(st.links, vec!["new 0 0 2 2 1 1".to_string()]);
+        assert_eq!(st.signs, vec!["new sign".to_string()]);
+        assert_eq!(st.level_mod_time, Some(("a.nw".to_string(), 1_500)));
+        assert_eq!(st.board.as_ref().map(|b| b[0]), Some(7));
+        // Leaving a again caches the new copy.
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "x", "y"));
+        assert_eq!(st.cached_mod_time("a.nw"), Some(1_500));
+    }
+
+    /// Without a request armed, a level the player has been in is entered
+    /// from the server's data only, and a request nobody answers is dropped
+    /// with its copy.
+    #[test]
+    fn restore_needs_a_request() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "l", "s"));
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "x", "y"));
+        // Server-side warp back to a, no request: nothing is restored.
+        st.apply_body(&cached_answer("a.nw"));
+        assert_eq!(st.cache_restores, 0);
+        assert!(st.links.is_empty() && st.board.is_none());
+        // A request that is never answered: cancelling forgets the copy.
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "l", "s"));
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "x", "y"));
+        st.expect_cached_level("a.nw");
+        st.cancel_cached_request();
+        assert!(st.cached_mod_time("a.nw").is_none());
+        // A request for one level answered with another restores nothing.
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "l", "s"));
+        st.apply_body(&full_answer("c.nw", 3_000, 5, "z", "z"));
+        st.expect_cached_level("a.nw");
+        st.apply_body(&cached_answer("c.nw"));
+        assert_eq!(st.cache_restores, 0);
+    }
+
+    /// A level whose board or mod time never arrived is not cached.
+    #[test]
+    fn incomplete_levels_are_not_cached() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(&msg(6, b"a.nw"));
+        st.apply_body(&msg(6, b"b.nw"));
+        assert!(st.level_cache.is_empty());
+        // Board but no mod time.
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        let a = answer("a.nw", None, 0, "l", "s");
+        st.apply_body(&a);
+        st.apply_body(&msg(6, b"b.nw"));
+        assert!(st.level_cache.is_empty());
     }
 
     #[test]

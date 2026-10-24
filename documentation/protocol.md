@@ -210,10 +210,33 @@ client-initiated link request, right after the 0 or 30, and not after a
 server-side warp. 2.31 does not re-send 39 on a link or warp (its 39 is
 periodic).
 
-Seihai (code: `net::EnterLevelSender`, `Connection::send_link_request`,
-`net::enter_level_extras`):
+Seihai (code: `net::EnterLevelSender`, `net::link_request_frame`,
+`Connection::send_link`, `net::enter_level_extras`,
+`protocol::levelcache`):
 
-- It keeps no level cache, so it always asks with 0 (the "not cached" row).
+- **Level cache.** A level counts as cached once the server has sent its
+  board (101) and its mod time (`PLO_LEVELMODTIME`, 39) and the player has
+  left it (off a gmap). The cache is in memory for one login; the real
+  client's disk cache (`GWEBL001`, Graal_analysis `gwebl001-cache.md`) is
+  not read or written. What the real client counts as cached beyond
+  "in memory or in its web-level cache" is not isolated by the lab, which
+  only revisited levels inside one session.
+- **Cached link.** For a profile with `levels.cached_links` (2.05, and
+  every build from 2.1 on as an inference; not 1.33 to 2.04) and a cached
+  destination other than the current level, the request is
+  `PLI_LEVELWARPMOD` (30): `GINT5 mod time, GCHAR x*2, GCHAR y*2, name`,
+  as GServer-v2 `msgPLI_LEVELWARP` reads it. The same frame then holds, in
+  order: the tamper check (2.22, with `--send-tampercheck`), or 46 and
+  the props at the destination (2.31, 2.3). The 46 is therefore not sent
+  again when the server names the level.
+- **Answer.** The server's answer to a current mod time has no 14, board,
+  mod time, links or signs (lab). Seihai takes the position from the link
+  request, and fills the level's board, links, signs and mod time from the
+  cache. If the server sends them anyway (a stale copy, or a server that
+  ignores the mod time) they replace the cached ones. A request with no
+  answer within 4 s drops that cache entry.
+- Not cached (or a profile without cached links): it asks with 0, the "not
+  cached" row.
 - A new level name after the first one owes a 46 (profiles with 46 in their
   send set only). Once the server's position is known, the 46 goes out as the
   first message of one frame; after Seihai's own link request the position
@@ -223,8 +246,10 @@ Seihai (code: `net::EnterLevelSender`, `Connection::send_link_request`,
   frame for the profile whose rule is "on level change" (2.22), and is no
   longer sent after the server's answer, so a server-side warp does not
   trigger it.
-- Not done: the cached-level `LEVELWARPMOD` (30) form, and level changes
-  started by a level script (`setlevel2`), which the lab never captured.
+- Not done: level changes started by a level script (`setlevel2`), which
+  the lab never captured; cached links on a gmap (a gmap keeps its own
+  per-level slots and uses 35); the disk cache; a lab run of Seihai's own
+  30 frame.
 
 **Server warp (178).** The lab text was `labtwo,labtwo,127.0.0.2,14803`. The
 2.31 client closed its connection, opened a new one to field 2 (host) and
@@ -353,7 +378,8 @@ a gmap, sends no cell prop and no 35.
 - Neighbour levels draw tiles only. Their NPCs, signs, chests and links are
   not drawn or active until the player is in the level.
 - Cached-level crossings (`30` with the mod time, instead of waiting for the
-  board) are not done: Seihai keeps no mod-time cache.
+  board) are not done on a gmap: the cache serves level links off a gmap
+  only (see "Level changes").
 - No `PLO_BIGMAP`/`MINIMAP` map screen (171/172).
 - `PLO_BOARDHEIGHTS` (185) is decoded only.
 - Not run against the real server in this change; see the PR for the test
