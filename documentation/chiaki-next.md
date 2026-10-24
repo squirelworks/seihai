@@ -13,6 +13,9 @@ Running in the private lab. One PR per divergence (rectangle links, login props,
 The playerworld archives supply reference material. Goal: a clean, self-contained default asset set that ships with Seihai so a fresh download can open a level and walk without relying on a server or the original client files.
 
 ### Item 17 — Inventory the playerworld archives
+The extra archives are already inventoried. See `documentation/inventories/playerworlds-extra-inventory-2026-10-25.md` and the matching `.tsv`. Use that as the starting point; do not re-scan the whole set unless a specific world needs a deeper look. Note the sensitive Lumina-1 GRACC001 account exports — do not open or use them.
+
+
 
 - Scan the archives that were handed over.
 - Produce a short inventory: counts of .nw / .graal / .zelda / .gmap, PNG/GIF/MNG sheets, GANI files, WAV/MP3, tiledefs, NPC scripts.
