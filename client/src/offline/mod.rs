@@ -573,6 +573,8 @@ impl OfflineSession {
         self.current_level = w.levels.remove(&c.to);
         w.cell = c.to;
         w.crossing = Some(c);
+        // A new cell is a new level to the script engine too.
+        self.level_serial += 1;
         self.player_x = c.local_x;
         self.player_y = c.local_y;
         self.opened_chests.clear();

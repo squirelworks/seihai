@@ -15,6 +15,7 @@ use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
 use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
+use seihai::scripting::engine::host::{SessionScripts, WeaponScript};
 use seihai::settings::Settings;
 use seihai::ui;
 use seihai::render::{
@@ -68,6 +69,7 @@ fn main() {
     let mut list_only = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
+    let mut no_scripts = false;
     // None: not given on the command line, so the settings file decides.
     let mut cli_serverwarp: Option<bool> = None;
     while i < args.len() {
@@ -103,6 +105,7 @@ fn main() {
             "--send-showimg" => send_showimg = true,
             "--no-serverwarp" => cli_serverwarp = Some(false),
             "--serverwarp" => cli_serverwarp = Some(true),
+            "--no-scripts" => no_scripts = true,
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -142,6 +145,8 @@ fn main() {
                 println!("                             and logs in again, as the real client does");
                 println!("                             (settings file: follow_serverwarp=0)");
                 println!("         --serverwarp        follow it even if the settings file says off");
+                println!("         --no-scripts        do not run the client-side GS1 scripts of level NPCs");
+                println!("                             and weapons (default: they run)");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -215,6 +220,10 @@ fn main() {
     // Settings only pre-fill the form.
 
     let mut session = OfflineSession::new();
+    // Client-side GS1 scripts of the level's NPCs and the player's weapons.
+    let mut scripts = SessionScripts::new(version);
+    let mut scripts_serial = u64::MAX;
+    let mut scripts_clock = Instant::now();
     let mut net_state = SessionState::default();
     let mut conn: Option<Connection> = None;
     // Opt-in tamper check (`--send-tampercheck`): the build's constant.
@@ -275,6 +284,8 @@ fn main() {
         }
         // Read server traffic the way the chosen version does.
         net_state = SessionState::for_version(version);
+        scripts = SessionScripts::new(version);
+        scripts_serial = u64::MAX;
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
@@ -657,6 +668,16 @@ fn main() {
             if changed {
                 // True when this batch put the player in a new level.
                 let mut entered = false;
+                if !no_scripts {
+                    let ws: Vec<WeaponScript> = net_state
+                        .weapons
+                        .iter()
+                        .filter_map(|w| {
+                            w.script.as_deref().map(|script| WeaponScript { name: &w.name, image: w.image.as_deref().unwrap_or(""), script })
+                        })
+                        .collect();
+                    scripts.sync_weapons(&mut session, &ws);
+                }
                 if let Some(name) = &net_state.current_level_name() {
                     if loaded_level.as_deref().map_or(true, |l| !l.eq_ignore_ascii_case(name)) {
                         entered = true;
@@ -824,6 +845,43 @@ fn main() {
                 session.try_move(dx, dy);
                 moved = true;
                 last_step = Instant::now();
+            }
+        }
+        // Client-side scripts: load the level's NPCs when a level arrives,
+        // touch events after a step, timeouts on the clock.
+        if !no_scripts {
+            if session.level_serial != scripts_serial {
+                scripts_serial = session.level_serial;
+                let label = loaded_level.clone().or_else(|| offline_level.clone()).unwrap_or_default();
+                scripts.load_level(&mut session, &label);
+            }
+            if moved {
+                scripts.touch(&mut session);
+            }
+            let dt = scripts_clock.elapsed().as_millis() as u64;
+            scripts_clock = Instant::now();
+            scripts.tick(&mut session, dt);
+            // A script asked for a level change (setlevel / setlevel2).
+            if let Some((dest, x, y)) = session.pending_link.take() {
+                if conn.is_some() {
+                    // The wire form of a script-initiated warp has not been
+                    // captured, so it is not sent.
+                    eprintln!("script warp to {dest} ignored while online");
+                } else if session.load_level(root.level(&dest)).is_ok() {
+                    if session.arrive(x, y) {
+                        net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
+                    }
+                    eprintln!("script warp to {dest}");
+                } else {
+                    eprintln!("script warp: no local {dest}");
+                }
+                dirty = true;
+            }
+            for e in scripts.unhandled.drain(..) {
+                eprintln!("script effect not applied: {e:?}");
+            }
+            for l in scripts.world.take_log() {
+                eprintln!("script: {l}");
             }
         }
         if moved {
@@ -1016,6 +1074,9 @@ fn main() {
                         ui::ChatSend::Say(t) => {
                             my_chat = t.clone();
                             dirty = true;
+                            if !no_scripts {
+                                scripts.chat(&mut session, &t);
+                            }
                             if !t.is_empty() {
                                 net_state.push_chat(ChatKind::Say, me(&net_state, &account), t.clone());
                             }
