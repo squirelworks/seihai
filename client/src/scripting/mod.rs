@@ -4,6 +4,7 @@
 //! `gs1` is the cleaned 2.05 command table (parse-tree interpreter,
 //! opcode = 600 + index).
 
+pub mod engine;
 mod bytecode;
 mod gs1;
 
