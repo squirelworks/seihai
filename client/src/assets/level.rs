@@ -69,6 +69,13 @@ pub struct Link {
     pub new_y: Option<f32>,
 }
 
+impl Link {
+    /// True if tile `(x, y)` is inside the link's rectangle.
+    pub fn contains(&self, x: i32, y: i32) -> bool {
+        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
+    }
+}
+
 /// A sign (SIGN / SIGNEND). Text is already plain for GLEVNW01.
 #[derive(Debug, Clone)]
 pub struct Sign {
@@ -95,7 +102,31 @@ pub struct Chest {
     pub sign_index: i32,
 }
 
-/// 4096-byte collision table. wall >= 20, water == 11.
+/// Tile type byte for water (`isOnWater`).
+pub const TYPE_WATER: u8 = 11;
+/// Tile type byte for lava. Walkable, like every type below 20.
+pub const TYPE_LAVA: u8 = 12;
+/// Type bytes from here up are walls (`isOnWall`).
+pub const TYPE_WALL_MIN: u8 = 20;
+/// Type given to tiles that `arrays.dat` does not list as passable.
+const TYPE_HARD_WALL: u8 = 22;
+
+/// What a tile does to a walking player.
+///
+/// The 2.05 client and GServer only ever ask two questions of the type
+/// byte: `>= 20` is a wall and `== 11` is water. Lava (12) is told apart
+/// because the client has its own `lava` animation, but it does not
+/// block. Every other type below 20 is plain floor for movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileKind {
+    Open,
+    Water,
+    Lava,
+    Blocking,
+}
+
+/// 4096-byte collision table: one type byte per tile id.
+/// Wall >= 20, water == 11, lava == 12.
 #[derive(Debug, Clone)]
 pub struct TileTypes {
     pub types: [u8; 4096],
@@ -147,42 +178,90 @@ impl TileTypes {
         Ok(TileTypes { types })
     }
 
-    /// Load a Graal `arrays.dat`.
-    ///
-    /// Format (big-endian, from the Zelda Online `makeArrays` lineage):
-    /// length-prefixed int arrays. The first array is the passable-tile
-    /// list (`nowall`). Tiles in that list get type 0; everything else
-    /// gets type 22 (hard wall).
+    /// Load a Graal `arrays.dat`. See [`Self::parse_arrays`].
     pub fn load_arrays<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let data = fs::read(path).map_err(|e| e.to_string())?;
         Self::parse_arrays(&data)
     }
 
+    /// Parse a Graal `arrays.dat`.
+    ///
+    /// Format (big-endian, from the Zelda Online `makeArrays` lineage):
+    /// a run of length-prefixed int arrays. The ones used here:
+    ///
+    /// - array 0: the passable-tile list (`nowall`). Listed tiles are
+    ///   type 0; every tile not listed is a hard wall (22).
+    /// - array 1: the liquid list. Water and lava tiles are in it, and
+    ///   many of the water tiles are *not* in `nowall`, so the first
+    ///   version of this loader turned water into wall.
+    /// - array 3: the lava list. A liquid tile that is also here is lava
+    ///   (12, walkable); one that is not is water (11, swimmable).
+    ///
+    /// Arrays 2 and 4 to 7 do not change movement and are skipped. Any
+    /// array that is cut short or implausibly long ends the scan, so a
+    /// file with only the first array still loads.
     pub fn parse_arrays(data: &[u8]) -> Result<Self, String> {
         if data.len() < 4 {
             return Err("arrays.dat too short".into());
         }
-        let count = u32::from_be_bytes(data[0..4].try_into().unwrap()) as usize;
-        if data.len() < 4 + count * 4 {
-            return Err(format!("arrays.dat truncated: need {count} ints"));
+        let mut arrays: Vec<Vec<usize>> = Vec::new();
+        let mut off = 0usize;
+        while arrays.len() < 4 && off + 4 <= data.len() {
+            let count = u32::from_be_bytes(data[off..off + 4].try_into().unwrap()) as usize;
+            let end = off.saturating_add(4).saturating_add(count.saturating_mul(4));
+            if end > data.len() || (!arrays.is_empty() && count > 4096) {
+                if arrays.is_empty() {
+                    return Err(format!("arrays.dat truncated: need {count} ints"));
+                }
+                break;
+            }
+            arrays.push(
+                data[off + 4..end]
+                    .chunks_exact(4)
+                    .map(|c| u32::from_be_bytes(c.try_into().unwrap()) as usize)
+                    .collect(),
+            );
+            off = end;
         }
-        let mut types = [22u8; 4096];
-        for i in 0..count {
-            let off = 4 + i * 4;
-            let id = u32::from_be_bytes(data[off..off + 4].try_into().unwrap()) as usize;
-            if id < 4096 {
+        let mut types = [TYPE_HARD_WALL; 4096];
+        if let Some(nowall) = arrays.first() {
+            for &id in nowall.iter().filter(|&&id| id < 4096) {
                 types[id] = 0;
+            }
+        }
+        let lava: std::collections::HashSet<usize> =
+            arrays.get(3).map(|a| a.iter().copied().collect()).unwrap_or_default();
+        if let Some(liquid) = arrays.get(1) {
+            for &id in liquid.iter().filter(|&&id| id < 4096) {
+                types[id] = if lava.contains(&id) { TYPE_LAVA } else { TYPE_WATER };
             }
         }
         Ok(TileTypes { types })
     }
 
+    /// The raw type byte for `id`, if the id is on the table.
+    pub fn raw(&self, id: u16) -> Option<u8> {
+        self.types.get(id as usize).copied()
+    }
+
+    /// What the tile does to a walking player. An id off the table is a
+    /// wall, as in the client.
+    pub fn kind(&self, id: u16) -> TileKind {
+        match self.raw(id) {
+            None => TileKind::Blocking,
+            Some(t) if t >= TYPE_WALL_MIN => TileKind::Blocking,
+            Some(TYPE_WATER) => TileKind::Water,
+            Some(TYPE_LAVA) => TileKind::Lava,
+            Some(_) => TileKind::Open,
+        }
+    }
+
     pub fn is_wall(&self, id: u16) -> bool {
-        self.types.get(id as usize).copied().unwrap_or(20) >= 20
+        self.kind(id) == TileKind::Blocking
     }
 
     pub fn is_water(&self, id: u16) -> bool {
-        self.types.get(id as usize).copied().unwrap_or(0) == 11
+        self.kind(id) == TileKind::Water
     }
 }
 
@@ -201,6 +280,68 @@ mod tiletypes_tests {
         assert!(!t.is_wall(0));
         assert!(!t.is_wall(8));
         assert!(t.is_wall(1));
+    }
+
+    fn arrays_blob(arrays: &[&[u32]]) -> Vec<u8> {
+        let mut data = Vec::new();
+        for a in arrays {
+            data.extend_from_slice(&(a.len() as u32).to_be_bytes());
+            for v in *a {
+                data.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn arrays_liquid_list_makes_water_and_lava() {
+        // 5 is water and also passable; 6 is water and not passable;
+        // 7 is lava (liquid list and lava list).
+        let data = arrays_blob(&[&[0, 5], &[5, 6, 7], &[9], &[7]]);
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        assert_eq!(t.kind(0), TileKind::Open);
+        assert_eq!(t.kind(5), TileKind::Water);
+        assert_eq!(t.kind(6), TileKind::Water, "water must not be a wall");
+        assert_eq!(t.kind(7), TileKind::Lava);
+        assert_eq!(t.kind(1), TileKind::Blocking);
+        assert!(t.is_water(6) && !t.is_wall(6) && !t.is_wall(7));
+    }
+
+    #[test]
+    fn arrays_tolerates_trailing_data_and_one_array() {
+        let mut data = arrays_blob(&[&[0], &[4]]);
+        // junk that looks like a huge count
+        data.extend_from_slice(&0x0001_0004u32.to_be_bytes());
+        data.extend_from_slice(&[1, 2, 3]);
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        assert_eq!(t.kind(4), TileKind::Water);
+        assert!(TileTypes::parse_arrays(&arrays_blob(&[&[0]])).is_ok());
+        assert!(TileTypes::parse_arrays(&[0, 0, 1]).is_err());
+        assert!(TileTypes::parse_arrays(&[0, 0, 0, 9, 0, 0]).is_err());
+    }
+
+    #[test]
+    fn kind_follows_the_type_byte() {
+        let mut t = TileTypes { types: [0; 4096] };
+        t.types[1] = TYPE_WATER;
+        t.types[2] = TYPE_LAVA;
+        t.types[3] = 19;
+        t.types[4] = 20;
+        t.types[5] = 22;
+        t.types[6] = 3; // beds, chairs and the rest of 1..19 do not block
+        assert_eq!(
+            [0u16, 1, 2, 3, 4, 5, 6].map(|id| t.kind(id)),
+            [
+                TileKind::Open,
+                TileKind::Water,
+                TileKind::Lava,
+                TileKind::Open,
+                TileKind::Blocking,
+                TileKind::Blocking,
+                TileKind::Open
+            ]
+        );
+        assert_eq!(t.kind(4096), TileKind::Blocking);
     }
 
     #[test]
@@ -544,27 +685,29 @@ impl Level {
         self.tile_at(x, y).map(tile_id)
     }
 
-    /// True if the cell is a wall (or out of bounds) given a collision table.
-    pub fn is_on_wall(&self, types: &TileTypes, x: f32, y: f32) -> bool {
-        if x < 0.0 || y < 0.0 || x > 63.0 || y > 63.0 {
-            return true;
+    /// The kind of the tile under the point `(x, y)` (in tiles), or
+    /// `Blocking` off the board. A point is in the tile it falls in:
+    /// the original client truncates its test point to a tile (`int
+    /// testx = ...`), so tile 63 runs from 63.0 up to 64.0. A tile the
+    /// level does not define is open floor.
+    pub fn kind_at(&self, types: &TileTypes, x: f32, y: f32) -> TileKind {
+        if x < 0.0 || y < 0.0 || x >= 64.0 || y >= 64.0 {
+            return TileKind::Blocking;
         }
-        let tx = x.round() as i32;
-        let ty = y.round() as i32;
-        match self.tile_id_at(tx, ty) {
-            Some(id) => types.is_wall(id),
-            None => false,
+        match self.tile_id_at(x as i32, y as i32) {
+            Some(id) => types.kind(id),
+            None => TileKind::Open,
         }
     }
 
-    /// True if the cell is water.
+    /// True if the point is a wall (or off the board).
+    pub fn is_on_wall(&self, types: &TileTypes, x: f32, y: f32) -> bool {
+        self.kind_at(types, x, y) == TileKind::Blocking
+    }
+
+    /// True if the point is in water.
     pub fn is_on_water(&self, types: &TileTypes, x: f32, y: f32) -> bool {
-        let tx = x as i32;
-        let ty = y as i32;
-        match self.tile_id_at(tx, ty) {
-            Some(id) => types.is_water(id),
-            None => false,
-        }
+        self.kind_at(types, x, y) == TileKind::Water
     }
 }
 

@@ -47,11 +47,20 @@ From the merged chat/HUD PRs:
 - Permanent chat bar at the bottom. Enter opens it, Enter again sends.
 - F2 opens a PM to the nearest player.
 - F3 toggles the debug overlay (fps, position, level, frames, players).
-- F4 toggles the player list.
+- Tab toggles the player list. (F4 is the level editor, not built yet.)
+- F1 or ? shows the key help; a hint says so at start. The list is `client/src/help.rs`, and a test keeps it in step with `bin/main.rs`.
 - F12 saves a PNG to `screenshots/`.
+- F9 is developer mode (wallhack). It is off at every start, never saved, shows `DEV MODE` while on, and turns itself off on a level change, warp or disconnect. Build with `--no-default-features` to compile the wallhack out.
 - Chests open with A or Space when facing them. The terminal prints the item.
 - Signs open a reading panel.
 - Nickname tags and chat bubbles draw over other players.
+
+## Tiles, swimming and links
+
+- Tile types come from `arrays.dat` (the real client's data): array 0 is the no-wall list, array 1 the liquid list, array 3 the lava list. Water and lava are not walls. Anything off the board is a wall.
+- The collision test is the foot point `(x + 2.0, y + 2.75)` truncated to a tile, so rows and columns 0..63 are all reachable.
+- Swimming steps take twice as long as walking. On 2.1+ the client sends gani `swim`/`idle` (prop 10) when it enters or leaves water. Nothing is sent before 2.1: prop 10 is the bow slot there, and the 2.05 swim sprite number is not verified.
+- After a warp the client does not check links until a warp reply arrives, the player has moved, and the foot has left any link that contains the arrival tile.
 
 ## Protocol
 
