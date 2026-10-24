@@ -13,6 +13,9 @@ two, normal asset downloads and a `PLO_SERVERWARP` if the server sends one. A
 few connections in all, a few minutes each at most, no uploads, no account
 changes, no scanning, no bypassing anything.
 
+
+**Port confirmation (user, 2026-10-25):** port 14923 is the legacy support port on listserver.graal.in. For pre-2.17 clients use 14923; 14922 serves 2.17 and later. The earlier open question (14921 vs 14923) is settled.
+
 ## What was tried (2026-10-25, 03:08 to 03:10 JST)
 
 Seihai built from this branch, version profile 2.22, from the box's own
