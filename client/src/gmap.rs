@@ -264,8 +264,10 @@ impl Gmap {
     /// The cells around `(cx, cy)` (up to eight) that hold a level.
     pub fn neighbours(&self, (cx, cy): (i32, i32)) -> Vec<(i32, i32)> {
         let mut v = Vec::new();
-        for dy in -1..=1 {
-            for dx in -1..=1 {
+        // Columns first, then rows: the order the real 2.22 and 2.31 clients
+        // send their `PLI_ADJACENTLEVEL` messages in (documentation/gmap-order.md).
+        for dx in -1..=1 {
+            for dy in -1..=1 {
                 if (dx, dy) != (0, 0) && self.level_at(cx + dx, cy + dy).is_some() {
                     v.push((cx + dx, cy + dy));
                 }
@@ -351,31 +353,42 @@ fn gshort(v: u16) -> [u8; 2] {
 /// followed by the wrapped coordinate of that axis: X2/Y2 (78/79) when the
 /// profile uses precise positions, X/Y (15/16) otherwise.
 ///
-/// Real 2.31 messages, from the lab: `43 = 1, X2 = 0` going east, `43 = 0,
-/// X2 = 63.5` going west, and the same with 44 and Y2 for south and north.
+/// Real messages, from the lab: 2.31 `43 = 1, X2 = 0` going east, `43 = 0,
+/// X2 = 63.5` going west, and the same with 44 and Y2 for south and north;
+/// 2.22 `X, 43` (the coordinate first: its id 15 is below 43).
 /// Nothing else (no direction, no other axis) is in the message. A step
 /// that changes both axes at once was never seen; this writes the pairs
 /// one after the other.
 pub fn crossing_props_message(rules: &GmapRules, c: &Crossing) -> Vec<u8> {
     let mut m = vec![PLI_PLAYERPROPS + 0x20];
-    let coord = |m: &mut Vec<u8>, classic: u8, precise: u8, v: f32| {
+    // Props go out in ascending id order, as the real clients write them: the
+    // classic X/Y (15, 16) come before the cell props (43, 44), the precise
+    // X2/Y2 (78, 79) after them. A step that changes both axes was never seen;
+    // the same rule is applied to it.
+    let mut props: Vec<(u8, Vec<u8>)> = Vec::new();
+    let mut add = |id: u8, bytes: Vec<u8>| props.push((id, bytes));
+    let coord = |classic: u8, precise: u8, v: f32| -> (u8, Vec<u8>) {
         if rules.precise_pos {
-            m.push(precise + 0x20);
-            m.extend_from_slice(&gshort(encode_pos_precise(v)));
+            let mut b = vec![precise + 0x20];
+            b.extend_from_slice(&gshort(encode_pos_precise(v)));
+            (precise, b)
         } else {
-            m.push(classic + 0x20);
-            m.push(encode_pos_classic(v).wrapping_add(0x20));
+            (classic, vec![classic + 0x20, encode_pos_classic(v).wrapping_add(0x20)])
         }
     };
     if c.x_changed() {
-        m.push(PROP_GMAPLEVELX + 0x20);
-        m.push(c.to.0 as u8 + 0x20);
-        coord(&mut m, PROP_X, PROP_X2, c.local_x);
+        add(PROP_GMAPLEVELX, vec![PROP_GMAPLEVELX + 0x20, c.to.0 as u8 + 0x20]);
+        let (id, b) = coord(PROP_X, PROP_X2, c.local_x);
+        add(id, b);
     }
     if c.y_changed() {
-        m.push(PROP_GMAPLEVELY + 0x20);
-        m.push(c.to.1 as u8 + 0x20);
-        coord(&mut m, PROP_Y, PROP_Y2, c.local_y);
+        add(PROP_GMAPLEVELY, vec![PROP_GMAPLEVELY + 0x20, c.to.1 as u8 + 0x20]);
+        let (id, b) = coord(PROP_Y, PROP_Y2, c.local_y);
+        add(id, b);
+    }
+    props.sort_by_key(|(id, _)| *id);
+    for (_, b) in props {
+        m.extend(b);
     }
     m.push(b'\n');
     m
@@ -630,7 +643,7 @@ mod tests {
         let g = map();
         assert_eq!(g.cell_of("GM_SE.NW"), Some((1, 1)));
         assert_eq!(g.cell_of("nope.nw"), None);
-        assert_eq!(g.neighbours((0, 0)), vec![(1, 0), (0, 1), (1, 1)]);
+        assert_eq!(g.neighbours((0, 0)), vec![(0, 1), (1, 0), (1, 1)]);
         assert_eq!(g.neighbours((1, 1)).len(), 3);
     }
 
@@ -724,19 +737,21 @@ mod tests {
     fn props_message_uses_classic_coordinates_for_222() {
         let r = GmapRules::for_version(ClientVersion::V222);
         let east = crossing_props_message(&r, &cross((0, 0), (1, 0), 0.0, 30.5));
-        assert_eq!(east, [&[0x22, 0x4b, 0x21, 0x2f, 0x20][..], b"\n"].concat());
+        assert_eq!(east, [&[0x22, 0x2f, 0x20, 0x4b, 0x21][..], b"\n"].concat());
         let west = crossing_props_message(&r, &cross((1, 0), (0, 0), 63.5, 30.5));
-        assert_eq!(west, [&[0x22, 0x4b, 0x20, 0x2f, 127 + 0x20][..], b"\n"].concat());
+        assert_eq!(west, [&[0x22, 0x2f, 127 + 0x20, 0x4b, 0x20][..], b"\n"].concat());
         let south = crossing_props_message(&r, &cross((0, 0), (0, 1), 10.0, 0.5));
-        assert_eq!(south, [&[0x22, 0x4c, 0x21, 0x30, 0x21][..], b"\n"].concat());
+        assert_eq!(south, [&[0x22, 0x30, 0x21, 0x4c, 0x21][..], b"\n"].concat());
     }
 
     #[test]
-    fn diagonal_props_message_writes_the_pairs_in_order() {
+    fn diagonal_props_message_writes_the_props_in_id_order() {
         let r = GmapRules::for_version(ClientVersion::V231);
         let m = crossing_props_message(&r, &cross((0, 0), (1, 1), 0.0, 0.0));
         let ids: Vec<u8> = crate::protocol::parse_player_props(&m[1..m.len() - 1]).iter().map(|p| p.id).collect();
-        assert_eq!(ids, vec![43, 78, 44, 79]);
+        // Inferred: a diagonal step was never captured; ascending ids is the rule
+        // both single-axis captures follow.
+        assert_eq!(ids, vec![43, 44, 78, 79]);
     }
 
     /// The messages the props message parses back to what was crossed.
@@ -797,7 +812,8 @@ mod tests {
         let none = HashMap::new();
         let all = adjacent_requests(&r, &g, (0, 0), &none);
         assert_eq!(all.len(), 3);
-        assert!(all[0].ends_with(b"gm_ne.nw\n"));
+        assert!(all[0].ends_with(b"gm_sw.nw\n"), "columns first: sw, ne, se");
+        assert!(all[1].ends_with(b"gm_ne.nw\n") && all[2].ends_with(b"gm_se.nw\n"));
         let mut have = HashMap::new();
         have.insert("gm_ne.nw".to_string(), 5);
         assert_eq!(adjacent_requests(&r, &g, (0, 0), &have).len(), 2);
@@ -884,7 +900,7 @@ mod tests {
         assert!(!w.levels.contains_key(&(0, 1)));
         // 35 for the three neighbours, once.
         assert_eq!(r.messages.len(), 3);
-        assert!(r.messages[0].ends_with(b"gm_ne.nw\n"));
+        assert!(r.messages[0].ends_with(b"gm_sw.nw\n"), "sw, ne, se");
         assert!(sync_world(&mut session, &mut net, &rules, &files, &mut asked).messages.is_empty());
         // The server's answer for gm_sw (name, board, gmap) fills the gap.
         let mut board = vec![100 + 0x20, 0x20, 64 + 0x20, 2 + 0x20, b'\n', 101 + 0x20];
