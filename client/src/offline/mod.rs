@@ -4,7 +4,8 @@
 //! without a network connection. Behavior is provisional and will
 //! be refined against the original client’s offline/tutorial paths.
 
-use crate::assets::{GaniPlayer, Level, TileTypes};
+use crate::assets::{GaniPlayer, Level, TileKind, TileTypes};
+use crate::dev::DevMode;
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
@@ -14,6 +15,16 @@ pub const DIR_NORTH: u8 = 0;
 pub const DIR_WEST: u8 = 1;
 pub const DIR_SOUTH: u8 = 2;
 pub const DIR_EAST: u8 = 3;
+
+/// Where the feet are, from the sprite's top-left, in tiles. This is the
+/// one point the original client tests for walls, water and links.
+pub const FOOT_DX: f32 = 2.0;
+pub const FOOT_DY: f32 = 2.75;
+
+/// Walking and swimming step times. A step is half a tile; swimming is
+/// half as fast.
+pub const WALK_STEP_MS: u64 = 50;
+pub const SWIM_STEP_MS: u64 = 100;
 
 /// A locally simulated game session (no server).
 #[derive(Debug)]
@@ -54,8 +65,19 @@ pub struct OfflineSession {
     pub opened_chests: HashSet<(i32, i32)>,
     /// Sign or chest text being read. The game waits until it is closed.
     pub reading: Option<String>,
-    /// Developer mode: walk through walls and chests.
-    pub wallhack: bool,
+    /// Developer-only switches (wallhack). Off at start, never saved.
+    pub dev: DevMode,
+    /// Set from the moment a level warp is asked for until the new level
+    /// arrives. Nothing walks and no link fires meanwhile.
+    pub warp_pending: Option<String>,
+    /// False from an arrival until the player has moved: a link cannot
+    /// fire on the spot the player was put on.
+    armed: bool,
+    /// Tile the player arrived on. Links that contain it stay off until
+    /// the player steps out of them.
+    arrival_tile: Option<(i32, i32)>,
+    /// Swimming state last reported to the server.
+    swim_sent: bool,
 }
 
 /// What an interact press did.
@@ -66,6 +88,22 @@ pub enum Interaction {
     /// A sign is being read.
     Sign(String),
     Nothing,
+}
+
+/// The message that tells a 2.1+ server the player started or stopped
+/// swimming: `PLI_PLAYERPROPS` (2) with prop 10 (`PLPROP_GANI`) as a
+/// GSTRING, `swim` or `idle`.
+///
+/// GServer keeps no swimming status. It stores the gani name and relays
+/// it to the other players in the level, so that is how they see the
+/// swim animation. Clients before 2.1 read prop 10 as the bow slot, so
+/// nothing is sent for them.
+pub fn swim_message(swimming: bool) -> Vec<u8> {
+    let name: &[u8] = if swimming { b"swim" } else { b"idle" };
+    let mut m = vec![2 + 0x20, 10 + 0x20, name.len() as u8 + 0x20];
+    m.extend_from_slice(name);
+    m.push(b'\n');
+    m
 }
 
 impl OfflineSession {
@@ -93,14 +131,22 @@ impl OfflineSession {
             max_hearts: 6,
             opened_chests: HashSet::new(),
             reading: None,
-            wallhack: false,
+            dev: DevMode::default(),
+            warp_pending: None,
+            armed: true,
+            arrival_tile: None,
+            swim_sent: false,
         }
     }
 
-    /// The point one tile ahead of the player's feet, in tiles. The feet
-    /// are the collision point used by [`Self::try_move`].
+    /// The feet, in tiles: the collision point used by [`Self::try_move`].
+    pub fn foot(&self) -> (f32, f32) {
+        (self.player_x + FOOT_DX, self.player_y + FOOT_DY)
+    }
+
+    /// The point one tile ahead of the player's feet, in tiles.
     pub fn facing_point(&self) -> (f32, f32) {
-        let (fx, fy) = (self.player_x + 2.0, self.player_y + 2.75);
+        let (fx, fy) = self.foot();
         match self.player_dir {
             DIR_NORTH => (fx, fy - 1.0),
             DIR_WEST => (fx - 1.0, fy - 0.5),
@@ -369,34 +415,91 @@ impl OfflineSession {
         }
         false
     }
-    /// If so, record the destination in `pending_link`.
-    /// Returns true if a link was entered.
+    /// If the player's feet are in a link, record the destination in
+    /// `pending_link`. Returns true if a link was entered.
+    ///
+    /// A link does not fire while a level is loading or a warp is
+    /// pending, before the player has moved since arriving, or while the
+    /// player is still inside a link that contained the arrival tile.
     pub fn check_links(&mut self) -> bool {
-        // Use the foot point, not the sprite top-left.
-        let (fx, fy) = (self.player_x + 2.0, self.player_y + 2.75);
-        let px = fx as i32;
-        let py = fy as i32;
-        let dest = if let Some(level) = &self.current_level {
-            level.links.iter().find_map(|link| {
-                if px >= link.x
-                    && px < link.x + link.width
-                    && py >= link.y
-                    && py < link.y + link.height
-                {
-                    Some((
-                        link.dest.clone(),
-                        link.new_x.unwrap_or(self.player_x),
-                        link.new_y.unwrap_or(self.player_y),
-                    ))
-                } else {
-                    None
-                }
-            })
+        self.pending_link = None;
+        if self.warp_pending.is_some() || !self.armed {
+            return false;
+        }
+        let (fx, fy) = self.foot();
+        let (px, py) = (fx as i32, fy as i32);
+        let Some(level) = &self.current_level else {
+            return false;
+        };
+        if let Some(t) = self.arrival_tile {
+            // Still on the way out of the arrival link?
+            if level.links.iter().any(|l| l.contains(t.0, t.1) && l.contains(px, py)) {
+                return false;
+            }
+            self.arrival_tile = None;
+        }
+        self.pending_link = level.links.iter().find(|l| l.contains(px, py)).map(|link| {
+            (
+                link.dest.clone(),
+                link.new_x.unwrap_or(self.player_x),
+                link.new_y.unwrap_or(self.player_y),
+            )
+        });
+        self.pending_link.is_some()
+    }
+
+    /// The player is put at `(x, y)` in a level that is now loaded: the
+    /// end of a warp, online or offline. Ends a pending warp, switches
+    /// developer mode off (returns true if it was on), and holds links
+    /// back until the player moves (see [`Self::check_links`]).
+    pub fn arrive(&mut self, x: f32, y: f32) -> bool {
+        self.player_x = x;
+        self.player_y = y;
+        self.warp_pending = None;
+        self.pending_link = None;
+        self.armed = false;
+        let (fx, fy) = self.foot();
+        self.arrival_tile = Some((fx as i32, fy as i32));
+        let dev_was_on = self.dev.reset();
+        self.refresh_water();
+        dev_was_on
+    }
+
+    /// Ask for a warp: from now until [`Self::arrive`] or
+    /// [`Self::cancel_warp`] no link fires and the player stays put.
+    pub fn begin_warp(&mut self, dest: &str) {
+        self.warp_pending = Some(dest.to_string());
+        self.pending_link = None;
+    }
+
+    /// Give up a pending warp (the server refused or never answered).
+    pub fn cancel_warp(&mut self) {
+        self.warp_pending = None;
+    }
+
+    /// Recompute `in_water` from the feet.
+    pub fn refresh_water(&mut self) {
+        let (fx, fy) = self.foot();
+        self.in_water = match (&self.current_level, &self.tiletypes) {
+            (Some(level), Some(types)) => level.kind_at(types, fx, fy) == TileKind::Water,
+            _ => false,
+        };
+    }
+
+    /// Time between steps now: swimming is slower than walking.
+    pub fn step_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(if self.in_water { SWIM_STEP_MS } else { WALK_STEP_MS })
+    }
+
+    /// `Some(swimming)` when the swimming state changed since the last
+    /// call, so the caller can tell the server once per change.
+    pub fn take_swim_change(&mut self) -> Option<bool> {
+        if self.in_water != self.swim_sent {
+            self.swim_sent = self.in_water;
+            Some(self.in_water)
         } else {
             None
-        };
-        self.pending_link = dest;
-        self.pending_link.is_some()
+        }
     }
 
     /// Check for player-touch-NPC events.
@@ -444,10 +547,41 @@ impl OfflineSession {
         fired
     }
 
-    /// Move the player by (dx, dy) if the destination is not a wall.
-    /// Uses the single-point foot test from the observed client path:
-    /// test point is (pixel + move + 32, pixel + move + 44) in 16px units.
-    /// Updates facing from the dominant axis.
+    /// True if the player may stand with the sprite's top-left at
+    /// `(x, y)`: the feet are not on a wall tile (or off the board) and
+    /// not inside a chest. Water and lava are open. Developer mode skips
+    /// the test.
+    fn can_stand(&self, x: f32, y: f32) -> bool {
+        if self.dev.wallhack() {
+            return true;
+        }
+        let (fx, fy) = (x + FOOT_DX, y + FOOT_DY);
+        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
+            if level.kind_at(types, fx, fy) == TileKind::Blocking {
+                return false;
+            }
+        }
+        // Chests are solid, 2×2 tiles.
+        if let Some(level) = &self.current_level {
+            let blocked = level.chests.iter().any(|c| {
+                fx >= c.x as f32 && fx < c.x as f32 + 2.0 && fy >= c.y as f32 && fy < c.y as f32 + 2.0
+            });
+            if blocked {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Move the player by (dx, dy) if the feet can stand there.
+    ///
+    /// Uses the single-point foot test of the original client (see
+    /// [`Self::can_stand`]); updates facing from the dominant axis.
+    /// A diagonal step needs both of its axis steps to be open too, so
+    /// the player cannot cut through the corner where two walls touch;
+    /// when it cannot go diagonally it slides along the open axis.
+    /// A player already standing in a blocked tile (put there by a
+    /// warp, say) may walk out. Nothing moves while a warp is pending.
     /// Returns the emitted `PlayerUpdate` if the move succeeded.
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
         if dx == 0.0 && dy == 0.0 {
@@ -459,47 +593,34 @@ impl OfflineSession {
         } else {
             self.player_dir = if dy > 0.0 { DIR_SOUTH } else { DIR_NORTH };
         }
-
-        // Single-point foot test (observed client offsets).
-        // Convert tile-space position to pixel, add move, then +32/+44, divide by 16.
-        let px = self.player_x * 16.0;
-        let py = self.player_y * 16.0;
-        let test_px = px + dx * 16.0 + 32.0;
-        let test_py = py + dy * 16.0 + 44.0;
-        let test_x = test_px / 16.0;
-        let test_y = test_py / 16.0;
-
-        if !self.wallhack {
-            if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-                if level.is_on_wall(types, test_x, test_y) {
-                    return None;
-                }
-            }
-            // Chests are solid, 2×2 tiles.
-            if let Some(level) = &self.current_level {
-                let blocked = level.chests.iter().any(|c| {
-                    test_x >= c.x as f32
-                        && test_x < c.x as f32 + 2.0
-                        && test_y >= c.y as f32
-                        && test_y < c.y as f32 + 2.0
-                });
-                if blocked {
-                    return None;
-                }
-            }
+        if self.warp_pending.is_some() {
+            return None;
         }
 
-        self.player_x += dx;
-        self.player_y += dy;
-        // Water is at the feet, same point as the wall test.
-        self.in_water = self
-            .current_level
-            .as_ref()
-            .zip(self.tiletypes.as_ref())
-            .map(|(level, types)| {
-                level.is_on_water(types, self.player_x + 2.0, self.player_y + 2.75)
-            })
-            .unwrap_or(false);
+        let (x, y) = (self.player_x, self.player_y);
+        let stuck = !self.can_stand(x, y);
+        let open = |s: &Self, mx: f32, my: f32| stuck || s.can_stand(x + mx, y + my);
+        let step = if dx != 0.0 && dy != 0.0 {
+            if open(self, dx, dy) && open(self, dx, 0.0) && open(self, 0.0, dy) {
+                Some((dx, dy))
+            } else if open(self, dx, 0.0) {
+                Some((dx, 0.0))
+            } else if open(self, 0.0, dy) {
+                Some((0.0, dy))
+            } else {
+                None
+            }
+        } else if open(self, dx, dy) {
+            Some((dx, dy))
+        } else {
+            None
+        };
+        let (mx, my) = step?;
+
+        self.player_x += mx;
+        self.player_y += my;
+        self.armed = true;
+        self.refresh_water();
         if let Some(gani) = self.walk_gani.as_mut() {
             gani.step();
         }
@@ -575,5 +696,262 @@ mod tests {
         assert!(matches!(s.interact(), Interaction::Chest { x: 10, y: 10, .. }));
         assert_eq!(s.max_hearts, 8);
         assert!(s.reading.is_none());
+    }
+
+    // ---- tile movement and warp arrival ------------------------------------
+
+    use crate::assets::Link;
+
+    const OPEN: u16 = 0;
+    const WALL: u16 = 1;
+    const WATER: u16 = 2;
+    const LAVA: u16 = 3;
+
+    fn types() -> TileTypes {
+        let mut t = TileTypes { types: [0; 4096] };
+        t.types[WALL as usize] = 22;
+        t.types[WATER as usize] = 11;
+        t.types[LAVA as usize] = 12;
+        t
+    }
+
+    /// A 64x64 level where `f(x, y)` picks each tile.
+    fn level(f: impl Fn(i32, i32) -> u16) -> Level {
+        let tiles: Vec<u16> = (0..64 * 64).map(|i| f(i % 64, i / 64)).collect();
+        Level::from_board(&tiles)
+    }
+
+    /// A session whose feet stand at tile-space `(fx, fy)`.
+    fn session_at(level: Level, fx: f32, fy: f32) -> OfflineSession {
+        let mut s = OfflineSession::new();
+        s.current_level = Some(level);
+        s.tiletypes = Some(types());
+        s.player_x = fx - FOOT_DX;
+        s.player_y = fy - FOOT_DY;
+        s
+    }
+
+    fn walk(s: &mut OfflineSession, dx: f32, dy: f32, steps: usize) -> usize {
+        (0..steps).filter(|_| s.try_move(dx, dy).is_some()).count()
+    }
+
+    #[test]
+    fn wall_blocks_a_walk() {
+        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 18.5, 10.5);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2, "feet 18.5 -> 19.0, 19.5, then 20.0 is wall");
+        assert_eq!(s.foot().0, 19.5);
+        assert_eq!(s.player_dir, DIR_EAST);
+        // and it is open again going back
+        assert_eq!(walk(&mut s, -0.5, 0.0, 2), 2);
+    }
+
+    #[test]
+    fn last_row_and_column_are_floor_not_wall() {
+        // The original client truncates its test point to a tile, so tile
+        // 63 runs from 63.0 to 64.0; only 64.0 and beyond is off the board.
+        let mut s = session_at(level(|_, _| OPEN), 62.5, 10.5);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2, "62.5 -> 63.0, 63.5; 64.0 is outside");
+        assert_eq!(s.foot().0, 63.5);
+        let mut s = session_at(level(|_, _| OPEN), 0.5, 0.5);
+        assert_eq!(walk(&mut s, -0.5, 0.0, 4), 1, "0.5 -> 0.0 ok, -0.5 is off the board");
+    }
+
+    #[test]
+    fn wall_edge_is_the_tile_edge_not_half_a_tile_earlier() {
+        // Wall column at x = 20: standing at 19.5 must be allowed, since
+        // tile 19 is floor (a rounded test point would call it tile 20).
+        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.0, 10.5);
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert_eq!(s.foot().0, 19.5);
+        assert!(s.try_move(0.5, 0.0).is_none());
+    }
+
+    #[test]
+    fn water_is_swimmable_not_a_wall() {
+        // Water at x 10..=13 on every row.
+        let mut s = session_at(level(|x, _| if (10..=13).contains(&x) { WATER } else { OPEN }), 8.5, 20.5);
+        assert!(!s.in_water);
+        assert_eq!(s.take_swim_change(), None);
+        assert!(s.try_move(0.5, 0.0).is_some()); // 9.0
+        assert!(!s.in_water);
+        assert!(s.try_move(0.5, 0.0).is_some()); // 9.5
+        assert!(s.try_move(0.5, 0.0).is_some()); // 10.0: in the water
+        assert!(s.in_water);
+        assert_eq!(s.take_swim_change(), Some(true));
+        assert_eq!(s.take_swim_change(), None, "reported once per change");
+        // swim across and leave
+        walk(&mut s, 0.5, 0.0, 8); // 10.5 .. 14.0
+        assert!(!s.in_water);
+        assert_eq!(s.take_swim_change(), Some(false));
+        assert_eq!(s.foot().0, 14.0);
+    }
+
+    #[test]
+    fn swimming_is_slower_and_reports_the_gani() {
+        let mut s = session_at(level(|_, _| WATER), 30.5, 30.5);
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.in_water);
+        assert!(s.step_interval() > std::time::Duration::from_millis(WALK_STEP_MS));
+        let mut dry = session_at(level(|_, _| OPEN), 30.5, 30.5);
+        dry.try_move(0.5, 0.0);
+        assert_eq!(dry.step_interval(), std::time::Duration::from_millis(WALK_STEP_MS));
+        // PLI_PLAYERPROPS, PLPROP_GANI, GSTRING
+        assert_eq!(swim_message(true), b"\x22\x2a\x24swim\n");
+        assert_eq!(swim_message(false), b"\x22\x2a\x24idle\n");
+    }
+
+    #[test]
+    fn lava_does_not_block() {
+        let mut s = session_at(level(|x, _| if x >= 12 { LAVA } else { OPEN }), 10.5, 20.5);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 6), 6);
+        assert!(!s.in_water, "lava is not water");
+    }
+
+    #[test]
+    fn diagonal_does_not_cut_through_a_corner() {
+        // Walls at (21,29) and (20,30) touch at a corner; the feet at
+        // (20.75, 29.75) try to go to (21.25, 30.25) between them.
+        let mut s = session_at(
+            level(|x, y| if (x, y) == (21, 29) || (x, y) == (20, 30) { WALL } else { OPEN }),
+            20.75,
+            29.75,
+        );
+        let before = (s.player_x, s.player_y);
+        assert!(s.try_move(0.5, 0.5).is_none());
+        assert_eq!((s.player_x, s.player_y), before);
+    }
+
+    #[test]
+    fn diagonal_slides_along_a_wall() {
+        // Wall row at y = 30: going down-right slides right.
+        let mut s = session_at(level(|_, y| if y == 30 { WALL } else { OPEN }), 10.5, 29.75);
+        let x0 = s.player_x;
+        let r = s.try_move(0.5, 0.5);
+        assert!(r.is_some());
+        assert_eq!(s.player_x, x0 + 0.5);
+        assert_eq!(s.foot().1, 29.75);
+    }
+
+    #[test]
+    fn a_player_inside_a_wall_can_walk_out() {
+        let mut s = session_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 20.5, 10.5);
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert_eq!(s.foot().0, 21.5);
+        // out of the wall, now it blocks again
+        let mut s = session_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 19.5, 10.5);
+        assert!(s.try_move(0.5, 0.0).is_none());
+    }
+
+    #[test]
+    fn chests_block_the_feet() {
+        let mut s = session_at(level(|_, _| OPEN), 18.5, 10.5);
+        s.current_level.as_mut().unwrap().chests.push(crate::assets::Chest {
+            x: 20,
+            y: 10,
+            item: "greenrupee".into(),
+            sign_index: -1,
+        });
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2);
+    }
+
+    #[test]
+    fn dev_mode_is_off_at_start_and_walks_through_walls() {
+        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.5, 10.5);
+        assert!(!s.dev.active());
+        assert!(s.try_move(0.5, 0.0).is_none());
+        if DevMode::AVAILABLE {
+            s.dev.toggle();
+            assert!(s.try_move(0.5, 0.0).is_some());
+            // a warp or level change switches it off again
+            assert!(s.arrive(10.0, 10.0));
+            assert!(!s.dev.active());
+        }
+    }
+
+    fn link(dest: &str, x: i32, y: i32, w: i32, h: i32, nx: Option<f32>, ny: Option<f32>) -> Link {
+        Link { dest: dest.into(), x, y, width: w, height: h, new_x: nx, new_y: ny }
+    }
+
+    #[test]
+    fn link_uses_its_destination_and_keeps_player_axes() {
+        let mut lvl = level(|_, _| OPEN);
+        lvl.links.push(link("b.nw", 40, 0, 4, 64, Some(1.0), None)); // x = 1, y = playery
+        lvl.links.push(link("c.nw", 0, 50, 64, 2, None, Some(2.5))); // x = playerx, y = 2.5
+        let mut s = session_at(lvl, 41.0, 20.0);
+        assert!(s.check_links());
+        assert_eq!(s.pending_link, Some(("b.nw".into(), 1.0, s.player_y)));
+        let mut s2 = session_at(s.current_level.clone().unwrap(), 12.0, 50.5);
+        assert!(s2.check_links());
+        assert_eq!(s2.pending_link, Some(("c.nw".into(), s2.player_x, 2.5)));
+    }
+
+    /// B has a link back to A across its west edge, and the arrival spot
+    /// from A's link is inside it.
+    fn level_b() -> Level {
+        let mut b = level(|_, _| OPEN);
+        b.links.push(link("a.nw", 0, 10, 4, 6, Some(60.0), None));
+        b
+    }
+
+    #[test]
+    fn arriving_inside_a_link_does_not_warp_straight_back() {
+        let mut s = session_at(level_b(), 40.0, 40.0);
+        // The server puts the player at x = 1, y = 12: feet at (3.0, 14.75),
+        // inside the return link.
+        s.begin_warp("b.nw");
+        assert!(!s.check_links(), "no link fires while a warp is pending");
+        assert!(s.try_move(0.5, 0.0).is_none(), "and nothing walks");
+        s.arrive(1.0, 12.0);
+        assert_eq!((s.player_x, s.player_y), (1.0, 12.0), "arrival is the destination, exactly");
+        assert!(s.warp_pending.is_none());
+        assert!(!s.check_links(), "not before the player has moved");
+        // Holding the key toward the edge keeps the player in that link.
+        for _ in 0..6 {
+            s.try_move(-0.5, 0.0);
+            assert!(!s.check_links());
+        }
+        assert!(s.foot().0 < 1.0);
+    }
+
+    #[test]
+    fn stepping_off_the_arrival_link_and_back_on_warps() {
+        let mut s = session_at(level_b(), 40.0, 40.0);
+        s.arrive(1.0, 12.0); // feet (3.0, 14.75)
+        assert_eq!(walk(&mut s, 0.5, 0.0, 2), 2); // feet x 4.0: out of the link
+        assert!(!s.check_links());
+        assert!(s.try_move(-0.5, 0.0).is_some()); // feet x 3.5: back in
+        assert!(s.check_links());
+        assert_eq!(s.pending_link, Some(("a.nw".into(), 60.0, s.player_y)));
+    }
+
+    #[test]
+    fn a_link_elsewhere_still_fires_after_the_first_move() {
+        let mut b = level_b();
+        b.links.push(link("c.nw", 30, 0, 4, 64, Some(5.0), Some(5.0)));
+        let mut s = session_at(b, 28.0, 30.0);
+        s.arrive(26.0, 27.25);
+        assert!(!s.check_links());
+        assert_eq!(walk(&mut s, 0.5, 0.0, 4), 4); // feet x 30.0
+        assert!(s.check_links());
+        assert_eq!(s.pending_link.as_ref().map(|l| l.0.as_str()), Some("c.nw"));
+    }
+
+    #[test]
+    fn no_link_while_the_level_is_loading() {
+        let mut s = session_at(level_b(), 2.0, 12.0);
+        s.arrive(0.0, 9.25);
+        s.try_move(0.5, 0.0);
+        s.current_level = None;
+        assert!(!s.check_links());
+    }
+
+    #[test]
+    fn a_cancelled_warp_frees_the_player() {
+        let mut s = session_at(level(|_, _| OPEN), 10.0, 10.0);
+        s.begin_warp("x.nw");
+        assert!(s.try_move(0.5, 0.0).is_none());
+        s.cancel_warp();
+        assert!(s.try_move(0.5, 0.0).is_some());
     }
 }

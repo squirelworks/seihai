@@ -447,16 +447,24 @@ fn main() {
     let mut show_debug = false;
     let mut show_players = false;
     let mut confirm_quit = false;
+    let mut show_help = false;
+    let started = Instant::now();
+    let mut warp_since: Option<Instant> = None;
+    let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
     let mut fps_count = 0u32;
     let mut fps_since = Instant::now();
     let mut dirty = true;
 
-    const STEP_EVERY: Duration = Duration::from_millis(50);
     let mut last_step = Instant::now();
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
+        if !input.is_open()
+            && (window.is_key_pressed(minifb::Key::F1, minifb::KeyRepeat::No) || typed_now.contains(&'?'))
+        {
+            show_help = !show_help;
+        }
         if input.is_open() {
             for c in typed_now {
                 input.type_char(c);
@@ -477,7 +485,9 @@ fn main() {
                 input.cancel();
             }
         } else if window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No) {
-            if session.reading.take().is_none() {
+            if show_help {
+                show_help = false;
+            } else if session.reading.take().is_none() {
                 confirm_quit = true;
                 dirty = true;
             }
@@ -564,8 +574,11 @@ fn main() {
                 }
             }
             if changed {
+                // True when this batch put the player in a new level.
+                let mut entered = false;
                 if let Some(name) = &net_state.level_name {
                     if loaded_level.as_ref() != Some(name) {
+                        entered = true;
                         // The server sends the file name, e.g. "onlinestartlocal.nw".
                         let file = if name.ends_with(".nw") {
                             name.clone()
@@ -640,16 +653,17 @@ fn main() {
                     session.player_dir = d;
                 }
                 session.opened_chests.extend(net_state.opened_chests.drain(..));
+                if entered || (warped && session.warp_pending.is_some()) {
+                    // Arrival: the server's position is final. Links stay
+                    // quiet until the player moves off it.
+                    warp_since = None;
+                    if session.arrive(session.player_x, session.player_y) {
+                        net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
+                    }
+                } else if warped {
+                    session.refresh_water();
+                }
                 if warped {
-                    // Refresh water from the foot point after a server warp.
-                    session.in_water = session
-                        .current_level
-                        .as_ref()
-                        .zip(session.tiletypes.as_ref())
-                        .map(|(level, types)| {
-                            level.is_on_water(types, session.player_x + 2.0, session.player_y + 2.75)
-                        })
-                        .unwrap_or(false);
                     eprintln!(
                         "position {} {} dir {}",
                         session.player_x, session.player_y, session.player_dir
@@ -682,7 +696,7 @@ fn main() {
             }
             dirty = true;
         }
-        if !input.is_open() && session.reading.is_none() && last_step.elapsed() >= STEP_EVERY {
+        if !input.is_open() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if window.is_key_down(minifb::Key::Left) {
                 dx -= 0.5;
@@ -716,23 +730,54 @@ fn main() {
                 if let Some((dest, x, y)) = session.pending_link.take() {
                     eprintln!("link to {dest} at {x} {y}");
                     if let Some(c) = conn.as_mut() {
-                        // Online: the server owns the warp.
+                        // Online: the server owns the warp. Ask once and
+                        // wait; its reply moves the player.
+                        session.begin_warp(&dest);
+                        warp_since = Some(Instant::now());
                         if let Err(e) = c.send_levelwarp(x, y, &dest) {
                             eprintln!("send failed: {e}");
+                            session.cancel_warp();
                             conn = None;
                         }
                     } else {
                         // Offline: load the destination if it is local.
                         let path = root.level(&dest);
                         if session.load_level(&path).is_ok() {
-                            session.player_x = x;
-                            session.player_y = y;
+                            if session.arrive(x, y) {
+                                net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
+                            }
                             eprintln!("warped to {dest}");
                         } else {
                             eprintln!("no local {dest}");
                         }
                     }
                 }
+            }
+        }
+
+        // Tell the server when swimming starts or stops (2.1+ clients; the
+        // gani prop is the bow slot before that).
+        if let Some(swimming) = session.take_swim_change() {
+            dirty = true;
+            if let (Some(c), false) = (conn.as_mut(), profile.props.bow_prop10) {
+                if let Err(e) = c.send_messages(&[seihai::offline::swim_message(swimming)]) {
+                    eprintln!("send failed: {e}");
+                }
+            }
+        }
+        // A warp the server never answers is given up after a few seconds.
+        if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
+            warp_since = None;
+            session.cancel_warp();
+            eprintln!("warp not answered");
+        }
+        // Developer mode does not survive a lost connection.
+        was_online |= conn.is_some();
+        if was_online && conn.is_none() {
+            was_online = false;
+            session.cancel_warp();
+            if session.dev.reset() {
+                net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
             }
         }
 
@@ -787,9 +832,13 @@ fn main() {
             if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
                 show_debug = !show_debug;
             }
+            if window.is_key_pressed(minifb::Key::Tab, minifb::KeyRepeat::No) {
+                show_players = !show_players;
+            }
             if window.is_key_pressed(minifb::Key::F9, minifb::KeyRepeat::No) {
-                session.wallhack = !session.wallhack;
-                let msg = if session.wallhack {
+                let msg = if !seihai::dev::DevMode::AVAILABLE {
+                    "developer mode is not in this build"
+                } else if session.dev.toggle() {
                     "developer mode: wallhack on"
                 } else {
                     "developer mode: wallhack off"
@@ -861,6 +910,12 @@ fn main() {
         if confirm_quit {
             ui::draw_panel(&mut frame, "Quit", "Quit Seihai?  Y / Enter = yes,  N / Esc = no");
         }
+        if show_help {
+            seihai::help::draw_help(&mut frame);
+        } else if started.elapsed() < Duration::from_secs(10) {
+            seihai::help::draw_hint(&mut frame);
+        }
+        seihai::help::draw_dev_badge(&mut frame, &session.dev);
         ui::draw_chat(&mut frame, &net_state.chat_log, chat_scroll, &input);
         if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {
             let line = match save_screenshot(&frame) {

@@ -15,5 +15,11 @@ egui = "0.29"
 name = "seihai"
 path = "src/bin/main.rs"
 
+[features]
+# Developer mode (F9 wallhack). On for now; build with
+# `--no-default-features` to compile it out.
+default = ["dev"]
+dev = []
+
 [dev-dependencies]
 serde_json = "1"
