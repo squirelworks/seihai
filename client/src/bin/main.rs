@@ -63,6 +63,17 @@ fn main() {
                     password = p.clone();
                 }
             }
+            "--password-env" => {
+                i += 1;
+                if let Some(var) = args.get(i) {
+                    match env::var(var) {
+                        Ok(p) if !p.is_empty() => password = p,
+                        _ => eprintln!("warning: environment variable {var} is unset or empty"),
+                    }
+                } else {
+                    eprintln!("warning: --password-env needs a variable name");
+                }
+            }
             "--version" => {
                 i += 1;
                 if let Some(v) = args.get(i) {
@@ -75,6 +86,9 @@ fn main() {
             "--help" | "-h" => {
                 println!("seihai --assets <dir> [--level <name.nw>]");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
+                println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
+                println!("         --password-env VAR  read the password from environment variable VAR");
+                println!("                             (keeps it off the command line)");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
