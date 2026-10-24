@@ -63,15 +63,15 @@ each was checked against the captured payload shapes (four gservers).
 | id | name | payload | `SessionState` field |
 |---|---|---|---|
 | 10 | ISLEADER | empty | `is_leader` |
-| 25 | SIGNATURE | GCHAR (73 on gs2 servers, 41 on GServer-RS) | `signature` |
+| 25 | SIGNATURE | GCHAR (73 on gs2 servers, 41 on GServer-RS). The real client quits on 1, quits on 0 unless the host string is `127.0.0.1`, and ignores anything else (`signature_action`; reported, not enforced) | `signature` |
 | 39 | LEVELMODTIME | GINT5 Unix time of the level file | `level_mod_time` |
-| 41 | STARTMESSAGE | HTML welcome page; empty on one server | `start_message` |
+| 41 | STARTMESSAGE | HTML or RTF welcome page, trimmed; empty on one server | `start_message` |
 | 44 | HASNPCSERVER | empty | `has_npc_server` |
 | 47 | STAFFGUILDS | comma list, items optionally quoted | `staff_guilds` |
 | 156 | SETACTIVELEVEL | level name | `active_level` |
 | 168 | UNKNOWN168 | empty | none (accepted, no effect) |
-| 171, 172 | BIGMAP, MINIMAP | `txt,png,x,y` | `bigmap`, `minimap` |
-| 174 | GHOSTICON | GCHAR, 1 = show (servers sent 0, once as a raw `0x00`) | `ghost_icon` |
+| 171, 172 | BIGMAP, MINIMAP | `txt,png,x,y` (at least 4 comma fields, x and y floats) | `bigmap`, `minimap` |
+| 174 | GHOSTICON | GCHAR, above 0 = show (servers sent 0, once as a raw `0x00`) | `ghost_icon` |
 | 179 | RPGWINDOW | quoted comma list (welcome line, credits line) | `rpg_window` |
 | 180 | STATUSLIST | comma list of status names | `status_list` |
 | 182 | LISTPROCESSES | empty | `process_list_requests` |
@@ -85,12 +85,82 @@ Seen on the wire but not in the 2.22 client's server set, so they stay
 ignored: 82 SERVERTEXT (empty), 190 SERVERLISTCONNECTED (empty), 194
 CLEARWEAPONS (empty).
 
+## Layouts read from the 2.17.1, 2.22 and 2.31 decompiles
+
+`client/src/protocol/layouts.rs` decodes the ids the 2.22 dispatcher handles
+that the capture-backed set above did not cover. Source: Graal_analysis
+`client-internals/decomp-findings-2026-10-24-b/` (`plo_layouts.tsv`). Which
+versions handle an id is the profile's `plo` set; the tests compare every
+2.00 to 2.31 row with the per-build tables read from the binaries
+(`decomp_plo_handled.tsv`, `decomp_pli_sent.tsv`).
+
+| id | name | payload | gate | `SessionState` field |
+|---|---|---|---|---|
+| 49 | PLAYERWARP2 | GCHAR x*2, y*2, z (unused), gmapX, gmapY, name; a `.gmap` name is kept in `gmap_name` instead of becoming the level | 2.1 test builds, 2.17+ | `player_warp2`, `gmap_name`, position |
+| 75 | PROFILE | repeated GCHAR n + n chars; first = account | 1.39+ | `profile` |
+| 150 | NPCDEL2 | GCHAR n, level name, GINT3 id | 1.42+ | `last_npc_del`, `npc_dels` |
+| 151 | HIDENPCS | none; removes ids 1 to 999 of the active level | 1.42+ | `hide_npcs` |
+| 153 / 154 / 155 | SAY2, FREEZEPLAYER2, UNFREEZEPLAYER | text / none / none | 1.42+, 2.00+ | `say2`, `frozen` |
+| 165, 166, 189 | MOVE, SHOWIMGNPC, MOVE2 | GINT3 npc id + rest (id above 0 for 165 and 189) | 2.03+, 2.04+, 2.31 | `npc_moves`, `npc_showimgs` |
+| 169, 173 | UPGRADEURL, GHOSTTEXT | text | 2.1 test builds+, 2.17+ | `upgrade_url`, `ghost_text` |
+| 170 | GHOSTMODE | GCHAR, above 0 = on | 2.17+ | `ghost_mode` |
+| 175 | SHOOT | GSHORT player id + rest | 2.17+ | `shoots` |
+| 176, 177 | KINGDOMSMODE, NEWWORLDMODE | none | 2.17+ | `server_mode` |
+| 178 | SERVERWARP | comma text, at least 4 fields; fields 1 to 3 used | 2.17+ | `server_warp` (meanings unresolved; not followed) |
+| 181 | (unnamed) | GSHORT player id, GCHAR toggle | 2.17+ | `player_toggle` |
+| 183 | HASPROCESSRUNNING | names; the client answers PLI 45 | 2.17+ | `process_running_requests` (never answered) |
+| 184 | TAKESCREENSHOT | file name, `.png` only | 2.17+ | `screenshot_requests` (no screenshot taken) |
+| 185 | BOARDHEIGHTS | GCHAR mapX, mapY, blockX, blockY, w-1, h-1, then w*h cells of 2 bytes: `(b0-0x20-50) + (b1-0x20)/128` | 2.17+ | `board_heights` |
+| 186 | BOARDMODIFY2 | GCHAR mapX, mapY, x, y, w, h, then w*h GSHORT tiles, then an unread trailer | 2.22+ | `board_modify2` |
+
+Ids Seihai answers or sends only on request: none of the above. Seihai still
+does not answer 182 or 183 (process list and "is X running"), and takes no
+screenshot on 184.
+
+## Tamper check (client to server id 39)
+
+`client/src/protocol/tampercheck.rs`. Off by default; `--send-tampercheck`
+turns it on for 2.17, 2.22 and 2.31 (GServer-v2 ignores the packet, and four
+public 2.22 servers did not kick a client that never sent it for 20 s).
+
+- Payload: 10 raw bytes, word A then word B, each 5 bytes:
+  `((v>>28)&0x0F)+0x20`, then `((v>>21)+0x20)&0xFF`, `((v>>14)+0x20)&0xFF`,
+  `((v>>7)+0x20)&0xFF`, `(v&0x7F)+0x20`. Not GINT5 and not masked, so middle
+  bytes can fall below 0x20. A payload with a `0x0a` is not sent (it would
+  split the line; the real send helper drops it too).
+- The words are reflected CRC-32 values over ranges of the client's own
+  memory image (`crc_chain`). Seihai has no such image, so the source is a
+  `TamperImage`; the default is the build's constant in its profile row:
+  2.17 `ab637cbe`/`3e48dc0c`, 2.22 `5dcb77f6`/`bc736311`, 2.31
+  `9ecd4bc0`/`ecea65e2`. The tests reproduce the six lab byte strings from
+  them (2.17 `2a7bad195e231243d82c`, 2.22 `250e4d0f962b03ede631`, 2.31
+  `291655b7602e87c9eb82`).
+- Position: the second message of the first frame after login, behind
+  `PLI_LANGUAGE`.
+- Re-sends, as the real builds do: 2.17 never; 2.22 on every level change
+  (the real client's level-change routine; the lab saw it on each gmap edge
+  crossing). Seihai re-sends on a level change after the first level, and has
+  no gmap edge crossing yet. 2.31 every 3.2 s: a 50 ms timer counts modulo
+  64 and sends at count 31 (`TamperSender::advance`, driven from the game loop).
+- 2.3 has no binary and no captured value, so nothing is sent for it.
+- Not known: whether any server enforces the value.
+
+## 2.00 login
+
+Type 0, the key byte `(key & 0x7F) + 0x20`, the token `GNW24011`, then the
+account and password as length-biased strings, in one plain zlib frame, then
+gen 3. Account and password are not hidden. No PLI 37 (the row has no
+language), and the send set stops at 34 (no 35 to 39). The row and a wire test
+(`v200_login_line`) cover this. The lab gserver only needs `GNW24011` in its
+allowed versions. Not exercised: 2.00's listserver frames (its host is hidden
+in the exe), so the 2.00 listserver flow here is the 2.05 one, unverified.
+
 Still unknown or not implemented, for lack of a capture or a decompile: what
-`x` and `y` in 171/172 position (always 0 in the captures); what SIGNATURE's
-value is for; the 49 PLAYERWARP2, 169, 170, 173, 175-178, 181, 183-189 payloads
-(documented in gs2lib but never seen on the wire, so left alone); the
-`PLI_TAMPERCHECK` (39) payload (see the PR for why the recorded 10-byte lab
-value cannot be two GINT5 words).
+`x` and `y` in 171/172 position (always 0 in the captures); the SERVERWARP
+field meanings; the trailer of 186; what 2.31's PLI 24 (value 9) and PLI 46
+(value 1) are for (Seihai does not send them); the 2.31 extra step in 156;
+whether a server checks the tamper value; gmap support (49, 185 and 186 are
+decoded but not applied).
 
 ## Implementation Notes
 
@@ -108,7 +178,7 @@ value cannot be two GINT5 words).
 
 Real clients (2.17, 2.22, 2.31) against a local lab. No public server.
 
-- **Tampercheck (PLI 39):** 10 raw bytes, per-build constant. 2.17 `2a7bad195e231243d82c`, 2.22 `250e4d0f962b03ede631`, 2.31 `291655b7602e87c9eb82`. Sent after language. 2.22 re-sends on every gmap-edge cross; 2.31 re-sends about every 3.2 s.
+- **Tampercheck (PLI 39):** 10 raw bytes, per-build constant. 2.17 `2a7bad195e231243d82c`, 2.22 `250e4d0f962b03ede631`, 2.31 `291655b7602e87c9eb82`. Sent after language. 2.22 re-sends on every gmap-edge cross; 2.31 re-sends about every 3.2 s. Seihai sends them with `--send-tampercheck` (see above).
 - **2.17 listserver:** one plain zlib frame with two messages (`id 0` + `newmain`, then `id 1` + account/password). Server answers with list, then status/site/donation. Gen-3 after that. Seihai 2.17 matched this flow.
 - **2.22 gmap crossing:** no level-warp packet. Client sets `gr.x`/`gr.y` to the global position (local + 64 × cell). When it wraps, the same props message carries local X/Y = 0 and GMAPLEVELX/Y (props 43/44). Server answers with the new level name, then the gmap name. Seihai currently treats the gmap name in `PLO_PLAYERWARP2` as a level and asks for `name.gmap.nw`.
 - **Buddy / ignore:** local files (`buddyaccounts.txt`, `ignoredaccounts.txt`). No listserver traffic in this lab. Mute is `PLI 43` with player id + 1/0.

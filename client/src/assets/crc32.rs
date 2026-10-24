@@ -24,15 +24,22 @@ static CRC_TABLE: [u32; 256] = {
     table
 };
 
+/// The raw CRC-32 update: run `data` through the register `reg` with no
+/// initial value and no final inversion. `crc32(d)` is
+/// `!crc32_update(0xFFFFFFFF, d)`; chaining calls (as the tamper check
+/// does) feeds one call's register into the next.
+pub fn crc32_update(mut reg: u32, data: &[u8]) -> u32 {
+    for &b in data {
+        let idx = ((reg ^ b as u32) & 0xFF) as usize;
+        reg = CRC_TABLE[idx] ^ (reg >> 8);
+    }
+    reg
+}
+
 /// Compute CRC-32 over `data`.
 /// Matches the client’s update function (initial 0xFFFFFFFF, final XOR 0xFFFFFFFF).
 pub fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xFFFFFFFFu32;
-    for &b in data {
-        let idx = ((crc ^ b as u32) & 0xFF) as usize;
-        crc = CRC_TABLE[idx] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFFFFFF
+    crc32_update(0xFFFFFFFF, data) ^ 0xFFFFFFFF
 }
 
 #[cfg(test)]
@@ -42,6 +49,14 @@ mod tests {
     #[test]
     fn empty() {
         assert_eq!(crc32(b""), 0);
+    }
+
+    #[test]
+    fn update_is_the_raw_register_step() {
+        assert_eq!(crc32_update(0xFFFFFFFF, b"123456789") ^ 0xFFFFFFFF, 0xCBF43926);
+        // Splitting the input and feeding the register on gives the same result.
+        let r = crc32_update(crc32_update(0xFFFFFFFF, b"1234"), b"56789");
+        assert_eq!(r ^ 0xFFFFFFFF, 0xCBF43926);
     }
 
     #[test]
