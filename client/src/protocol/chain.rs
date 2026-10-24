@@ -719,6 +719,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
             Unknown { area: "login", what: "id 0 then id 1 listserver flow is untested against a server" },
+            Unknown { area: "showimg", what: "the binary has the id 24 sender with 2.22's send test, and the solo 90 s capture saw none, as that test predicts; the period and a two-player run are not observed, so none is sent" },
         ],
     },
     Step {

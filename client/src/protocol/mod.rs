@@ -38,7 +38,10 @@ pub use profile::{
     by_label, profile, Basis, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, PROFILES,
 };
-pub use showimg::{showimg_message, ShowImgInfo, ShowImgSender};
+pub use showimg::{
+    apply_showimg_update, describe_showimg_update, parse_showimg_update, showimg_message, ImgField, ImgPart, ImgRecord,
+    PlayerImage, PlayerImages, ShowImgInfo, ShowImgSender, ShowImgUpdate,
+};
 pub use tampercheck::{TamperImage, TamperSender, TamperWords};
 pub use version::{ClientVersion, EncryptionGen};
 

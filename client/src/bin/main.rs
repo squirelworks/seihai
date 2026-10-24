@@ -1438,7 +1438,7 @@ fn main() {
         // the real client.
         if let Some(w) = net_state.server_warp.take() {
             if !follow_serverwarp {
-                eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.name);
+                eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.display_name());
             } else if let Some(old) = conn.as_ref() {
                 let _ = old.shutdown();
                 conn = None;
@@ -1447,7 +1447,7 @@ fn main() {
                 warp_since = None;
                 cached_arrival = None;
                 let target = w.address();
-                eprintln!("server warp to {:?}: {}", w.name, target.as_deref().unwrap_or("no usable host and port"));
+                eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {
                     Some(a) => seihai::net::login_gserver(
                         &a,
@@ -1464,6 +1464,9 @@ fn main() {
                 match result {
                     Ok((a, mut sess)) => {
                         eprintln!("logged in to {a} as {account} ({})", version.profile().summary());
+                        // The clients keep field 1 as the server's name (without
+                        // the type prefix) and show it in the window title.
+                        window.set_title(&profile.window_title(Some(&w.display_name())));
                         for m in &sess.warnings {
                             eprintln!("{m}");
                         }

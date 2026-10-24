@@ -106,8 +106,8 @@ versions handle an id is the profile's `plo` set; the tests compare every
 | 170 | GHOSTMODE | GCHAR, above 0 = on | 2.17+ | `ghost_mode` |
 | 175 | SHOOT | GSHORT player id + rest | 2.17+ | `shoots` |
 | 176, 177 | KINGDOMSMODE, NEWWORLDMODE | none | 2.17+ | `server_mode` |
-| 178 | SERVERWARP | comma text, at least 4 fields: 0 unused, 1 name, 2 host, 3 port | 2.17+ | `server_warp` (followed: see "Server warp" below) |
-| 32 | SHOWIMG | GSHORT sender id + the sender's PLI 24 payload, opaque (a real client's is the one byte 9) | 2.05+ | `showimg_relays`, `last_showimg` (nothing drawn) |
+| 178 | SERVERWARP | comma text read like the clients' list reader (quotes; white space splits unquoted items), at least 4 fields: 0 unused, 1 name, 2 host, 3 port | 2.17+ | `server_warp` (followed: see "Server warp" below) |
+| 32 | SHOWIMG | GSHORT sender id + the sender's PLI 24 payload: an image-record text from 2.17 on (a real client's one byte 9 is its full-list marker); see `remaining-fields.md` | 2.05+ | `showimg_relays`, `last_showimg`, `player_images` (2.17+; nothing drawn) |
 | 181 | (unnamed) | GSHORT player id, GCHAR toggle | 2.17+ | `player_toggle` |
 | 183 | HASPROCESSRUNNING | names; the client answers PLI 45 | 2.17+ | `process_running_requests` (never answered) |
 | 184 | TAKESCREENSHOT | file name, `.png` only | 2.17+ | `screenshot_requests` (no screenshot taken) |

@@ -12,7 +12,7 @@
 //! panics. Where the client's own reading is only partly known, the field
 //! says so.
 
-use super::dispatch::{latin1, read_gint3, read_gshort, split_quoted};
+use super::dispatch::{delphi_comma_text, latin1, read_gint3, read_gshort};
 
 /// A GCHAR: the byte minus 0x20 (wrapping, as the client's subtraction).
 fn gchar(b: u8) -> u8 {
@@ -126,14 +126,21 @@ pub enum ServerMode {
 
 /// `PLO_SERVERWARP` (178): comma text with at least 4 fields, e.g.
 /// `labtwo,labtwo,127.0.0.2,14803`. Field 0 is unused, field 1 is the
-/// server's name (not needed to connect), field 2 is the host and field 3
-/// the port. A real 2.31 client closed its connection and logged in again
-/// to field 2 and 3 with a new key and the same credentials, with no
-/// listserver step. Reordered host and port made it fail to connect, a
-/// wrong field 0 did nothing, and a 3-field payload was ignored entirely
-/// (lab, 2026-10-24). Whether field 1 is used for anything else (a title,
-/// say) is unresolved. The sample text came from the open-source listserver
-/// reimplementation, so a real service's text is still unobserved.
+/// server's name, field 2 is the host and field 3 the port. A real 2.31
+/// client closed its connection and logged in again to field 2 and 3 with a
+/// new key and the same credentials, with no listserver step. Reordered
+/// host and port made it fail to connect, a wrong field 0 did nothing, and
+/// a 3-field payload was ignored entirely (lab, 2026-10-24).
+///
+/// The text is split by the clients' own comma-text reader (2.17.1, 2.22
+/// and 2.31 share it; see [`delphi_comma_text`]): quotes, doubled quotes,
+/// and white space that ends an unquoted field. A name with a space in it
+/// must therefore be quoted, or it shifts the later fields. The three
+/// clients read the fields the same way; field 1 is kept as the server's
+/// name (2.31 puts it in the window caption; see
+/// [`ServerWarp::display_name`]), not used for connecting. The wire text of
+/// a real service is still unobserved: the open-source listserver
+/// reimplementation sends `name,name,ip,port`, each quoted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerWarp {
     /// Field 1.
@@ -162,13 +169,24 @@ impl ServerWarp {
             Some(format!("{host}:{n}"))
         }
     }
+
+    /// The name as the client keeps it: the listserver's two-character type
+    /// prefix is dropped when the second character is a space (`P Name`
+    /// becomes `Name`). The three clients do this to field 1 before they
+    /// store it.
+    pub fn display_name(&self) -> String {
+        let mut it = self.name.chars();
+        match (it.next(), it.next()) {
+            (Some(_), Some(' ')) => it.collect(),
+            _ => self.name.clone(),
+        }
+    }
 }
 
 pub fn parse_server_warp(payload: &[u8]) -> Option<ServerWarp> {
-    let f = split_quoted(&latin1(payload));
+    let f = delphi_comma_text(payload);
     let [_, name, host, port, ..] = &f[..] else { return None };
-    let port = port.trim_end_matches(['\r', '\n']).to_string();
-    Some(ServerWarp { name: name.clone(), host: host.clone(), port })
+    Some(ServerWarp { name: latin1(name), host: latin1(host), port: latin1(port) })
 }
 
 /// `PLO_SHOWIMG` (32): `GSHORT` sender id, then the sender's `PLI_SHOWIMGPLAYER`
@@ -414,10 +432,49 @@ mod tests {
 
     #[test]
     fn server_warp_uses_fields_1_to_3() {
-        let w = parse_server_warp(b"x,Main Server,127.0.0.1,14900").unwrap();
+        let w = parse_server_warp(b"x,\"Main Server\",127.0.0.1,14900").unwrap();
         assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("Main Server", "127.0.0.1", "14900"));
         assert_eq!(parse_server_warp(b"a,b,c"), None);
-        assert!(parse_server_warp(b"\"a,b\",\"c, d\",e,f,g").is_some());
+        // Quoted fields may hold commas; a quote is doubled.
+        let w = parse_server_warp(b"\"a,b\",\"c, \"\"d\"\"\",e,f,g").unwrap();
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("c, \"d\"", "e", "f"));
+    }
+
+    /// The clients read the text with their own comma-text reader: white
+    /// space ends an unquoted field, so an unquoted name with a space in it
+    /// shifts the later fields (checked in the 2.17.1, 2.22 and 2.31
+    /// binaries). Seihai reads it the same way.
+    #[test]
+    fn server_warp_splits_like_the_clients_list_reader() {
+        // Unquoted "Main Server" becomes two fields: host is "Server".
+        let w = parse_server_warp(b"x,Main Server,127.0.0.1,14900").unwrap();
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("Main", "Server", "127.0.0.1"));
+        assert_eq!(w.address(), None);
+        // White space around items and commas is dropped.
+        let w = parse_server_warp(b"  x ,  n  ,  h.example , 14900  \n").unwrap();
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("n", "h.example", "14900"));
+        // An empty item in the middle is kept; a comma at the end adds none.
+        let w = parse_server_warp(b"x,,h,1,").unwrap();
+        assert_eq!((w.name.as_str(), w.host.as_str(), w.port.as_str()), ("", "h", "1"));
+        assert_eq!(parse_server_warp(b"x,n,h,"), None);
+        // A NUL ends the text.
+        assert_eq!(parse_server_warp(b"x,n,h\x00,1"), None);
+        // An unclosed quote runs to the end.
+        let w = parse_server_warp(b"x,n,h,\"14900").unwrap();
+        assert_eq!(w.port, "14900");
+    }
+
+    /// The two-character type prefix (`P Name`) is dropped from the name.
+    #[test]
+    fn server_warp_display_name_drops_the_type_prefix() {
+        let n = |s: &str| ServerWarp { name: s.into(), host: "h".into(), port: "1".into() }.display_name();
+        assert_eq!(n("P Graal Era"), "Graal Era");
+        assert_eq!(n("H x"), "x");
+        assert_eq!(n("Plain"), "Plain");
+        assert_eq!(n("a"), "a");
+        assert_eq!(n("a "), "");
+        assert_eq!(n(""), "");
+        assert_eq!(n("ab c"), "ab c");
     }
 
     #[test]
