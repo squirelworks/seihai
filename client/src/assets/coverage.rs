@@ -166,7 +166,7 @@ pub struct Report {
 /// Resolve and load every expected file of `profile` in `root`.
 pub fn check_folder(root: &AssetRoot, profile: &'static VersionProfile) -> Report {
     let r = AssetResolver::new(root.clone(), profile);
-    let findings = expected_files(profile).into_iter().map(|n| check_one(&r, n)).collect();
+    let findings: Vec<Finding> = expected_files(profile).into_iter().map(|n| check_one(&r, n)).collect();
     let mut notes = Vec::new();
     if profile.levels.graal {
         let n = count_ext(&root.root, "graal", 3);
@@ -177,6 +177,10 @@ pub fn check_folder(root: &AssetRoot, profile: &'static VersionProfile) -> Repor
             );
         }
     }
+    let mut findings = findings;
+    if profile.levels.zelda || profile.levels.graal {
+        scan_binary_levels(root, profile, &mut findings, &mut notes);
+    }
     if !profile.levels.nw {
         notes.push(".nw levels are not opened by this build (profile levels.nw = false)".to_string());
     }
@@ -184,6 +188,89 @@ pub fn check_folder(root: &AssetRoot, profile: &'static VersionProfile) -> Repor
         notes.push("this build has no GANIs (profile ui.ganis = false); none are looked up".to_string());
     }
     Report { findings, notes }
+}
+
+/// Every `.zelda` and `.graal` file under the folder (six levels deep) is
+/// read with the loader its magic selects, whatever its extension says. A
+/// Z3-V1 file must reach the end of the file with nothing odd on the way;
+/// one that does not is a finding. A `GR-V1` file only has to load. A note
+/// gives the counts. Only the first 20 failures are listed.
+fn scan_binary_levels(root: &AssetRoot, profile: &VersionProfile, findings: &mut Vec<Finding>, notes: &mut Vec<String>) {
+    use super::zelda::{is_zelda, ZeldaLevel, ZeldaMagic};
+    let mut files = Vec::new();
+    let mut stack = vec![(root.root.clone(), 6u32)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if depth > 0 {
+                    stack.push((p, depth - 1));
+                }
+            } else if p
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| x.eq_ignore_ascii_case("zelda") || x.eq_ignore_ascii_case("graal"))
+            {
+                files.push(p);
+            }
+        }
+    }
+    files.sort();
+    let (mut z103, mut z104, mut zother, mut gr, mut clean, mut other) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+    let mut failed = 0usize;
+    for p in &files {
+        let Ok(data) = fs::read(p) else { continue };
+        let verdict: Result<(), String> = if is_zelda(&data) {
+            match ZeldaMagic::from_bytes(&data) {
+                Some(ZeldaMagic::V103) => z103 += 1,
+                Some(ZeldaMagic::V104) => z104 += 1,
+                _ => zother += 1,
+            }
+            ZeldaLevel::parse(&data).and_then(|z| match z.layout.anomalies.first() {
+                Some(a) => Err(a.clone()),
+                None if z.layout.unread_tail > 0 => Err(format!("{} bytes follow the signs", z.layout.unread_tail)),
+                None => {
+                    clean += 1;
+                    Ok(())
+                }
+            })
+        } else if data.starts_with(b"GR-V1") {
+            gr += 1;
+            Level::parse_binary_with_layout(&data).map(|_| ())
+        } else {
+            other += 1;
+            Err("not a Z3-V1 or GR-V1 level".to_string())
+        };
+        if let Err(e) = verdict {
+            failed += 1;
+            if failed <= 20 {
+                let name = p.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                findings.push(Finding {
+                    need: Need { group: "level scan", name, kind: NeedKind::Level, required: true, why: "binary level read to its end" },
+                    path: Some(p.clone()),
+                    status: Status::BadFile(e),
+                });
+            }
+        }
+    }
+    let zelda_files = z103 + z104 + zother;
+    notes.push(format!(
+        "level scan ({}): {} .zelda/.graal files read by magic: {} Z3-V1.03, {} Z3-V1.04, {} other Z3-V1, {} GR-V1, {} unrecognised; {} Z3-V1 files parse to the end with no anomaly, {} files failed{}",
+        profile.label,
+        files.len(),
+        z103,
+        z104,
+        zother,
+        gr,
+        other,
+        clean,
+        failed,
+        if failed > 20 { " (first 20 listed)" } else { "" }
+    ));
+    if zelda_files == 0 && profile.levels.zelda {
+        notes.push("the folder holds no Z3-V1 (.zelda) level, so that loader is covered by synthetic tests only".to_string());
+    }
 }
 
 fn check_one(r: &AssetResolver, need: Need) -> Finding {
@@ -523,4 +610,74 @@ mod tests {
         assert_eq!(lost, 0, "files the resolver cannot find by name");
     }
 
+
+    fn z3_bytes(computers: usize) -> Vec<u8> {
+        use super::super::zelda::{Computer, ZeldaLevel, ZeldaMagic};
+        ZeldaLevel {
+            magic: ZeldaMagic::V104,
+            board: vec![3; 4096],
+            links: vec![],
+            computers: (0..computers).map(|i| Computer { x: i as u8, y: 2, kind: 1, extra: b"\\\\".to_vec() }).collect(),
+            signs: vec![],
+            layout: Default::default(),
+        }
+        .to_bytes()
+        .unwrap()
+    }
+
+    /// Z3-V1 files are found by magic whatever their extension, a clean one
+    /// is counted, a damaged one is a finding, and the note gives the counts.
+    #[test]
+    fn level_scan_reads_zelda_levels_by_magic() {
+        let d = std::env::temp_dir().join(format!("seihai-scan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(d.join("levels/sub")).unwrap();
+        fs::write(d.join("levels/a.zelda"), z3_bytes(2)).unwrap();
+        fs::write(d.join("levels/sub/b.graal"), z3_bytes(0)).unwrap(); // Z3-V1 in a .graal name
+        let mut cut = z3_bytes(1);
+        cut.truncate(cut.len() - 3); // the terminator is cut
+        fs::write(d.join("levels/bad.zelda"), cut).unwrap();
+        fs::write(d.join("levels/junk.graal"), b"not a level at all").unwrap();
+        let rep = check_folder(&AssetRoot::new(&d), ClientVersion::V139.profile());
+        let bad: Vec<_> = rep.findings.iter().filter(|f| f.need.group == "level scan").collect();
+        assert_eq!(bad.len(), 2, "{bad:?}");
+        assert!(bad.iter().all(|f| matches!(f.status, Status::BadFile(_)) && f.need.required));
+        let note = rep.notes.iter().find(|n| n.starts_with("level scan")).expect("a scan note");
+        assert!(note.contains("4 .zelda/.graal files") && note.contains("0 Z3-V1.03, 3 Z3-V1.04"), "{note}");
+        assert!(note.contains("2 Z3-V1 files parse to the end with no anomaly, 2 files failed"), "{note}");
+        let _ = fs::remove_dir_all(&d);
+        // A folder with none says so.
+        let e = std::env::temp_dir().join(format!("seihai-scan-empty-{}", std::process::id()));
+        fs::create_dir_all(&e).unwrap();
+        let rep = check_folder(&AssetRoot::new(&e), ClientVersion::V139.profile());
+        assert!(rep.notes.iter().any(|n| n.contains("no Z3-V1 (.zelda) level")), "{:?}", rep.notes);
+        let _ = fs::remove_dir_all(&e);
+    }
+
+    /// The old client folders: `SEIHAI_DRIVE_CLIENTS` is the folder holding
+    /// the build folders. Every Z3-V1 file in each build that ships levels
+    /// must read to its end. Prints the scan note per build.
+    #[test]
+    #[ignore = "needs SEIHAI_DRIVE_CLIENTS=<folder with the old client builds>"]
+    fn real_drive_builds_level_scan_is_clean() {
+        let Some(dir) = std::env::var_os("SEIHAI_DRIVE_CLIENTS") else {
+            panic!("set SEIHAI_DRIVE_CLIENTS to the folder that holds the client builds");
+        };
+        let mut seen = 0;
+        for e in fs::read_dir(&dir).unwrap().flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            let rep = check_folder(&AssetRoot::new(e.path()), ClientVersion::V139.profile());
+            let bad: Vec<_> = rep.findings.iter().filter(|f| f.need.group == "level scan").collect();
+            let note = rep.notes.iter().find(|n| n.starts_with("level scan")).cloned().unwrap_or_default();
+            if note.contains(" 0 .zelda/.graal files") {
+                continue;
+            }
+            seen += 1;
+            eprintln!("{}: {note}", e.file_name().to_string_lossy());
+            assert!(bad.is_empty(), "{}: {} files do not read clean", e.file_name().to_string_lossy(), bad.len());
+        }
+        assert!(seen >= 10, "builds with levels: {seen}");
+    }
 }

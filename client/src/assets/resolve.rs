@@ -17,7 +17,7 @@
 //! * **Extension rules from the profile.** `files.image_ext` is added to a
 //!   bare image name (GServer adds `.gif` for clients below 2.1); level
 //!   extensions are limited to what the build opens (`levels.nw`,
-//!   `levels.graal`, `levels.gmap`); GANIs only where `ui.ganis` is set.
+//!   `levels.graal`, `levels.zelda`, `levels.gmap`); GANIs only where `ui.ganis` is set.
 //! * **Safe names.** Names come from the server. `..`, absolute paths and
 //!   drive letters never leave the folder.
 //!
@@ -67,7 +67,7 @@ impl AssetResolver {
 
     // ---- levels ----------------------------------------------------------
 
-    /// Find a level, gmap or `.graal` file. A name with an extension must be
+    /// Find a level, gmap, `.graal` or `.zelda` file. A name with an extension must be
     /// a format this version opens; a bare name gets the version's level
     /// extensions in turn.
     pub fn level(&self, name: &str) -> Option<PathBuf> {
@@ -95,6 +95,7 @@ impl AssetResolver {
         match ext.to_ascii_lowercase().as_str() {
             ".nw" => l.nw,
             ".graal" => l.graal,
+            ".zelda" => l.zelda,
             ".gmap" => l.gmap,
             _ => false,
         }
@@ -308,9 +309,9 @@ fn has_ext(rel: &str) -> bool {
     ext_of(rel).is_some()
 }
 
-/// A level extension if the name has one of the three Seihai knows.
+/// A level extension if the name has one of the four Seihai knows.
 fn level_ext(rel: &str) -> Option<&str> {
-    ext_of(rel).filter(|e| matches!(e.to_ascii_lowercase().as_str(), ".nw" | ".graal" | ".gmap"))
+    ext_of(rel).filter(|e| matches!(e.to_ascii_lowercase().as_str(), ".nw" | ".graal" | ".zelda" | ".gmap"))
 }
 
 /// The first existing file, trying each directory in order and, inside
@@ -416,6 +417,34 @@ mod tests {
             let r = resolver(&d, v);
             assert!(r.level("a.nw").is_some() && r.level("b.graal").is_some() && r.level("c.gmap").is_some(), "{v:?}");
         }
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn zelda_levels_open_in_every_build_and_bare_names_try_graal_first() {
+        let d = tmp("zelda");
+        touch(&d, "levels/Level11.Zelda");
+        touch(&d, "house1.graal");
+        touch(&d, "house1.zelda");
+        touch(&d, "only.zelda");
+        for p in crate::protocol::PROFILES.iter() {
+            let r = AssetResolver::new(AssetRoot::new(&d), p);
+            // An explicit name is found whatever case the disk has.
+            assert_eq!(r.level("level11.zelda"), Some(d.join("levels/Level11.Zelda")), "{}", p.label);
+            assert!(r.opens(".zelda") && r.opens(".ZELDA"), "{}", p.label);
+            // A bare name: the build's own order, `.zelda` after `.graal`.
+            assert_eq!(r.level("only"), Some(d.join("only.zelda")), "{}", p.label);
+            assert_eq!(r.level("house1"), Some(d.join("house1.graal")), "{}", p.label);
+            // No swap for a named extension that is missing.
+            assert_eq!(r.level("house2.zelda"), None);
+        }
+        // A build whose profile does not read Z3-V1 would not open it.
+        let mut p = ClientVersion::V139.profile().clone();
+        p.levels.zelda = false;
+        let p: &'static VersionProfile = Box::leak(Box::new(p));
+        let r = AssetResolver::new(AssetRoot::new(&d), p);
+        assert_eq!(r.level("only.zelda"), None);
+        assert_eq!(r.level("only"), None);
         let _ = fs::remove_dir_all(&d);
     }
 
