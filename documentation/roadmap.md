@@ -41,7 +41,7 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Version chain. Each profile plus a per-step handler-change table, so adding a version means adding a row and a small delta, not new logic.
 - [x] Differential testing. Tools, lab runner and first results are in: a capture-to-frame-sequence decoder (`difftest trace`), a differ with a ranked report (`difftest diff`), and a private-namespace scenario runner (`tools/difftest/lab.sh`). First run: 2.22 and 2.31, login, gmap crossing, chat and door/warp, real client against Seihai. Ranked divergences are in `documentation/difftest.md`. Not yet covered: the real 2.17 client (its launcher needs its own UI steps), the server-side warp scenario, and running it in CI.
 - [ ] Public-server checks. Read-only first, and only with approval each time.
-- [ ] Tooling. A capture viewer and a layout explorer fed by the .tsv tables.
+- [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
 ## Completed (prior phases)
 

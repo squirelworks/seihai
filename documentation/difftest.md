@@ -18,6 +18,8 @@ Branch note: the script engine (#23) is **not** merged, so this work is based on
 | differ | `seihai::difftest::diff`, `difftest diff` | Aligns the two traces per connection and direction (LCS over run-collapsed ids) and reports missing and extra ids, ordering, frame bundling, field mismatches, count and timing differences, with a severity. Writes `PREFIX.txt` (readable) and `PREFIX.tsv`. `--fail-on SEV` gives a non-zero exit for CI. |
 | runner | `tools/difftest/lab.sh`, `scenarios/*.steps` | Private namespace `graallabd`, its own Xvfb displays (`:31` real, `:32` Seihai; `:3` is refused), fresh copies of the server, listserver and client folder per run, the lab hosts file bind-mounted inside a private mount namespace (no `/etc/hosts` edit). Details and safety rules: `tools/difftest/README.md`. |
 
+To read a capture or a trace by eye (names, decoded fields, raw hex, filters, a packet's layout across versions) use `seihai capture`; see `capture-viewer.md`.
+
 Tolerances (all in `DiffOptions`, all overridable): walk updates (C>S 2) and the
 variable-count server messages (S>C 8, 9) are compared by first message and by
 cadence, not by count; positions within 0.6 tile; timer-like ids (C>S 24, 39)

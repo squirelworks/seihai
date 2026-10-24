@@ -142,6 +142,11 @@ fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files:
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    // `seihai capture ...`: the capture viewer and layout explorer. Reads
+    // files only; no window, no network.
+    if args.first().map(String::as_str) == Some("capture") {
+        std::process::exit(seihai::viewer::cli::run(&args[1..]));
+    }
     let mut assets: Option<PathBuf> = None;
     let mut level_name: Option<String> = None;
     let mut online: Option<String> = None;
@@ -257,6 +262,13 @@ fn main() {
                 println!("                             data folder and print what is found; without");
                 println!("                             --version, the five main versions. Exit 1 if a");
                 println!("                             required file is missing or unreadable");
+                println!("       seihai capture show FILE [--version V] [--dir c2s|s2c] [--id N,NAME] [--time A..B]");
+                println!("                               [--frame A..B] [--format text|tsv|json] [--raw] [--layouts]");
+                println!("       seihai capture layout ID|NAME [--dir c2s|s2c] [--version V]");
+                println!("       seihai capture tables [--tables DIR]");
+                println!("         capture             read a capture (pcap or difftest trace) and print the");
+                println!("                             decoded messages, or show a packet's field layout across");
+                println!("                             versions; login frames are redacted (seihai capture help)");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
