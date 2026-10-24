@@ -24,6 +24,7 @@
 //! values come from release notes and server source and should be checked
 //! when a build turns up.
 
+use super::grflags::GrFlagsMode;
 use super::login::LoginInfo;
 use super::showimg::ShowImgInfo;
 use std::time::Duration;
@@ -187,6 +188,9 @@ pub struct Protocol {
     /// checks, process list, login props); `Some` only for the builds
     /// observed doing it (2.17, 2.22 and 2.31). See [`super::login`].
     pub login: Option<LoginInfo>,
+    /// The `gr.x` and `gr.y` flags the build sets (2.17 at login, 2.22 on
+    /// every position change); `None` sets none. See [`super::grflags`].
+    pub gr_flags: Option<GrFlagsMode>,
     /// Peer-to-peer UDP channel present.
     pub udp: bool,
     /// UDP off by default (`noudp=true` in the shipped config).
