@@ -2219,4 +2219,162 @@ mod tests {
         assert_eq!(st.others[0].position_from(Some((1, 1))), (1.0, 10.0));
         assert_eq!(st.others[0].position_from(None), (1.0, 10.0));
     }
+
+    // --- Script-initiated warps: the online request (item 2) ---
+
+    mod script_warp {
+        use super::*;
+        use crate::net::{start_online_link, EnterLevelSender};
+        use crate::offline::OfflineSession;
+        use crate::protocol::TamperSender;
+        use std::cell::RefCell;
+
+        const T: u32 = 1_781_284_436;
+
+        /// What `send` was given, one entry per frame.
+        fn run(
+            v: ClientVersion,
+            sess: &mut OfflineSession,
+            st: &mut SessionState,
+            el: Option<&mut EnterLevelSender>,
+            tamper: Option<&mut TamperSender>,
+        ) -> (Option<crate::net::LinkStart>, Vec<Vec<Vec<u8>>>) {
+            let sent = RefCell::new(Vec::new());
+            let r = start_online_link(
+                |m| {
+                    sent.borrow_mut().push(m.to_vec());
+                    Ok(())
+                },
+                v,
+                sess,
+                st,
+                el,
+                tamper,
+                "c.nw",
+                12.0,
+                3.0,
+            )
+            .unwrap();
+            (r, sent.into_inner())
+        }
+
+        fn warp_to_c(code: u8) -> Vec<u8> {
+            // 12 tiles is 24 half-tiles, 3 is 6.
+            [&[code + 0x20, 24 + 0x20, 6 + 0x20][..], b"c.nw\n"].concat()
+        }
+
+        /// 2.31, level not held: PLI 0 alone, one frame; the warp is
+        /// pending (no walking, no further link); the server's answer names
+        /// the level and the 46 is owed after it.
+        #[test]
+        fn uncached_script_warp_sends_pli_0_then_loads_on_the_answer() {
+            let v = ClientVersion::V231;
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&full_answer("a.nw", 1_000, 0, "", ""));
+            let mut el = EnterLevelSender::for_version(v);
+            assert!(!el.note_level("a.nw"));
+            let mut sess = OfflineSession::new();
+            let (r, sent) = run(v, &mut sess, &mut st, Some(&mut el), None);
+            let r = r.expect("sent");
+            assert_eq!(sent, vec![vec![warp_to_c(0)]]);
+            assert_eq!(r.cached_arrival, None);
+            assert_eq!(sess.warp_pending.as_deref(), Some("c.nw"));
+            // The server's answer loads the new level; 46 is owed once.
+            st.apply_body(&full_answer("c.nw", 2_000, 5, "", ""));
+            assert_eq!(st.level_name.as_deref(), Some("c.nw"));
+            assert!(st.board.is_some());
+            assert!(el.note_level("c.nw") && el.is_pending());
+            sess.arrive(12.0, 3.0);
+            assert!(sess.warp_pending.is_none());
+        }
+
+        /// 2.31 with a copy of the level: 30, 46, props in one frame, in
+        /// that order, and the arrival position is the requested one.
+        #[test]
+        fn cached_script_warp_sends_30_46_props_in_one_frame() {
+            let v = ClientVersion::V231;
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&full_answer("c.nw", T, 0, "", ""));
+            st.apply_body(&full_answer("a.nw", 1_000, 1, "", ""));
+            assert_eq!(st.cached_mod_time("c.nw"), Some(T));
+            let mut el = EnterLevelSender::for_version(v);
+            assert!(!el.note_level("a.nw"));
+            let mut sess = OfflineSession::new();
+            sess.player_dir = 1;
+            let (r, sent) = run(v, &mut sess, &mut st, Some(&mut el), None);
+            let r = r.expect("sent");
+            assert_eq!(sent.len(), 1, "one frame");
+            let ids: Vec<u8> = sent[0].iter().map(|m| m[0] - 0x20).collect();
+            assert_eq!(ids, vec![30, 46, 2]);
+            assert_eq!(r.cached_arrival, Some((12.0, 3.0)));
+            assert_eq!(r.cached_mod_time, Some(T));
+            // The 46 went along: none owed after the answer.
+            st.expect_cached_level("c.nw");
+            st.apply_body(&cached_answer("c.nw"));
+            assert_eq!(st.level_name.as_deref(), Some("c.nw"));
+            assert!(!el.note_level("c.nw"));
+        }
+
+        /// 2.22 holds the tamper check in the same frame, after the request,
+        /// and never sends 46. A profile without cached links asks with 0.
+        #[test]
+        fn script_warp_follows_the_profile() {
+            let v = ClientVersion::V222;
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&full_answer("c.nw", T, 0, "", ""));
+            st.apply_body(&full_answer("a.nw", 1_000, 1, "", ""));
+            let mut tamper = TamperSender::for_version(v).unwrap();
+            let mut sess = OfflineSession::new();
+            let (_, sent) = run(v, &mut sess, &mut st, None, Some(&mut tamper));
+            let ids: Vec<u8> = sent[0].iter().map(|m| m[0] - 0x20).collect();
+            assert_eq!(ids, vec![30, 39]);
+
+            let v = ClientVersion::V204;
+            assert!(!v.sends_cached_links());
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&full_answer("c.nw", T, 0, "", ""));
+            st.apply_body(&full_answer("a.nw", 1_000, 1, "", ""));
+            let mut sess = OfflineSession::new();
+            let (r, sent) = run(v, &mut sess, &mut st, None, None);
+            assert_eq!(sent, vec![vec![warp_to_c(0)]]);
+            assert_eq!(r.unwrap().cached_arrival, None);
+        }
+
+        /// A warp already waiting for the server: a second script warp
+        /// sends nothing and changes nothing.
+        #[test]
+        fn a_second_script_warp_while_pending_sends_nothing() {
+            let v = ClientVersion::V231;
+            let mut st = SessionState::for_version(v);
+            let mut sess = OfflineSession::new();
+            sess.begin_warp("b.nw");
+            let (r, sent) = run(v, &mut sess, &mut st, None, None);
+            assert!(r.is_none() && sent.is_empty());
+            assert_eq!(sess.warp_pending.as_deref(), Some("b.nw"));
+        }
+
+        /// The send fails (a profile that cannot send the request, or a
+        /// dead socket): the warp is not left pending and the error
+        /// comes back to the caller.
+        #[test]
+        fn a_failed_send_cancels_the_warp() {
+            let v = ClientVersion::V231;
+            let mut st = SessionState::for_version(v);
+            let mut sess = OfflineSession::new();
+            let e = start_online_link(
+                |_| Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "no")),
+                v,
+                &mut sess,
+                &mut st,
+                None,
+                None,
+                "c.nw",
+                1.0,
+                1.0,
+            )
+            .unwrap_err();
+            assert_eq!(e.kind(), std::io::ErrorKind::Unsupported);
+            assert!(sess.warp_pending.is_none());
+        }
+    }
 }
