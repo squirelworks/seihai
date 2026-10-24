@@ -443,6 +443,13 @@ pub struct Connection {
     /// Client→server ids the logged-in version can send, set by
     /// [`Self::login_versioned`]. Others are refused.
     pli: Option<IdSet>,
+    /// The `gr.x`/`gr.y` flags the logged-in build keeps (its profile's
+    /// `gr_flags`), once the post-login frame has set them the first time.
+    gr_flags: Option<crate::protocol::grflags::GrFlags>,
+    gr_started: bool,
+    /// The top-left of the player's gmap cell in the whole map, in tiles
+    /// (`(0, 0)` off a gmap): the flags hold whole-map positions.
+    world_origin: (f32, f32),
 }
 
 impl Connection {
@@ -456,7 +463,7 @@ impl Connection {
         let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
         let stream = connect_any(&addrs, CONNECT_TIMEOUT)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, gr_flags: None, gr_started: false, world_origin: (0.0, 0.0) })
     }
 
     /// Close the connection in both directions. A reader thread from
@@ -490,6 +497,8 @@ impl Connection {
         line.push(b'\n');
         self.send_raw(&write_zlib_frame(&line)?)?;
         self.pli = Some(version.profile().protocol.pli);
+        self.gr_flags = version.profile().protocol.gr_flags.map(crate::protocol::grflags::GrFlags::new);
+        self.gr_started = false;
         match version.encryption() {
             EncryptionGen::Gen3 => self.gen3 = Some(Gen3::new(key)),
             EncryptionGen::Gen5 => {
@@ -702,10 +711,15 @@ impl Connection {
         c: &crate::gmap::Crossing,
         tamper: Option<&mut TamperSender>,
     ) -> io::Result<bool> {
-        let msgs = crate::gmap::crossing_frame(version, c, tamper);
+        let mut msgs = crate::gmap::crossing_frame(version, c, tamper);
         if msgs.is_empty() {
             return Ok(false);
         }
+        // The flags ride ahead of the props, which come last in the frame.
+        let props = msgs.pop();
+        let flags = self.changed_gr_flags(c.local_x, c.local_y);
+        msgs.extend(flags);
+        msgs.extend(props);
         let with_46 = msgs.iter().any(|m| m.first() == Some(&(PLI_ENTERLEVEL + 0x20)));
         self.send_messages(&msgs)?;
         Ok(with_46)
@@ -719,6 +733,43 @@ impl Connection {
             Some(m) => self.send_messages(&[m]),
             None => Ok(()),
         }
+    }
+
+    /// Say which gmap cell the player is in (`None` off a gmap), so the
+    /// `gr.x` and `gr.y` flags hold whole-map positions.
+    pub fn set_gmap_cell(&mut self, cell: Option<(i32, i32)>) {
+        self.world_origin = cell.map_or((0.0, 0.0), |(cx, cy)| (cx as f32 * 64.0, cy as f32 * 64.0));
+    }
+
+    /// The `gr.x`/`gr.y` flag messages for the player at `(x, y)` in the
+    /// current cell, the first time (the post-login frame): both flags.
+    /// Empty for a build that sets none.
+    pub fn first_gr_flags(&mut self, x: f32, y: f32) -> Vec<Vec<u8>> {
+        self.gr_started = true;
+        let (ox, oy) = self.world_origin;
+        self.gr_flags.as_mut().map(|g| g.sync(x + ox, y + oy)).unwrap_or_default()
+    }
+
+    /// The flags that changed since the last time, for the player at
+    /// `(x, y)` in the current cell: they go ahead of the walk props, in the
+    /// same frame. Empty before [`Self::first_gr_flags`], and for a build
+    /// that sets none or sets them only at login.
+    pub fn changed_gr_flags(&mut self, x: f32, y: f32) -> Vec<Vec<u8>> {
+        if !self.gr_started {
+            return Vec::new();
+        }
+        let (ox, oy) = self.world_origin;
+        self.gr_flags.as_mut().map(|g| g.sync(x + ox, y + oy)).unwrap_or_default()
+    }
+
+    /// Send the flags that changed without a walk update to carry them
+    /// (after a server warp or a level arrival). Nothing when none changed.
+    pub fn send_gr_flags(&mut self, x: f32, y: f32) -> io::Result<()> {
+        let msgs = self.changed_gr_flags(x, y);
+        if msgs.is_empty() {
+            return Ok(());
+        }
+        self.send_messages(&msgs)
     }
 
     /// Send `PLI_PLAYERPROPS` (2) with X (15), Y (16) and SPRITE (17).
@@ -839,7 +890,9 @@ impl Connection {
     /// A walk update with an explicit SPRITE value (`dir + 4 * S`): the
     /// sword swing and hurt mode ([`crate::combat::CombatState::sprite`]).
     pub fn send_walk_sprite(&mut self, upd: &PlayerUpdate, sprite: u8) -> io::Result<()> {
-        self.send_messages(&[position_message_sprite(upd.x, upd.y, sprite)])
+        let mut msgs = self.changed_gr_flags(upd.x, upd.y);
+        msgs.push(position_message_sprite(upd.x, upd.y, sprite));
+        self.send_messages(&msgs)
     }
 
     /// Say `text` in the level: `PLI_PLAYERPROPS` (2) with CURCHAT (12)
@@ -1017,6 +1070,39 @@ mod tests {
         let mut body = vec![0u8; u16::from_be_bytes(len) as usize];
         s.read_exact(&mut body).unwrap();
         zlib_decompress(&body).unwrap()
+    }
+
+    /// The gr flags ride ahead of the walk props in the same frame, only
+    /// for the axes that changed, and not before the post-login frame set them.
+    #[test]
+    fn gr_flags_go_ahead_of_the_walk_props() {
+        use crate::protocol::grflags::{GrFlags, GrFlagsMode};
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut conn = Connection::connect(&addr).unwrap();
+        let (mut srv, _) = listener.accept().unwrap();
+        conn.login_versioned(ClientVersion::V205, 0x42, "ab", "cd").unwrap();
+        conn.gr_flags = Some(GrFlags::new(GrFlagsMode::Tracking));
+        let _ = read_frame(&mut srv);
+
+        // Before the first sync nothing is added.
+        conn.send_walk_sprite(&PlayerUpdate { x: 30.0, y: 30.5, dir: 1 }, 1).unwrap();
+        // Login frame: both flags; then a step west: x only, ahead of the props.
+        assert_eq!(conn.first_gr_flags(30.0, 30.5).len(), 2);
+        conn.set_gmap_cell(Some((1, 0)));
+        conn.send_walk_sprite(&PlayerUpdate { x: 29.5, y: 30.5, dir: 1 }, 1).unwrap();
+        let mut g = Gen3::new(0x42);
+        let mut decode = |srv: &mut TcpStream| {
+            let body = read_frame(srv);
+            body.split_inclusive(|b| *b == b'\n').map(|l| g.decode(l).unwrap()).collect::<Vec<_>>()
+        };
+        let first = decode(&mut srv);
+        assert_eq!(first.len(), 1, "no flags before the first sync");
+        let second = decode(&mut srv);
+        assert_eq!(second.len(), 2);
+        // world position: cell 1 starts at 64
+        assert_eq!(second[0], b"\x32gr.x=93.5\n");
+        assert_eq!(second[1][0], 2 + 0x20);
     }
 
     #[test]

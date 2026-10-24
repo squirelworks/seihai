@@ -15,6 +15,7 @@ mod gen5;
 pub mod layouts;
 pub mod levelcache;
 mod list;
+pub mod grflags;
 pub mod login;
 mod profile;
 mod props;

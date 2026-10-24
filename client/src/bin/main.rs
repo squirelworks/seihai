@@ -945,7 +945,9 @@ fn main() {
             // a real client answers with.
             if changed {
                 if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
-                    let msgs = lb.take(&net_state, &account, |n| files.need(n));
+                    let (lx, ly) = (net_state.player_x.unwrap_or(session.player_x), net_state.player_y.unwrap_or(session.player_y));
+                    c.set_gmap_cell(net_state.gmap.as_ref().map(|g| g.cell));
+                    let msgs = lb.take(&net_state, &account, |n| files.need(n), || c.first_gr_flags(lx, ly));
                     if !msgs.is_empty() {
                         if let Err(e) = c.send_messages(&msgs) {
                             eprintln!("login frame send failed: {e}");
@@ -1358,6 +1360,7 @@ fn main() {
                 let now = net_state.current_level_name();
                 eprintln!("gmap crossing {:?} -> {:?} at {} {}", cx.from, cx.to, cx.local_x, cx.local_y);
                 if let Some(c) = conn.as_mut() {
+                    c.set_gmap_cell(Some(cx.to));
                     match c.send_gmap_crossing(version, &cx, tamper.as_mut()) {
                         Ok(sent46) => {
                             if let (Some(el), Some(n)) = (enter_level.as_mut(), now.as_deref()) {
@@ -1424,6 +1427,17 @@ fn main() {
                             eprintln!("no local {dest}");
                         }
                     }
+                }
+            }
+        }
+
+        // The gr.x/gr.y flags follow the player's position on every tick,
+        // also when the server moved the player (a warp or an arrival).
+        if session.warp_pending.is_none() {
+            if let Some(c) = conn.as_mut() {
+                c.set_gmap_cell(session.gmap.as_ref().map(|g| g.cell));
+                if let Err(e) = c.send_gr_flags(session.player_x, session.player_y) {
+                    eprintln!("send failed: {e}");
                 }
             }
         }

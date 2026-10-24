@@ -199,11 +199,15 @@ impl LoginBurst {
     /// Build the frame's messages (once). `check` turns an image name into
     /// the file messages the request rules give (`PLI_UPDATEFILE` or
     /// `PLI_WANTFILE`, or nothing when the name is queued or settled).
+    /// `flags` gives the `gr.x`/`gr.y` flag messages (see
+    /// [`super::grflags`]), which go between the file checks and the process
+    /// list; it runs only when the frame is built.
     pub fn take(
         &mut self,
         state: &SessionState,
         account: &str,
         mut check: impl FnMut(&str) -> Vec<Vec<u8>>,
+        flags: impl FnOnce() -> Vec<Vec<u8>>,
     ) -> Vec<Vec<u8>> {
         if !self.due(state) {
             return Vec::new();
@@ -218,6 +222,7 @@ impl LoginBurst {
         for n in &names {
             out.extend(check(n));
         }
+        out.extend(flags());
         out.push(process_list_message(&["seihai"]));
         out.push(login_props_message(&self.info, &state.player_props, account, state.own_prop_ids.as_ref()));
         out
@@ -323,24 +328,25 @@ mod tests {
         let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
         let mut st = burst_state();
         assert!(!b.due(&st));
-        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()]).is_empty());
+        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new).is_empty());
         st.process_list_requests = 1;
         assert!(b.due(&st));
         let mut asked = Vec::new();
         let out = b.take(&st, "acct", |n| {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
-        });
-        // images in order, then the icons, then the process list and the props
+        }, || vec![b"flag".to_vec()]);
+        // images in order, then the icons, the flags, the process list and the props
         assert_eq!(
             asked,
             ["sword1.png", "shield1.png", "head0.png", "body.png", "wbomb1.png", "wbowi1.png", "plisticononline.png", "plisticonno pms.png"]
         );
-        assert_eq!(out.len(), asked.len() + 2);
-        assert_eq!(out[asked.len()][0], PLI_PROCESSLIST + 0x20);
-        assert_eq!(out[asked.len() + 1][0], PLI_PLAYERPROPS + 0x20);
+        assert_eq!(out.len(), asked.len() + 3);
+        assert_eq!(out[asked.len()], b"flag");
+        assert_eq!(out[asked.len() + 1][0], PLI_PROCESSLIST + 0x20);
+        assert_eq!(out[asked.len() + 2][0], PLI_PLAYERPROPS + 0x20);
         assert!(!b.due(&st), "once");
-        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()]).is_empty());
+        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new).is_empty());
     }
 
     #[test]
