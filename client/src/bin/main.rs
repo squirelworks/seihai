@@ -1295,7 +1295,7 @@ fn main() {
             if dx != 0.0 || dy != 0.0 {
                 session.try_move(dx, dy);
                 moved = true;
-                last_step = Instant::now();
+                last_step = seihai::offline::next_step_clock(last_step, Instant::now(), session.step_interval());
             }
         }
         // Sound: GANI cues from the steps just taken. Leaving a level stops

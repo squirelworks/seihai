@@ -29,6 +29,21 @@ pub const FOOT_DY: f32 = 2.75;
 pub const WALK_STEP_MS: u64 = 50;
 pub const SWIM_STEP_MS: u64 = 100;
 
+/// When the step just taken counts from, so the pace holds on a loop that
+/// ticks every 16 ms or so. A step is due `interval` after the last one; if
+/// the loop only noticed it late (a 50 ms step seen after 64 ms), the next
+/// step still counts from the time it was due, not from when it was taken. That
+/// keeps the average at one step per `interval` (20 per second, 10 tiles a
+/// second, as the real clients walk). After a pause of two intervals or more
+/// there is nothing to catch up on, and the clock starts from `now`.
+pub fn next_step_clock(last: std::time::Instant, now: std::time::Instant, interval: std::time::Duration) -> std::time::Instant {
+    if now.saturating_duration_since(last) >= interval * 2 {
+        now
+    } else {
+        last + interval
+    }
+}
+
 /// The box, as offsets from the player's position in tiles, that the real
 /// 2.22 and 2.31 clients test against level links, by walking direction
 /// (`DIR_NORTH`, `DIR_WEST`, `DIR_SOUTH`, `DIR_EAST`): `(x0, y0, x1, y1)`.
@@ -977,6 +992,43 @@ impl Default for OfflineSession {
 
 #[cfg(test)]
 mod tests {
+    /// A 16 ms loop (the frame limit) and a 50 ms step: counting from the due time gives 20 steps
+    /// a second (the real clients' pace); counting from the moment of the step
+    /// gave a step every 64 ms (15.6 a second).
+    #[test]
+    fn step_clock_holds_the_pace_on_a_16_ms_loop() {
+        use std::time::{Duration, Instant};
+        let interval = Duration::from_millis(WALK_STEP_MS);
+        let t0 = Instant::now();
+        let simulate = |catch_up: bool| {
+            let mut last = t0;
+            let mut steps = 0;
+            // ticks of 16 ms for ten seconds
+            for k in 1..=625u64 {
+                let now = t0 + Duration::from_millis(k * 16);
+                if now - last >= interval {
+                    last = if catch_up { next_step_clock(last, now, interval) } else { now };
+                    steps += 1;
+                }
+            }
+            steps
+        };
+        let old = simulate(false);
+        let new = simulate(true);
+        assert_eq!(old, 156, "the old rule steps every fourth tick (64 ms)");
+        assert!((199..=201).contains(&new), "{new} steps in ten seconds");
+    }
+
+    #[test]
+    fn step_clock_restarts_after_a_pause() {
+        use std::time::{Duration, Instant};
+        let interval = Duration::from_millis(50);
+        let t0 = Instant::now();
+        assert_eq!(next_step_clock(t0, t0 + Duration::from_millis(60), interval), t0 + interval);
+        let late = t0 + Duration::from_millis(100);
+        assert_eq!(next_step_clock(t0, late, interval), late);
+    }
+
     use super::*;
 
     #[test]
