@@ -26,6 +26,7 @@ use super::profile::{
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
+use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
 use super::version::{ClientVersion, EncryptionGen};
@@ -108,6 +109,7 @@ pub struct Delta {
     pub tampercheck: Option<bool>,
     pub tamper: Option<Option<TamperInfo>>,
     pub showimg: Option<Option<ShowImgInfo>>,
+    pub login: Option<Option<LoginInfo>>,
     pub udp: Option<bool>,
     pub udp_off_by_default: Option<bool>,
     // Props.
@@ -158,6 +160,7 @@ impl Delta {
         tampercheck: None,
         tamper: None,
         showimg: None,
+        login: None,
         udp: None,
         udp_off_by_default: None,
         own_props: IdDelta::NONE,
@@ -247,6 +250,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.protocol.tampercheck = pick(p.protocol.tampercheck, d.tampercheck);
     p.protocol.tamper = pick(p.protocol.tamper, d.tamper);
     p.protocol.showimg = pick(p.protocol.showimg, d.showimg);
+    p.protocol.login = pick(p.protocol.login, d.login);
     p.protocol.udp = pick(p.protocol.udp, d.udp);
     p.protocol.udp_off_by_default = pick(p.protocol.udp_off_by_default, d.udp_off_by_default);
 
@@ -307,6 +311,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         tampercheck: false,
         tamper: None,
         showimg: None,
+        login: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -710,11 +715,12 @@ pub const CHAIN: &[Step] = &[
             pli: IdDelta::plus(&[39, 40, 43, 44, 45]),
             tampercheck: Some(true),
             tamper: Some(Some(TAMPER_217)),
+            login: Some(Some(LOGIN_217)),
             npc_max: Some(73),
             heights: Some(true),
             ..Delta::NONE
         },
-        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73",
+        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language)",
         unknown: &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
@@ -735,11 +741,12 @@ pub const CHAIN: &[Step] = &[
             pli: IdDelta::plus_minus(&[], &[36, 45, 81]),
             tamper: Some(Some(TAMPER_222)),
             showimg: Some(Some(SHOWIMG_222)),
+            login: Some(Some(LOGIN_222)),
             udp_off_by_default: Some(true),
             server_list: Some(ServerList::Tabs(3)),
             ..Delta::NONE
         },
-        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s",
+        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props",
         unknown: &[
             Unknown { area: "pli", what: "send sites of ids 36, 42 and 45 were not matched in the binary, so 36 and 45 are not sent" },
             Unknown { area: "framing", what: "a client-originated bz2 frame (0x1000 and over) was never seen" },
@@ -756,6 +763,7 @@ pub const CHAIN: &[Step] = &[
             pli: IdDelta::plus_minus(&[46], &[21]),
             tamper: Some(Some(TAMPER_230)),
             showimg: Some(None),
+            login: Some(None),
             own_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             npc_max: Some(77),
@@ -769,6 +777,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "binary", what: "no 2.3 binary; the whole step is the 2.31 values" },
             Unknown { area: "tampercheck", what: "constant of this build; the re-send rule is taken from 2.31" },
             Unknown { area: "showimg", what: "no id 24 observation, so none is sent" },
+            Unknown { area: "login", what: "no post-login frame observation, so none is sent" },
         ],
     },
     Step {
@@ -780,9 +789,10 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             tamper: Some(Some(TAMPER_231)),
             showimg: Some(Some(SHOWIMG_231)),
+            login: Some(Some(LOGIN_231)),
             ..Delta::NONE
         },
-        source: "binary (same code as 2.22) and lab: its own tampercheck constant and timer re-send, id 24 every 5.13 s whether or not others are in the level",
+        source: "binary (same code as 2.22) and lab: its own tampercheck constant and timer re-send, id 24 every 5.13 s whether or not others are in the level, post-login frame without the idle.gani request",
         unknown: &[
             Unknown { area: "pli", what: "the TOML's pli_changes (21 out, 46 in) disagrees with its pli_sent list, which lacks 44; a real client sent 44, so the row keeps it" },
             Unknown { area: "live", what: "never run against a public server" },
@@ -927,6 +937,18 @@ fn showimg_text(s: &Option<ShowImgInfo>) -> String {
     }
 }
 
+fn login_text(l: &Option<LoginInfo>) -> String {
+    match l {
+        None => "none".into(),
+        Some(l) => format!(
+            "files, process list, props{}{}{}",
+            if l.os_props { " with OS and code page" } else { "" },
+            if l.idle_gani { ", idle.gani at once" } else { "" },
+            if l.status_icons { ", status icons" } else { "" },
+        ),
+    }
+}
+
 fn death_text(d: &Option<DeathRules>) -> String {
     match d {
         None => "none".into(),
@@ -966,6 +988,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "protocol", "tampercheck", &pa.tampercheck, &pb.tampercheck, yes_no);
     value_change(&mut o, "protocol", "tamper", &pa.tamper, &pb.tamper, tamper_text);
     value_change(&mut o, "protocol", "showimg (id 24)", &pa.showimg, &pb.showimg, showimg_text);
+    value_change(&mut o, "protocol", "login frame", &pa.login, &pb.login, login_text);
     value_change(&mut o, "protocol", "udp", &pa.udp, &pb.udp, yes_no);
     value_change(&mut o, "protocol", "udp_off_by_default", &pa.udp_off_by_default, &pb.udp_off_by_default, yes_no);
     let (ra, rb) = (&a.props, &b.props);
@@ -1109,6 +1132,13 @@ mod tests {
         }
     }
 
+    /// `row` without the text from `from` up to (not including) `until`.
+    fn strip_field(row: &str, from: &str, until: &str) -> String {
+        let a = row.find(from).expect("field");
+        let b = a + row[a..].find(until).expect("next field");
+        format!("{}{}", &row[..a].trim_end_matches(' '), &row[b..]).replace(",, udp:", ", udp:")
+    }
+
     /// Behaviour is unchanged: every build that existed before the chain
     /// resolves to exactly the row that was written out by hand.
     #[test]
@@ -1117,7 +1147,9 @@ mod tests {
         for line in GOLDEN.lines() {
             let (label, want) = line.split_once('\t').expect("label<TAB>row");
             let p = super::super::profile::by_label(label).unwrap_or_else(|| panic!("no profile {label}"));
-            let got = format!("{p:?}");
+            // Fields added after the hand-written rows existed (the post-login
+            // frame, `login`) are not in them: compare without it.
+            let got = strip_field(&format!("{p:?}"), "login: ", ", udp:");
             if got != want {
                 let at = got.bytes().zip(want.bytes()).position(|(a, b)| a != b).unwrap_or(got.len().min(want.len()));
                 let ctx = |s: &str| s[at.saturating_sub(60)..(at + 80).min(s.len())].to_string();

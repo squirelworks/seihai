@@ -24,6 +24,7 @@
 //! values come from release notes and server source and should be checked
 //! when a build turns up.
 
+use super::login::LoginInfo;
 use super::showimg::ShowImgInfo;
 use std::time::Duration;
 use super::tampercheck::{TamperInfo, TamperResend, TamperWords};
@@ -182,6 +183,10 @@ pub struct Protocol {
     /// Seihai sends it only when asked (`--send-showimg`); see
     /// [`super::showimg`].
     pub showimg: Option<ShowImgInfo>,
+    /// What the build sends once the server's login burst is in (image
+    /// checks, process list, login props); `Some` only for the builds
+    /// observed doing it (2.17, 2.22 and 2.31). See [`super::login`].
+    pub login: Option<LoginInfo>,
     /// Peer-to-peer UDP channel present.
     pub udp: bool,
     /// UDP off by default (`noudp=true` in the shipped config).
