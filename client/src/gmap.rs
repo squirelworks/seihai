@@ -65,6 +65,63 @@ impl GmapRules {
     }
 }
 
+/// What the server sent for one level while the player was elsewhere: the
+/// per-level lists the session keeps for the level it is currently filling.
+#[derive(Debug, Default, Clone)]
+pub struct LevelSlot {
+    pub board: Option<Vec<u16>>,
+    pub board_lines: Vec<String>,
+    pub links: Vec<String>,
+    pub signs: Vec<String>,
+    pub chests: Vec<String>,
+}
+
+/// The session's view of the gmap the player is on, built from the server's
+/// messages: `PLO_PLAYERWARP2` (49) names the gmap and the cell, the `.gmap`
+/// file gives the grid, and level data arrives per level (the player's own
+/// and the neighbours the client asked for with 35), each introduced by a
+/// `PLO_LEVELNAME` (6) and closed by a 6 that names the gmap again.
+#[derive(Debug, Default)]
+pub struct GmapSession {
+    /// The gmap file name from 49.
+    pub name: String,
+    /// The player's cell.
+    pub cell: (i32, i32),
+    /// The grid, once the file is known.
+    pub map: Option<Gmap>,
+    /// 64×64 tile ids of every level the server sent, by lower-case name.
+    pub boards: HashMap<String, Vec<u16>>,
+    /// The level the first 6 after a 49 named: the player's level until
+    /// the grid says which cell is which.
+    pub level_hint: Option<String>,
+    /// A 49 arrived and its level name has not.
+    pub awaiting_level: bool,
+    /// Level data parked while another level is the one being filled.
+    pub slots: HashMap<String, LevelSlot>,
+}
+
+impl GmapSession {
+    pub fn new(name: String, cell: (i32, i32)) -> Self {
+        Self { name, cell, awaiting_level: true, ..Default::default() }
+    }
+
+    /// Whether `name` is this gmap's file name (a 6 that names it means
+    /// "the player's level again", not a level).
+    pub fn is_name(&self, name: &str) -> bool {
+        name.eq_ignore_ascii_case(&self.name)
+    }
+
+    /// The level at `cell` per the grid.
+    pub fn level_at(&self, cell: (i32, i32)) -> Option<String> {
+        self.map.as_ref()?.level_at(cell.0, cell.1).map(str::to_string)
+    }
+
+    /// The player's level: the grid's, else the one the server named first.
+    pub fn current_level(&self) -> Option<String> {
+        self.level_at(self.cell).or_else(|| self.level_hint.clone())
+    }
+}
+
 /// A parsed `.gmap` file (`GRMAP001`), the reader keys only: the keys a
 /// client needs to place levels. Generator keys (`GENERATED`, `HEIGHTMAP`,
 /// ...) are skipped.
