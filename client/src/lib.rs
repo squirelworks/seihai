@@ -14,6 +14,7 @@ pub mod protocol;
 pub mod render;
 pub mod scripting;
 pub mod settings;
+pub mod sound;
 pub mod ui;
 
 pub fn version() -> &'static str {

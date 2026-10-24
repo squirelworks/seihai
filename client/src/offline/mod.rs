@@ -5,6 +5,7 @@
 //! be refined against the original client’s offline/tutorial paths.
 
 use crate::assets::{GaniPlayer, Level, TileKind, TileTypes};
+use crate::sound::SoundEvent;
 use crate::dev::DevMode;
 use crate::gmap::{Crossing, GmapWorld, Resolved};
 use crate::life::{respawn_half_hearts, Life, LifeEvent};
@@ -40,6 +41,12 @@ pub struct OfflineSession {
     pub in_water: bool,
     /// Optional walk animation.
     pub walk_gani: Option<GaniPlayer>,
+    /// Optional swim animation, stepped instead of the walk one while the
+    /// feet are in water.
+    pub swim_gani: Option<GaniPlayer>,
+    /// Sounds from GANI frames entered since the last
+    /// [`Self::take_sound_events`].
+    pub sound_events: Vec<SoundEvent>,
     /// Player health (for `hurt`).
     pub player_health: i32,
     /// Last message from `say` / `message`.
@@ -162,6 +169,8 @@ impl OfflineSession {
             player_dir: DIR_SOUTH,
             in_water: false,
             walk_gani: None,
+            swim_gani: None,
+            sound_events: Vec::new(),
             player_health: 100,
             last_message: None,
             flags: HashMap::new(),
@@ -831,8 +840,15 @@ impl OfflineSession {
         }
         self.armed = true;
         self.refresh_water();
-        if let Some(gani) = self.walk_gani.as_mut() {
-            gani.step();
+        // One GANI step per move; each frame entered with a PLAYSOUND cue
+        // queues that sound once, at the cue's offset from the player.
+        let swimming = self.in_water && self.swim_gani.is_some();
+        let gani = if swimming { self.swim_gani.as_mut() } else { self.walk_gani.as_mut() };
+        if let Some(gani) = gani {
+            let cues = gani.step_sounds();
+            for c in cues {
+                self.sound_events.push(SoundEvent { file: c.file, x: self.player_x + c.x, y: self.player_y + c.y });
+            }
         }
         Some(self.player_update())
     }
@@ -840,6 +856,16 @@ impl OfflineSession {
     /// Attach a walk GANI. Stepped on every successful move.
     pub fn set_walk_gani(&mut self, gani: GaniPlayer) {
         self.walk_gani = Some(gani);
+    }
+
+    /// Attach a swim GANI, stepped instead of the walk one in water.
+    pub fn set_swim_gani(&mut self, gani: GaniPlayer) {
+        self.swim_gani = Some(gani);
+    }
+
+    /// Sounds queued by GANI frames since the last call.
+    pub fn take_sound_events(&mut self) -> Vec<SoundEvent> {
+        std::mem::take(&mut self.sound_events)
     }
 
     /// Current walk-frame index, if a GANI is attached.
@@ -1519,5 +1545,75 @@ mod tests {
         s.load_level(dir.join("Town.nw")).unwrap();
         assert!(s.is_loaded("town.nw") && s.is_loaded("TOWN") && !s.is_loaded("other.nw"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- GANI sounds -------------------------------------------------------
+
+    use crate::assets::Gani;
+
+    /// A single-direction gani with `n` frames; frame `k` has a cue for
+    /// each `(k, name)` in `cues`.
+    fn gani_with(n: usize, cues: &[(usize, &str)]) -> GaniPlayer {
+        let mut text = String::from("SINGLEDIRECTION\nANI\n");
+        for k in 0..n {
+            text.push_str("1 0 0, 2 0 0\n");
+            for (at, name) in cues {
+                if *at == k {
+                    text.push_str(&format!("PLAYSOUND {name} 1.5 2\n"));
+                }
+            }
+            text.push('\n');
+        }
+        text.push_str("ANIEND\n");
+        GaniPlayer::new(Gani::parse(&text).unwrap())
+    }
+
+    #[test]
+    fn a_gani_frame_with_a_sound_queues_it_once_per_entry() {
+        let mut s = session_at(level(|_, _| OPEN), 10.5, 10.5);
+        s.set_walk_gani(gani_with(4, &[(2, "steps.wav")]));
+        // Frames entered: 1, 2 (cue), 3, 0, 1, 2 (cue).
+        walk(&mut s, 0.5, 0.0, 1);
+        assert!(s.sound_events.is_empty(), "frame 1 has no cue");
+        walk(&mut s, 0.5, 0.0, 1);
+        let ev = s.take_sound_events();
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].file, "steps.wav");
+        // The cue is 1.5, 2 from the player: the listener's own point.
+        assert_eq!((ev[0].x, ev[0].y), (s.player_x + 1.5, s.player_y + 2.0));
+        assert!(s.take_sound_events().is_empty(), "taken events are gone");
+        walk(&mut s, 0.5, 0.0, 3); // 3, 0, 1
+        assert!(s.take_sound_events().is_empty());
+        walk(&mut s, 0.5, 0.0, 1); // 2 again
+        assert_eq!(s.take_sound_events().len(), 1);
+    }
+
+    #[test]
+    fn a_blocked_move_does_not_step_the_gani_or_queue_a_sound() {
+        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.5, 10.5);
+        s.set_walk_gani(gani_with(1, &[(0, "steps.wav")]));
+        assert!(s.try_move(0.5, 0.0).is_none());
+        assert!(s.sound_events.is_empty());
+        assert_eq!(s.walk_frame(), Some(0));
+    }
+
+    #[test]
+    fn no_gani_means_no_sound_events() {
+        let mut s = session_at(level(|_, _| OPEN), 10.5, 10.5);
+        walk(&mut s, 0.5, 0.0, 4);
+        assert!(s.sound_events.is_empty());
+    }
+
+    #[test]
+    fn swimming_steps_the_swim_gani_not_the_walk_one() {
+        let mut s = session_at(level(|x, _| if (10..=13).contains(&x) { WATER } else { OPEN }), 8.5, 20.5);
+        s.set_walk_gani(gani_with(1, &[(0, "steps.wav")]));
+        s.set_swim_gani(gani_with(1, &[(0, "water.wav")]));
+        walk(&mut s, 0.5, 0.0, 1); // 9.0, still on land
+        assert_eq!(s.take_sound_events()[0].file, "steps.wav");
+        walk(&mut s, 0.5, 0.0, 4); // into the water
+        assert!(s.in_water);
+        let files: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
+        assert_eq!(files.last().map(String::as_str), Some("water.wav"));
     }
 }

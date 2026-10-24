@@ -6,7 +6,8 @@
 //!   pics1.png          # 2048×512 tile sheet
 //!   tiledefs.txt       # or arrays.dat
 //!   levels/            # .nw files
-//!   gani/              # .gani files
+//!   gani/              # .gani files (the 2.22 folder has levels/ganis/)
+//!   sounds/            # .wav files (levels/sounds/ is tried too)
 //!   bodies/body.png    # player sheets (also found at the root or
 //!   heads/head0.png    #   under levels/bodies, levels/heads)
 //!   sprites.png        # shadow and effects
@@ -51,6 +52,26 @@ impl AssetRoot {
 
     pub fn gani(&self, name: &str) -> PathBuf {
         self.gani_dir().join(name)
+    }
+
+    /// Where sound effects live: `<root>/sounds`, as in every client
+    /// folder, or `<root>/levels/sounds`. The first that exists wins.
+    pub fn sounds_dir(&self) -> Option<PathBuf> {
+        [self.root.join("sounds"), self.root.join("levels").join("sounds")]
+            .into_iter()
+            .find(|p| p.is_dir())
+    }
+
+    /// Find a GANI by file name in `gani/`, `levels/ganis/` (the 2.22
+    /// folder) or the root.
+    pub fn find_gani(&self, name: &str) -> Option<PathBuf> {
+        [
+            self.gani_dir().join(name),
+            self.root.join("levels").join("ganis").join(name),
+            self.root.join(name),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
     }
 
     /// Find a player image such as `body.png` in `<dir>/`, `levels/<dir>/`
