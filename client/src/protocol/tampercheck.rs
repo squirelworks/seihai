@@ -25,7 +25,7 @@
 //! | build | login | later |
 //! |---|---|---|
 //! | 2.17 | yes | never |
-//! | 2.22 | yes | on every level change (seen on each gmap edge crossing) |
+//! | 2.22 | yes | with every client-initiated link request and gmap edge crossing, not after a server-side warp |
 //! | 2.31 | yes | every 3.2 s: a 50 ms timer counts modulo 64 and sends at count 31 |
 //!
 //! 2.3 (no binary) would send it too, but its constant is unknown, so no
@@ -235,8 +235,9 @@ impl TamperSender {
         due
     }
 
-    /// The player entered a level other than the first one after login.
-    /// True when the build sends again (2.22).
+    /// The player asked for a level link (not a server-side warp). True when
+    /// the build sends again in the same frame, right after the request
+    /// (2.22; see `Connection::send_link_request`).
     pub fn level_changed(&mut self) -> bool {
         self.resend == TamperResend::OnLevelChange
     }

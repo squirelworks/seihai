@@ -47,6 +47,20 @@ pub fn position_message(x: f32, y: f32, dir: u8) -> Vec<u8> {
     ]
 }
 
+/// Extra messages that go in the same frame right after 46 on a level
+/// entry. A real 2.31 client sends 46 and then its props (the cell prop
+/// and the position) in one frame when it started the move itself: lab,
+/// 2026-10-24, every level link, cached or not, and every gmap crossing. After
+/// a server-side warp the props follow only if the position changed, which
+/// Seihai does not track, so 46 goes out alone then.
+pub fn enter_level_extras(own_link: bool, at: &PlayerUpdate) -> Vec<Vec<u8>> {
+    if own_link {
+        vec![position_message(at.x, at.y, at.dir)]
+    } else {
+        Vec::new()
+    }
+}
+
 /// Decides when `PLI_ENTERLEVEL` (46) goes out for one logged-in session:
 /// once at login and once per later level entry, never as a one-shot. A
 /// profile without 46 in its send set never sends it.
@@ -54,17 +68,34 @@ pub fn position_message(x: f32, y: f32, dir: u8) -> Vec<u8> {
 /// A level entry is a new level name. The first level the server names
 /// after login is not one: the login send covers it, as in the real
 /// client, whose first frame after login carries 46.
+///
+/// Where 46 sits depends on who started the move (lab, real 2.31):
+/// - a level link whose level the client has cached sends the link request
+///   (`PLI_LEVELWARPMOD` 30) and 46 in one frame, before the server's
+///   answer. Seihai keeps no level cache and sends `PLI_LEVELWARP` (0), the
+///   case below;
+/// - a level link whose level is not cached sends 0, waits for the server's
+///   level, then sends one frame that starts with 46 and goes on with the
+///   props;
+/// - a server-side warp: the first client frame after the server's answer
+///   starts with 46.
+///
+/// So after the server's answer, [`Self::note_level`] says a 46 is owed and
+/// [`Self::send_pending`] sends it once the player's position is known,
+/// followed by `then` in the same frame.
 #[derive(Debug, Clone)]
 pub struct EnterLevelSender {
     version: ClientVersion,
     level: Option<String>,
+    /// A 46 is owed for the level just entered.
+    pending: bool,
     /// How many 46 messages were sent.
     pub sent: usize,
 }
 
 impl EnterLevelSender {
     pub fn for_version(version: ClientVersion) -> Self {
-        Self { version, level: None, sent: 0 }
+        Self { version, level: None, pending: false, sent: 0 }
     }
 
     /// Send 46 for the login. Call once, right after the post-login frame.
@@ -74,21 +105,116 @@ impl EnterLevelSender {
         Ok(sent)
     }
 
-    /// The server put the player in level `name`. Sends 46 when that is a
-    /// new level and not the first one since login.
-    pub fn level_entered(&mut self, conn: &mut Connection, name: &str) -> io::Result<bool> {
+    /// The server put the player in level `name`. True when that is a new
+    /// level and not the first one since login, so a 46 is now owed (and
+    /// stays owed until [`Self::send_pending`]). No I/O.
+    pub fn note_level(&mut self, name: &str) -> bool {
         let first = self.level.is_none();
         if self.level.as_deref() == Some(name) {
-            return Ok(false);
+            return false;
         }
         self.level = Some(name.to_string());
         if first {
+            return false;
+        }
+        self.pending = true;
+        true
+    }
+
+    /// Whether a 46 is owed.
+    pub fn is_pending(&self) -> bool {
+        self.pending
+    }
+
+    /// Send the owed 46 with `then` after it in the same frame. Returns
+    /// `Ok(false)` and sends nothing if none is owed or the profile has no
+    /// 46. The debt is cleared either way.
+    pub fn send_pending(&mut self, conn: &mut Connection, then: &[Vec<u8>]) -> io::Result<bool> {
+        if !std::mem::take(&mut self.pending) {
             return Ok(false);
         }
-        let sent = conn.send_enter_level(self.version, &[])?;
+        let sent = conn.send_enter_level(self.version, then)?;
         self.sent += usize::from(sent);
         Ok(sent)
     }
+
+    /// [`Self::note_level`] and, when a 46 is owed, [`Self::send_pending`]
+    /// with nothing after it. Sends the owed 46 at once and alone.
+    pub fn level_entered(&mut self, conn: &mut Connection, name: &str) -> io::Result<bool> {
+        if !self.note_level(name) {
+            return Ok(false);
+        }
+        self.send_pending(conn, &[])
+    }
+}
+
+/// `PLI_LEVELWARP` (0): `GCHAR x*2`, `GCHAR y*2` (tiles), level name.
+pub fn levelwarp_message(x: f32, y: f32, level: &str) -> Vec<u8> {
+    let mut msg = vec![0x20];
+    msg.push(((x * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+    msg.push(((y * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
+    msg.extend_from_slice(&to_latin1(level));
+    msg.push(b'\n');
+    msg
+}
+
+/// A game-server session as [`login_gserver`] sets it up.
+pub struct GserverSession {
+    pub conn: Connection,
+    /// `Some` with `send_tampercheck` on and a build constant.
+    pub tamper: Option<TamperSender>,
+    /// 46 at login was sent; later level entries go through this.
+    pub enter_level: EnterLevelSender,
+    /// `send_tampercheck` was on but the build has no constant to send.
+    pub tamper_unavailable: bool,
+    /// Post-login sends that failed. The login itself worked.
+    pub warnings: Vec<String>,
+}
+
+/// Why [`login_gserver`] failed.
+#[derive(Debug)]
+pub struct LoginFailure {
+    /// True when the TCP connection failed, false when the login send did.
+    pub connect: bool,
+    pub error: io::Error,
+}
+
+impl std::fmt::Display for LoginFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} failed: {}", if self.connect { "connect" } else { "login" }, self.error)
+    }
+}
+
+/// Connect to a gserver at `addr` and log in with `key`: the login frame,
+/// the post-login frame (language and, when asked, the tamper check) and
+/// the login 46. The same steps serve the first login and the reconnect
+/// that follows a `PLO_SERVERWARP` (178), which in a real 2.31 client is a
+/// complete fresh login (new random key, same account and password, no
+/// listserver step). The reader is not started: call
+/// [`Connection::spawn_reader`] on the result.
+pub fn login_gserver(
+    addr: &str,
+    version: ClientVersion,
+    key: u8,
+    account: &str,
+    password: &str,
+    send_tampercheck: bool,
+) -> Result<GserverSession, LoginFailure> {
+    let mut conn =
+        Connection::connect(addr).map_err(|error| LoginFailure { connect: true, error })?;
+    conn.login_versioned(version, key, account, password)
+        .map_err(|error| LoginFailure { connect: false, error })?;
+    let mut warnings = Vec::new();
+    let tamper = if send_tampercheck { TamperSender::for_version(version) } else { None };
+    let tamper_unavailable = send_tampercheck && tamper.is_none();
+    if let Err(e) = conn.send_post_login_with(version, "English", tamper.as_ref()) {
+        warnings.push(format!("post-login send failed: {e}"));
+    }
+    let mut enter_level = EnterLevelSender::for_version(version);
+    if let Err(e) = enter_level.at_login(&mut conn) {
+        warnings.push(format!("enter-level send failed: {e}"));
+    }
+    Ok(GserverSession { conn, tamper, enter_level, tamper_unavailable, warnings })
 }
 
 /// How long one address gets to accept a connection.
@@ -540,12 +666,36 @@ impl Connection {
     /// `GCHAR x*2`, `GCHAR y*2`, level name. The server answers with the
     /// level, as at login.
     pub fn send_levelwarp(&mut self, x: f32, y: f32, level: &str) -> io::Result<()> {
-        let mut msg = vec![0x20];
-        msg.push(((x * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
-        msg.push(((y * 2.0).clamp(0.0, 127.0) as u8) + 0x20);
-        msg.extend_from_slice(&to_latin1(level));
-        msg.push(b'\n');
-        self.send_messages(&[msg])
+        self.send_messages(&[levelwarp_message(x, y, level)])
+    }
+
+    /// A client-initiated level link: `PLI_LEVELWARP` (0), and with
+    /// `tamper` for a build that re-sends it on level changes (its profile's
+    /// rule, 2.22) the tamper check in the same frame right after it. A real
+    /// 2.22 client sends `0` then `39` in one frame on every link request
+    /// and does not send 39 after a server-side warp; 2.31 does not send it
+    /// on links at all (lab, 2026-10-24). Returns whether 39 went along.
+    ///
+    /// Seihai keeps no level cache, so it always asks with id 0; a client
+    /// with the level cached sends `PLI_LEVELWARPMOD` (30) with the mod time.
+    pub fn send_link_request(
+        &mut self,
+        x: f32,
+        y: f32,
+        level: &str,
+        tamper: Option<&mut TamperSender>,
+    ) -> io::Result<bool> {
+        let mut msgs = vec![levelwarp_message(x, y, level)];
+        if let Some(t) = tamper {
+            if t.level_changed() {
+                if let Some(m) = t.message() {
+                    msgs.push(m);
+                }
+            }
+        }
+        let with_tamper = msgs.len() > 1;
+        self.send_messages(&msgs)?;
+        Ok(with_tamper)
     }
 
     /// Request a file from the server (`PLI_WANTFILE`, id 23).
@@ -1264,5 +1414,199 @@ mod tests {
             };
             assert_eq!(body[0], 2 + 0x20, "{}", v.label());
         }
+    }
+
+    // --- Lab batch c wiring (2026-10-24) ---
+
+    /// 10 tiles is 20 half-tiles, 20 tiles is 40, then the level name.
+    fn warp_msg() -> Vec<u8> {
+        [&[0x20, 20 + 0x20, 40 + 0x20][..], b"lv_c.nw\n"].concat()
+    }
+
+    #[test]
+    fn levelwarp_message_layout() {
+        assert_eq!(levelwarp_message(10.0, 20.0, "lv_c.nw"), warp_msg());
+        // Clamped to a GCHAR: 63.5 tiles is the last half-tile that fits 127.
+        assert_eq!(levelwarp_message(99.0, 0.0, "a")[1], 127 + 0x20);
+    }
+
+    /// 2.22: the tamper check rides in the frame of every client-initiated
+    /// link request, right after it. 2.31 and 2.17 do not send it on a link,
+    /// and nothing is added without a sender (the default, off).
+    #[test]
+    fn link_request_carries_tamper_check_by_profile() {
+        // 2.22: 0 then 39, one frame.
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x15, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x15);
+        let mut t = TamperSender::for_version(ClientVersion::V222).unwrap();
+        assert!(conn.send_link_request(10.0, 20.0, "lv_c.nw", Some(&mut t)).unwrap());
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!(body, [warp_msg(), t.message().unwrap()].concat());
+        // Off: the warp alone.
+        assert!(!conn.send_link_request(10.0, 20.0, "lv_c.nw", None).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), warp_msg());
+
+        // 2.31: its 39 is periodic, never on a link.
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x16, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x16);
+        let mut t = TamperSender::for_version(ClientVersion::V231).unwrap();
+        assert!(!conn.send_link_request(10.0, 20.0, "lv_c.nw", Some(&mut t)).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), warp_msg());
+
+        // 2.17: sent at login only.
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V217, 0x17, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut t = TamperSender::for_version(ClientVersion::V217).unwrap();
+        assert!(!conn.send_link_request(10.0, 20.0, "lv_c.nw", Some(&mut t)).unwrap());
+        assert_eq!(gen3_messages(0x17, &read_frame(&mut srv)), vec![warp_msg()]);
+    }
+
+    /// Own link: 46 then the props (position) in one frame, 46 first. A
+    /// server-side warp: 46 alone. The level entry is owed once.
+    #[test]
+    fn enter_level_ordering_after_the_servers_answer() {
+        let at = PlayerUpdate { x: 10.5, y: 3.0, dir: 2 };
+        assert_eq!(enter_level_extras(true, &at), vec![position_message(10.5, 3.0, 2)]);
+        assert!(enter_level_extras(false, &at).is_empty());
+
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V231, 0x23, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x23);
+        let mut el = EnterLevelSender::for_version(ClientVersion::V231);
+        // Nothing owed for the first level after login, nor for a repeat.
+        assert!(!el.note_level("a.nw"));
+        assert!(!el.is_pending());
+        assert!(!el.send_pending(&mut conn, &[]).unwrap());
+        assert!(!el.note_level("a.nw"));
+        // Own link to b: 46 + props, one frame, 46 first.
+        assert!(el.note_level("b.nw"));
+        assert!(el.is_pending());
+        assert!(el.send_pending(&mut conn, &enter_level_extras(true, &at)).unwrap());
+        let body = gen5_body(&mut srv, &mut g);
+        assert_eq!(body, [&ENTER[..], &position_message(10.5, 3.0, 2)[..]].concat());
+        // Owed once: a second flush sends nothing.
+        assert!(!el.is_pending());
+        assert!(!el.send_pending(&mut conn, &[]).unwrap());
+        // Server warp to a: 46 alone.
+        assert!(el.note_level("a.nw"));
+        assert!(el.send_pending(&mut conn, &enter_level_extras(false, &at)).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+        assert_eq!(el.sent, 2);
+    }
+
+    /// A profile without 46: the debt is cleared and nothing is written.
+    #[test]
+    fn enter_level_pending_is_cleared_without_46() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x24, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut el = EnterLevelSender::for_version(ClientVersion::V222);
+        assert!(!el.note_level("a.nw"));
+        assert!(el.note_level("b.nw"));
+        assert!(!el.send_pending(&mut conn, &[position_message(1.0, 2.0, 0)]).unwrap());
+        assert!(!el.is_pending());
+        assert_eq!(el.sent, 0);
+    }
+
+    /// What a gserver sees from a login: the plain login frame, then the
+    /// gen-5 post-login frame, then 46 (2.31).
+    #[test]
+    fn login_gserver_sends_login_post_login_and_46() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let s = login_gserver(&addr, ClientVersion::V231, 0x31, "ab", "cd", true).unwrap();
+        assert!(s.warnings.is_empty() && !s.tamper_unavailable);
+        assert!(s.tamper.is_some());
+        let (mut srv, _) = listener.accept().unwrap();
+        let login = read_frame(&mut srv);
+        assert_eq!(&login[..2], &[0x20 + 5, 0x31 + 0x20]);
+        assert_eq!(&login[2..10], b"GNW28015");
+        assert_eq!(&login[10..], b"\"ab\"cd\n");
+        let mut g = Gen5::new(0x31);
+        let post = gen5_body(&mut srv, &mut g);
+        assert_eq!(post[0], 37 + 0x20);
+        assert!(post.len() > lang_msg().len(), "tamper check follows the language");
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+
+        // Without the flag: language only, and no tamper sender.
+        let s = login_gserver(&addr, ClientVersion::V231, 0x32, "ab", "cd", false).unwrap();
+        assert!(s.tamper.is_none() && !s.tamper_unavailable);
+        let (mut srv, _) = listener.accept().unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x32);
+        assert_eq!(gen5_body(&mut srv, &mut g), lang_msg());
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+
+        // A build with no tamper constant (2.3) says so.
+        let s = login_gserver(&addr, ClientVersion::V230, 0x33, "ab", "cd", true).unwrap();
+        assert!(s.tamper.is_none() && s.tamper_unavailable);
+    }
+
+    /// A connection that cannot be made is a connect failure.
+    #[test]
+    fn login_gserver_reports_connect_failure() {
+        let addr = {
+            let l = TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap().to_string()
+        };
+        let Err(e) = login_gserver(&addr, ClientVersion::V231, 1, "ab", "cd", false) else {
+            panic!("nothing listens there")
+        };
+        assert!(e.connect);
+        assert!(e.to_string().starts_with("connect failed:"), "{e}");
+    }
+
+    /// Following a server warp: the old connection is closed, and the new
+    /// one is a complete fresh login to the warp's host and port with a new
+    /// key, the same credentials, and the login 46 again. Nothing is sent
+    /// to a listserver.
+    #[test]
+    fn server_warp_reconnects_with_a_fresh_login() {
+        use crate::protocol::layouts::parse_server_warp;
+        let one = TcpListener::bind("127.0.0.1:0").unwrap();
+        let two = TcpListener::bind("127.0.0.1:0").unwrap();
+        let (a1, a2) = (one.local_addr().unwrap().to_string(), two.local_addr().unwrap());
+        let s1 = login_gserver(&a1, ClientVersion::V231, 0x41, "ab", "cd", false).unwrap();
+        let (mut srv1, _) = one.accept().unwrap();
+        let first = read_frame(&mut srv1);
+
+        // The server sends 178 as in the lab: name, name, host, port.
+        let text = format!("two,two,{},{}", a2.ip(), a2.port());
+        let w = parse_server_warp(text.as_bytes()).unwrap();
+        let target = w.address().unwrap();
+        assert_eq!(target, a2.to_string());
+        s1.conn.shutdown().unwrap();
+        drop(s1);
+        let s2 = login_gserver(&target, ClientVersion::V231, 0x42, "ab", "cd", false).unwrap();
+
+        // The old connection is closed (FIN).
+        let mut rest = Vec::new();
+        srv1.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut sink = [0u8; 64];
+        loop {
+            match srv1.read(&mut sink) {
+                Ok(0) => break,
+                Ok(n) => rest.extend_from_slice(&sink[..n]),
+                Err(e) => panic!("old connection not closed: {e}"),
+            }
+        }
+        // The new one logs in again: same account and password, new key.
+        let (mut srv2, _) = two.accept().unwrap();
+        let second = read_frame(&mut srv2);
+        assert_eq!(&first[2..], &second[2..]);
+        assert_ne!(first[1], second[1]);
+        assert_eq!(second[1], 0x42 + 0x20);
+        let mut g = Gen5::new(0x42);
+        assert_eq!(gen5_body(&mut srv2, &mut g), lang_msg());
+        assert_eq!(gen5_body(&mut srv2, &mut g), ENTER);
+        // A fresh sender: the first level on the new server is not a change.
+        let mut el = s2.enter_level;
+        assert!(!el.note_level("start.nw"));
     }
 }

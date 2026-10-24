@@ -106,7 +106,8 @@ versions handle an id is the profile's `plo` set; the tests compare every
 | 170 | GHOSTMODE | GCHAR, above 0 = on | 2.17+ | `ghost_mode` |
 | 175 | SHOOT | GSHORT player id + rest | 2.17+ | `shoots` |
 | 176, 177 | KINGDOMSMODE, NEWWORLDMODE | none | 2.17+ | `server_mode` |
-| 178 | SERVERWARP | comma text, at least 4 fields; fields 1 to 3 used | 2.17+ | `server_warp` (meanings unresolved; not followed) |
+| 178 | SERVERWARP | comma text, at least 4 fields: 0 unused, 1 name, 2 host, 3 port | 2.17+ | `server_warp` (followed: see "Server warp" below) |
+| 32 | SHOWIMG | GSHORT sender id + the sender's PLI 24 payload, opaque (a real client's is the one byte 9) | 2.05+ | `showimg_relays`, `last_showimg` (nothing drawn) |
 | 181 | (unnamed) | GSHORT player id, GCHAR toggle | 2.17+ | `player_toggle` |
 | 183 | HASPROCESSRUNNING | names; the client answers PLI 45 | 2.17+ | `process_running_requests` (never answered) |
 | 184 | TAKESCREENSHOT | file name, `.png` only | 2.17+ | `screenshot_requests` (no screenshot taken) |
@@ -161,8 +162,8 @@ listserver flow here is still the 2.05 one, unverified. Note only.
 
 Still unknown or not implemented, for lack of a capture or a decompile: what
 `x` and `y` in 171/172 position (always 0 in the captures); the SERVERWARP
-field meanings; what 2.31's PLI 24 (value 9) is for (Seihai does not send it)
-and what PLI 46 (always `GCHAR 1`) tells a server; the 2.31 extra step in 156;
+field 1's use beyond a name; what PLI 24 (value 9, 2.22 and 2.31) is for and what
+PLI 46 (always `GCHAR 1`) tells a server; the 2.31 extra step in 156;
 whether a server checks the tamper value; gmap support (49, 185 and 186 are
 decoded but not applied).
 
@@ -181,7 +182,7 @@ Settled by the lab captures in Graal_analysis #33.
   (`EnterLevelSender`). Seihai has no gmaps and sends no cell prop, so the 46
   goes out alone and the next walk update is the props frame that follows it;
   `Connection::send_enter_level` can put props messages behind it in the same
-  frame. Not tested in the lab: doors and warps.
+  frame. Doors and warps: see "Level changes" below.
 - **PLO 186:** header and `w*h` tiles are applied at the position. Bytes after the
   tiles are ignored (a whole second record there is not applied). One byte short
   of `6+2*w*h` is dropped silently, with no disconnect and no partial apply. A
@@ -189,6 +190,74 @@ Settled by the lab captures in Graal_analysis #33.
   64x64 board. The session does not call it: it keeps the last decoded record
   only, because applying one needs the gmap cell the player is in (`mapX`/`mapY`
   other than the current cell were never tested), and Seihai has no gmaps.
+
+## Level changes, server warp and PLI 24 (lab batch c)
+
+Real 2.22 and 2.31 clients against GServer-v2 and a local listserver
+reimplementation, loopback only (Graal_analysis lab note, 2026-10-24).
+
+**Level changes (PLI 46 and the tamper check).** 2.31 sends 46 on every level
+entry, not only gmap crossings: door or edge links, and a server-side warp.
+Where it sits depends on who started the move:
+
+| move | client frames |
+|---|---|
+| link, level cached | one frame: 30 (`LEVELWARPMOD`), 46, props; before the server answers |
+| link, level not cached | one frame: 0 (`LEVELWARP`); the server answers (14, 6, ...); then one frame: 46, props |
+| server-side warp | the server sends 14 + 6; the first client frame after it starts with 46; props follow only if the position changed |
+
+2.22 never sends 46. It sends the tamper check (39) in the same frame as every
+client-initiated link request, right after the 0 or 30, and not after a
+server-side warp. 2.31 does not re-send 39 on a link or warp (its 39 is
+periodic).
+
+Seihai (code: `net::EnterLevelSender`, `Connection::send_link_request`,
+`net::enter_level_extras`):
+
+- It keeps no level cache, so it always asks with 0 (the "not cached" row).
+- A new level name after the first one owes a 46 (profiles with 46 in their
+  send set only). Once the server's position is known, the 46 goes out as the
+  first message of one frame; after Seihai's own link request the position
+  props follow in the same frame, and after a server-side warp the 46 goes
+  alone (Seihai does not track whether the position changed).
+- The tamper check (with `--send-tampercheck`) now rides in the link-request
+  frame for the profile whose rule is "on level change" (2.22), and is no
+  longer sent after the server's answer, so a server-side warp does not
+  trigger it.
+- Not done: the cached-level `LEVELWARPMOD` (30) form, and level changes
+  started by a level script (`setlevel2`), which the lab never captured.
+
+**Server warp (178).** The lab text was `labtwo,labtwo,127.0.0.2,14803`. The
+2.31 client closed its connection, opened a new one to field 2 (host) and
+field 3 (port) and logged in again by itself: a new random key, the same
+account and password, no listserver step. Field 0 is unused, field 1 is a name
+the client did not need to connect, a swapped host and port gave a failed
+connection ("The connection couldn't be established"), and a 3-field text was
+ignored. The text came from the open-source listserver reimplementation, so
+what a real service sends is still unobserved. 2.22 was not tried, nor a host
+name instead of an IP, nor a port above 65535.
+
+Seihai (`layouts::ServerWarp`, `net::login_gserver`): decodes the four fields
+(fewer than four: ignored), and unless `--no-serverwarp` is given closes the
+connection and logs in again to field 2 and 3 with a new key, the same
+credentials and a fresh session (language, tamper check if enabled, the login
+46). A port that is not 1 to 65535 or an empty host counts as a failed
+connection, as in the real client. Note that, like the real client, it sends
+the stored password to whatever host the server names.
+
+**PLI 24 (SHOWIMGPLAYER) and PLO 32.** Both 2.22 and 2.31 send `24 = GCHAR 9`:
+2.31 in its first frame after login and then every 5.11 to 5.17 s (median
+5.13 s), idle or walking, in every level; 2.22 only while another player is in
+the level (every 5.1 s; 0 sends in 3 solo sessions; the exact condition was
+not isolated). Level changes do not trigger or reset it. GServer-v2 forwards
+the payload unchanged to the other players in the level as PLO 32 (`GSHORT`
+sender id + payload); injected payloads of 0, 1, 5, 14, 58, 95, a file name
+and an empty one all went through, and neither client showed any reaction.
+What the 9 means is unknown. Seihai sends it only with `--send-showimg`, on the
+period and condition in the profile (`protocol.showimg`: 5100 ms with others
+needed for 2.22, 5130 ms always for 2.31, nothing for other builds), and
+decodes PLO 32 as an id and opaque bytes without drawing it. "Another player is
+present" is "Seihai has another player on its list".
 
 ## Implementation Notes
 

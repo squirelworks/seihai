@@ -11,9 +11,9 @@
 //! and a levels/ subdirectory.
 
 use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot};
-use seihai::net::{Connection, EnterLevelSender};
+use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
 use seihai::offline::OfflineSession;
-use seihai::protocol::{ChatKind, ClientVersion, SessionState, TamperSender};
+use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
 use seihai::settings::Settings;
 use seihai::ui;
 use seihai::render::{
@@ -38,6 +38,8 @@ fn main() {
     let mut cli_mode = false;
     let mut list_only = false;
     let mut send_tampercheck = false;
+    let mut send_showimg = false;
+    let mut follow_serverwarp = true;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -68,6 +70,8 @@ fn main() {
             }
             "--list-only" => list_only = true,
             "--send-tampercheck" => send_tampercheck = true,
+            "--send-showimg" => send_showimg = true,
+            "--no-serverwarp" => follow_serverwarp = false,
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -100,6 +104,11 @@ fn main() {
                 println!("         --send-tampercheck  as 2.17, 2.22 and 2.31: send PLI_TAMPERCHECK (39) after");
                 println!("                             login, and again as that build does (default: off;");
                 println!("                             GServer-v2 ignores it)");
+                println!("         --send-showimg      as 2.22 and 2.31: send PLI_SHOWIMGPLAYER (24) = 9 on");
+                println!("                             the build's period (default: off; meaning unknown)");
+                println!("         --no-serverwarp     do not follow a PLO_SERVERWARP (178); by default");
+                println!("                             Seihai reconnects to the host and port it names");
+                println!("                             and logs in again, as the real client does");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -178,6 +187,9 @@ fn main() {
     let mut tamper_clock = Instant::now();
     // PLI_ENTERLEVEL (46): login and every level change, for profiles with it.
     let mut enter_level: Option<EnterLevelSender> = None;
+    // Opt-in PLI_SHOWIMGPLAYER (24) = 9 (`--send-showimg`), on the build's period.
+    let mut showimg: Option<ShowImgSender> = None;
+    let mut showimg_clock = Instant::now();
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
     // True while the level on screen was built from the server's board.
@@ -257,46 +269,36 @@ fn main() {
         }
 
         if let Some(addr) = &online {
-            match Connection::connect(addr) {
-                Ok(mut c) => {
-                    let key = seihai::net::random_key();
-                    if let Err(e) = c.login_versioned(version, key, &account, &password) {
-                        eprintln!("login failed: {e}");
-                        if !cli_mode {
-                            gui_error = Some(format!("login failed: {e}"));
-                            continue;
-                        }
-                    } else {
-                        eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
-                        if send_tampercheck {
-                            tamper = TamperSender::for_version(version);
-                            if tamper.is_none() {
-                                eprintln!(
-                                    "--send-tampercheck: {} has no tamper-check value; not sent",
-                                    version.label()
-                                );
-                            }
-                        }
-                        if let Err(e) = c.send_post_login_with(version, "English", tamper.as_ref()) {
-                            eprintln!("post-login send failed: {e}");
-                        }
-                        tamper_clock = Instant::now();
-                        let mut el = EnterLevelSender::for_version(version);
-                        if let Err(e) = el.at_login(&mut c) {
-                            eprintln!("enter-level send failed: {e}");
-                        }
-                        enter_level = Some(el);
-                        match c.spawn_reader() {
-                            Ok(rx) => frames = Some(rx),
-                            Err(e) => eprintln!("reader failed: {e}"),
-                        }
-                        conn = Some(c);
+            match login_gserver(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck) {
+                Ok(mut sess) => {
+                    eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
+                    if sess.tamper_unavailable {
+                        eprintln!(
+                            "--send-tampercheck: {} has no tamper-check value; not sent",
+                            version.label()
+                        );
                     }
+                    for w in &sess.warnings {
+                        eprintln!("{w}");
+                    }
+                    tamper = sess.tamper.take();
+                    tamper_clock = Instant::now();
+                    enter_level = Some(sess.enter_level.clone());
+                    showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
+                    if send_showimg && showimg.is_none() {
+                        eprintln!("--send-showimg: {} has no recorded id 24 behaviour; not sent", version.label());
+                    }
+                    showimg_clock = Instant::now();
+                    match sess.conn.spawn_reader() {
+                        Ok(rx) => frames = Some(rx),
+                        Err(e) => eprintln!("reader failed: {e}"),
+                    }
+                    conn = Some(sess.conn);
                 }
                 Err(e) => {
-                    eprintln!("connect failed: {e}");
+                    eprintln!("{e}");
                     if !cli_mode {
-                        gui_error = Some(format!("connect failed: {e}"));
+                        gui_error = Some(e.to_string());
                         continue;
                     }
                 }
@@ -606,21 +608,11 @@ fn main() {
                         entered = true;
                         // The first level after login is not a "level change":
                         // the login send already covers it.
-                        // PLI 46 goes out first on a level change, before
-                        // the next props frame (the walk update).
-                        if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
-                            if let Err(e) = el.level_entered(c, name) {
-                                eprintln!("enter-level send failed: {e}");
-                            }
-                        }
-                        if loaded_level.is_some() {
-                            if let (Some(t), Some(c)) = (tamper.as_mut(), conn.as_mut()) {
-                                if t.level_changed() {
-                                    if let Err(e) = c.send_tampercheck(t) {
-                                        eprintln!("tamper-check send failed: {e}");
-                                    }
-                                }
-                            }
+                        // A new level (not the first after login) owes a
+                        // PLI 46. It goes out once the player's position is
+                        // known, below, as the first message of the frame.
+                        if let Some(el) = enter_level.as_mut() {
+                            el.note_level(name);
                         }
                         // The server sends the file name, e.g. "onlinestartlocal.nw".
                         let file = if name.ends_with(".nw") {
@@ -699,6 +691,17 @@ fn main() {
                 if entered || (warped && session.warp_pending.is_some()) {
                     // Arrival: the server's position is final. Links stay
                     // quiet until the player moves off it.
+                    //
+                    // PLI 46 first: after our own link request, 46 and the
+                    // props (position) in one frame; after a server-side
+                    // warp (or login), 46 alone.
+                    let own_link = session.warp_pending.is_some();
+                    if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
+                        let extras = enter_level_extras(own_link, &session.player_update());
+                        if let Err(e) = el.send_pending(c, &extras) {
+                            eprintln!("enter-level send failed: {e}");
+                        }
+                    }
                     warp_since = None;
                     if session.arrive(session.player_x, session.player_y) {
                         net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
@@ -777,7 +780,8 @@ fn main() {
                         // wait; its reply moves the player.
                         session.begin_warp(&dest);
                         warp_since = Some(Instant::now());
-                        if let Err(e) = c.send_levelwarp(x, y, &dest) {
+                        // 2.22 sends the tamper check in the same frame.
+                        if let Err(e) = c.send_link_request(x, y, &dest, tamper.as_mut()) {
                             eprintln!("send failed: {e}");
                             session.cancel_warp();
                             conn = None;
@@ -822,6 +826,78 @@ fn main() {
                 if t.advance(dt) {
                     if let Err(e) = c.send_tampercheck(t) {
                         eprintln!("tamper-check send failed: {e}");
+                    }
+                }
+            }
+        }
+        // 2.22 and 2.31 send PLI 24 = 9 on a fixed period; Seihai only when
+        // asked. 2.22 sends it only while another player is in the level.
+        {
+            let dt = showimg_clock.elapsed();
+            showimg_clock = Instant::now();
+            if let (Some(t), Some(c)) = (showimg.as_mut(), conn.as_mut()) {
+                if t.advance(dt, !net_state.others.is_empty()) {
+                    if let Err(e) = c.send_messages(&[showimg_message()]) {
+                        eprintln!("showimg send failed: {e}");
+                    }
+                }
+            }
+        }
+        // PLO_SERVERWARP (178): leave this server for the host and port it
+        // names and log in again there (new key, same account and password,
+        // no listserver step), as the real client does. A text whose host
+        // and port cannot be read gives a failed connection, as it did in
+        // the real client.
+        if let Some(w) = net_state.server_warp.take() {
+            if !follow_serverwarp {
+                eprintln!("server warp to {:?} not followed (--no-serverwarp)", w.name);
+            } else if let Some(old) = conn.as_ref() {
+                let _ = old.shutdown();
+                conn = None;
+                frames = None;
+                session.cancel_warp();
+                warp_since = None;
+                let target = w.address();
+                eprintln!("server warp to {:?}: {}", w.name, target.as_deref().unwrap_or("no usable host and port"));
+                let result = match target {
+                    Some(a) => seihai::net::login_gserver(
+                        &a,
+                        version,
+                        seihai::net::random_key(),
+                        &account,
+                        &password,
+                        send_tampercheck,
+                    )
+                    .map(|s| (a, s))
+                    .map_err(|e| e.to_string()),
+                    None => Err(format!("server warp to {:?} has no usable host and port", w.name)),
+                };
+                match result {
+                    Ok((a, mut sess)) => {
+                        eprintln!("logged in to {a} as {account} ({})", version.profile().summary());
+                        for m in &sess.warnings {
+                            eprintln!("{m}");
+                        }
+                        // A fresh session on the new server.
+                        net_state = SessionState::for_version(version);
+                        loaded_level = None;
+                        tamper = sess.tamper.take();
+                        tamper_clock = Instant::now();
+                        enter_level = Some(sess.enter_level.clone());
+                        showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
+                        showimg_clock = Instant::now();
+                        match sess.conn.spawn_reader() {
+                            Ok(rx) => frames = Some(rx),
+                            Err(e) => eprintln!("reader failed: {e}"),
+                        }
+                        conn = Some(sess.conn);
+                    }
+                    Err(why) => {
+                        eprintln!("{why}");
+                        if !cli_mode {
+                            let _ = seihai::gui::run_with_error(why);
+                            return;
+                        }
                     }
                 }
             }
