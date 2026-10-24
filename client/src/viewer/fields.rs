@@ -53,9 +53,9 @@ fn text(b: &[u8], mask: bool, account: Option<&str>) -> String {
 }
 
 /// Read `payload` with `rows` (already in field order). Returns `None` when
-/// a row needs the trace decoder (`props`).
+/// a row needs the trace decoder (`props`, `showimg`).
 pub fn read_layout(rows: &[&LayoutRow], payload: &[u8], mask: bool, account: Option<&str>) -> Option<Read> {
-    if rows.iter().any(|r| r.enc == Enc::Props) {
+    if rows.iter().any(|r| matches!(r.enc, Enc::Props | Enc::Showimg)) {
         return None;
     }
     let mut out = Read::default();
@@ -165,7 +165,7 @@ pub fn read_layout(rows: &[&LayoutRow], payload: &[u8], mask: bool, account: Opt
                 rest_taken = true;
                 if left.len() > 32 { format!("len={} crc={:08x}", left.len(), crc32(left)) } else { short_hex(left) }
             }
-            Enc::Props => unreachable!(),
+            Enc::Props | Enc::Showimg => unreachable!(),
         };
         if r.status != super::tables::Status::Known {
             out.unknown.push(format!("`{}` is {} in the table", r.field, r.status.label()));

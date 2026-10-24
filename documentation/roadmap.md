@@ -15,7 +15,7 @@ Single code path. Versions are profile rows, not branches.
 - [x] Gmaps. Ids 49 and 186, cell props 43/44, and the crossing behaviour captured in the lab: grid model and `.gmap` reader, edge crossing and wrapped coordinate, cell-prop frame gated by profile (with 46 or the 2.22 tamper check in front), 186 applied at its cell, neighbour levels for collision and drawing, `PLI_ADJACENTLEVEL`. Still open under gmaps: 185 board heights, the `gr.x`/`gr.y` flags, neighbours' NPCs/links/chests, cached-level crossings on a gmap, the 171/172 map screens, and a run against a real server. See `documentation/protocol.md`, "Gmaps".
 - [x] Cached level links. The 30-plus-46 form: a level the player has left is kept with its `PLO_LEVELMODTIME`, and a link back into it sends `PLI_LEVELWARPMOD` (30) with that mod time, then 46 and the props in the same frame (2.31), or the tamper check (2.22), before the server answers; the server's data-free answer is filled from the cache. Gated by `levels.cached_links`. Still open: the real client's disk cache (`GWEBL001`), cached crossings on a gmap, and a lab run of Seihai itself. See `documentation/protocol.md`, "Level changes".
 - [x] Script-initiated warps. `setlevel`/`setlevel2` from NPC scripts: offline the client loads the level as before; online it sends the link request (`PLI_LEVELWARP`, or `PLI_LEVELWARPMOD` with a cached copy, by profile) and loads the level on the server's answer. A lab run of Seihai confirmed the frames on 2.31 and 2.22. Still open: what a real client sends (its level NPC scripts never ran in the lab; see `documentation/script-warps.md`). See `documentation/protocol.md`, "Script-initiated warps".
-- [ ] Remaining fields. The unresolved id 24 and 46 meanings, and the field order for id 178 when a real service sends it.
+- [x] Remaining fields. Id 24 is the sender's weapon-script image list (the byte 9 is its full-list marker); id 46 is a content-free level-switch notice; id 178 is read with the clients' own comma-text reader. What a real service sends for 178 is still unobserved (`documentation/remaining-fields.md`).
 - [ ] Early builds. A real 2.00-era listserver reply, which is still unobserved.
 
 ## 3. Gameplay the client decides on its own
@@ -40,15 +40,14 @@ Single code path. Versions are profile rows, not branches.
 
 - [x] Version chain (`client/src/protocol/chain.rs`). Each build is a step with a small delta against the build before; `PROFILES` is the resolved chain and equals the old hand-written rows. A generated handler-change table (`seihai --version-chain`, `documentation/version-chain.md`/`.tsv`, checked by a test) lists what changed at each step with its source and what is unknown. Adding a version is one step, not new logic. Still open: the unknown deltas of 2.1 to 2.16 and 2.3 (no binaries), and per-step layouts that are not profile fields. See `documentation/version-chain.md`.
 - [x] Differential testing. Tools, lab runner and first results are in: a capture-to-frame-sequence decoder (`difftest trace`), a differ with a ranked report (`difftest diff`), and a private-namespace scenario runner (`tools/difftest/lab.sh`). First run: 2.22 and 2.31, login, gmap crossing, chat and door/warp, real client against Seihai. Ranked divergences are in `documentation/difftest.md`. Not yet covered: the real 2.17 client (its launcher needs its own UI steps), the server-side warp scenario, and running it in CI.
-- [ ] Public-server checks. Read-only first, and only with approval each time.
+- [ ] Public-server checks. Approved for read-only checks, then chat, warps and file transfer, with a few normal lines and no uploads. Attempted 2026-10-25: the build box's network gave no answer on listserver ports 14921, 14922 and 14923, so nothing was observed and no code changed. What was tried, the port facts and the checklist are in `documentation/public-checks.md`.
 - [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
 ## Remaining
 
-- Remaining fields (ids 24, 46, 178): implementation in Seihai #39. Notes in Graal_analysis batch g.
 - Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
 - Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist). No implementation started.
-- Public-server checks: blocked from the build box. Checklist in Seihai #38.
+- Public-server checks: blocked from the build box. Checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
 
 
@@ -65,7 +64,7 @@ Single code path. Versions are profile rows, not branches.
 
 ### Phase 2 — Assets & Rendering
 - [x] Text level loader (GLEVNW01)
-- [x] Binary loaders (.graal, .zelda)
+- [x] Binary loaders (.graal, .zelda): `.zelda` (Z3-V1.03/.04) has its own strict reader, profile gate and `--level-info` / `--check-assets` support; see `assets.md`
 - [x] Tile-type table (text or arrays.dat)
 - [x] ASCII / PPM board view
 - [x] Sprite sheet / tileset loading

@@ -446,6 +446,12 @@ impl Level {
         if data.len() < 8 {
             return Err("binary level too short".into());
         }
+        // Z3-V1 (`.zelda`) has its own reader: no NPCs, no chests, 4-byte
+        // computer records, strict reporting (see `zelda.rs`).
+        if super::zelda::is_zelda(data) {
+            let z = super::zelda::ZeldaLevel::parse(data)?;
+            return Ok((z.to_level(), z.layout.to_graal_layout()));
+        }
         let magic = &data[0..8];
         let codebits = graal_code_bits(magic);
         let mut tiles = vec![0u16; 4096];
@@ -521,31 +527,7 @@ impl Level {
         layout.board_end = pos;
         layout.max_tile = tiles.iter().copied().max().unwrap_or(0);
 
-        // Convert the flat tile array into row runs for layer 0.
-        let mut boards = Vec::new();
-        for y in 0..64 {
-            let mut run_start = 0;
-            let mut run_tiles = Vec::new();
-            for x in 0..64 {
-                let t = tiles[y * 64 + x];
-                if t != 0 || !run_tiles.is_empty() {
-                    if run_tiles.is_empty() {
-                        run_start = x;
-                    }
-                    run_tiles.push(tile_code(t));
-                }
-                if (t == 0 || x == 63) && !run_tiles.is_empty() {
-                    boards.push(BoardRun {
-                        x: run_start as i32,
-                        y: y as i32,
-                        width: run_tiles.len() as i32,
-                        layer: 0,
-                        tiles: run_tiles.clone(),
-                    });
-                    run_tiles.clear();
-                }
-            }
-        }
+        let boards = board_runs(&tiles);
 
         // `pos` is the byte after the last code, so the sections start there.
         let mut level = Level {
@@ -852,6 +834,36 @@ pub const CHEST_ITEMS: [&str; 25] = [
     "goldrupee", "fireball", "fireblast", "nukeshot", "joltbomb", "spinattack",
 ];
 
+/// A 64×64 board of tile ids as layer-0 row runs: tile 0 is left out, each
+/// run is a stretch of non-zero tiles on one row.
+pub(crate) fn board_runs(tiles: &[u16]) -> Vec<BoardRun> {
+    let mut boards = Vec::new();
+    for y in 0..64 {
+        let mut run_start = 0;
+        let mut run_tiles = Vec::new();
+        for x in 0..64 {
+            let t = tiles[y * 64 + x];
+            if t != 0 || !run_tiles.is_empty() {
+                if run_tiles.is_empty() {
+                    run_start = x;
+                }
+                run_tiles.push(tile_code(t));
+            }
+            if (t == 0 || x == 63) && !run_tiles.is_empty() {
+                boards.push(BoardRun {
+                    x: run_start as i32,
+                    y: y as i32,
+                    width: run_tiles.len() as i32,
+                    layer: 0,
+                    tiles: run_tiles.clone(),
+                });
+                run_tiles.clear();
+            }
+        }
+    }
+    boards
+}
+
 /// Bits per board code for a binary level magic: 13 for GR-V1.02 to 1.04
 /// (the 4096-tile sheet needs the top bit free), 11 for Z3-V1.02, else 12.
 pub fn graal_code_bits(magic: &[u8]) -> u32 {
@@ -1141,7 +1153,11 @@ fn parse_link(line: &str) -> Option<Link> {
 ///   player's coordinate" and the link is kept rather than dropped.
 fn link_coord(s: &str, keep: &str) -> (Option<f32>, f32) {
     if let Ok(n) = s.parse::<f32>() {
-        return (Some(n), 0.0);
+        // A negative arrival (the editors write -1) keeps the player's own
+        // coordinate: 1st Graal and the Java Zelda Online client both set a
+        // "constant" flag from `< 0` (805 of 5381 distinct `GR-V1` links in
+        // the Drive set use -1, and so do 151 of 338 `Z3-V1` links).
+        return (if n < 0.0 { None } else { Some(n) }, 0.0);
     }
     if s.len() >= keep.len() && s.is_char_boundary(keep.len()) && s[..keep.len()].eq_ignore_ascii_case(keep) {
         let rest = &s[keep.len()..];

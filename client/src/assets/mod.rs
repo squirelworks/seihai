@@ -8,6 +8,7 @@ mod png;
 pub(crate) mod resolve;
 mod root;
 mod tiledefs;
+mod zelda;
 mod coverage;
 
 pub use objects::{ObjectSet, Stamp};
@@ -22,4 +23,5 @@ pub use level::{
     CHEST_ITEMS, decode_sign_record, decode_sign_text, graal_code_bits, GraalLayout, tile_code, tile_id, tile_src_rect, Baddy, BoardRun, Chest, Level,
     Link, Npc, Sign, Tile, TileKind, TileTypes,
 };
+pub use zelda::{is_zelda, Computer, ZeldaLayout, ZeldaLevel, ZeldaLink, ZeldaMagic, ZeldaSign};
 pub use png::{read_png_rgb, read_png_rgba, write_png_indexed, write_png_rgb};
