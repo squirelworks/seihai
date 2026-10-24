@@ -15,8 +15,8 @@ What remains after the current gmaps / script engine / differential testing work
 - Chat popups, buddy/ignore/mute files.
 - Damage formula and the respawn "same name group" rule.
 - File transfer leftovers: the `GWEBL001` level cache, the login set of `UPDATEFILE`s and the file-index scan order (`documentation/file-cache.md`).
-- Early builds. A real 2.00-era listserver reply, which is still unobserved.
-- Public-server checks. Read-only first, and only with approval each time.
+- Early builds. A real 2.00-era listserver reply, which is still unobserved. Skipped (item 13): nothing new observed.
+- Public-server checks. Approved (read-only, then chat, warps and file transfer), but the build box could not reach any listserver port on 2026-10-25, so nothing was observed. Checklist and port facts in `documentation/public-checks.md`; run it from a network that reaches ports 14921 to 14923.
 
 ## Done
 
