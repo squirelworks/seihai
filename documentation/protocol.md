@@ -96,7 +96,7 @@ versions handle an id is the profile's `plo` set; the tests compare every
 
 | id | name | payload | gate | `SessionState` field |
 |---|---|---|---|---|
-| 49 | PLAYERWARP2 | GCHAR x*2, y*2, z (unused), gmapX, gmapY, name; a `.gmap` name is kept in `gmap_name` instead of becoming the level | 2.1 test builds, 2.17+ | `player_warp2`, `gmap_name`, position |
+| 49 | PLAYERWARP2 | GCHAR x*2, y*2, z (unused), gmapX, gmapY, name; a `.gmap` name starts a gmap session (`gmap`, see "Gmaps") instead of becoming the level | 2.1 test builds, 2.17+ | `player_warp2`, `gmap_name`, `gmap`, position |
 | 75 | PROFILE | repeated GCHAR n + n chars; first = account | 1.39+ | `profile` |
 | 150 | NPCDEL2 | GCHAR n, level name, GINT3 id | 1.42+ | `last_npc_del`, `npc_dels` |
 | 151 | HIDENPCS | none; removes ids 1 to 999 of the active level | 1.42+ | `hide_npcs` |
@@ -140,8 +140,8 @@ public 2.22 servers did not kick a client that never sent it for 20 s).
   `PLI_LANGUAGE`.
 - Re-sends, as the real builds do: 2.17 never; 2.22 on every level change
   (the real client's level-change routine; the lab saw it on each gmap edge
-  crossing). Seihai re-sends on a level change after the first level, and has
-  no gmap edge crossing yet. 2.31 every 3.2 s: a 50 ms timer counts modulo
+  crossing). Seihai re-sends on a level change after the first level, and on a gmap
+  edge crossing when the profile re-sends (see "Gmaps"). 2.31 every 3.2 s: a 50 ms timer counts modulo
   64 and sends at count 31 (`TamperSender::advance`, driven from the game loop).
 - 2.3 has no binary and no captured value, so nothing is sent for it.
 - Not known: whether any server enforces the value.
@@ -164,8 +164,7 @@ Still unknown or not implemented, for lack of a capture or a decompile: what
 `x` and `y` in 171/172 position (always 0 in the captures); the SERVERWARP
 field 1's use beyond a name; what PLI 24 (value 9, 2.22 and 2.31) is for and what
 PLI 46 (always `GCHAR 1`) tells a server; the 2.31 extra step in 156;
-whether a server checks the tamper value; gmap support (49, 185 and 186 are
-decoded but not applied).
+whether a server checks the tamper value.
 
 ## PLI 46 (ENTERLEVEL) and PLO 186 (BOARDMODIFY2)
 
@@ -179,17 +178,17 @@ Settled by the lab captures in Graal_analysis #33.
   the wrapped coordinate. It is not a one-shot, and 2.31 does not re-send the
   tamper check (39) on a crossing. Seihai sends it once after the post-login
   frame and again whenever the server puts the player in a different level
-  (`EnterLevelSender`). Seihai has no gmaps and sends no cell prop, so the 46
-  goes out alone and the next walk update is the props frame that follows it;
+  (`EnterLevelSender`). At a gmap crossing it goes out in the crossing frame,
+  in front of the props with the cell prop; see "Gmaps". Elsewhere it goes out
+  alone and the next walk update is the props frame that follows it;
   `Connection::send_enter_level` can put props messages behind it in the same
   frame. Doors and warps: see "Level changes" below.
 - **PLO 186:** header and `w*h` tiles are applied at the position. Bytes after the
   tiles are ignored (a whole second record there is not applied). One byte short
   of `6+2*w*h` is dropped silently, with no disconnect and no partial apply. A
   block past column 63 is clipped. `BoardModify2::apply_to` does that on a
-  64x64 board. The session does not call it: it keeps the last decoded record
-  only, because applying one needs the gmap cell the player is in (`mapX`/`mapY`
-  other than the current cell were never tested), and Seihai has no gmaps.
+  64x64 board, and the session now calls it: the block goes onto the level at its
+  `mapX`/`mapY` cell (see "Gmaps").
 
 ## Level changes, server warp and PLI 24 (lab batch c)
 
@@ -279,7 +278,83 @@ Real clients (2.17, 2.22, 2.31) against a local lab. No public server.
 
 - **Tampercheck (PLI 39):** 10 raw bytes, per-build constant. 2.17 `2a7bad195e231243d82c`, 2.22 `250e4d0f962b03ede631`, 2.31 `291655b7602e87c9eb82`. Sent after language. 2.22 re-sends on every gmap-edge cross; 2.31 re-sends about every 3.2 s. Seihai sends them with `--send-tampercheck` (see above).
 - **2.17 listserver:** one plain zlib frame with two messages (`id 0` + `newmain`, then `id 1` + account/password). Server answers with list, then status/site/donation. Gen-3 after that. Seihai 2.17 matched this flow.
-- **2.22 gmap crossing:** no level-warp packet. Client sets `gr.x`/`gr.y` to the global position (local + 64 × cell). When it wraps, the same props message carries local X/Y = 0 and GMAPLEVELX/Y (props 43/44). Server answers with the new level name, then the gmap name. Seihai currently treats the gmap name in `PLO_PLAYERWARP2` as a level and asks for `name.gmap.nw`.
+- **2.22 gmap crossing:** no level-warp packet. Client sets `gr.x`/`gr.y` to the global position (local + 64 × cell). When it wraps, the same props message carries local X/Y = 0 and GMAPLEVELX/Y (props 43/44). Server answers with the new level name, then the gmap name. Seihai handles this now; see "Gmaps".
 - **Buddy / ignore:** local files (`buddyaccounts.txt`, `ignoredaccounts.txt`). No listserver traffic in this lab. Mute is `PLI 43` with player id + 1/0.
 - **Gen-5 XOR:** all 17 real 2.22 client zlib frames (lengths not multiples of 4) decode with the one-step-per-group rule. No bz2 client send was seen.
 - **Missing binaries:** no 2.1.x (2.1–2.16) or 2.3 binaries are recoverable. Those rows stay inferred. Alias 2.1–2.16 to 2.05 or 2.17, and 2.3 to 2.31.
+
+## Gmaps
+
+A gmap is a grid of ordinary 64×64-tile levels (`client/src/gmap.rs`). The
+sources are the lab captures of real 2.22 and 2.31 clients on a 2x2 gmap
+(Graal_analysis feature spec 06, lab notes of 2026-10-24). Everything is
+gated by the version profile: `GmapRules::for_version` reads `levels.gmap`,
+the profile's `plo` set (49), the own-prop set (43 and 44), `props.precise_pos`
+and the `pli` set (35). A profile without them (2.05 and earlier) never enters
+a gmap, sends no cell prop and no 35.
+
+**Server to client (what the session does with it).**
+
+- `PLO_PLAYERWARP2` (49) naming a `.gmap`: a gmap session starts with the cell
+  from the message. The gmap name is not a level. The first `PLO_LEVELNAME`
+  (6) after it names the player's level.
+- The `.gmap` file (`GRMAP001`: `WIDTH`, `HEIGHT`, `LEVELNAMES`, `MAPIMG`,
+  `MINIMAPIMG`, `NOAUTOMAPPING`, `LOADFULLMAP`, `LOADATSTART`) gives the grid.
+  It is read from the asset folder if it is there, else asked for with
+  `WANTFILE` and read when the transfer completes.
+- After each level it sends, the server sends a 6 that names the gmap again.
+  Seihai reads that as "the player's level again": level data (board, links,
+  signs, chests) is parked per level while another level is the one being sent
+  (a neighbour the client asked for with 35), so the neighbours' data does not
+  land in the player's level. `SessionState::current_level_name` is the level
+  at the player's cell.
+- Boards are kept by level name (`GmapSession::boards`), which is how
+  neighbours are drawn when there is no local level file.
+- Own props 43/44 in a `PLO_PLAYERPROPS` move the cell. Another player's 43/44
+  give its cell, and its position is drawn relative to ours
+  (`OtherPlayer::position_from`).
+- `PLO_BOARDMODIFY2` (186) goes onto the level the grid puts at its
+  `mapX`/`mapY`, with the column-63 clipping of `BoardModify2::apply_to` and
+  the 12-bit tile mask. A cell with no known level drops the block (counted).
+  A block for a level whose board has not arrived is applied to an empty
+  board. Off a gmap the block applies to the current level only when
+  `mapX`/`mapY` are 0. Only the player's own cell was tested against real
+  clients; the rest follows the field names.
+
+**Client to server.**
+
+- Position: the walk keeps `player_x`/`player_y` local to the cell. When a
+  step takes the sprite's x or y outside `0..64` the player moves into the
+  next cell (its level is the loaded neighbour), the position is wrapped, and
+  one frame goes out, before the server answers: 46 when the profile sends it
+  (2.3, 2.31); the tamper check (39) when the profile re-sends it on level
+  changes (2.22) and `--send-tampercheck` is on; then `PLI_PLAYERPROPS` with the
+  cell prop (43 for x, 44 for y) followed by the wrapped coordinate (X2/Y2,
+  78/79, when the profile has precise positions, else X/Y 15/16). Real 2.31
+  bytes from the lab are in the tests: east `43=1, X2=0`, west `43=0, X2=63.5`,
+  and the same with 44 and Y2. The server's answer then names the new level;
+  the 46 is not owed again.
+- `PLI_ADJACENTLEVEL` (35): `GINT5` mod time (0, nothing cached) and the level
+  name, once per neighbouring level the server has not yet sent. Seihai sends
+  them after the grid is known, not at the login frame as the real client does
+  (it has the `.gmap` cached already).
+- Walls and water across a seam are read from the neighbour's tiles. A cell
+  whose level is not loaded, or the edge of the grid, blocks the walk. A step
+  that would cross both edges at once is refused and the walk slides along
+  one axis. The real client's behaviour at a corner was not captured.
+
+**Not done or not matching the real client.**
+
+- The `gr.x`/`gr.y` flags (`PLI_SETFLAG`, global position) are not sent. The
+  captures do not say whether the client or a server movement script sends
+  them; GServer does not need them for a crossing.
+- The real client sends the south crossing's flag first and the props on the
+  next half-step; Seihai sends the props in the crossing step's frame.
+- Neighbour levels draw tiles only. Their NPCs, signs, chests and links are
+  not drawn or active until the player is in the level.
+- Cached-level crossings (`30` with the mod time, instead of waiting for the
+  board) are not done: Seihai keeps no mod-time cache.
+- No `PLO_BIGMAP`/`MINIMAP` map screen (171/172).
+- `PLO_BOARDHEIGHTS` (185) is decoded only.
+- Not run against the real server in this change; see the PR for the test
+  run.

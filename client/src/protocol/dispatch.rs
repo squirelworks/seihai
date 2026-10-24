@@ -4,6 +4,7 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
+use crate::gmap::{Gmap, GmapSession, LevelSlot};
 use super::extras::{
     parse_ghost_icon, parse_level_mod_time, parse_map_spec, parse_signature, parse_start_message,
     parse_text_list, signature_action, MapSpec, SignatureAction,
@@ -186,6 +187,25 @@ pub struct OtherPlayer {
     pub nick: Option<String>,
     /// Chat bubble text (CURCHAT, prop 12). Empty clears it.
     pub chat: Option<String>,
+    /// The gmap cell (props 43/44) the player is in, once the server has
+    /// said. `x` and `y` are local to it. `None`: no cell sent, the same
+    /// cell as ours.
+    pub cell: Option<(i32, i32)>,
+}
+
+impl OtherPlayer {
+    /// The player's position in the coordinates of the cell `own` (tiles):
+    /// `x`/`y` plus 64 per cell of distance. With no cell sent, or off a
+    /// gmap, the position as it is.
+    pub fn position_from(&self, own: Option<(i32, i32)>) -> (f32, f32) {
+        match (self.cell, own) {
+            (Some(c), Some(o)) => (
+                self.x + ((c.0 - o.0) * crate::gmap::CELL_TILES) as f32,
+                self.y + ((c.1 - o.1) * crate::gmap::CELL_TILES) as f32,
+            ),
+            _ => (self.x, self.y),
+        }
+    }
 }
 
 /// Where a chat line came from.
@@ -313,9 +333,17 @@ pub struct SessionState {
     pub process_list_requests: usize,
     /// The last `PLO_PLAYERWARP2` (49).
     pub player_warp2: Option<PlayerWarp2>,
-    /// The gmap named by the last 49, if any. Seihai has no gmap support, so
-    /// the level stays the one `PLO_LEVELNAME` names.
+    /// The gmap named by the last 49, if any.
     pub gmap_name: Option<String>,
+    /// The gmap the player is on, set by a 49 that names a `.gmap` and
+    /// cleared by a 49 that names a level. Level data is kept per level
+    /// while it is set; see [`GmapSession`].
+    pub gmap: Option<GmapSession>,
+    /// 186 blocks applied since the last [`Self::take_board_mods`]: the
+    /// lower-case level they went to and the block.
+    pub board_mods: Vec<(String, BoardModify2)>,
+    /// 186 blocks dropped because no level was known for their cell.
+    pub board_mods_dropped: usize,
     /// The last `PLO_PROFILE` (75).
     pub profile: Option<ProfileCard>,
     /// Level and id of the last `PLO_NPCDEL2` (150), and how many arrived.
@@ -579,6 +607,13 @@ impl SessionState {
                             .map(|p| u16::from_le_bytes([p[0], p[1]]) & 0x0FFF)
                             .collect(),
                     );
+                    // On a gmap every level's board is kept: the player's
+                    // and the neighbours' are drawn side by side.
+                    if let (Some(g), Some(level), Some(b)) =
+                        (self.gmap.as_mut(), self.level_name.as_ref(), self.board.as_ref())
+                    {
+                        g.boards.insert(level.to_ascii_lowercase(), b.clone());
+                    }
                 }
             }
             28 => {
@@ -635,11 +670,21 @@ impl SessionState {
                     self.player_x = Some(w.x);
                     self.player_y = Some(w.y);
                     if w.is_gmap() {
-                        // The client swaps a gmap name for its cell's level;
-                        // Seihai has no gmaps, so wait for PLO_LEVELNAME.
+                        // The player is in a gmap cell. The level it is in
+                        // comes with the next PLO_LEVELNAME, and the grid
+                        // from the .gmap file.
+                        let cell = (i32::from(w.gmap_x), i32::from(w.gmap_y));
                         self.gmap_name = Some(w.level.clone());
+                        match self.gmap.as_mut() {
+                            Some(g) if g.is_name(&w.level) => {
+                                g.cell = cell;
+                                g.awaiting_level = true;
+                            }
+                            _ => self.gmap = Some(GmapSession::new(w.level.clone(), cell)),
+                        }
                     } else {
                         self.gmap_name = None;
+                        self.gmap = None;
                         if !w.level.is_empty() {
                             self.enter_level(w.level.clone());
                         }
@@ -715,6 +760,7 @@ impl SessionState {
             }
             186 => {
                 if let Some(m) = parse_board_modify2(&msg.payload) {
+                    self.apply_board_modify2(&m);
                     self.board_modify2 = Some(m);
                 }
             }
@@ -742,15 +788,132 @@ impl SessionState {
     /// Switch to level `name`. When it differs from the current level,
     /// drop the old level's board, links, signs and chests: the server
     /// sends the new ones after the name.
+    ///
+    /// On a gmap the lists are parked per level instead, and a `name` that
+    /// is the gmap's own file name means "back to the player's level": the
+    /// server names the gmap after each level it sends, the neighbours the
+    /// client asked for included.
     fn enter_level(&mut self, name: String) {
-        if self.level_name.as_deref() != Some(name.as_str()) {
-            self.board = None;
-            self.board_lines.clear();
-            self.links.clear();
-            self.signs.clear();
-            self.chests.clear();
+        let Some(mut g) = self.gmap.take() else {
+            if self.level_name.as_deref() != Some(name.as_str()) {
+                self.board = None;
+                self.board_lines.clear();
+                self.links.clear();
+                self.signs.clear();
+                self.chests.clear();
+            }
+            self.level_name = Some(name);
+            return;
+        };
+        let target = if g.is_name(&name) {
+            g.current_level()
+        } else {
+            if std::mem::take(&mut g.awaiting_level) {
+                g.level_hint = Some(name.clone());
+            }
+            Some(name)
+        };
+        if let Some(target) = target {
+            let same = self.level_name.as_deref().is_some_and(|c| c.eq_ignore_ascii_case(&target));
+            if !same {
+                if let Some(old) = self.level_name.take() {
+                    g.slots.insert(
+                        old.to_ascii_lowercase(),
+                        LevelSlot {
+                            board: self.board.take(),
+                            board_lines: std::mem::take(&mut self.board_lines),
+                            links: std::mem::take(&mut self.links),
+                            signs: std::mem::take(&mut self.signs),
+                            chests: std::mem::take(&mut self.chests),
+                        },
+                    );
+                }
+                let slot = g.slots.remove(&target.to_ascii_lowercase()).unwrap_or_default();
+                self.board = slot.board;
+                self.board_lines = slot.board_lines;
+                self.links = slot.links;
+                self.signs = slot.signs;
+                self.chests = slot.chests;
+            }
+            self.level_name = Some(target);
         }
-        self.level_name = Some(name);
+        self.gmap = Some(g);
+    }
+
+    /// The level the player is in: on a gmap the one at the player's cell,
+    /// otherwise the one the server named last.
+    pub fn current_level_name(&self) -> Option<String> {
+        match &self.gmap {
+            Some(g) => g.current_level().or_else(|| self.level_name.clone()),
+            None => self.level_name.clone(),
+        }
+    }
+
+    /// The 64×64 tiles the server sent for `level` (a gmap keeps them for
+    /// every level it was sent; without one, only the current level's board
+    /// is known).
+    pub fn board_of(&self, level: &str) -> Option<&Vec<u16>> {
+        let key = level.to_ascii_lowercase();
+        match &self.gmap {
+            Some(g) => g.boards.get(&key),
+            None => (self.level_name.as_deref().map(str::to_ascii_lowercase) == Some(key))
+                .then_some(self.board.as_ref())
+                .flatten(),
+        }
+    }
+
+    /// Move the player's cell (the client crossed an edge: the real client
+    /// changes the cell at once and the server follows). No-op off a gmap.
+    pub fn set_gmap_cell(&mut self, cell: (i32, i32)) {
+        if let Some(g) = self.gmap.as_mut() {
+            g.cell = cell;
+        }
+    }
+
+    /// Hand the grid to the session (read from a local file, or from the
+    /// file the server sent). Ignored off a gmap.
+    pub fn set_gmap_grid(&mut self, map: Gmap) {
+        if let Some(g) = self.gmap.as_mut() {
+            g.map = Some(map);
+        }
+    }
+
+    /// Apply a 186 block to the level its `mapX`/`mapY` cell holds. On a
+    /// gmap that is the grid's level at that cell; off a gmap there is one
+    /// level, cell (0, 0). A cell with no known level drops the block.
+    ///
+    /// The cell other than the player's own was never tested against a
+    /// real client; this follows the field's name.
+    fn apply_board_modify2(&mut self, m: &BoardModify2) {
+        let cell = (i32::from(m.map_x), i32::from(m.map_y));
+        let level = match &self.gmap {
+            Some(g) => g.level_at(cell).or_else(|| (cell == g.cell).then(|| g.current_level()).flatten()),
+            None => (cell == (0, 0)).then(|| self.level_name.clone()).flatten(),
+        };
+        let Some(level) = level else {
+            self.board_mods_dropped += 1;
+            return;
+        };
+        let key = level.to_ascii_lowercase();
+        let is_live = self.level_name.as_deref().map(str::to_ascii_lowercase).as_deref() == Some(key.as_str());
+        if let Some(g) = self.gmap.as_mut() {
+            // The level object exists on the real client before its board
+            // arrives: start from an empty board.
+            let board = g.boards.entry(key.clone()).or_insert_with(|| vec![0; 64 * 64]);
+            m.apply_to(board);
+        }
+        if is_live {
+            if let Some(b) = self.board.as_mut() {
+                m.apply_to(b);
+            }
+        }
+        self.board_mods.push((key, m.clone()));
+    }
+
+    /// The 186 blocks applied since the last call, for whoever draws the
+    /// levels.
+    pub fn take_board_mods(&mut self) -> Vec<(String, BoardModify2)> {
+        std::mem::take(&mut self.board_mods)
     }
 
     /// Apply every message in a decompressed body.
@@ -796,6 +959,7 @@ impl SessionState {
                     dir: 2,
                     nick: None,
                     chat: None,
+                    cell: None,
                 });
                 self.others.len() - 1
             }
@@ -809,6 +973,10 @@ impl SessionState {
         }
         if let Some(v) = u.dir {
             o.dir = v;
+        }
+        if u.cell_x.is_some() || u.cell_y.is_some() {
+            let (cx, cy) = o.cell.unwrap_or((0, 0));
+            o.cell = Some((u.cell_x.unwrap_or(cx), u.cell_y.unwrap_or(cy)));
         }
         if u.nick.is_some() {
             o.nick = u.nick;
@@ -832,6 +1000,17 @@ impl SessionState {
                 (15, Some(v)) => self.player_x = Some(v as f32 / 2.0),
                 (16, Some(v)) => self.player_y = Some(v as f32 / 2.0),
                 (17, Some(v)) => self.player_dir = Some(v % 4),
+                // The server moves the player's cell (GMAPLEVELX/Y).
+                (43, Some(v)) => {
+                    if let Some(g) = self.gmap.as_mut() {
+                        g.cell.0 = i32::from(v);
+                    }
+                }
+                (44, Some(v)) => {
+                    if let Some(g) = self.gmap.as_mut() {
+                        g.cell.1 = i32::from(v);
+                    }
+                }
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
                 _ => {}
             }
@@ -843,6 +1022,12 @@ impl SessionState {
     pub fn flush_files(&mut self, dir: &std::path::Path) -> Vec<String> {
         let mut written = Vec::new();
         for (name, data) in self.incoming_files.drain(..) {
+            // The gmap's own file gives the grid.
+            if let Some(g) = self.gmap.as_mut().filter(|g| g.is_name(&name)) {
+                if let Some(map) = Gmap::parse(&String::from_utf8_lossy(&data)) {
+                    g.map = Some(map);
+                }
+            }
             let path = dir.join(&name);
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -871,6 +1056,9 @@ struct OtherUpdate {
     dir: Option<u8>,
     nick: Option<String>,
     chat: Option<String>,
+    /// GMAPLEVELX (43) and GMAPLEVELY (44).
+    cell_x: Option<i32>,
+    cell_y: Option<i32>,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -887,6 +1075,8 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             15 => u.x = prop.gchar().map(|v| v as f32 / 2.0),
             16 => u.y = prop.gchar().map(|v| v as f32 / 2.0),
             17 => u.dir = prop.gchar().map(|v| v % 4),
+            43 => u.cell_x = prop.gchar().map(i32::from),
+            44 => u.cell_y = prop.gchar().map(i32::from),
             50 => u.left |= prop.gchar() == Some(0),
             51 => u.left = true,
             // X2/Y2: precise position, GSHORT.
@@ -1585,5 +1775,217 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ---- gmap sessions ----
+
+    fn gsh(v: u16) -> [u8; 2] {
+        [gc((v >> 7) as u8 & 0x7F), gc(v as u8 & 0x7F)]
+    }
+
+    /// A `PLO_RAWDATA` + `PLO_BOARDPACKET` pair for a board filled with `fill`.
+    fn raw_board(fill: u16) -> Vec<u8> {
+        let mut out = vec![100 + 0x20];
+        out.extend([gc(0), gc(64), gc(2)]); // GINT3 8194
+        out.push(b'\n');
+        out.push(101 + 0x20);
+        for _ in 0..64 * 64 {
+            out.extend(fill.to_le_bytes());
+        }
+        out.push(b'\n');
+        out
+    }
+
+    const GRID: &str = "GRMAP001\nWIDTH 2\nHEIGHT 2\nLEVELNAMES\n\"gm_nw.nw\",\"gm_ne.nw\",\n\"gm_sw.nw\",\"gm_se.nw\",\nLEVELNAMESEND\n";
+
+    fn warp49(cell: (u8, u8), name: &str) -> Vec<u8> {
+        msg(49, &[&[gc(116), gc(61), gc(50), gc(cell.0), gc(cell.1)][..], name.as_bytes()].concat())
+    }
+
+    /// The 2.22 lab login order: 49 names the gmap, 6 names the level, 6
+    /// names the gmap again.
+    fn gmap_login(st: &mut SessionState) {
+        st.apply_body(&[warp49((0, 0), "gm2x2.gmap"), msg(6, b"gm_nw.nw"), raw_board(1), msg(6, b"gm2x2.gmap")].concat());
+    }
+
+    fn grid() -> Gmap {
+        Gmap::parse(GRID).unwrap()
+    }
+
+    #[test]
+    fn gmap_login_keeps_the_players_level_not_the_gmap_name() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        let g = st.gmap.as_ref().unwrap();
+        assert_eq!((g.name.as_str(), g.cell), ("gm2x2.gmap", (0, 0)));
+        assert_eq!(st.level_name.as_deref(), Some("gm_nw.nw"));
+        // No grid yet: the first level named after the 49 stands in.
+        assert_eq!(st.current_level_name().as_deref(), Some("gm_nw.nw"));
+        st.set_gmap_grid(grid());
+        assert_eq!(st.current_level_name().as_deref(), Some("gm_nw.nw"));
+        st.set_gmap_cell((1, 0));
+        assert_eq!(st.current_level_name().as_deref(), Some("gm_ne.nw"));
+        assert_eq!(st.board_of("GM_NW.NW").map(|b| b[0]), Some(1));
+    }
+
+    #[test]
+    fn neighbour_levels_are_parked_and_the_players_level_comes_back() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.set_gmap_grid(grid());
+        st.apply_body(&msg(1, b"gm_ne.nw 0 0 1 1 5 5"));
+        // The server answers a PLI 35 for gm_ne: name, board, link, gmap.
+        st.apply_body(
+            &[msg(6, b"gm_ne.nw"), raw_board(2), msg(1, b"other.nw 1 1 2 2 3 3"), msg(6, b"gm2x2.gmap")].concat(),
+        );
+        // The player's level is current again, with its own link and board.
+        assert_eq!(st.level_name.as_deref(), Some("gm_nw.nw"));
+        assert_eq!(st.links, vec!["gm_ne.nw 0 0 1 1 5 5"]);
+        assert_eq!(st.board.as_ref().map(|b| b[0]), Some(1));
+        assert_eq!(st.board_of("gm_ne.nw").map(|b| b[0]), Some(2));
+        assert_eq!(st.board_of("gm_nw.nw").map(|b| b[0]), Some(1));
+        // The neighbour's link did not leak into the player's level.
+        assert!(!st.links.iter().any(|l| l.starts_with("other.nw")));
+    }
+
+    /// After a crossing the server names the new level, sends its data (an
+    /// empty board packet when the client has it), then the gmap.
+    #[test]
+    fn crossing_answer_moves_the_current_level() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.set_gmap_grid(grid());
+        st.apply_body(&[msg(6, b"gm_ne.nw"), raw_board(2), msg(6, b"gm2x2.gmap")].concat());
+        st.set_gmap_cell((1, 0));
+        assert_eq!(st.current_level_name().as_deref(), Some("gm_ne.nw"));
+        st.apply_body(&[msg(6, b"gm_ne.nw"), msg(39, &[gc(0); 5]), msg(0, b"BOARD 0 0 1 0 AA"), msg(6, b"gm2x2.gmap")].concat());
+        assert_eq!(st.level_name.as_deref(), Some("gm_ne.nw"));
+        assert_eq!(st.board_lines.len(), 1);
+        // Going back restores the first level's own board.
+        st.set_gmap_cell((0, 0));
+        st.apply_body(&[msg(6, b"gm_nw.nw"), msg(6, b"gm2x2.gmap")].concat());
+        assert_eq!(st.level_name.as_deref(), Some("gm_nw.nw"));
+        assert_eq!(st.board.as_ref().map(|b| b[0]), Some(1));
+    }
+
+    #[test]
+    fn plain_49_leaves_the_gmap() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.apply_body(&warp49((0, 0), "b.nw"));
+        assert!(st.gmap.is_none());
+        assert_eq!(st.level_name.as_deref(), Some("b.nw"));
+        assert_eq!(st.current_level_name().as_deref(), Some("b.nw"));
+    }
+
+    #[test]
+    fn gmap_file_from_the_server_gives_the_grid() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.incoming_files.push(("gm2x2.gmap".into(), GRID.as_bytes().to_vec()));
+        st.incoming_files.push(("other.png".into(), vec![1, 2, 3]));
+        let dir = std::env::temp_dir().join(format!("seihai-gmap-{}", std::process::id()));
+        let written = st.flush_files(&dir);
+        assert_eq!(written.len(), 2);
+        assert_eq!(st.gmap.as_ref().unwrap().map.as_ref().unwrap().width, 2);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn own_cell_props_move_the_cell() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.apply_body(&msg(9, &[gc(43), gc(1), gc(44), gc(1)]));
+        assert_eq!(st.gmap.as_ref().unwrap().cell, (1, 1));
+    }
+
+    /// 186 goes onto the level at its mapX/mapY cell. A block at x 62 is
+    /// clipped at column 63, as the real 2.22 and 2.31 clients drew it.
+    #[test]
+    fn board_modify2_lands_on_the_level_at_its_cell() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.set_gmap_grid(grid());
+        st.apply_body(&[msg(6, b"gm_ne.nw"), raw_board(2), msg(6, b"gm2x2.gmap")].concat());
+        let mut p = vec![gc(1), gc(0), gc(62), gc(1), gc(4), gc(1)];
+        for t in [10u16, 11, 12, 13] {
+            p.extend(gsh(t));
+        }
+        st.apply_body(&msg(186, &p));
+        let ne = st.board_of("gm_ne.nw").unwrap();
+        assert_eq!(&ne[64 + 60..64 + 64], &[2, 2, 10, 11], "columns 62 and 63 only");
+        assert_eq!(ne[2 * 64 + 62], 2, "no wrap onto the next row");
+        // The player's own level is untouched, and so is its live board.
+        assert_eq!(st.board_of("gm_nw.nw").unwrap()[64 + 62], 1);
+        assert_eq!(st.board.as_ref().unwrap()[64 + 62], 1);
+        let mods = st.take_board_mods();
+        assert_eq!(mods.len(), 1);
+        assert_eq!(mods[0].0, "gm_ne.nw");
+        assert!(st.take_board_mods().is_empty());
+    }
+
+    #[test]
+    fn board_modify2_on_the_live_level_updates_its_board_too() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        gmap_login(&mut st);
+        st.set_gmap_grid(grid());
+        let mut p = vec![gc(0), gc(0), gc(1), gc(1), gc(1), gc(1)];
+        p.extend(gsh(0x0ABC));
+        st.apply_body(&msg(186, &p));
+        assert_eq!(st.board.as_ref().unwrap()[64 + 1], 0x0ABC);
+        assert_eq!(st.board_of("gm_nw.nw").unwrap()[64 + 1], 0x0ABC);
+        // The 12-bit mask of the 101 board applies.
+        let mut p = vec![gc(0), gc(0), gc(0), gc(0), gc(1), gc(1)];
+        p.extend(gsh(0xFABC));
+        st.apply_body(&msg(186, &p));
+        assert_eq!(st.board.as_ref().unwrap()[0], 0x0ABC);
+    }
+
+    #[test]
+    fn board_modify2_for_an_unknown_cell_is_dropped() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        gmap_login(&mut st);
+        st.set_gmap_grid(grid());
+        let mut p = vec![gc(5), gc(5), gc(0), gc(0), gc(1), gc(1)];
+        p.extend(gsh(9));
+        st.apply_body(&msg(186, &p));
+        assert_eq!(st.board_mods_dropped, 1);
+        assert!(st.take_board_mods().is_empty());
+        assert_eq!(st.board_modify2.as_ref().map(|m| m.map_x), Some(5), "still recorded");
+    }
+
+    /// Off a gmap there is one level, cell (0, 0).
+    #[test]
+    fn board_modify2_off_a_gmap_is_cell_zero() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        st.apply_body(&[msg(6, b"a.nw"), raw_board(3)].concat());
+        let mut p = vec![gc(0), gc(0), gc(2), gc(2), gc(1), gc(1)];
+        p.extend(gsh(7));
+        st.apply_body(&msg(186, &p));
+        assert_eq!(st.board.as_ref().unwrap()[2 * 64 + 2], 7);
+        assert_eq!(st.take_board_mods().len(), 1);
+        let mut p = vec![gc(1), gc(0), gc(2), gc(2), gc(1), gc(1)];
+        p.extend(gsh(8));
+        st.apply_body(&msg(186, &p));
+        assert_eq!(st.board.as_ref().unwrap()[2 * 64 + 2], 7);
+        assert_eq!(st.board_mods_dropped, 1);
+    }
+
+    /// Props 43 and 44 of another player give its cell, one axis at a time;
+    /// its position is then drawn relative to ours.
+    #[test]
+    fn other_player_cell_props() {
+        let mut st = SessionState::default();
+        st.apply_body(&other(7, &[15 + 0x20, 10 + 0x20, 16 + 0x20, 20 + 0x20]));
+        assert_eq!(st.others[0].cell, None);
+        assert_eq!(st.others[0].position_from(Some((0, 0))), (5.0, 10.0));
+        st.apply_body(&other(7, &[43 + 0x20, 1 + 0x20]));
+        assert_eq!(st.others[0].cell, Some((1, 0)));
+        st.apply_body(&other(7, &[44 + 0x20, 1 + 0x20, 15 + 0x20, 2 + 0x20]));
+        assert_eq!(st.others[0].cell, Some((1, 1)));
+        // Cell (1,1) seen from cell (0,0): 64 tiles east and south.
+        assert_eq!(st.others[0].position_from(Some((0, 0))), (65.0, 74.0));
+        assert_eq!(st.others[0].position_from(Some((1, 1))), (1.0, 10.0));
+        assert_eq!(st.others[0].position_from(None), (1.0, 10.0));
     }
 }

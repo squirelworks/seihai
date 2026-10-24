@@ -263,10 +263,15 @@ pub fn render_view(
         for tx in 0..=view_tiles_w as i32 {
             let lx = ox + tx;
             let ly = oy + ty;
-            if lx < 0 || ly < 0 || lx >= 64 || ly >= 64 {
-                continue;
-            }
-            if let Some(id) = tile_at(level, lx, ly) {
+            // The current level, or on a gmap the neighbour the tile is in.
+            let (kx, ky) = (lx.div_euclid(64), ly.div_euclid(64));
+            let at = if (kx, ky) == (0, 0) {
+                Some(level)
+            } else {
+                session.gmap.as_ref().and_then(|w| w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky)))
+            };
+            let Some(at) = at else { continue };
+            if let Some(id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
                 fb.blit_tile(sheet, sheet_w, sheet_h, id, tx * t - sub_x, ty * t - sub_y);
             }
         }
@@ -449,5 +454,54 @@ mod tests {
         let mut fb = Framebuffer::new(32, 32);
         fb.blit_tile(&sheet, 16, 16, 0, 0, 0);
         assert_eq!(fb.pixels[0], 0xFF);
+    }
+
+    /// A 2048×512 sheet where tile `n` is a flat colour: `n` in the red byte.
+    fn flat_sheet() -> Vec<u8> {
+        let mut sheet = vec![0u8; 2048 * 512 * 3];
+        for n in 0..512u32 {
+            let (col, row) = (n % 16, (n / 16) % SHEET_ROWS);
+            for y in 0..16 {
+                for x in 0..16 {
+                    let i = (((row * 16 + y) * 2048) + col * 16 + x) as usize * 3;
+                    sheet[i] = n as u8;
+                }
+            }
+        }
+        sheet
+    }
+
+    fn red_at(fb: &Framebuffer, x: u32, y: u32) -> u8 {
+        fb.pixels[((y * fb.width + x) * 3) as usize]
+    }
+
+    /// On a gmap the view shows the neighbour's tiles past the edge: tile
+    /// column 64 of the view is column 0 of the next level.
+    #[test]
+    fn neighbour_levels_are_drawn_past_the_edge() {
+        use crate::assets::Level;
+        let lv = |mark: u16| {
+            let tiles: Vec<u16> = (0..64 * 64).map(|i| if i == 30 * 64 { mark } else { 1 }).collect();
+            Level::from_board(&tiles)
+        };
+        let grid = "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n";
+        let mut s = OfflineSession::default();
+        s.current_level = Some(lv(20));
+        s.player_x = 60.0;
+        s.player_y = 30.5;
+        let sheet = flat_sheet();
+        // Without a gmap the right of the edge stays blank.
+        let fb = render_view(&s, &sheet, 2048, 512, 40, 30);
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        // Tile (64, 30) in cell-local tiles, and (0, 30) of this level.
+        let px = |tx: i32, ty: i32| ((tx * 16 - cam_x + 8) as u32, (ty * 16 - cam_y + 8) as u32);
+        let (ex, ey) = px(64, 30);
+        assert_eq!(red_at(&fb, ex, ey), 0, "no gmap: nothing past the edge");
+        s.enter_gmap("g.gmap".into(), crate::gmap::Gmap::parse(grid).unwrap(), (0, 0));
+        s.gmap.as_mut().unwrap().levels.insert((1, 0), lv(21));
+        let fb = render_view(&s, &sheet, 2048, 512, 40, 30);
+        assert_eq!(red_at(&fb, ex, ey), 21, "the east level's tile (0, 30)");
+        let (ix, iy) = px(63, 30);
+        assert_eq!(red_at(&fb, ix, iy), 1, "this level's own tile");
     }
 }

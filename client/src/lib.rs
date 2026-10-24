@@ -2,6 +2,7 @@
 
 pub mod assets;
 pub mod dev;
+pub mod gmap;
 pub mod gui;
 pub mod help;
 pub mod net;

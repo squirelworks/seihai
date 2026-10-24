@@ -6,6 +6,7 @@
 
 use crate::assets::{GaniPlayer, Level, TileKind, TileTypes};
 use crate::dev::DevMode;
+use crate::gmap::{Crossing, GmapWorld, Resolved};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
@@ -70,6 +71,10 @@ pub struct OfflineSession {
     /// Set from the moment a level warp is asked for until the new level
     /// arrives. Nothing walks and no link fires meanwhile.
     pub warp_pending: Option<String>,
+    /// On a gmap: the grid, the player's cell and the neighbouring levels.
+    /// `player_x`/`player_y` stay local to that cell. Walking past an edge
+    /// moves the player into the next cell (see [`Self::take_gmap_crossing`]).
+    pub gmap: Option<GmapWorld>,
     /// False from an arrival until the player has moved: a link cannot
     /// fire on the spot the player was put on.
     armed: bool,
@@ -133,6 +138,7 @@ impl OfflineSession {
             reading: None,
             dev: DevMode::default(),
             warp_pending: None,
+            gmap: None,
             armed: true,
             arrival_tile: None,
             swim_sent: false,
@@ -481,7 +487,7 @@ impl OfflineSession {
     pub fn refresh_water(&mut self) {
         let (fx, fy) = self.foot();
         self.in_water = match (&self.current_level, &self.tiletypes) {
-            (Some(level), Some(types)) => level.kind_at(types, fx, fy) == TileKind::Water,
+            (Some(level), Some(types)) => self.kind_at_point(level, types, fx, fy) == TileKind::Water,
             _ => false,
         };
     }
@@ -547,6 +553,72 @@ impl OfflineSession {
         fired
     }
 
+    /// The kind of tile under a point given relative to the current cell.
+    /// On a gmap a point past the edge is in the next cell's level, and in
+    /// no level (blocking) when that cell has none loaded.
+    fn kind_at_point(&self, level: &Level, types: &TileTypes, fx: f32, fy: f32) -> TileKind {
+        let Some(w) = &self.gmap else {
+            return level.kind_at(types, fx, fy);
+        };
+        let side = crate::gmap::CELL_TILES as f32;
+        let (kx, ky) = ((fx / side).floor() as i32, (fy / side).floor() as i32);
+        if (kx, ky) == (0, 0) {
+            return level.kind_at(types, fx, fy);
+        }
+        match w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky)) {
+            Some(l) => l.kind_at(types, fx - kx as f32 * side, fy - ky as f32 * side),
+            None => TileKind::Blocking,
+        }
+    }
+
+    /// Whether a sprite position (current-cell tiles) is a legal place to be
+    /// as far as the gmap goes: inside the cell, or across an edge into a
+    /// loaded level. A step that would cross both edges at once is refused
+    /// (it was never seen from a real client; the walk slides along one
+    /// axis instead).
+    fn gmap_step_ok(&self, nx: f32, ny: f32) -> bool {
+        let Some(w) = &self.gmap else { return true };
+        match w.map.resolve(w.cell, (nx, ny)) {
+            Resolved::Inside => true,
+            Resolved::NoLevel => false,
+            Resolved::Crossed(c) => !(c.x_changed() && c.y_changed()) && w.levels.contains_key(&c.to),
+        }
+    }
+
+    /// Start a gmap walk: the grid, and the cell the player is in.
+    /// `player_x`/`player_y` must be local to `cell`.
+    pub fn enter_gmap(&mut self, name: String, map: crate::gmap::Gmap, cell: (i32, i32)) {
+        self.gmap = Some(GmapWorld::new(name, map, cell));
+    }
+
+    /// Leave the gmap (a plain level warp).
+    pub fn leave_gmap(&mut self) {
+        self.gmap = None;
+    }
+
+    /// The edge crossing the last step made, if any. The caller sends the
+    /// crossing frame ([`crate::gmap::crossing_frame`]); the player is
+    /// already in the new cell with the wrapped position.
+    pub fn take_gmap_crossing(&mut self) -> Option<Crossing> {
+        self.gmap.as_mut()?.crossing.take()
+    }
+
+    /// Move into the cell `c` names: the loaded level there becomes the
+    /// current one, the old one is kept as a neighbour.
+    fn cross_to(&mut self, c: Crossing) {
+        let Some(w) = self.gmap.as_mut() else { return };
+        if let Some(old) = self.current_level.take() {
+            w.levels.insert(c.from, old);
+        }
+        self.current_level = w.levels.remove(&c.to);
+        w.cell = c.to;
+        w.crossing = Some(c);
+        self.player_x = c.local_x;
+        self.player_y = c.local_y;
+        self.opened_chests.clear();
+        self.pending_link = None;
+    }
+
     /// True if the player may stand with the sprite's top-left at
     /// `(x, y)`: the feet are not on a wall tile (or off the board) and
     /// not inside a chest. Water and lava are open. Developer mode skips
@@ -557,7 +629,7 @@ impl OfflineSession {
         }
         let (fx, fy) = (x + FOOT_DX, y + FOOT_DY);
         if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-            if level.kind_at(types, fx, fy) == TileKind::Blocking {
+            if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking {
                 return false;
             }
         }
@@ -599,7 +671,7 @@ impl OfflineSession {
 
         let (x, y) = (self.player_x, self.player_y);
         let stuck = !self.can_stand(x, y);
-        let open = |s: &Self, mx: f32, my: f32| stuck || s.can_stand(x + mx, y + my);
+        let open = |s: &Self, mx: f32, my: f32| s.gmap_step_ok(x + mx, y + my) && (stuck || s.can_stand(x + mx, y + my));
         let step = if dx != 0.0 && dy != 0.0 {
             if open(self, dx, dy) && open(self, dx, 0.0) && open(self, 0.0, dy) {
                 Some((dx, dy))
@@ -619,6 +691,11 @@ impl OfflineSession {
 
         self.player_x += mx;
         self.player_y += my;
+        if let Some(w) = &self.gmap {
+            if let Resolved::Crossed(c) = w.map.resolve(w.cell, (self.player_x, self.player_y)) {
+                self.cross_to(c);
+            }
+        }
         self.armed = true;
         self.refresh_water();
         if let Some(gani) = self.walk_gani.as_mut() {
@@ -953,5 +1030,169 @@ mod tests {
         assert!(s.try_move(0.5, 0.0).is_none());
         s.cancel_warp();
         assert!(s.try_move(0.5, 0.0).is_some());
+    }
+
+    // ---- gmap walking ------------------------------------------------------
+
+    use crate::gmap::Gmap;
+
+    const GRID: &str = "GRMAP001\nWIDTH 2\nHEIGHT 2\nLEVELNAMES\n\"nw.nw\",\"ne.nw\",\n\"sw.nw\",\"se.nw\",\nLEVELNAMESEND\n";
+    /// A tile id no wall or water test confuses with the open floor: each
+    /// cell's level is open floor with its own marker in the top-left tile.
+    const MARK: [u16; 4] = [10, 11, 12, 13];
+
+    fn marked(cell: usize, wall_at: Option<(i32, i32)>) -> Level {
+        level(move |x, y| {
+            if Some((x, y)) == wall_at {
+                WALL
+            } else if (x, y) == (0, 0) {
+                MARK[cell]
+            } else {
+                OPEN
+            }
+        })
+    }
+
+    /// A 2x2 world, the player in the north-west cell with the sprite at
+    /// `(x, y)`. `load` says which neighbour cells have a level.
+    fn gmap_session(x: f32, y: f32, load: &[(i32, i32)], wall_ne: Option<(i32, i32)>) -> OfflineSession {
+        let mut s = OfflineSession::new();
+        s.tiletypes = Some(types());
+        s.current_level = Some(marked(0, None));
+        s.player_x = x;
+        s.player_y = y;
+        s.enter_gmap("g.gmap".into(), Gmap::parse(GRID).unwrap(), (0, 0));
+        let w = s.gmap.as_mut().unwrap();
+        for &(cx, cy) in load {
+            let i = (cy * 2 + cx) as usize;
+            w.levels.insert((cx, cy), marked(i, if (cx, cy) == (1, 0) { wall_ne } else { None }));
+        }
+        s
+    }
+
+    fn marker(s: &OfflineSession) -> Option<u16> {
+        s.current_level.as_ref().and_then(|l| l.tile_id_at(0, 0))
+    }
+
+    #[test]
+    fn walking_east_crosses_into_the_next_level() {
+        let mut s = gmap_session(60.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
+        // 60.0 -> 63.5 is seven half-steps; the eighth reaches 64.0.
+        assert_eq!(walk(&mut s, 0.5, 0.0, 7), 7);
+        assert_eq!((s.player_x, marker(&s)), (63.5, Some(10)));
+        assert!(s.take_gmap_crossing().is_none());
+        assert!(s.try_move(0.5, 0.0).is_some());
+        let c = s.take_gmap_crossing().expect("the step crossed");
+        assert_eq!((c.from, c.to, c.local_x, c.local_y), ((0, 0), (1, 0), 0.0, 30.5));
+        assert_eq!((s.player_x, s.player_y), (0.0, 30.5));
+        assert_eq!(marker(&s), Some(11), "the north-east level is current");
+        assert_eq!(s.gmap.as_ref().unwrap().cell, (1, 0));
+        assert!(s.gmap.as_ref().unwrap().levels.contains_key(&(0, 0)), "the old level stays as a neighbour");
+        assert!(s.take_gmap_crossing().is_none(), "taken once");
+    }
+
+    #[test]
+    fn walking_back_west_returns_with_a_wrapped_position() {
+        let mut s = gmap_session(63.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
+        walk(&mut s, 0.5, 0.0, 2);
+        s.take_gmap_crossing().unwrap();
+        assert_eq!((s.player_x, marker(&s)), (0.0, Some(11)));
+        assert!(s.try_move(-0.5, 0.0).is_some());
+        let c = s.take_gmap_crossing().unwrap();
+        assert_eq!((c.to, c.local_x), ((0, 0), 63.5));
+        assert_eq!((s.player_x, marker(&s)), (63.5, Some(10)));
+    }
+
+    #[test]
+    fn walking_south_and_north_cross_the_y_edge() {
+        let mut s = gmap_session(30.5, 63.0, &[(1, 0), (0, 1), (1, 1)], None);
+        walk(&mut s, 0.0, 0.5, 2);
+        let c = s.take_gmap_crossing().unwrap();
+        assert_eq!((c.to, c.local_y, c.y_changed(), c.x_changed()), ((0, 1), 0.0, true, false));
+        assert_eq!(marker(&s), Some(12));
+        s.try_move(0.0, -0.5);
+        let c = s.take_gmap_crossing().unwrap();
+        assert_eq!((c.to, c.local_y), ((0, 0), 63.5));
+    }
+
+    #[test]
+    fn the_grid_edge_stops_the_walk() {
+        let mut s = gmap_session(61.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
+        walk(&mut s, 0.5, 0.0, 6);
+        s.take_gmap_crossing().unwrap();
+        // Now in the east column: nothing further east. The feet reach 64.0
+        // (sprite 62.0) and stop there.
+        walk(&mut s, 0.5, 0.0, 200);
+        assert_eq!(s.player_x, 61.5);
+        assert!(s.take_gmap_crossing().is_none());
+        // Same at the north edge.
+        let mut s = gmap_session(30.5, 1.0, &[(1, 0), (0, 1), (1, 1)], None);
+        walk(&mut s, 0.0, -0.5, 20);
+        assert!(s.take_gmap_crossing().is_none());
+        assert_eq!(s.player_y, 0.0);
+    }
+
+    #[test]
+    fn a_neighbour_that_is_not_loaded_blocks() {
+        let mut s = gmap_session(60.0, 30.5, &[], None);
+        walk(&mut s, 0.5, 0.0, 20);
+        assert!(s.take_gmap_crossing().is_none());
+        assert_eq!(s.player_x, 61.5, "stops with the feet at the seam");
+        assert_eq!(marker(&s), Some(10));
+        // Once it is loaded the walk goes on.
+        s.gmap.as_mut().unwrap().levels.insert((1, 0), marked(1, None));
+        walk(&mut s, 0.5, 0.0, 20);
+        assert!(s.take_gmap_crossing().is_some());
+    }
+
+    /// The feet test reads the neighbour's tiles across the seam, so a wall
+    /// in column 0 of the next level stops the player in this one.
+    #[test]
+    fn a_wall_across_the_seam_blocks() {
+        let mut s = gmap_session(60.0, 30.5, &[(1, 0), (0, 1), (1, 1)], Some((0, 33)));
+        // Feet row: 30.5 + 2.75 = 33.25, tile row 33.
+        walk(&mut s, 0.5, 0.0, 20);
+        assert_eq!(s.player_x, 61.5);
+        assert!(s.take_gmap_crossing().is_none());
+        // A row up the same walk is free.
+        let mut s = gmap_session(60.0, 29.5, &[(1, 0), (0, 1), (1, 1)], Some((0, 33)));
+        walk(&mut s, 0.5, 0.0, 8);
+        assert!(s.take_gmap_crossing().is_some());
+    }
+
+    #[test]
+    fn water_across_the_seam_is_read_from_the_neighbour() {
+        let mut s = gmap_session(60.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
+        s.gmap.as_mut().unwrap().levels.insert((1, 0), level(|_, _| WATER));
+        walk(&mut s, 0.5, 0.0, 4);
+        assert!(s.in_water, "feet at 64.0 are in the east level's water");
+    }
+
+    /// A step across both edges at once is refused; the walk slides along
+    /// one axis, so the player crosses one edge at a time.
+    #[test]
+    fn a_corner_step_does_not_cross_both_edges() {
+        let mut s = gmap_session(63.5, 63.5, &[(1, 0), (0, 1), (1, 1)], None);
+        let r = s.try_move(0.5, 0.5);
+        assert!(r.is_some(), "it slides");
+        let c = s.take_gmap_crossing().unwrap();
+        assert!(c.x_changed() != c.y_changed(), "one axis only: {c:?}");
+    }
+
+    #[test]
+    fn without_a_gmap_the_edge_is_a_wall_as_before() {
+        let mut s = session_at(level(|_, _| OPEN), 62.5, 10.5);
+        assert!(s.gmap.is_none());
+        walk(&mut s, 0.5, 0.0, 10);
+        assert!(s.take_gmap_crossing().is_none());
+        assert_eq!(s.foot().0, 63.5);
+    }
+
+    #[test]
+    fn crossing_clears_the_opened_chests_and_pending_link() {
+        let mut s = gmap_session(63.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
+        s.opened_chests.insert((3, 3));
+        walk(&mut s, 0.5, 0.0, 2);
+        assert!(s.opened_chests.is_empty());
     }
 }

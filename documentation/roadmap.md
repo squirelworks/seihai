@@ -12,7 +12,7 @@ Single code path. Versions are profile rows, not branches.
 
 ## 2. Wire parity, by version
 
-- [ ] Gmaps. Ids 49, 185 and 186, cell props 43/44, and the crossing behaviour captured in the lab.
+- [x] Gmaps. Ids 49 and 186, cell props 43/44, and the crossing behaviour captured in the lab: grid model and `.gmap` reader, edge crossing and wrapped coordinate, cell-prop frame gated by profile (with 46 or the 2.22 tamper check in front), 186 applied at its cell, neighbour levels for collision and drawing, `PLI_ADJACENTLEVEL`. Still open under gmaps: 185 board heights, the `gr.x`/`gr.y` flags, neighbours' NPCs/links/chests, cached-level crossings, the 171/172 map screens, and a run against a real server. See `documentation/protocol.md`, "Gmaps".
 - [ ] Cached level links. The 30-plus-46 form.
 - [ ] Script-initiated warps. Needs the script engine below.
 - [ ] Remaining fields. The unresolved id 24 and 46 meanings, and the field order for id 178 when a real service sends it.
