@@ -65,13 +65,21 @@ To skip the launcher:
 ./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password PASS --version 2.05
 ```
 
+To keep the password off the command line, put it in an environment variable and pass the name:
+
+```bash
+export SEIHAI_PASSWORD=...
+./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22
+```
+
 | Flag | Meaning |
 |------|---------|
 | `--assets`, `-a` | Folder containing `pics1.png` |
 | `--level`, `-l` | Level file to load offline |
 | `--online`, `-o` | `host:port` of a listserver or gserver |
 | `--account` | Account name |
-| `--password` | Password |
+| `--password` | Password (visible in the process list; prefer `--password-env`) |
+| `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 
 ## Features

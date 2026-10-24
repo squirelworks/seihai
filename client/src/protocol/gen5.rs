@@ -6,11 +6,13 @@
 //! On send: compress first, then XOR.
 //! On receive: undo XOR first, then decompress.
 //!
-//! Group limits:
-//! - uncompressed (`0x02`): `ceil(len/4)` capped at 12
-//! - zlib (`0x04`) / bz2 (`0x06`): `ceil(len/4)` capped at 4
+//! The iterator steps once per 4-byte group actually present in the body,
+//! up to a cap that depends on the compression type:
+//! - uncompressed (`0x02`): at most 12 groups
+//! - zlib (`0x04`) / bz2 (`0x06`): at most 4 groups
 //!
-//! A partial last group is XORed byte by byte.
+//! A partial last group is XORed byte by byte and still steps the iterator.
+//! A body shorter than the cap steps fewer times.
 //! Login frame is plain zlib with no compression byte and no XOR.
 
 use super::gen3::{GEN3_MUL, GEN3_SEED};
