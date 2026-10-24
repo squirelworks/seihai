@@ -94,6 +94,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
+| `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
 
 ### Settings file
 
