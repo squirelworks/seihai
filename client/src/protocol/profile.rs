@@ -345,8 +345,9 @@ const PLO_205: IdSet = PLO_204.with(168);
 /// 2.1: the 2.1 test builds add 49 and 169; ghost mode and the gserver
 /// bigmap/minimap (170–174) arrive with 2.1. [inferred]
 const PLO_210: IdSet = PLO_205.with(49).with_range(169, 174);
-/// 2.14: large files, serverwarp and the status list. [inferred]
-const PLO_214: IdSet = PLO_210.with_all(&[68, 69]).with_range(175, 184);
+/// 2.14: large files (68/69) and ids 178 and 180, as the version-profile
+/// TOML has them; the rest of 175–185 is first seen in 2.17. [inferred]
+const PLO_214: IdSet = PLO_210.with_all(&[68, 69, 178, 180]);
 /// 79 ids.
 const PLO_217: IdSet = PLO_205.with_all(&[49, 68, 69]).with_range(169, 185);
 /// 80 ids.
@@ -367,10 +368,29 @@ const PLI_205: IdSet = IdSet::range(0, 24)
     .with_range(26, 30)
     .with_range(32, 38)
     .with_all(&[80, 81]);
-/// 1.41–2.04 between the two. [inferred]
-const PLI_141: IdSet = PLI_139.with_range(34, 36);
-/// 2.17+: adds TAMPERCHECK (39). Later additions not traced. [inferred]
-const PLI_217: IdSet = PLI_205.with(39);
+/// 1.41: 1.39 without 31 and 34–36. Ids passed as constants to the send
+/// method, read from the 1.41 binary.
+const PLI_141: IdSet = PLI_139.without(31);
+/// 1.42 and 2.00 add UPDATEFILE (34).
+const PLI_142: IdSet = PLI_141.with(34);
+/// 2.01 and 2.02 add ADJACENTLEVEL (35) and HITOBJECTS (36).
+const PLI_201: IdSet = PLI_142.with_all(&[35, 36]);
+/// 2.02 rev 2 adds LANGUAGE (37).
+const PLI_202R2: IdSet = PLI_201.with(37);
+/// 2.03 adds TRIGGERACTION (38). 2.04 and 2.05 send the same set.
+const PLI_203: IdSet = PLI_202R2.with(38);
+/// 2.14: adds SERVERWARP (41). [inferred]
+const PLI_214: IdSet = PLI_205.with(41);
+/// 2.17: 2.05's set plus TAMPERCHECK, SHOOT and SERVERWARP (39–41) and
+/// MUTEPLAYER and the process-list pair (43–45).
+const PLI_217: IdSet = PLI_205.with_range(39, 41).with_range(43, 45);
+/// 2.22: 2.17 without 36, 45 and 81 (no send site was matched for 36 and
+/// 45; 81 is not sent), so 0–24, 26–30, 32–35, 37–41, 43, 44 and 80.
+const PLI_222: IdSet = PLI_217.without_all(&[36, 45, 81]);
+/// 2.31: 2.22 minus PUTNPC (21) and the process-list reply (44), plus
+/// ENTERLEVEL (46). The TOML's `pli_changes` note lists only 21 and 46, but
+/// its `pli_sent` list (which this follows) has no 44 either.
+const PLI_231: IdSet = PLI_222.without_all(&[21, 44]).with(46);
 
 // Own-player prop sets (`PLO_PLAYERPROPS`).
 const OWN_133: IdSet = IdSet::range(0, 33);
@@ -395,6 +415,8 @@ const OTHER_205: IdSet = IdSet::EMPTY
     .with(24)
     .with_range(30, 42)
     .with_all(&[50, 51]);
+/// 2.1 test builds: the 2.05 set plus 43–45 (GMAPLEVELX/Y, Z).
+const OTHER_210: IdSet = OTHER_205.with_range(43, 45);
 const OTHER_222: IdSet = IdSet::range(0, 76).without_all(&[1, 3, 4, 5, 6, 7, 14, 22, 25, 26, 27, 28, 29]);
 const OTHER_231: IdSet = IdSet::range(0, 80).without_all(&[1, 3, 4, 5, 6, 7, 14, 22, 25, 26, 27, 28, 29, 77]);
 
@@ -502,10 +524,15 @@ const CLASSIC: VersionProfile = VersionProfile {
 /// 2.1 and later: the server treats the client as 2.1+ (gani prop 10,
 /// `.png` defaults, modtime in `PLO_FILE`, gserver minimap).
 const NEW_2_1: VersionProfile = VersionProfile {
-    protocol: Protocol { plo: PLO_210, ..BASE.protocol },
+    protocol: Protocol {
+        plo: PLO_210,
+        // 2.1 test builds and later default to port 14922.
+        listserver: Some(Listserver { port: 14922, token: None }),
+        ..BASE.protocol
+    },
     props: Props {
         own: OWN_210,
-        other: other_upto(45),
+        other: OTHER_210,
         npc_max: 43,
         bow_prop10: false,
         ..BASE.props
@@ -532,7 +559,7 @@ const GEN5: VersionProfile = VersionProfile {
         encryption: EncryptionGen::Gen5,
         listserver: Some(Listserver { port: 14922, token: Some("GNW30123") }),
         plo: PLO_222,
-        pli: PLI_217,
+        pli: PLI_222,
         tampercheck: true,
         udp_off_by_default: true,
         ..NEW_2_1.protocol
@@ -696,9 +723,10 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V142,
         label: "1.42",
         token: "GNW08011",
+        date: "2001-01-10",
         protocol: Protocol {
             plo: PLO_142,
-            pli: PLI_141,
+            pli: PLI_142,
             sends_language: false,
             ..BASE.protocol
         },
@@ -720,9 +748,10 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V200,
         label: "2.00",
         token: "GNW24011",
+        date: "2001-02-01",
         protocol: Protocol {
             plo: PLO_200,
-            pli: PLI_141,
+            pli: PLI_142,
             sends_language: false,
             ..BASE.protocol
         },
@@ -744,9 +773,10 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V201,
         label: "2.01",
         token: "GNW23021",
+        date: "2001-03-08",
         protocol: Protocol {
             plo: PLO_201,
-            pli: PLI_141,
+            pli: PLI_201,
             sends_language: false,
             ..BASE.protocol
         },
@@ -764,13 +794,15 @@ pub static PROFILES: &[VersionProfile] = &[
         },
         ..BASE
     },
+    // 2.02 (base build and rev 1): no LANGUAGE send yet.
     VersionProfile {
         version: ClientVersion::V202,
         label: "2.02",
         token: "GNW15041",
+        date: "2001-04-15",
         protocol: Protocol {
             plo: PLO_202,
-            pli: PLI_141,
+            pli: PLI_201,
             sends_language: false,
             ..BASE.protocol
         },
@@ -788,7 +820,86 @@ pub static PROFILES: &[VersionProfile] = &[
         },
         ..BASE
     },
-    VersionProfile { date: "", ..BASE },
+    // 2.02 rev 2: first build that sends LANGUAGE (37).
+    VersionProfile {
+        version: ClientVersion::V202R2,
+        label: "2.02 rev2",
+        token: "GNW20041",
+        date: "2001-04-20",
+        protocol: Protocol {
+            plo: PLO_202,
+            pli: PLI_202R2,
+            sends_language: true,
+            ..BASE.protocol
+        },
+        props: Props {
+            own: OWN_202,
+            other: other_upto(41),
+            npc_max: 40,
+            ..BASE.props
+        },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 146,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    // 2.03: TRIGGERACTION (38), MOVE (165) and PLO 48.
+    VersionProfile {
+        version: ClientVersion::V203,
+        label: "2.03",
+        token: "GNW06051",
+        date: "2001-05-07",
+        protocol: Protocol {
+            plo: PLO_203,
+            pli: PLI_203,
+            sends_language: true,
+            ..BASE.protocol
+        },
+        props: Props {
+            own: OWN_202,
+            other: other_upto(41),
+            npc_max: 40,
+            ..BASE.props
+        },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 148,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    // 2.04: SHOWIMGNPC (166), PLO 26 dropped, ATTACHNPC (prop 42).
+    VersionProfile {
+        version: ClientVersion::V204,
+        label: "2.04",
+        token: "GNW24061",
+        date: "2001-06-25",
+        protocol: Protocol {
+            plo: PLO_204,
+            pli: PLI_203,
+            sends_language: true,
+            ..BASE.protocol
+        },
+        props: Props {
+            own: OWN_204,
+            other: other_upto(42),
+            npc_max: 40,
+            ..BASE.props
+        },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 157,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    // 2.05 rev 2 (the base row): .nw and .gmap levels, server name in the title.
+    VersionProfile { date: "2001-08-16", ..BASE },
     VersionProfile {
         version: ClientVersion::V210,
         label: "2.1",
@@ -811,7 +922,7 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V214,
         label: "2.14",
         token: "GNW30042",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
+        protocol: Protocol { plo: PLO_214, pli: PLI_214, ..NEW_2_1.protocol },
         files: Files { large_files: true, ..NEW_2_1.files },
         ui: Ui { server_list: ServerList::Tabs(2), ..NEW_2_1.ui },
         ..NEW_2_1
@@ -820,7 +931,7 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V215,
         label: "2.15",
         token: "GNW19052",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
+        protocol: Protocol { plo: PLO_214, pli: PLI_214, ..NEW_2_1.protocol },
         files: Files { large_files: true, ..NEW_2_1.files },
         ui: Ui { server_list: ServerList::Tabs(2), ..NEW_2_1.ui },
         ..NEW_2_1
@@ -829,7 +940,7 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V216,
         label: "2.16",
         token: "GNW12102",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
+        protocol: Protocol { plo: PLO_214, pli: PLI_214, ..NEW_2_1.protocol },
         props: Props {
             own: OWN_216,
             other: OTHER_222,
@@ -854,6 +965,7 @@ pub static PROFILES: &[VersionProfile] = &[
         props: Props {
             own: OWN_216,
             other: OTHER_222,
+            npc_max: 73,
             ..NEW_2_1.props
         },
         files: Files { large_files: true, ..NEW_2_1.files },
@@ -873,7 +985,7 @@ pub static PROFILES: &[VersionProfile] = &[
         label: "2.3",
         token: "GNW14015",
         basis: Basis::Inferred,
-        protocol: Protocol { plo: PLO_231, ..GEN5.protocol },
+        protocol: Protocol { plo: PLO_231, pli: PLI_231, ..GEN5.protocol },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -889,7 +1001,7 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V231,
         label: "2.31",
         token: "GNW28015",
-        protocol: Protocol { plo: PLO_231, ..GEN5.protocol },
+        protocol: Protocol { plo: PLO_231, pli: PLI_231, ..GEN5.protocol },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -1009,13 +1121,154 @@ mod tests {
     #[test]
     fn language_needs_pli_37() {
         for p in PROFILES {
-            if p.protocol.sends_language {
-                assert!(p.protocol.pli.contains(37), "{}", p.label);
-            }
+            assert_eq!(p.protocol.sends_language, p.protocol.pli.contains(37), "{}", p.label);
             if p.protocol.tampercheck {
                 assert!(p.protocol.pli.contains(39), "{}", p.label);
             }
         }
+    }
+
+    /// The per-version data from Graal_analysis' version-profile TOMLs
+    /// (`profile_toml.tsv`, made by `tools/gen_profile_fixture.py`).
+    struct TomlRow {
+        label: String,
+        token: String,
+        inferred: bool,
+        plo: IdSet,
+        pli: IdSet,
+        own_max: u8,
+        npc_max: u8,
+        other: Option<IdSet>,
+        tampercheck: bool,
+        list_port: Option<u16>,
+    }
+
+    fn parse_ids(s: &str) -> Option<IdSet> {
+        if s == "-" {
+            return None;
+        }
+        let mut set = IdSet::EMPTY;
+        for part in s.split(',') {
+            let (lo, hi) = part.split_once('-').unwrap_or((part, part));
+            set = set.with_range(lo.parse().unwrap(), hi.parse().unwrap());
+        }
+        Some(set)
+    }
+
+    fn toml_rows() -> Vec<TomlRow> {
+        include_str!("profile_toml.tsv")
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.is_empty())
+            .map(|l| {
+                let c: Vec<&str> = l.split('\t').collect();
+                assert_eq!(c.len(), 10, "{l}");
+                TomlRow {
+                    label: c[0].to_string(),
+                    token: c[1].to_string(),
+                    inferred: c[2] == "inf",
+                    plo: parse_ids(c[3]).unwrap(),
+                    pli: parse_ids(c[4]).unwrap(),
+                    own_max: c[5].parse().unwrap(),
+                    npc_max: c[6].parse().unwrap(),
+                    other: parse_ids(c[7]),
+                    tampercheck: c[8] == "1",
+                    list_port: c[9].parse().ok(),
+                }
+            })
+            .collect()
+    }
+
+    /// Every row agrees with the version-profile TOMLs on token, basis,
+    /// server and client id sets, prop limits, tampercheck and listserver
+    /// port. To fix a failure, correct the row, or (if the TOML changed)
+    /// regenerate `profile_toml.tsv`.
+    #[test]
+    fn rows_match_version_profile_toml() {
+        let rows = toml_rows();
+        assert_eq!(rows.len(), PROFILES.len(), "one TOML row per profile row");
+        let mut bad = Vec::new();
+        for t in &rows {
+            let Some(p) = by_label(&t.label) else {
+                bad.push(format!("{}: no profile row", t.label));
+                continue;
+            };
+            let mut check = |name: &str, ok: bool| {
+                if !ok {
+                    bad.push(format!("{}: {name}", t.label));
+                }
+            };
+            check("token", p.token == t.token);
+            check("basis", (p.basis == Basis::Inferred) == t.inferred);
+            check("plo", p.protocol.plo == t.plo);
+            check("pli", p.protocol.pli == t.pli);
+            check("npc_max", p.props.npc_max == t.npc_max);
+            check("tampercheck", p.protocol.tampercheck == t.tampercheck);
+            check("sends_language == pli has 37", p.protocol.sends_language == t.pli.contains(37));
+            check("listserver port", p.protocol.listserver.map(|l| l.port) == t.list_port);
+            // 2.16: its TOML entry keeps the 2.15 prop limit but notes that
+            // 54-74 arrive in 2.16; the row follows the note.
+            if t.label != "2.16" {
+                check("own_max", p.props.own.iter().max() == Some(t.own_max));
+                if let Some(o) = t.other {
+                    check("other props", p.props.other == o);
+                }
+            }
+        }
+        assert!(bad.is_empty(), "rows differ from the TOML: {bad:#?}");
+    }
+
+    /// The corrections this table was regenerated for.
+    #[test]
+    fn client_send_sets_after_toml_sync() {
+        let pli = |v| profile(v).protocol.pli;
+        // 2.00 predates ADJACENTLEVEL and HITOBJECTS (2.01).
+        assert!(!pli(ClientVersion::V200).contains(35));
+        assert!(!pli(ClientVersion::V200).contains(36));
+        assert!(pli(ClientVersion::V201).contains(35));
+        // 2.17 sends the 2.17 additions.
+        for id in [34, 35, 36, 40, 41, 43, 44, 45] {
+            assert!(pli(ClientVersion::V217).contains(id), "2.17 id {id}");
+        }
+        // 2.22 follows the binary list: no 36/45/81, adds 40/41/43/44.
+        for id in [36, 45, 81] {
+            assert!(!pli(ClientVersion::V222).contains(id), "2.22 id {id}");
+        }
+        for id in [40, 41, 43, 44] {
+            assert!(pli(ClientVersion::V222).contains(id), "2.22 id {id}");
+        }
+        // 2.31: PUTNPC (21) gone, ENTERLEVEL (46) new.
+        assert!(pli(ClientVersion::V222).contains(21));
+        assert!(!pli(ClientVersion::V231).contains(21));
+        assert!(pli(ClientVersion::V231).contains(46));
+        assert!(!pli(ClientVersion::V231).contains(44));
+        assert_eq!(pli(ClientVersion::V230), pli(ClientVersion::V231));
+        // 2.17's listserver default is 14922.
+        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V205.listserver_port(), 14921);
+        assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
+    }
+
+    /// 2.02 rev 2, 2.03 and 2.04 each differ from the build before.
+    #[test]
+    fn the_2_0x_builds() {
+        let p = |v| profile(v);
+        let (a, b, c, d) = (
+            p(ClientVersion::V202),
+            p(ClientVersion::V202R2),
+            p(ClientVersion::V203),
+            p(ClientVersion::V204),
+        );
+        assert!(!a.protocol.sends_language && b.protocol.sends_language);
+        assert!(!b.protocol.pli.contains(38) && c.protocol.pli.contains(38));
+        assert!(!b.protocol.plo.contains(48) && c.protocol.plo.contains(48));
+        assert!(c.protocol.plo.contains(26) && !d.protocol.plo.contains(26));
+        assert!(d.protocol.plo.contains(166) && !c.protocol.plo.contains(166));
+        assert!(d.props.own.contains(42) && !c.props.own.contains(42));
+        assert_eq!((a.token, b.token, c.token, d.token), ("GNW15041", "GNW20041", "GNW06051", "GNW24061"));
+        // 2.05 is the first build with .nw levels and the server name in the title.
+        assert!(!d.levels.nw && p(ClientVersion::V205).levels.nw);
+        assert_eq!(b.window_title(Some("X")), "Graal 2.02 rev2");
+        assert_eq!(by_label("2.02 rev2").unwrap().version, ClientVersion::V202R2);
     }
 
     #[test]
