@@ -91,6 +91,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--password` | Password (visible in the process list; prefer `--password-env`) |
 | `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
 | `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
+| `--check-assets` | With `--assets`, resolve and load the files a version uses from the data folder and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
