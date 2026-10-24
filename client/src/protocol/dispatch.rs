@@ -267,6 +267,13 @@ pub struct SessionState {
     pub file_has_modtime: bool,
     /// Our own nickname (NICKNAME, prop 0, in `PLO_PLAYERPROPS`).
     pub nickname: Option<String>,
+    /// Own hearts and status from `PLO_PLAYERPROPS`, each set when it
+    /// arrives and taken by the game loop: MAXPOWER (1, heart containers),
+    /// CURPOWER (2, hearts × 2), STATUS (18) and ALIGNMENT (32, AP).
+    pub own_max_power: Option<u8>,
+    pub own_cur_power: Option<u8>,
+    pub own_status: Option<u8>,
+    pub own_alignment: Option<u8>,
     /// Read prop 10 as the pre-2.1 bow slot.
     pub bow_prop10: bool,
     /// Server→client ids this client version handles. Others are counted
@@ -1113,6 +1120,10 @@ impl SessionState {
                         g.cell.1 = i32::from(v);
                     }
                 }
+                (1, Some(v)) => self.own_max_power = Some(v),
+                (2, Some(v)) => self.own_cur_power = Some(v),
+                (18, Some(v)) => self.own_status = Some(v),
+                (32, Some(v)) => self.own_alignment = Some(v),
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
                 _ => {}
             }
@@ -1614,6 +1625,18 @@ mod tests {
         let mut st = SessionState::default();
         st.apply_body(b") 'default\n");
         assert_eq!(st.nickname.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn own_hearts_status_and_ap() {
+        let mut st = SessionState::default();
+        // MAXPOWER 3, CURPOWER 5 (2.5 hearts), STATUS 0x14, ALIGNMENT 50.
+        let props = [1 + 0x20, 3 + 0x20, 2 + 0x20, 5 + 0x20, 18 + 0x20, 0x14 + 0x20, 32 + 0x20, 50 + 0x20];
+        st.apply_body(&[&[9 + 0x20][..], &props, b"\n"].concat());
+        assert_eq!(
+            (st.own_max_power, st.own_cur_power, st.own_status, st.own_alignment),
+            (Some(3), Some(5), Some(0x14), Some(50))
+        );
     }
 
     #[test]

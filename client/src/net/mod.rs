@@ -913,7 +913,7 @@ impl Connection {
 }
 
 /// A GSHORT: two GCHARs, high 7 bits first.
-fn gshort(v: u16) -> [u8; 2] {
+pub(crate) fn gshort(v: u16) -> [u8; 2] {
     [((v >> 7) & 0x7F) as u8 + 0x20, (v & 0x7F) as u8 + 0x20]
 }
 

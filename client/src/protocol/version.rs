@@ -118,6 +118,20 @@ impl ClientVersion {
         p.levels.cached_links && p.protocol.pli.contains(crate::net::PLI_LEVELWARPMOD)
     }
 
+    /// The client-side death sequence this build runs, if its handler was
+    /// traced (see [`crate::protocol::DeathRules`]).
+    pub fn death_rules(self) -> Option<crate::protocol::DeathRules> {
+        self.profile().life.death
+    }
+
+    /// The victim's client sends `PLI_CLAIMPKER` (14) when it dies to a
+    /// known attacker: the build has the death sequence and the id is in its
+    /// send set. Read from the profile, not from the version.
+    pub fn sends_claim(self) -> bool {
+        let p = self.profile();
+        p.life.death.is_some() && p.protocol.pli.contains(crate::life::PLI_CLAIMPKER)
+    }
+
     /// Listserver port, or the 2.05 one for versions without a listserver.
     pub fn listserver_port(self) -> u16 {
         self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)

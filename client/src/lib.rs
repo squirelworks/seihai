@@ -6,6 +6,7 @@ pub mod difftest;
 pub mod gmap;
 pub mod gui;
 pub mod help;
+pub mod life;
 pub mod net;
 pub mod offline;
 pub mod protocol;

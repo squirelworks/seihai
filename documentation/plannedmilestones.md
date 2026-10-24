@@ -11,7 +11,6 @@ What remains after the current gmaps / script engine / differential testing work
 ## Next
 
 - Audio playback. GANI frames carry a sound field; nothing consumes it.
-- Health and death. The 1.5 s timer, input lock, dead status bit, respawn hearts by AP, and the victim-sent claim packet.
 - Combat. Sword hits are judged by the victim's client, with a reach of 0–4 tiles, a lateral limit under 2, and AP 100 immune.
 - Chat popups, buddy/ignore/mute files.
 - Damage formula and the respawn "same name group" rule.
@@ -39,3 +38,4 @@ What remains after the current gmaps / script engine / differential testing work
 - SERVERWARP follow (default on, settings option)
 - Script-initiated warps: `setlevel`/`setlevel2` online use the link request (PLI 0, or 30 with a cached copy, by profile); the new level loads on the server's answer. Seihai lab-tested on 2.31 and 2.22; the real client's own form is not captured (`documentation/script-warps.md`)
 - Cached level links: PLI 30 (`LEVELWARPMOD`) with the mod time from a per-session level cache, 46 and the props in the same frame, gated by profile
+- Health and death: 1.5 s death timer, input lock, dead status bit from tick 28, respawn hearts by AP and at the saved entry point, victim-sent `PLI_CLAIMPKER` (14), gated by `life.death` in the profile (`documentation/health-death.md`)
