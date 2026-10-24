@@ -53,6 +53,45 @@ This document describes the wire protocol used by Graal Reborn listservers and g
 
 Exact IDs and layouts are recorded in `../shworkingpapers/protocol/` as they are confirmed.
 
+## Login-time server messages (ids 10, 25, 39, 41, 44, 47, 156, 168, 171, 172, 174, 179, 180, 182)
+
+Every public 2.22 gserver tried on 2026-10-24 sent these around the level
+data. `client/src/protocol/extras.rs` decodes them into `SessionState`.
+Layouts come from gs2lib's `IEnums.h` and Graal_analysis `packet-ids.md`, and
+each was checked against the captured payload shapes (four gservers).
+
+| id | name | payload | `SessionState` field |
+|---|---|---|---|
+| 10 | ISLEADER | empty | `is_leader` |
+| 25 | SIGNATURE | GCHAR (73 on gs2 servers, 41 on GServer-RS) | `signature` |
+| 39 | LEVELMODTIME | GINT5 Unix time of the level file | `level_mod_time` |
+| 41 | STARTMESSAGE | HTML welcome page; empty on one server | `start_message` |
+| 44 | HASNPCSERVER | empty | `has_npc_server` |
+| 47 | STAFFGUILDS | comma list, items optionally quoted | `staff_guilds` |
+| 156 | SETACTIVELEVEL | level name | `active_level` |
+| 168 | UNKNOWN168 | empty | none (accepted, no effect) |
+| 171, 172 | BIGMAP, MINIMAP | `txt,png,x,y` | `bigmap`, `minimap` |
+| 174 | GHOSTICON | GCHAR, 1 = show (servers sent 0, once as a raw `0x00`) | `ghost_icon` |
+| 179 | RPGWINDOW | quoted comma list (welcome line, credits line) | `rpg_window` |
+| 180 | STATUSLIST | comma list of status names | `status_list` |
+| 182 | LISTPROCESSES | empty | `process_list_requests` |
+
+Deliberately not done: Seihai does not answer 182 with a process list (the
+real client sends `PLI_PROCESSLIST`; Seihai never reports the user's
+processes). A version only acts on an id its profile lists, so 2.05 still drops
+171 and 172.
+
+Seen on the wire but not in the 2.22 client's server set, so they stay
+ignored: 82 SERVERTEXT (empty), 190 SERVERLISTCONNECTED (empty), 194
+CLEARWEAPONS (empty).
+
+Still unknown or not implemented, for lack of a capture or a decompile: what
+`x` and `y` in 171/172 position (always 0 in the captures); what SIGNATURE's
+value is for; the 49 PLAYERWARP2, 169, 170, 173, 175-178, 181, 183-189 payloads
+(documented in gs2lib but never seen on the wire, so left alone); the
+`PLI_TAMPERCHECK` (39) payload (see the PR for why the recorded 10-byte lab
+value cannot be two GINT5 words).
+
 ## Implementation Notes
 
 - Prefer a single `Packet` / buffer class that can be shared by both listserver and gserver connections.

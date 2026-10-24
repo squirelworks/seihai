@@ -4,6 +4,9 @@
 //! its GCHAR id (wire byte - 0x20). The level-entry set is handled;
 //! everything else is recorded as unhandled.
 
+use super::extras::{
+    parse_ghost_icon, parse_level_mod_time, parse_map_spec, parse_signature, parse_text_list, MapSpec,
+};
 use super::profile::IdSet;
 use super::props::parse_player_props_in;
 use super::version::ClientVersion;
@@ -271,6 +274,37 @@ pub struct SessionState {
     pub board: Option<Vec<u16>>,
     /// Server world time from `PLO_NEWWORLDTIME` (42).
     pub world_time: Option<u32>,
+    /// `PLO_SIGNATURE` (25) value; gs2 servers send 73.
+    pub signature: Option<u8>,
+    /// `PLO_LEVELMODTIME` (39): Unix time of the level file, with the level
+    /// it arrived for.
+    pub level_mod_time: Option<(String, u32)>,
+    /// `PLO_STARTMESSAGE` (41): the server's HTML welcome page. Empty on
+    /// some servers.
+    pub start_message: Option<String>,
+    /// `PLO_HASNPCSERVER` (44) seen: the server runs NPC scripts, so the
+    /// client leaves NPC props alone.
+    pub has_npc_server: bool,
+    /// `PLO_STAFFGUILDS` (47): guild tags that mark staff.
+    pub staff_guilds: Vec<String>,
+    /// `PLO_SETACTIVELEVEL` (156): the level the following chests, baddies
+    /// and NPCs belong to.
+    pub active_level: Option<String>,
+    /// `PLO_GHOSTICON` (174).
+    pub ghost_icon: bool,
+    /// `PLO_RPGWINDOW` (179): the strings of the RPG window, in order
+    /// (a welcome line and a credits line on the servers seen).
+    pub rpg_window: Vec<String>,
+    /// `PLO_STATUSLIST` (180): player status names (Online, Away, ...).
+    pub status_list: Vec<String>,
+    /// `PLO_BIGMAP` (171) and `PLO_MINIMAP` (172).
+    pub bigmap: Option<MapSpec>,
+    pub minimap: Option<MapSpec>,
+    /// `PLO_ISLEADER` (10) seen.
+    pub is_leader: bool,
+    /// `PLO_LISTPROCESSES` (182) requests seen. Seihai never answers with
+    /// a process list.
+    pub process_list_requests: usize,
     pub unhandled: HashMap<u8, usize>,
     splitter: Splitter,
 }
@@ -527,6 +561,31 @@ impl SessionState {
                 let name = String::from_utf8_lossy(&msg.payload);
                 self.file_requests.push(format!("UPTODATE:{name}"));
             }
+            10 => self.is_leader = true,
+            25 => self.signature = parse_signature(&msg.payload),
+            39 => {
+                if let (Some(t), Some(level)) = (parse_level_mod_time(&msg.payload), &self.level_name) {
+                    self.level_mod_time = Some((level.clone(), t));
+                }
+            }
+            41 => self.start_message = Some(latin1(&msg.payload)),
+            44 => self.has_npc_server = true,
+            47 => self.staff_guilds = parse_text_list(&msg.payload),
+            156 => {
+                let name = latin1(&msg.payload);
+                if !name.is_empty() {
+                    self.active_level = Some(name);
+                }
+            }
+            168 => {
+                // PLO_UNKNOWN168: empty; login servers send it. Nothing to do.
+            }
+            171 => self.bigmap = parse_map_spec(&msg.payload),
+            172 => self.minimap = parse_map_spec(&msg.payload),
+            174 => self.ghost_icon = parse_ghost_icon(&msg.payload),
+            179 => self.rpg_window = parse_text_list(&msg.payload),
+            180 => self.status_list = parse_text_list(&msg.payload),
+            182 => self.process_list_requests += 1,
             _ => {
                 *self.unhandled.entry(msg.id).or_insert(0) += 1;
             }
@@ -699,7 +758,7 @@ pub fn latin1(b: &[u8]) -> String {
 }
 
 /// Split a `"a","b",c` list, as GServer's gtokenize writes it.
-fn split_quoted(s: &str) -> Vec<String> {
+pub(super) fn split_quoted(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut quoted = false;
@@ -722,7 +781,7 @@ fn split_quoted(s: &str) -> Vec<String> {
 }
 
 /// Read a GINT5: five GCHARs, high 7 bits first.
-fn read_gint5(b: &[u8]) -> Option<u64> {
+pub(super) fn read_gint5(b: &[u8]) -> Option<u64> {
     if b.len() < 5 {
         return None;
     }
@@ -1046,6 +1105,89 @@ mod tests {
         let st = SessionState::for_version(ClientVersion::V139);
         assert!(st.handles(101) && st.handles(102));
         assert!(!st.handles(169));
+    }
+
+    fn msg(id: u8, payload: &[u8]) -> Vec<u8> {
+        [&[id + 0x20][..], payload, b"\n"].concat()
+    }
+
+    /// The messages every public 2.22 gserver sent around the level (ids
+    /// 10, 25, 39, 41, 44, 47, 156, 168, 174, 179, 180, 182), shaped like
+    /// the captured ones, plus the big-map and mini-map specs.
+    #[test]
+    fn public_login_extras_are_decoded() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        st.apply_body(&msg(6, b"start.nw"));
+        let mut body = Vec::new();
+        for (id, p) in [
+            (25u8, &b"i"[..]),
+            (44, b""),
+            (168, b""),
+            (171, b"bigmap2.txt,bigmap.png,0,0"),
+            (172, b"minimap.txt,map2.png,0,0"),
+            (10, b""),
+            (174, b" "),
+            (156, b"start.nw"),
+            (179, b"\"Welcome to X.\",\"Credits, with a comma.\""),
+            (41, b"<html><body>hi</body></html>"),
+            (47, b"\"Server\",\"Manager\",\"GP\""),
+            (180, b"Online,Away,DND"),
+            (182, b""),
+        ] {
+            body.extend(msg(id, p));
+        }
+        // LEVELMODTIME: GINT5 1_781_284_436.
+        let t: u64 = 1_781_284_436;
+        let g5: Vec<u8> = (0..5).rev().map(|i| (((t >> (7 * i)) & 0x7F) as u8) + 0x20).collect();
+        body.extend(msg(39, &g5));
+        st.apply_body(&body);
+
+        assert!(st.unhandled.is_empty(), "{:?}", st.unhandled);
+        assert!(st.ignored.is_empty(), "{:?}", st.ignored);
+        assert_eq!(st.signature, Some(73));
+        assert!(st.has_npc_server && st.is_leader && !st.ghost_icon);
+        assert_eq!(st.bigmap.as_ref().map(|m| m.png.as_str()), Some("bigmap.png"));
+        assert_eq!(st.minimap.as_ref().map(|m| m.txt.as_str()), Some("minimap.txt"));
+        assert_eq!(st.active_level.as_deref(), Some("start.nw"));
+        assert_eq!(st.rpg_window, vec!["Welcome to X.", "Credits, with a comma."]);
+        assert_eq!(st.start_message.as_deref(), Some("<html><body>hi</body></html>"));
+        assert_eq!(st.staff_guilds, vec!["Server", "Manager", "GP"]);
+        assert_eq!(st.status_list, vec!["Online", "Away", "DND"]);
+        assert_eq!(st.process_list_requests, 1);
+        assert_eq!(st.level_mod_time, Some(("start.nw".to_string(), 1_781_284_436)));
+    }
+
+    /// Ghost icon on, and the map specs are ignored by a version without
+    /// handlers for them (2.05 has no 171 or 172).
+    #[test]
+    fn extras_follow_the_version() {
+        let mut old = SessionState::for_version(ClientVersion::V205);
+        old.apply_body(&msg(171, b"a.txt,b.png,1,2"));
+        assert!(old.bigmap.is_none());
+        assert_eq!(old.ignored.get(&171), Some(&1));
+        let mut new = SessionState::for_version(ClientVersion::V222);
+        new.apply_body(&[msg(171, b"a.txt,b.png,1,2"), msg(174, b"!")].concat());
+        assert_eq!(new.bigmap.as_ref().map(|m| (m.x, m.y)), Some((1, 2)));
+        assert!(new.ghost_icon);
+    }
+
+    /// No id and no payload shape may panic any version's session, and a
+    /// bad payload must leave the state as it was.
+    #[test]
+    fn no_message_panics() {
+        let payloads: [&[u8]; 6] = [b"", b" ", b"\xff", b"\x00\x00\x00", b"\"unterminated,", &[0x7f; 40]];
+        for v in ClientVersion::all_versions() {
+            for id in 0..=255u8 {
+                for p in payloads {
+                    let mut st = SessionState::for_version(*v);
+                    st.apply(&Message { id, payload: p.to_vec() });
+                }
+            }
+        }
+        let mut st = SessionState::default();
+        st.apply_body(&msg(171, b"not a map spec"));
+        st.apply_body(&msg(39, b"abc"));
+        assert!(st.bigmap.is_none() && st.level_mod_time.is_none());
     }
 
     /// Another player's stream stops at MAXPOWER (1) for 2.05.
