@@ -13,7 +13,7 @@ What remains after the current gmaps / script engine / differential testing work
 
 
 - Remaining fields (item 12): ids 24, 46 and 178 implementation is in Seihai #39 (rebased). Once rebased and mergeable, land it. Notes are in Graal_analysis batch g.
-- Differential-testing divergences (item 15): rectangle level links, login player props, 2.22 position flags, early id 46, asset requests, walk speed. Running in the private lab; one PR per divergence.
+- Differential-testing divergences (item 15), one PR each, measured in the private lab (`documentation/difftest.md`): [x] login frame (image checks, process list, login props; `documentation/login-burst.md`), [ ] rectangle level links, [ ] 2.22 position flags, [ ] early id 46, [ ] asset requests, walk fields, walk speed, frame bundling, adjacent level order, crossing prop order.
 - Damage and respawn leftovers: knockback, the per-player field in the packet path, bombs/arrows/baddies powers, the end-of-respawn save (`documentation/damage-respawn.md`).
 - File transfer leftovers: the `GWEBL001` level cache, the login set of `UPDATEFILE`s and the file-index scan order (`documentation/file-cache.md`).
 - Early builds. A real 2.00-era listserver reply, which is still unobserved. Skipped (item 13): nothing new observed.

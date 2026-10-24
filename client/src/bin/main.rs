@@ -13,6 +13,7 @@
 use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, AssetRoot, Gani, GaniPlayer, Level, TileTypesFile};
 use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
+use seihai::protocol::login::LoginBurst;
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
 use seihai::filecache::FileSession;
 use seihai::offline::OfflineSession;
@@ -599,6 +600,12 @@ fn main() {
     let resolver = AssetResolver::new(root.clone(), version.profile());
     // What to ask the server for, and where downloads are saved.
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
+    // The frame a real client sends once the server's login burst is in
+    // (image checks, process list, props), and the GANI it asks for at once.
+    let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
+    if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
+        send_file_msgs(conn.as_mut(), files.need("idle.gani"));
+    }
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -931,6 +938,18 @@ fn main() {
                         break;
                     }
                     Err(_) => break,
+                }
+            }
+            // The burst has ended: the file checks, process list and props
+            // a real client answers with.
+            if changed {
+                if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
+                    let msgs = lb.take(&net_state, &account, |n| files.need(n));
+                    if !msgs.is_empty() {
+                        if let Err(e) = c.send_messages(&msgs) {
+                            eprintln!("login frame send failed: {e}");
+                        }
+                    }
                 }
             }
             if changed {
@@ -1500,6 +1519,10 @@ fn main() {
                         gmap_asked.clear();
                         // The request lists belong to one connection.
                         files.new_connection();
+                        login_burst = LoginBurst::for_version(version);
+                        if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
+                            send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
+                        }
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
