@@ -78,6 +78,8 @@ To see what a listserver offers without logging in to anything:
 ./target/release/seihai --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22 --list-only
 ```
 
+The list is fetched as the version you pick, on that version's listserver login: one plain frame for 2.05 to 2.17, a keyed gen-5 login for 2.22 and later. Servers that send the status and URLs in a second frame are handled for both.
+
 Host names are resolved with the system resolver, and every address it returns is tried in turn (5 s each). If your resolver gives wrong or no answers for a name, use the server's IP address in `--online` instead.
 
 | Flag | Meaning |
