@@ -11,7 +11,7 @@
 //! and a levels/ subdirectory.
 
 use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot};
-use seihai::net::Connection;
+use seihai::net::{Connection, EnterLevelSender};
 use seihai::offline::OfflineSession;
 use seihai::protocol::{ChatKind, ClientVersion, SessionState, TamperSender};
 use seihai::settings::Settings;
@@ -176,6 +176,8 @@ fn main() {
     // Opt-in tamper check (`--send-tampercheck`): the build's constant.
     let mut tamper: Option<TamperSender> = None;
     let mut tamper_clock = Instant::now();
+    // PLI_ENTERLEVEL (46): login and every level change, for profiles with it.
+    let mut enter_level: Option<EnterLevelSender> = None;
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
     // True while the level on screen was built from the server's board.
@@ -279,6 +281,11 @@ fn main() {
                             eprintln!("post-login send failed: {e}");
                         }
                         tamper_clock = Instant::now();
+                        let mut el = EnterLevelSender::for_version(version);
+                        if let Err(e) = el.at_login(&mut c) {
+                            eprintln!("enter-level send failed: {e}");
+                        }
+                        enter_level = Some(el);
                         match c.spawn_reader() {
                             Ok(rx) => frames = Some(rx),
                             Err(e) => eprintln!("reader failed: {e}"),
@@ -599,6 +606,13 @@ fn main() {
                         entered = true;
                         // The first level after login is not a "level change":
                         // the login send already covers it.
+                        // PLI 46 goes out first on a level change, before
+                        // the next props frame (the walk update).
+                        if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
+                            if let Err(e) = el.level_entered(c, name) {
+                                eprintln!("enter-level send failed: {e}");
+                            }
+                        }
                         if loaded_level.is_some() {
                             if let (Some(t), Some(c)) = (tamper.as_mut(), conn.as_mut()) {
                                 if t.level_changed() {

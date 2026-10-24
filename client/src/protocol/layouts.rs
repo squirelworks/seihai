@@ -191,7 +191,10 @@ pub fn parse_board_heights(payload: &[u8]) -> Option<BoardHeights> {
 /// `PLO_BOARDMODIFY2` (186), 2.22 on: `GCHAR mapX, mapY, x, y, w, h`, then
 /// `w*h` GSHORT tiles row-major (the gmap cell's board is replaced from
 /// `x`,`y`), then a trailer the client does not read. It needs at least
-/// `6 + 2*w*h` bytes. What the trailer holds is unknown (none was seen).
+/// `6 + 2*w*h` bytes; one byte short is dropped without a disconnect and
+/// nothing is applied. The trailer is unread padding: bytes after the
+/// tiles are ignored, even a whole second record (lab, 2.22 and 2.31,
+/// 2026-10-24; Graal_analysis #33). There is no trailer decode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardModify2 {
     pub map_x: u8,
@@ -221,6 +224,40 @@ pub fn parse_board_modify2(payload: &[u8]) -> Option<BoardModify2> {
         trailer: rest[2 * width * height..].to_vec(),
     })
 }
+
+impl BoardModify2 {
+    /// Write the block into a 64-wide board (`board.len()` a multiple of
+    /// 64, row by row) at `x`,`y`. A tile past column 63 or past the last
+    /// row is clipped, not rejected: the real 2.22 and 2.31 clients drew
+    /// only columns 62 and 63 of a block at x 62 (lab, 2026-10-24).
+    /// Tiles are masked to 12 bits like the 101 board. Returns how many
+    /// tiles were written.
+    ///
+    /// Not called by the session yet: it needs the gmap cell the player is
+    /// in, and `mapX`/`mapY` other than that cell were never tested.
+    pub fn apply_to(&self, board: &mut [u16]) -> usize {
+        let rows = board.len() / BOARD_SIDE;
+        let mut written = 0;
+        for row in 0..self.height {
+            let by = usize::from(self.y) + row;
+            if by >= rows {
+                break;
+            }
+            for col in 0..self.width {
+                let bx = usize::from(self.x) + col;
+                if bx >= BOARD_SIDE {
+                    break;
+                }
+                board[by * BOARD_SIDE + bx] = self.tiles[row * self.width + col] & 0x0FFF;
+                written += 1;
+            }
+        }
+        written
+    }
+}
+
+/// Tiles per board side.
+const BOARD_SIDE: usize = 64;
 
 #[cfg(test)]
 mod tests {
@@ -363,5 +400,89 @@ mod tests {
         // Largest rectangles a GCHAR can ask for with nothing behind them.
         assert_eq!(parse_board_heights(&[0xff; 6]), None);
         assert_eq!(parse_board_modify2(&[0xff; 6]), None);
+    }
+
+    /// A 186 payload with the given block and `extra` bytes after the tiles.
+    fn p186(x: u8, y: u8, w: u8, h: u8, tiles: &[u16], extra: &[u8]) -> Vec<u8> {
+        let mut p = vec![gc(0), gc(0), gc(x), gc(y), gc(w), gc(h)];
+        for t in tiles {
+            p.extend_from_slice(&gs(*t));
+        }
+        p.extend_from_slice(extra);
+        p
+    }
+
+    /// Lab cases A and B: the block is applied; a trailer is ignored and
+    /// kept only as raw bytes.
+    #[test]
+    fn board_modify2_applies_block_and_ignores_the_trailer() {
+        let tiles: Vec<u16> = (1..=8).collect();
+        let m = parse_board_modify2(&p186(44, 26, 4, 2, &tiles, &[])).unwrap();
+        assert_eq!((m.x, m.y, m.width, m.height), (44, 26, 4, 2));
+        let mut board = vec![0u16; 4096];
+        assert_eq!(m.apply_to(&mut board), 8);
+        assert_eq!(&board[26 * 64 + 44..26 * 64 + 48], &[1, 2, 3, 4]);
+        assert_eq!(&board[27 * 64 + 44..27 * 64 + 48], &[5, 6, 7, 8]);
+        assert_eq!(board.iter().filter(|&&t| t != 0).count(), 8);
+
+        // Five arbitrary trailer bytes: same block, nothing else changes.
+        let mut board2 = vec![0u16; 4096];
+        let t = parse_board_modify2(&p186(44, 26, 4, 2, &tiles, &[1, 2, 3, 4, 5])).unwrap();
+        assert_eq!(t.tiles, m.tiles);
+        t.apply_to(&mut board2);
+        assert_eq!(board, board2);
+    }
+
+    /// Lab case C: a complete second record in the trailer is not applied.
+    #[test]
+    fn board_modify2_second_record_in_the_trailer_is_not_applied() {
+        let first: Vec<u16> = vec![1; 8];
+        let second = p186(50, 36, 4, 2, &[9; 8], &[]);
+        let m = parse_board_modify2(&p186(44, 32, 4, 2, &first, &second)).unwrap();
+        let mut board = vec![0u16; 4096];
+        assert_eq!(m.apply_to(&mut board), 8);
+        assert_eq!(board.iter().filter(|&&t| t != 0).count(), 8);
+        assert_eq!(board[36 * 64 + 50], 0);
+        assert_eq!(m.trailer, second);
+    }
+
+    /// Lab cases D and E: short by any amount, down to one byte, is dropped.
+    #[test]
+    fn board_modify2_one_byte_short_is_dropped() {
+        let full = p186(40, 36, 4, 2, &[3; 8], &[]);
+        assert!(parse_board_modify2(&full).is_some());
+        assert_eq!(parse_board_modify2(&full[..full.len() - 1]), None);
+        assert_eq!(parse_board_modify2(&full[..full.len() - 2]), None);
+        // Declared 4x2 with only 4 tiles behind it.
+        assert_eq!(parse_board_modify2(&p186(40, 36, 4, 2, &[3; 4], &[])), None);
+        // Through the session: a dropped 186 leaves the earlier one alone
+        // and counts as handled (no unhandled entry, no state change).
+        let mut st = crate::protocol::SessionState::default();
+        let msg = |payload: &[u8]| [&[186 + 0x20][..], payload, b"\n"].concat();
+        st.apply_body(&msg(&p186(1, 2, 1, 1, &[7], &[])));
+        let before = st.board_modify2.clone();
+        st.apply_body(&msg(&full[..full.len() - 1]));
+        assert_eq!(st.board_modify2, before);
+        assert!(st.unhandled.is_empty());
+    }
+
+    /// Lab case F: a block past column 63 is clipped, not rejected.
+    #[test]
+    fn board_modify2_clips_at_column_63_and_the_last_row() {
+        let m = parse_board_modify2(&p186(62, 26, 4, 2, &[1, 2, 3, 4, 5, 6, 7, 8], &[])).unwrap();
+        let mut board = vec![0u16; 4096];
+        assert_eq!(m.apply_to(&mut board), 4);
+        assert_eq!(&board[26 * 64 + 62..26 * 64 + 64], &[1, 2]);
+        assert_eq!(&board[27 * 64 + 62..27 * 64 + 64], &[5, 6]);
+        // Nothing wrapped onto the next row's start.
+        assert_eq!((board[27 * 64], board[28 * 64]), (0, 0));
+        // Past the last row too.
+        let m = parse_board_modify2(&p186(0, 63, 2, 2, &[1, 2, 3, 4], &[])).unwrap();
+        let mut board = vec![0u16; 4096];
+        assert_eq!(m.apply_to(&mut board), 2);
+        assert_eq!(&board[63 * 64..63 * 64 + 2], &[1, 2]);
+        // Start column 64 or more: nothing written.
+        let m = parse_board_modify2(&p186(70, 0, 2, 1, &[1, 2], &[])).unwrap();
+        assert_eq!(m.apply_to(&mut vec![0u16; 4096]), 0);
     }
 }
