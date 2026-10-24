@@ -246,10 +246,49 @@ Seihai (code: `net::EnterLevelSender`, `net::link_request_frame`,
   frame for the profile whose rule is "on level change" (2.22), and is no
   longer sent after the server's answer, so a server-side warp does not
   trigger it.
-- Not done: level changes started by a level script (`setlevel2`), which
-  the lab never captured; cached links on a gmap (a gmap keeps its own
+- Level changes started by a level script (`setlevel`, `setlevel2`) go out as
+  the same request as a link the player walked into (see "Script-initiated
+  warps" below); the real client's own form is not captured.
+- Not done: cached links on a gmap (a gmap keeps its own
   per-level slots and uses 35); the disk cache; a lab run of Seihai's own
   30 frame.
+
+**Script-initiated warps (`setlevel`, `setlevel2`).** A client-side NPC script
+can change level with `setlevel2 level,x,y` (level name, then the new position
+in tiles) or `setlevel level` (the older form: the player's current position,
+which a script may have set first with `playerx = ...; playery = ...`). Both
+end the script run. Seihai's engine hands the host a `SetLevel` effect and the
+host turns it into the session's level request, `pending_link`, the same value a
+walked-into link produces. Online, Seihai then sends that request through the
+link path (`net::start_online_link`):
+
+- the request is `PLI_LEVELWARP` (0) with the position and level name, or
+  `PLI_LEVELWARPMOD` (30) when the level is cached and the profile has
+  `levels.cached_links`; everything else in the frame (tamper check on 2.22,
+  46 and the props on 2.31 with the cached form) is exactly what a link
+  request carries, by profile;
+- the session is in the warp-pending state until the server's answer: walking
+  and links stop, and a second script warp in that time is dropped (nothing is
+  sent);
+- the server's answer (`PLO_PLAYERWARP`, `PLO_LEVELNAME`, board, ...) loads the
+  new level through the existing path; the 46 is owed after it for the
+  uncached form, and not for the cached one;
+- the plain walk update of the same pass is not sent: the request carries the
+  position;
+- a profile that cannot send the request (its send set lacks the id) logs it
+  and keeps the connection; any other send failure ends the connection as
+  before;
+- offline nothing changes: the level is loaded from the asset folder and the
+  player arrives at the given position.
+
+Lab (2026-10-25, private lab, 2.31 and 2.22 Seihai against GServer-v2): a level
+NPC with `playertouchsme` and `setlevel2 lv_c.nw,10,20` sent `0` (and `39` in
+the 2.22 parity run) and was answered with the new level; an NPC in that level
+with `playerx = 40; playery = 22; setlevel lv_n.nw` then sent `30`, `46`, props
+on 2.31 and `30`, `39` on 2.22 (the level was cached by then). The real clients never ran level NPCs in the lab (2.22 and 2.31 in the
+earlier batch, 2.31 again in this one), so what a real client sends for
+a script warp is **unobserved**: see `documentation/script-warps.md`. Seihai's
+form is the link form, which is an assumption, not a capture.
 
 **Server warp (178).** The lab text was `labtwo,labtwo,127.0.0.2,14803`. The
 2.31 client closed its connection, opened a new one to field 2 (host) and

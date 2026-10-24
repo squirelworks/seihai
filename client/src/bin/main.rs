@@ -28,6 +28,43 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Start an online level change (a walked-into link or a script warp), log
+/// the request and report a send failure.
+#[allow(clippy::too_many_arguments)]
+fn online_link(
+    conn: &mut Connection,
+    version: ClientVersion,
+    session: &mut OfflineSession,
+    net_state: &mut SessionState,
+    enter_level: Option<&mut EnterLevelSender>,
+    tamper: Option<&mut TamperSender>,
+    dest: &str,
+    x: f32,
+    y: f32,
+) -> std::io::Result<Option<seihai::net::LinkStart>> {
+    let r = seihai::net::start_online_link(
+        |m| conn.send_messages(m),
+        version,
+        session,
+        net_state,
+        enter_level,
+        tamper,
+        dest,
+        x,
+        y,
+    );
+    match &r {
+        Ok(Some(s)) => {
+            if let Some(t) = s.cached_mod_time {
+                eprintln!("cached link to {dest} (mod time {t})");
+            }
+        }
+        Ok(None) => eprintln!("level request for {dest} dropped: a warp is already pending"),
+        Err(e) => eprintln!("send failed: {e}"),
+    }
+    r
+}
+
 /// Gmap files and levels from the asset folder.
 struct RootLoader<'a>(&'a AssetRoot);
 
@@ -816,6 +853,9 @@ fn main() {
         // Arrow keys move the player half a tile per step, at most one
         // step every 50 ms.
         let mut moved = false;
+        // A script warp request went out this pass: it carries the position,
+        // so the plain walk update is left out.
+        let mut script_warp_sent = false;
         // A or Space: close the reading panel, or interact with what the
         // player faces.
         let interact = !input.is_open()
@@ -872,10 +912,36 @@ fn main() {
             scripts.tick(&mut session, dt);
             // A script asked for a level change (setlevel / setlevel2).
             if let Some((dest, x, y)) = session.pending_link.take() {
-                if conn.is_some() {
-                    // The wire form of a script-initiated warp has not been
-                    // captured, so it is not sent.
-                    eprintln!("script warp to {dest} ignored while online");
+                if let Some(c) = conn.as_mut() {
+                    // Online the server owns the warp: ask as for a link the
+                    // player walked into (PLI 0, or 30 with a cached copy)
+                    // and load the level when the server names it.
+                    eprintln!("script warp to {dest} at {x} {y}");
+                    match online_link(
+                        c,
+                        version,
+                        &mut session,
+                        &mut net_state,
+                        enter_level.as_mut(),
+                        tamper.as_mut(),
+                        &dest,
+                        x,
+                        y,
+                    ) {
+                        Ok(Some(started)) => {
+                            warp_since = Some(Instant::now());
+                            cached_arrival = started.cached_arrival;
+                            script_warp_sent = true;
+                        }
+                        // Another warp is pending: nothing more to do.
+                        Ok(None) => {}
+                        // A profile that cannot send the request: the
+                        // connection is fine, the warp just does not go.
+                        Err(e) if e.kind() == std::io::ErrorKind::Unsupported => {
+                            eprintln!("script warp to {dest} not sent: {e}");
+                        }
+                        Err(_) => conn = None,
+                    }
                 } else if session.load_level(root.level(&dest)).is_ok() {
                     if session.arrive(x, y) {
                         net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
@@ -922,7 +988,7 @@ fn main() {
                 loaded_level = now;
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req);
-            } else if let Some(c) = conn.as_mut() {
+            } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
                 if let Err(e) = c.send_walk(&session.player_update()) {
                     eprintln!("send failed: {e}");
@@ -936,34 +1002,23 @@ fn main() {
                     if let Some(c) = conn.as_mut() {
                         // Online: the server owns the warp. Ask once and
                         // wait; its reply moves the player.
-                        session.begin_warp(&dest);
-                        warp_since = Some(Instant::now());
-                        // A level the player has been in is asked for with
-                        // PLI 30 and its mod time (profiles with cached
-                        // links), and a 2.31 client then sends 46 and the
-                        // props in the same frame; 2.22 sends the tamper
-                        // check in the same frame instead.
-                        let cached = if version.sends_cached_links() { net_state.cached_mod_time(&dest) } else { None };
-                        let dir = session.player_update().dir;
-                        match c.send_link(version, cached, x, y, dir, &dest, tamper.as_mut()) {
-                            Ok(frame) => {
-                                if let Some(t) = cached {
-                                    eprintln!("cached link to {dest} (mod time {t})");
-                                    net_state.expect_cached_level(&dest);
-                                    // The server sends no PLO_PLAYERWARP for
-                                    // this form: the player lands where the
-                                    // link said.
-                                    cached_arrival = Some((x, y));
-                                    if let Some(el) = enter_level.as_mut() {
-                                        el.cached_link(&dest, frame.with_enter_level);
-                                    }
-                                }
+                        match online_link(
+                            c,
+                            version,
+                            &mut session,
+                            &mut net_state,
+                            enter_level.as_mut(),
+                            tamper.as_mut(),
+                            &dest,
+                            x,
+                            y,
+                        ) {
+                            Ok(Some(started)) => {
+                                warp_since = Some(Instant::now());
+                                cached_arrival = started.cached_arrival;
                             }
-                            Err(e) => {
-                                eprintln!("send failed: {e}");
-                                session.cancel_warp();
-                                conn = None;
-                            }
+                            Ok(None) => {}
+                            Err(_) => conn = None,
                         }
                     } else {
                         // Offline: load the destination if it is local.
