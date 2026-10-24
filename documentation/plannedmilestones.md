@@ -9,9 +9,11 @@ What remains after the current gmaps / script engine / differential testing work
 - [x] Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames. (f8127f4)
 
 ## Next
+- Asset generation track (items 17–21): inventory the playerworld archives, extract reference sheets, generate a self-contained default asset root (tile sheet, body/head, core GANIs, sounds, starter level), and wire it as the fallback so a fresh clone can open and walk offline. Optional generator tool. See `documentation/chiaki-next.md`.
+
 
 - Remaining fields (item 12): ids 24, 46 and 178 implementation is in Seihai #39 (rebased). Once rebased and mergeable, land it. Notes are in Graal_analysis batch g.
-- Differential-testing divergences (item 15), one PR each, measured in the private lab (`documentation/difftest.md`): [x] login frame (image checks, process list, login props; `documentation/login-burst.md`), [x] rectangle level links (`documentation/link-geometry.md`), [x] 2.22 position flags (`documentation/gr-flags.md`), [ ] early id 46, [ ] asset requests, walk fields, walk speed, frame bundling, adjacent level order, crossing prop order.
+- Differential-testing divergences (item 15), one PR each, measured in the private lab (`documentation/difftest.md`): [x] login frame (image checks, process list, login props; `documentation/login-burst.md`), [x] rectangle level links (`documentation/link-geometry.md`), [x] 2.22 position flags (`documentation/gr-flags.md`), [x] early id 46 and the early id 24 (`documentation/early-enter-level.md`), [x] adjacent level order and 2.22 crossing prop order (`documentation/gmap-order.md`), [ ] asset requests, walk fields, walk speed, frame bundling.
 - Damage and respawn leftovers: knockback, the per-player field in the packet path, bombs/arrows/baddies powers, the end-of-respawn save (`documentation/damage-respawn.md`).
 - File transfer leftovers: the `GWEBL001` level cache, the login set of `UPDATEFILE`s and the file-index scan order (`documentation/file-cache.md`).
 - Early builds. A real 2.00-era listserver reply, which is still unobserved. Skipped (item 13): nothing new observed.
