@@ -5,6 +5,7 @@
 //! OpenGS1, captures). No decompile material.
 
 mod board;
+pub mod chain;
 mod compress;
 mod dispatch;
 pub mod extras;

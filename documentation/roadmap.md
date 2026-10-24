@@ -38,7 +38,7 @@ Single code path. Versions are profile rows, not branches.
 
 ## 5. Behaviour over time
 
-- [ ] Version chain. Each profile plus a per-step handler-change table, so adding a version means adding a row and a small delta, not new logic.
+- [x] Version chain (`client/src/protocol/chain.rs`). Each build is a step with a small delta against the build before; `PROFILES` is the resolved chain and equals the old hand-written rows. A generated handler-change table (`seihai --version-chain`, `documentation/version-chain.md`/`.tsv`, checked by a test) lists what changed at each step with its source and what is unknown. Adding a version is one step, not new logic. Still open: the unknown deltas of 2.1 to 2.16 and 2.3 (no binaries), and per-step layouts that are not profile fields. See `documentation/version-chain.md`.
 - [x] Differential testing. Tools, lab runner and first results are in: a capture-to-frame-sequence decoder (`difftest trace`), a differ with a ranked report (`difftest diff`), and a private-namespace scenario runner (`tools/difftest/lab.sh`). First run: 2.22 and 2.31, login, gmap crossing, chat and door/warp, real client against Seihai. Ranked divergences are in `documentation/difftest.md`. Not yet covered: the real 2.17 client (its launcher needs its own UI steps), the server-side warp scenario, and running it in CI.
 - [ ] Public-server checks. Read-only first, and only with approval each time.
 - [ ] Tooling. A capture viewer and a layout explorer fed by the .tsv tables.
