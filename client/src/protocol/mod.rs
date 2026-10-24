@@ -34,8 +34,8 @@ pub use props::{
     decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_in, parse_player_props_with, PlayerProp,
 };
 pub use profile::{
-    by_label, profile, Basis, DeathRules, Files, Health, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
-    VersionProfile, DEATH_205, PROFILES,
+    by_label, profile, Basis, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
+    VersionProfile, COMBAT_205, DEATH_205, PROFILES,
 };
 pub use showimg::{showimg_message, ShowImgInfo, ShowImgSender};
 pub use tampercheck::{TamperImage, TamperSender, TamperWords};

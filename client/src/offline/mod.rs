@@ -91,6 +91,8 @@ pub struct OfflineSession {
     /// until the game loop gives it its version's (see
     /// [`Life::set_rules`]), so a bare session never dies.
     pub life: Life,
+    /// The sword swing and hurt mode (see [`crate::combat`]).
+    pub combat: crate::combat::CombatState,
     /// Alignment points (AP, 0–100): decide the hearts after a respawn.
     /// Starts at 50, the GServer default account; the server's
     /// `PLPROP_ALIGNMENT` replaces it online.
@@ -183,6 +185,7 @@ impl OfflineSession {
             swim_sent: false,
             level_serial: 0,
             life: Life::default(),
+            combat: crate::combat::CombatState::default(),
             alignment: 50,
             entry: None,
             loaded_file: None,

@@ -124,6 +124,12 @@ impl ClientVersion {
         self.profile().life.death
     }
 
+    /// How this build judges hits from other players, if its handler was
+    /// traced (see [`crate::protocol::CombatRules`]).
+    pub fn combat_rules(self) -> Option<crate::protocol::CombatRules> {
+        self.profile().life.combat
+    }
+
     /// The victim's client sends `PLI_CLAIMPKER` (14) when it dies to a
     /// known attacker: the build has the death sequence and the id is in its
     /// send set. Read from the profile, not from the version.

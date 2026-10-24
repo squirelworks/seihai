@@ -443,6 +443,7 @@ fn main() {
     let profile = version.profile();
     // The death sequence of this build (none for builds before 2.05).
     session.life.set_rules(profile.life.death);
+    session.combat.set_rules(profile.life.combat);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -591,6 +592,7 @@ fn main() {
     // STATUS (prop 18) as the server last gave it; the dead bit is toggled on it.
     let mut status_base = 0u8;
     let mut life_clock = Instant::now();
+    let mut combat_clock = Instant::now();
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open()
@@ -832,6 +834,43 @@ fn main() {
                     net_state.own_cur_power.take(),
                     net_state.own_alignment.take(),
                 );
+                // Hits from other players, judged here, on the victim's side:
+                // sword swings seen in their props, and ids 40 and 46.
+                {
+                    let swings = std::mem::take(&mut net_state.swings);
+                    let hits = std::mem::take(&mut net_state.hits);
+                    if !swings.is_empty() || !hits.is_empty() {
+                        let own_cell = net_state.gmap.as_ref().map(|g| g.cell);
+                        let mut took = false;
+                        for r in session.receive_all(&net_state.others, own_cell, &swings, &hits) {
+                            match r.outcome {
+                                Ok(half) => {
+                                    took = true;
+                                    eprintln!("hit by {:?} ({:?}): {half} half hearts", r.attacker, r.kind);
+                                }
+                                Err(why @ (seihai::combat::Reject::Immune
+                                | seihai::combat::Reject::Dead
+                                | seihai::combat::Reject::AlreadyHurt
+                                | seihai::combat::Reject::Swimming
+                                | seihai::combat::Reject::NpcSource
+                                | seihai::combat::Reject::UnknownPower
+                                | seihai::combat::Reject::CentreUnknown)) => {
+                                    eprintln!("hit by {:?} ({:?}) refused: {why:?}", r.attacker, r.kind);
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        if took {
+                            // Hurt mode shows in the sprite others see.
+                            if let Some(c) = conn.as_mut() {
+                                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                                    eprintln!("send failed: {e}");
+                                    conn = None;
+                                }
+                            }
+                        }
+                    }
+                }
                 if entered || (warped && session.warp_pending.is_some()) {
                     // Arrival: the server's position is final. Links stay
                     // quiet until the player moves off it.
@@ -931,6 +970,25 @@ fn main() {
                 if let (false, Some(c)) = (msgs.is_empty(), conn.as_mut()) {
                     if let Err(e) = c.send_messages(&msgs) {
                         eprintln!("send failed: {e}");
+                    }
+                }
+            }
+        }
+        // Combat: S swings the sword (others judge the hit from the sprite
+        // we send), and the swing and hurt mode run on the 50 ms clock.
+        {
+            let dt = combat_clock.elapsed().as_millis() as u64;
+            combat_clock = Instant::now();
+            let mut sprite_changed = session.tick_combat(dt);
+            if !input.is_open() && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
+                sprite_changed = true;
+            }
+            if sprite_changed {
+                dirty = true;
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
                     }
                 }
             }
@@ -1079,7 +1137,7 @@ fn main() {
                 send_world_requests(conn.as_mut(), req);
             } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
-                if let Err(e) = c.send_walk(&session.player_update()) {
+                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
                     eprintln!("send failed: {e}");
                     conn = None;
                 }
