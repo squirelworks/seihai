@@ -81,8 +81,8 @@ client and Seihai either both send the level warp for `lv_c.nw` or both do not.
 Same result on 2.22 and 2.31.
 
 `door_warp` on 2.22: the real client sends `LEVELWARP lv_c.nw 60 30`, then `LEVELWARPMOD lv_a.nw 14 30` on the
-way back, then `LEVELWARP lv_w.nw` at the edge. Before, Seihai sent only the edge warp (the diff listed the
-`LEVELWARP` to `lv_c.nw` and the `LEVELWARPMOD` as missing, 3 high divergences in all). After, Seihai sends the
+way back, then `LEVELWARP lv_w.nw` at the edge. Before, Seihai sent only the edge warp (the diff listed the `LEVELWARPMOD`
+as a missing id, a high divergence, and the `lv_c.nw` warp as a field mismatch against the edge warp). After, Seihai sends the
 `lv_c.nw` warp with the same `x=60`, `y=30`, the `LEVELWARPMOD` back at `x=14`, `y=30`, and the edge warp, and
 the report has no missing level warp. The edge warp's `x` differs (real 17.5, Seihai 20.5) because the two clients
 walk at different speeds (divergence 9).
