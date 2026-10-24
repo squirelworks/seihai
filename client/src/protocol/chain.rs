@@ -130,6 +130,7 @@ pub struct Delta {
     pub gmap: Option<bool>,
     pub heights: Option<bool>,
     pub cached_links: Option<bool>,
+    pub link_boxes: Option<bool>,
     // Health.
     pub death: Option<Option<DeathRules>>,
     pub combat: Option<Option<super::profile::CombatRules>>,
@@ -178,6 +179,7 @@ impl Delta {
         gmap: None,
         heights: None,
         cached_links: None,
+        link_boxes: None,
         death: None,
         combat: None,
         server_list: None,
@@ -271,6 +273,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.levels.gmap = pick(p.levels.gmap, d.gmap);
     p.levels.heights = pick(p.levels.heights, d.heights);
     p.levels.cached_links = pick(p.levels.cached_links, d.cached_links);
+    p.levels.link_boxes = pick(p.levels.link_boxes, d.link_boxes);
 
     p.life.death = pick(p.life.death, d.death);
     p.life.combat = pick(p.life.combat, d.combat);
@@ -338,7 +341,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         image_ext: ".gif",
         download_maps: false,
     },
-    levels: Levels { graal: true, nw: false, gmap: false, heights: false, cached_links: false },
+    levels: Levels { graal: true, nw: false, gmap: false, heights: false, cached_links: false, link_boxes: false },
     life: Health { death: None, combat: None },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
@@ -742,11 +745,12 @@ pub const CHAIN: &[Step] = &[
             tamper: Some(Some(TAMPER_222)),
             showimg: Some(Some(SHOWIMG_222)),
             login: Some(Some(LOGIN_222)),
+            link_boxes: Some(true),
             udp_off_by_default: Some(true),
             server_list: Some(ServerList::Tabs(3)),
             ..Delta::NONE
         },
-        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props",
+        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props, links tested with a per-direction probe box",
         unknown: &[
             Unknown { area: "pli", what: "send sites of ids 36, 42 and 45 were not matched in the binary, so 36 and 45 are not sent" },
             Unknown { area: "framing", what: "a client-originated bz2 frame (0x1000 and over) was never seen" },
@@ -1009,6 +1013,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "levels", "gmap", &la.gmap, &lb.gmap, yes_no);
     value_change(&mut o, "levels", "heights", &la.heights, &lb.heights, yes_no);
     value_change(&mut o, "levels", "cached_links", &la.cached_links, &lb.cached_links, yes_no);
+    value_change(&mut o, "levels", "link_boxes", &la.link_boxes, &lb.link_boxes, yes_no);
     value_change(&mut o, "life", "death", &a.life.death, &b.life.death, death_text);
     value_change(&mut o, "life", "combat", &a.life.combat, &b.life.combat, combat_text);
     let (ua, ub) = (&a.ui, &b.ui);
@@ -1148,8 +1153,10 @@ mod tests {
             let (label, want) = line.split_once('\t').expect("label<TAB>row");
             let p = super::super::profile::by_label(label).unwrap_or_else(|| panic!("no profile {label}"));
             // Fields added after the hand-written rows existed (the post-login
-            // frame, `login`) are not in them: compare without it.
+            // frame `login`, the link probe `link_boxes`) are not in them: compare
+            // without them.
             let got = strip_field(&format!("{p:?}"), "login: ", ", udp:");
+            let got = strip_field(&got, ", link_boxes: ", " }");
             if got != want {
                 let at = got.bytes().zip(want.bytes()).position(|(a, b)| a != b).unwrap_or(got.len().min(want.len()));
                 let ctx = |s: &str| s[at.saturating_sub(60)..(at + 80).min(s.len())].to_string();

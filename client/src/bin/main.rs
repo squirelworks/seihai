@@ -420,6 +420,7 @@ fn main() {
     // Settings only pre-fill the form.
 
     let mut session = OfflineSession::new();
+    session.link_boxes = version.profile().levels.link_boxes;
     // Client-side GS1 scripts of the level's NPCs and the player's weapons.
     let mut scripts = SessionScripts::new(version);
     let mut scripts_serial = u64::MAX;

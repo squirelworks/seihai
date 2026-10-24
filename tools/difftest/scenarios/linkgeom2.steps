@@ -1,0 +1,160 @@
+# Where a level link fires, part two: the cross-axis of the rectangle link in lv_a.nw
+# (lv_c 10 28 2 5). Down and Up from different columns, Left and Right from
+# different rows, so the box the client tests can be bounded on both axes.
+start lv_a.nw 30.00 30.50
+wait 3
+mark n1-Down-8.0_20.0
+chat warpto 8.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n2-Down-8.5_20.0
+chat warpto 8.5 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n3-Down-9.0_20.0
+chat warpto 9.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n4-Down-9.5_20.0
+chat warpto 9.5 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n5-Down-10.0_20.0
+chat warpto 10.0 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n6-Down-10.5_20.0
+chat warpto 10.5 20.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Down 1.2
+wait 1
+mark n7-Up-8.5_40.0
+chat warpto 8.5 40.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Up 1.2
+wait 1
+mark n8-Up-9.5_40.0
+chat warpto 9.5 40.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Up 1.2
+wait 1
+mark n9-Up-10.5_40.0
+chat warpto 10.5 40.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Up 1.2
+wait 1
+mark n10-Left-14.0_26.0
+chat warpto 14.0 26.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n11-Left-14.0_26.5
+chat warpto 14.0 26.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n12-Left-14.0_27.0
+chat warpto 14.0 27.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n13-Left-14.0_27.5
+chat warpto 14.0 27.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n14-Left-14.0_32.0
+chat warpto 14.0 32.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n15-Left-14.0_32.5
+chat warpto 14.0 32.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n16-Left-14.0_33.0
+chat warpto 14.0 33.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n17-Left-14.0_33.5
+chat warpto 14.0 33.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Left 1.2
+wait 1
+mark n18-Right-6.0_26.5
+chat warpto 6.0 26.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark n19-Right-6.0_27.0
+chat warpto 6.0 27.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark n20-Right-6.0_27.5
+chat warpto 6.0 27.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark n21-Right-6.0_32.5
+chat warpto 6.0 32.5 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+mark n22-Right-6.0_33.0
+chat warpto 6.0 33.0 lv_a.nw
+wait 2
+click 500 300
+wait 0.5
+hold Right 1.2
+wait 1
+wait 2
