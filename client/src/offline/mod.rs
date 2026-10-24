@@ -678,8 +678,8 @@ impl OfflineSession {
         self.pending_link = level.links.iter().find(|l| l.contains(px, py)).map(|link| {
             (
                 link.dest.clone(),
-                link.new_x.unwrap_or(self.player_x),
-                link.new_y.unwrap_or(self.player_y),
+                link.new_x.unwrap_or(self.player_x + link.x_offset),
+                link.new_y.unwrap_or(self.player_y + link.y_offset),
             )
         });
         self.pending_link.is_some()
@@ -1152,7 +1152,7 @@ mod tests {
     }
 
     fn link(dest: &str, x: i32, y: i32, w: i32, h: i32, nx: Option<f32>, ny: Option<f32>) -> Link {
-        Link { dest: dest.into(), x, y, width: w, height: h, new_x: nx, new_y: ny }
+        Link { dest: dest.into(), x, y, width: w, height: h, new_x: nx, new_y: ny, x_offset: 0.0, y_offset: 0.0 }
     }
 
     #[test]

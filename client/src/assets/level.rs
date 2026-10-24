@@ -67,6 +67,12 @@ pub struct Link {
     /// link says `playerx` / `playery`: keep the player's coordinate.
     pub new_x: Option<f32>,
     pub new_y: Option<f32>,
+    /// Written after `playerx` / `playery` (`playery+10`, `playerx-15`):
+    /// the signed number, as written. Only meaningful when the matching
+    /// `new_*` is `None`; 0 otherwise. Whether a client adds it is open
+    /// (found in old player-world levels; see `documentation/assets.md`).
+    pub x_offset: f32,
+    pub y_offset: f32,
 }
 
 impl Link {
@@ -423,19 +429,17 @@ impl Level {
 
     /// Parse a binary .graal (GR-V1) bitstream into a Level.
     fn parse_binary(data: &[u8]) -> Result<Self, String> {
+        Self::parse_binary_with_layout(data).map(|(level, _)| level)
+    }
+
+    /// Parse a binary `.graal` / `.zelda` file and also report where each
+    /// section sits (derived facts only; see [`GraalLayout`]).
+    pub fn parse_binary_with_layout(data: &[u8]) -> Result<(Self, GraalLayout), String> {
         if data.len() < 8 {
             return Err("binary level too short".into());
         }
         let magic = &data[0..8];
-        // 13 bits for GR-V1.02 to 1.04 (the 4096-tile sheet needs the top
-        // bit free); 12 for GR-V1.00/1.01 and Z3-V1.03/04; 11 for Z3-V1.02.
-        let codebits = if matches!(magic, b"GR-V1.02" | b"GR-V1.03" | b"GR-V1.04") {
-            13
-        } else if magic == b"Z3-V1.02" {
-            11
-        } else {
-            12
-        };
+        let codebits = graal_code_bits(magic);
         let mut tiles = vec![0u16; 4096];
         let mut boardindex = 0usize;
         let mut bitsread = 0u32;
@@ -444,6 +448,12 @@ impl Level {
         let mut firstcode = -1i32;
         let mut twicerepeat = false;
         let mut pos = 8usize;
+        let mut layout = GraalLayout {
+            magic: String::from_utf8_lossy(magic).into_owned(),
+            code_bits: codebits,
+            file_len: data.len(),
+            ..GraalLayout::default()
+        };
 
         while boardindex < 4096 && pos < data.len() {
             while bitsread < codebits && pos < data.len() {
@@ -458,10 +468,17 @@ impl Level {
             let code = buffer & mask;
             buffer >>= codebits;
             bitsread -= codebits;
+            layout.codes += 1;
 
             if code & (1 << (codebits - 1)) != 0 {
                 twicerepeat = (code & 0x100) != 0;
                 count = code & 0xFF;
+                if twicerepeat {
+                    layout.double_runs += 1;
+                } else {
+                    layout.single_runs += 1;
+                }
+                layout.max_run = layout.max_run.max(count);
             } else if count == 1 {
                 tiles[boardindex] = code as u16;
                 boardindex += 1;
@@ -492,6 +509,9 @@ impl Level {
                 count = 1;
             }
         }
+        layout.tiles_decoded = boardindex;
+        layout.board_end = pos;
+        layout.max_tile = tiles.iter().copied().max().unwrap_or(0);
 
         // Convert the flat tile array into row runs for layer 0.
         let mut boards = Vec::new();
@@ -528,8 +548,9 @@ impl Level {
             baddies: Vec::new(),
             chests: Vec::new(),
         };
-        parse_binary_sections(magic, &data[pos.min(data.len())..], &mut level);
-        Ok(level)
+        let base = pos.min(data.len());
+        parse_binary_sections(magic, &data[base..], &mut level, &mut layout, base);
+        Ok((level, layout))
     }
 
     /// Parse .nw content.
@@ -823,6 +844,76 @@ pub const CHEST_ITEMS: [&str; 25] = [
     "goldrupee", "fireball", "fireblast", "nukeshot", "joltbomb", "spinattack",
 ];
 
+/// Bits per board code for a binary level magic: 13 for GR-V1.02 to 1.04
+/// (the 4096-tile sheet needs the top bit free), 11 for Z3-V1.02, else 12.
+pub fn graal_code_bits(magic: &[u8]) -> u32 {
+    if matches!(magic, b"GR-V1.02" | b"GR-V1.03" | b"GR-V1.04") {
+        13
+    } else if magic == b"Z3-V1.02" {
+        11
+    } else {
+        12
+    }
+}
+
+/// Where the parts of a binary `.graal` / `.zelda` file sit and how many
+/// records each held. Every field is a count or an offset, never content.
+/// Ranges are byte offsets `(start, end)` into the file; an absent section
+/// is an empty range.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GraalLayout {
+    pub magic: String,
+    pub code_bits: u32,
+    pub file_len: usize,
+    /// Board codes read, split into single runs, double runs and the rest.
+    pub codes: usize,
+    pub single_runs: usize,
+    pub double_runs: usize,
+    /// Largest run count seen in a control code.
+    pub max_run: u32,
+    /// Tiles the board stream produced (4096 when complete).
+    pub tiles_decoded: usize,
+    pub max_tile: u16,
+    /// Offset of the first byte after the board stream.
+    pub board_end: usize,
+    pub links: (usize, usize),
+    pub baddies: (usize, usize),
+    pub npcs: (usize, usize),
+    pub chests: (usize, usize),
+    pub signs: (usize, usize),
+    pub link_lines: usize,
+    pub baddy_records: usize,
+    pub npc_records: usize,
+    pub chest_records: usize,
+    pub sign_records: usize,
+    /// Bytes left after the sign section ended (a `HEIGHTS` block would be here).
+    pub unread_tail: usize,
+}
+
+impl GraalLayout {
+    /// A short derived summary: sizes, offsets and record counts, no level
+    /// content. Backs `seihai --level-info`.
+    pub fn summary(&self, level: &Level) -> String {
+        let span = |r: (usize, usize)| format!("{}..{} ({} bytes)", r.0, r.1, r.1 - r.0);
+        let floor = level.layer0_board();
+        let distinct: std::collections::BTreeSet<u16> = floor.iter().copied().collect();
+        let mut out = String::new();
+        out.push_str(&format!("magic {}  code bits {}  file {} bytes\n", self.magic, self.code_bits, self.file_len));
+        out.push_str(&format!(
+            "board: {} tiles from {} codes ({} single runs, {} double runs, longest run {}), ends at byte {}\n",
+            self.tiles_decoded, self.codes, self.single_runs, self.double_runs, self.max_run, self.board_end
+        ));
+        out.push_str(&format!("board: {} distinct tile ids, highest {}\n", distinct.len(), self.max_tile));
+        out.push_str(&format!("links   {}: {} lines, {} read\n", span(self.links), self.link_lines, level.links.len()));
+        out.push_str(&format!("baddies {}: {} records\n", span(self.baddies), self.baddy_records));
+        out.push_str(&format!("npcs    {}: {} records\n", span(self.npcs), self.npc_records));
+        out.push_str(&format!("chests  {}: {} records\n", span(self.chests), self.chest_records));
+        out.push_str(&format!("signs   {}: {} records\n", span(self.signs), self.sign_records));
+        out.push_str(&format!("unread tail: {} bytes\n", self.unread_tail));
+        out
+    }
+}
+
 /// Bytes to text, one char per byte (the files are Latin-1 era).
 fn latin1(b: &[u8]) -> String {
     b.iter().map(|&c| c as char).collect()
@@ -859,7 +950,7 @@ impl<'a> Sections<'a> {
 /// `HEIGHTS` block. Layout from Graal_analysis `formats/level-binary.md`
 /// and `level-binary-client.md` (2.05, 2.31). A section that is cut short
 /// leaves what was read; nothing here fails the whole level.
-fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
+fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level, layout: &mut GraalLayout, base: usize) {
     let graal = magic.starts_with(b"GR-V1");
     // GR-V1.00 and later have NPCs; GR-V1.01 and later have chests; Z3-V1
     // has neither, and its baddies have a verse line from Z3-V1.04.
@@ -869,18 +960,22 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
     let mut s = Sections { data: tail, pos: 0 };
 
     // Links: lines up to "#" or an empty line.
+    let start = s.pos;
     while let Some(l) = s.line() {
         if l.is_empty() || l == b"#" {
             break;
         }
+        layout.link_lines += 1;
         if let Some(link) = parse_binary_link(&latin1(l)) {
             level.links.push(link);
         }
     }
+    layout.links = (base + start, base + s.pos);
 
     // Baddies: 3 raw bytes x, y, type, then a verse line. The record ends at
     // the first `\n` after those 3 bytes, which may themselves hold 0x0A.
     // A first byte of 0x80 or more (FF FF FF) ends the section.
+    let start = s.pos;
     loop {
         if s.pos + 3 > s.data.len() {
             s.pos = s.data.len();
@@ -903,6 +998,7 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
             }
             break;
         }
+        layout.baddy_records += 1;
         level.baddies.push(Baddy {
             x: x as f32,
             y: y as f32,
@@ -911,7 +1007,10 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
         });
     }
 
+    layout.baddies = (base + start, base + s.pos);
+
     // NPCs: `x+32, y+32, image#script`, the script's line breaks as 0xA7.
+    let start = s.pos;
     if has_npcs {
         while let Some(l) = s.line() {
             if l.is_empty() || l == b"#" {
@@ -920,6 +1019,7 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
             if l.len() < 2 {
                 continue;
             }
+            layout.npc_records += 1;
             let body = &l[2..];
             let (image, script) = match body.iter().position(|&b| b == b'#') {
                 Some(i) => (&body[..i], &body[i + 1..]),
@@ -935,7 +1035,10 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
         }
     }
 
+    layout.npcs = (base + start, base + s.pos);
+
     // Chests: four GCHARs, `x y item signindex`.
+    let start = s.pos;
     if has_chests {
         while let Some(l) = s.line() {
             if l.is_empty() || l == b"#" {
@@ -944,6 +1047,7 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
             if l.len() < 4 {
                 continue;
             }
+            layout.chest_records += 1;
             let item = l[2] as i32 - 32;
             level.chests.push(Chest {
                 x: l[0] as i32 - 32,
@@ -957,16 +1061,22 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level) {
         }
     }
 
+    layout.chests = (base + start, base + s.pos);
+
     // Signs: to an empty line (2.31) or the end (2.05). The sign alphabet is
     // the one used on the wire.
+    let start = s.pos;
     while let Some(l) = s.line() {
         if l.is_empty() {
             break;
         }
+        layout.sign_records += 1;
         if let Some((x, y, text)) = decode_sign_record(l) {
             level.signs.push(Sign { x, y, text });
         }
     }
+    layout.signs = (base + start, base + s.pos);
+    layout.unread_tail = s.data.len() - s.pos;
     // A GR-V1.04 `HEIGHTS` block may follow; it is read past and not kept.
 }
 
@@ -978,14 +1088,18 @@ fn parse_binary_link(line: &str) -> Option<Link> {
         return None;
     }
     let n = parts.len();
+    let nx = link_coord(parts[n - 2], "playerx");
+    let ny = link_coord(parts[n - 1], "playery");
     Some(Link {
         dest: parts[..n - 6].join(" "),
         x: parts[n - 6].parse().ok()?,
         y: parts[n - 5].parse().ok()?,
         width: parts[n - 4].parse().ok()?,
         height: parts[n - 3].parse().ok()?,
-        new_x: link_coord(parts[n - 2], "playerx")?,
-        new_y: link_coord(parts[n - 1], "playery")?,
+        new_x: nx.0,
+        new_y: ny.0,
+        x_offset: nx.1,
+        y_offset: ny.1,
     })
 }
 
@@ -995,25 +1109,41 @@ fn parse_link(line: &str) -> Option<Link> {
     if parts.len() < 8 || parts[0] != "LINK" {
         return None;
     }
+    let nx = link_coord(parts[6], "playerx");
+    let ny = link_coord(parts[7], "playery");
     Some(Link {
         dest: parts[1].to_string(),
         x: parts[2].parse().ok()?,
         y: parts[3].parse().ok()?,
         width: parts[4].parse().ok()?,
         height: parts[5].parse().ok()?,
-        new_x: link_coord(parts[6], "playerx")?,
-        new_y: link_coord(parts[7], "playery")?,
+        new_x: nx.0,
+        new_y: ny.0,
+        x_offset: nx.1,
+        y_offset: ny.1,
     })
 }
 
-/// A LINK arrival coordinate: a number, or `playerx` / `playery`
-/// (`Some(None)`). Anything else rejects the link.
-fn link_coord(s: &str, keep: &str) -> Option<Option<f32>> {
-    if s.eq_ignore_ascii_case(keep) {
-        Some(None)
-    } else {
-        s.parse().ok().map(Some)
+/// A LINK arrival coordinate as `(absolute, offset)`:
+/// * a number gives `(Some(n), 0)`;
+/// * `playerx` / `playery` (any case) gives `(None, 0)`;
+/// * the same followed by a signed number (`playery+10`, `playerx-1.5`)
+///   gives `(None, that number)`;
+/// * anything else (a stray word in an old level) is read as "keep the
+///   player's coordinate" and the link is kept rather than dropped.
+fn link_coord(s: &str, keep: &str) -> (Option<f32>, f32) {
+    if let Ok(n) = s.parse::<f32>() {
+        return (Some(n), 0.0);
     }
+    if s.len() >= keep.len() && s.is_char_boundary(keep.len()) && s[..keep.len()].eq_ignore_ascii_case(keep) {
+        let rest = &s[keep.len()..];
+        if rest.starts_with(['+', '-']) {
+            if let Ok(off) = rest.parse::<f32>() {
+                return (None, off);
+            }
+        }
+    }
+    (None, 0.0)
 }
 
 fn parse_sign(lines: &[String]) -> Option<Sign> {
@@ -1074,32 +1204,83 @@ fn parse_chest(line: &str) -> Option<Chest> {
     })
 }
 
-/// Binary sign alphabet: stored = char + 89.
-/// Decode `(byte - 89) & 0x7F`, then subtract 6 if the result is A–Z.
-/// The 7-byte token `v*eUWf` + 0x80 is a space.
-/// Do not use on GLEVNW01 text or NPC scripts.
+/// Binary sign alphabet: each byte is `index + 32` into this table. `#`
+/// slots are glyph and escape codes (`formats/sign-text.md`). The same table
+/// serves `.graal` sign sections and `PLO_LEVELSIGN`.
+const SIGN_ALPHABET: &[u8; 97] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?-.,#>()#####\"####':/~&### <####;\n";
+
+/// Glyph codes: one or two alphabet codes for `#` plus a symbol. Two-code
+/// glyphs come first so they win.
+const SIGN_GLYPHS: [(&[u8], &str); 14] = [
+    (&[74, 75], "#h"),
+    (&[87, 88], "#4"),
+    (&[91], "#A"),
+    (&[92], "#B"),
+    (&[93], "#X"),
+    (&[94], "#Y"),
+    (&[77], "#u"),
+    (&[78], "#d"),
+    (&[79], "#l"),
+    (&[80], "#r"),
+    (&[71], "#x"),
+    (&[72], "#y"),
+    (&[73], "#z"),
+    (&[67], "#."),
+];
+
+/// Decode sign text (the bytes after x and y) with the packed alphabet.
+/// Glyph codes become `#A`-style tags; `#K(n)` escapes become the character
+/// `n`, except `#K(13)` (the CR of the editor's CRLF), which is dropped.
+/// Bytes outside the table are controls and are not shown. Not for NPC
+/// scripts (plain Latin-1) or GLEVNW01 signs (plain text).
 pub fn decode_sign_text(payload: &[u8]) -> String {
-    const SPACE: &[u8] = &[0x76, 0x2a, 0x65, 0x55, 0x57, 0x66, 0x80];
-    let mut text = String::new();
+    let codes: Vec<i32> = payload.iter().map(|&b| b as i32 - 32).collect();
+    let mut raw = String::new();
     let mut i = 0;
-    while i < payload.len() {
-        if i + SPACE.len() <= payload.len() && &payload[i..i + SPACE.len()] == SPACE {
-            text.push(' ');
-            i += SPACE.len();
+    while i < codes.len() {
+        let c = codes[i];
+        if c < 0 || c as usize >= SIGN_ALPHABET.len() {
+            i += 1;
             continue;
         }
-        let mut value = (payload[i].wrapping_sub(89)) & 0x7f;
-        if (0x41..=0x5a).contains(&value) {
-            value -= 6;
+        let glyph = SIGN_GLYPHS
+            .iter()
+            .find(|(seq, _)| seq.iter().enumerate().all(|(k, &v)| codes.get(i + k) == Some(&(v as i32))));
+        if let Some((seq, tag)) = glyph {
+            raw.push_str(tag);
+            i += seq.len();
+            continue;
         }
+        raw.push(SIGN_ALPHABET[c as usize] as char);
         i += 1;
-        if value == 0x0a || value == 0x0d {
-            text.push('\n');
-        } else if value >= 0x20 && value != 0x7f {
-            text.push(char::from(value));
-        }
     }
-    text.trim().to_string()
+    expand_sign_escapes(&raw)
+}
+
+/// Turn `#K(n)` (1 to 3 digits) into the character `n`; `#K(13)` vanishes.
+fn expand_sign_escapes(raw: &str) -> String {
+    let b = raw.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i..].starts_with(b"#K(") {
+            let digits = b[i + 3..].iter().take_while(|d| d.is_ascii_digit()).count();
+            if (1..=3).contains(&digits) && b.get(i + 3 + digits) == Some(&b')') {
+                let n: u32 = raw[i + 3..i + 3 + digits].parse().unwrap_or(0);
+                if n < 256 {
+                    if n != 13 {
+                        out.push(char::from_u32(n).unwrap_or('?'));
+                    }
+                    i += 4 + digits;
+                    continue;
+                }
+            }
+        }
+        out.push(b[i] as char);
+        i += 1;
+    }
+    out
 }
 
 /// Full binary sign record: byte0 = x+0x20, byte1 = y+0x20, rest = alphabet.
@@ -1116,6 +1297,7 @@ pub fn decode_sign_record(line: &[u8]) -> Option<(i32, i32, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assets::crc32;
 
     #[test]
     fn link_keeps_player_coordinate() {
@@ -1337,8 +1519,8 @@ CHEST 8 8 greenrupee 0
         tail.extend_from_slice(&[32 + 7, 32 + 8, 32 + 1, 32 + 0, b'\n']);
         tail.extend_from_slice(&[32 + 9, 32 + 9, 32 + 99, 32 + 3, b'\n']);
         tail.extend_from_slice(b"#\n");
-        // A sign: x+32, y+32, then text in the sign alphabet (a lower-case letter is stored as char + 89).
-        tail.extend_from_slice(&[32 + 12, 32 + 13, b'a' + 89, b'\n']);
+        // A sign: x+32, y+32, then text in the sign alphabet (each byte is its alphabet index + 32, so `a` is 58).
+        tail.extend_from_slice(&[32 + 12, 32 + 13, 58, b'\n']);
         let d = binary_level(b"GR-V1.03", 13, &tail);
         let l = Level::parse_binary(&d).unwrap();
         assert_eq!(l.links.len(), 2);
@@ -1371,7 +1553,7 @@ CHEST 8 8 greenrupee 0
         tail.extend_from_slice(b"#\n");
         tail.extend_from_slice(&[0xFF, 0xFF, 0xFF, b'\n']);
         tail.extend_from_slice(b"#\n");
-        tail.extend_from_slice(&[32 + 1, 32 + 1, b'a' + 89, b'\n']);
+        tail.extend_from_slice(&[32 + 1, 32 + 1, 58, b'\n']);
         let mut b = sample_board();
         for t in b.iter_mut() {
             *t &= 0x7FF;
@@ -1388,7 +1570,7 @@ CHEST 8 8 greenrupee 0
         tail.extend_from_slice(b"#\n");
         tail.extend_from_slice(&[0xFF, 0xFF, 0xFF, b'\n']);
         tail.extend_from_slice(b"#\n#\n");
-        tail.extend_from_slice(&[32 + 2, 32 + 2, b'a' + 89, b'\n']);
+        tail.extend_from_slice(&[32 + 2, 32 + 2, 58, b'\n']);
         tail.extend_from_slice(b"\nHEIGHTS\n0,0,0,0,0,0,0,0,0\nHEIGHTSEND\n");
         let d = binary_level(b"GR-V1.04", 13, &tail);
         let l = Level::parse_binary(&d).unwrap();
@@ -1419,4 +1601,277 @@ CHEST 8 8 greenrupee 0
         std::fs::remove_dir_all(&dir).ok();
     }
 
+
+    fn unhex(h: &str) -> Vec<u8> {
+        (0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect()
+    }
+
+    /// Sign records from real GR-V1.03 levels (Graal_analysis
+    /// `formats/sign-decoder/vectors.json`): the packed alphabet, glyph
+    /// codes and the `#K(13)` + newline line break.
+    #[test]
+    fn sign_text_uses_the_packed_alphabet() {
+        let hex = "314848464c6f762a6555576680273e3a4542474079314848466f6d762a655557668032443a4d3e79493a4b446d762a655557668032493a4b706d762a6555576680213a4b793a473d794c4e494545524c70";
+        let t = decode_sign_text(&unhex(hex));
+        assert_eq!(t, "Rooms#l\nHealing Room#l#u\nSkate park#u\nSpar#r#u\nBar and supllys#r");
+        let t = decode_sign_text(&unhex("363e453c48463e79334879363a4d3e4b36484b453d61"));
+        assert_eq!(t, "Welcome To WaterWorld.");
+        // Punctuation and the apostrophe sit in the table's upper half.
+        let t = decode_sign_text(&unhex("413e454548793a473d79503e453c48463e794d4879762a6555576680233e4b3a47403e3d714c7941484e4c3e"));
+        assert_eq!(t, "hello and welcome to \nDeranged's house");
+        // A `#K(n)` escape is the character n; bytes below 32 are not shown.
+        let p = [32, 5, 32 + 86, 32 + 10, 32 + 69, 32 + 57, 32 + 56, 32 + 70];
+        assert_eq!(decode_sign_text(&p), "A6");
+        // A sign record is x+32, y+32, then the text.
+        let mut rec = vec![32 + 12, 32 + 13];
+        rec.extend(unhex("3641424c4d453e7932414849"));
+        assert_eq!(decode_sign_record(&rec), Some((12, 13, "Whistle Shop".to_string())));
+    }
+
+    /// A GR-V1.03 file shaped like the two real ones: one link with a
+    /// half-tile arrival, an empty baddy section, NPCs (one with no image),
+    /// a chest with sign index 0x1F ("none"), and no sign section at all.
+    #[test]
+    fn graal_03_without_signs_ends_at_the_chest_terminator() {
+        let mut tail: Vec<u8> = Vec::new();
+        tail.extend_from_slice(b"house2.graal 31 26 2 1 24.5 35\n#\n");
+        tail.extend_from_slice(&[0xFF, 0xFF, 0xFF, b'\n']);
+        tail.extend_from_slice(&[32 + 34, 32 + 25]);
+        tail.extend_from_slice(b"lamp.gif#if (playerenters) {\xa7  show;\xa7}\n");
+        tail.extend_from_slice(&[32 + 13, 32 + 33]);
+        tail.extend_from_slice(b"#// no image\xa7if (created) {\xa7}\n#\n");
+        tail.extend_from_slice(&[32 + 54, 32 + 9, 32 + 2, 31, b'\n']);
+        tail.extend_from_slice(b"#\n");
+        let d = binary_level(b"GR-V1.03", 13, &tail);
+        let (l, lay) = Level::parse_binary_with_layout(&d).unwrap();
+        assert_eq!((lay.magic.as_str(), lay.code_bits, lay.tiles_decoded, lay.max_tile), ("GR-V1.03", 13, 4096, 4095));
+        assert_eq!(lay.file_len, d.len());
+        let b = lay.board_end;
+        assert_eq!(lay.links, (b, b + 33));
+        assert_eq!(lay.baddies, (b + 33, b + 37));
+        assert_eq!((lay.link_lines, lay.baddy_records, lay.npc_records, lay.chest_records, lay.sign_records), (1, 0, 2, 1, 0));
+        assert_eq!(lay.chests.1, d.len());
+        assert_eq!((lay.signs, lay.unread_tail), ((d.len(), d.len()), 0));
+        assert_eq!((l.links[0].new_x, l.links[0].new_y), (Some(24.5), Some(35.0)));
+        assert_eq!(l.npcs.len(), 2);
+        assert_eq!((l.npcs[0].image.as_str(), l.npcs[0].x, l.npcs[0].y), ("lamp.gif", 34.0, 25.0));
+        assert_eq!(l.npcs[0].script, "if (playerenters) {\n  show;\n}");
+        assert_eq!(l.npcs[1].image, "");
+        assert_eq!((l.chests[0].x, l.chests[0].y, l.chests[0].item.as_str(), l.chests[0].sign_index), (54, 9, "redrupee", -1));
+        assert!(l.signs.is_empty());
+        assert!(lay.summary(&l).contains("npcs"));
+    }
+
+    /// Derived facts of real `.graal` levels, keyed by the CRC-32 of the
+    /// file. Set `SEIHAI_GRAAL_LEVELS` to a folder of `.graal` files: every
+    /// file must parse and tile up (the generic checks); the two levels the
+    /// project owner supplied are also checked against counts, offsets and a
+    /// few tile ids. No level content is stored in the repository.
+    #[test]
+    #[ignore = "needs real .graal files; set SEIHAI_GRAAL_LEVELS to a folder of them"]
+    fn real_graal_levels_match_the_format_notes() {
+        let Some(dir) = std::env::var_os("SEIHAI_GRAAL_LEVELS") else {
+            panic!("set SEIHAI_GRAAL_LEVELS to a folder of .graal files");
+        };
+        let mut seen = 0;
+        for e in std::fs::read_dir(&dir).unwrap() {
+            let path = e.unwrap().path();
+            if path.extension().and_then(|x| x.to_str()) != Some("graal") {
+                continue;
+            }
+            let data = std::fs::read(&path).unwrap();
+            let (l, lay) = Level::parse_binary_with_layout(&data).unwrap();
+            seen += 1;
+            // Generic: the board is complete, the sections tile the rest of
+            // the file in order, and nothing is left over.
+            assert_eq!(lay.tiles_decoded, 4096, "{path:?}");
+            assert!(lay.max_tile < 4096);
+            assert_eq!(lay.board_end, lay.links.0);
+            assert_eq!(lay.links.1, lay.baddies.0);
+            assert_eq!(lay.baddies.1, lay.npcs.0);
+            assert_eq!(lay.npcs.1, lay.chests.0);
+            assert_eq!(lay.chests.1, lay.signs.0);
+            assert_eq!(lay.signs.1 + lay.unread_tail, lay.file_len);
+            assert_eq!(l.layer0_board().len(), 4096);
+            assert_eq!(l.links.len(), lay.link_lines, "every link line parsed");
+            let t = |x: i32, y: i32| l.tile_id_at(x, y).unwrap();
+            match crc32(&data) {
+                0x6271_1327 => {
+                    assert_eq!((lay.magic.as_str(), lay.code_bits, lay.file_len), ("GR-V1.03", 13, 8289));
+                    assert_eq!((lay.codes, lay.single_runs, lay.double_runs, lay.max_run), (333, 71, 17, 64));
+                    assert_eq!((lay.board_end, lay.links, lay.baddies, lay.npcs, lay.chests), (550, (550, 583), (583, 587), (587, 8287), (8287, 8289)));
+                    assert_eq!((l.links.len(), l.baddies.len(), l.npcs.len(), l.chests.len(), l.signs.len()), (1, 0, 8, 0, 0));
+                    assert_eq!((lay.max_tile, l.layer0_board().iter().filter(|&&v| v == 632).count()), (1899, 3704));
+                    // The link is the door: two tiles of the same id, and
+                    // the arrival is a half tile.
+                    let k = &l.links[0];
+                    assert_eq!((k.x, k.y, k.width, k.height, k.new_x, k.new_y), (31, 26, 2, 1, Some(24.5), Some(35.0)));
+                    assert_eq!((t(0, 0), t(31, 26), t(32, 26), t(63, 63)), (632, 541, 541, 632));
+                    let at: Vec<(f32, f32)> = l.npcs.iter().map(|n| (n.x, n.y)).collect();
+                    assert_eq!(at[0], (34.0, 25.0));
+                    assert_eq!(at[7], (36.0, 30.0));
+                    assert!(l.npcs.iter().all(|n| n.image.ends_with(".gif") && !n.script.is_empty()));
+                    assert_eq!(l.npcs.iter().map(|n| n.script.matches('\n').count()).sum::<usize>(), 280);
+                }
+                0xa489_f475 => {
+                    assert_eq!((lay.magic.as_str(), lay.code_bits, lay.file_len), ("GR-V1.03", 13, 8611));
+                    assert_eq!((lay.codes, lay.single_runs, lay.double_runs, lay.max_run), (990, 144, 38, 64));
+                    assert_eq!((lay.board_end, lay.links, lay.baddies, lay.npcs, lay.chests), (1617, (1617, 1650), (1650, 1654), (1654, 8604), (8604, 8611)));
+                    assert_eq!((l.links.len(), l.baddies.len(), l.npcs.len(), l.chests.len(), l.signs.len()), (1, 0, 3, 1, 0));
+                    // 2135 is above 2047: only a 13-bit code can carry it.
+                    assert_eq!((lay.max_tile, l.layer0_board().iter().filter(|&&v| v == 632).count()), (2135, 2660));
+                    let k = &l.links[0];
+                    assert_eq!((k.x, k.y, k.width, k.height, k.new_x, k.new_y), (14, 28, 2, 1, Some(21.5), Some(28.0)));
+                    let c = &l.chests[0];
+                    assert_eq!((c.x, c.y, c.item.as_str(), c.sign_index), (54, 9, "redrupee", -1));
+                    // The chest sits on its own tile.
+                    assert_eq!((t(54, 9), t(13, 33), t(0, 0)), (2089, 2118, 632));
+                    assert_eq!(l.npcs.iter().map(|n| (n.x, n.y)).collect::<Vec<_>>(), vec![(13.0, 33.0), (53.0, 46.0), (31.0, 49.0)]);
+                    assert!(l.npcs.iter().all(|n| n.image.is_empty() && n.script.starts_with("// Graal v1.3 NPC")));
+                    assert_eq!(l.npcs.iter().map(|n| n.script.matches('\n').count()).sum::<usize>(), 372);
+                }
+                other => eprintln!("{path:?}: crc {other:08x}, generic checks only"),
+            }
+        }
+        assert!(seen > 0, "no .graal files in the folder");
+    }
+
+    /// Bulk run over a folder tree of old `.graal` levels (an old player
+    /// world): `SEIHAI_PLAYERWORLD=<dir>`. Asserts only derived facts, never
+    /// content. Set `SEIHAI_CORPUS_TSV=<file>` to also write one derived row
+    /// per file (CRC-32, sizes, counts, flags).
+    #[test]
+    #[ignore = "needs a folder tree of .graal files; set SEIHAI_PLAYERWORLD"]
+    fn playerworld_graal_corpus_parses() {
+        let Some(dir) = std::env::var_os("SEIHAI_PLAYERWORLD") else {
+            panic!("set SEIHAI_PLAYERWORLD to a folder tree with .graal files");
+        };
+        fn walk(d: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            let mut es: Vec<_> = std::fs::read_dir(d).unwrap().filter_map(Result::ok).map(|e| e.path()).collect();
+            es.sort();
+            for p in es {
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| x.eq_ignore_ascii_case("graal")) {
+                    out.push(p);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(std::path::Path::new(&dir), &mut files);
+        let mut tsv = String::from("crc32\tlen\tmagic\tbits\tcodes\tsingle\tdouble\tmaxrun\ttiles\tmaxtile\tboard_end\tlink_lines\tlinks\tbaddies\tnpcs\tchests\tsigns\tunread\tflags\n");
+        let (mut ok, mut clean, mut wide) = (0usize, 0usize, 0usize);
+        let mut sums = [0usize; 5];
+        let mut by_flag: std::collections::BTreeMap<String, usize> = Default::default();
+        for p in &files {
+            let data = std::fs::read(p).unwrap();
+            let crc = crc32(&data);
+            if data.len() < 8 || !(data.starts_with(b"GR-V1") || data.starts_with(b"Z3-V1")) {
+                let kind = if data.len() < 8 { "short" } else if data.starts_with(b"GLEVNW01") { "text-level" } else { "other-magic" };
+                *by_flag.entry(kind.into()).or_default() += 1;
+                tsv.push_str(&format!("{crc:08x}\t{}\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t{kind}\n", data.len()));
+                continue;
+            }
+            // The public entry point agrees with the layout parser.
+            assert!(Level::load(p).is_ok(), "Level::load failed for crc {crc:08x}");
+            match Level::parse_binary_with_layout(&data) {
+                Err(e) => {
+                    *by_flag.entry("error".into()).or_default() += 1;
+                    tsv.push_str(&format!("{crc:08x}\t{}\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\terror:{e}\n", data.len()));
+                }
+                Ok((l, y)) => {
+                    ok += 1;
+                    sums[0] += l.links.len();
+                    sums[1] += l.baddies.len();
+                    sums[2] += l.npcs.len();
+                    sums[3] += l.chests.len();
+                    sums[4] += l.signs.len();
+                    if y.max_tile >= 2048 {
+                        wide += 1;
+                    }
+                    let mut flags: Vec<&str> = Vec::new();
+                    if y.tiles_decoded < 4096 {
+                        flags.push("board-short");
+                    }
+                    if l.links.len() != y.link_lines {
+                        flags.push("link-unparsed");
+                    }
+                    if y.unread_tail > 0 {
+                        flags.push("tail");
+                    }
+                    if y.baddies.1 >= y.file_len && y.npcs.0 >= y.file_len {
+                        flags.push("cut-in-baddies");
+                    } else if y.npcs.1 >= y.file_len && y.chests.0 >= y.file_len {
+                        flags.push("cut-in-npcs");
+                    }
+                    if flags.is_empty() {
+                        clean += 1;
+                        flags.push("clean");
+                    }
+                    let f = flags.join(",");
+                    for x in &flags {
+                        *by_flag.entry((*x).into()).or_default() += 1;
+                    }
+                    tsv.push_str(&format!(
+                        "{crc:08x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{f}\n",
+                        y.file_len, y.magic, y.code_bits, y.codes, y.single_runs, y.double_runs, y.max_run, y.tiles_decoded,
+                        y.max_tile, y.board_end, y.link_lines, l.links.len(), l.baddies.len(), l.npcs.len(), l.chests.len(),
+                        l.signs.len(), y.unread_tail
+                    ));
+                }
+            }
+        }
+        eprintln!("graal files {}, parsed {ok}, clean {clean}; flags {by_flag:?}", files.len());
+        if let Some(out) = std::env::var_os("SEIHAI_CORPUS_TSV") {
+            std::fs::write(out, tsv).unwrap();
+        }
+        assert!(!files.is_empty());
+        assert_eq!(clean, ok, "files that parsed with a flag: {by_flag:?}");
+        // The owner's player world (3141 `.graal` names): 27 are empty and
+        // one is a text level under a `.graal` name; the rest are GR-V1.03.
+        if files.len() == 3141 {
+            assert_eq!((ok, by_flag.get("short"), by_flag.get("text-level")), (3113, Some(&27), Some(&1)));
+            // links, baddies, NPCs, chests, signs over all files
+            assert_eq!(sums, [9355, 902, 14857, 375, 2381]);
+            // 1998 files hold a tile id of 2048 or more: 13-bit codes.
+            assert_eq!(wide, 1998);
+        }
+    }
+
+    /// Old levels write arrival coordinates as `playerx`, `playery+10`,
+    /// `playerx-15` and, in one case, a stray word. None of them drops the
+    /// link; the signed number is kept as an offset.
+    #[test]
+    fn link_arrival_expressions_are_kept() {
+        let tail = b"a.graal 20 26 4 1 playerx playery+10\nb.graal 12 22 4 1 playerx+15 53\nc.graal 5 5 1 1 PlayerX-1.5 61.5\nd.graal 23 29 2 1 X's Y's\ne.graal 0 0 1 1 7 PLAYERY\n#\n";
+        let mut d = binary_level(b"GR-V1.03", 13, tail);
+        d.extend_from_slice(&[0xFF, 0xFF, 0xFF, b'\n', b'#', b'\n', b'#', b'\n']);
+        let (l, lay) = Level::parse_binary_with_layout(&d).unwrap();
+        assert_eq!((l.links.len(), lay.link_lines), (5, 5));
+        let v: Vec<_> = l.links.iter().map(|k| (k.new_x, k.new_y, k.x_offset, k.y_offset)).collect();
+        assert_eq!(v[0], (None, None, 0.0, 10.0));
+        assert_eq!(v[1], (None, Some(53.0), 15.0, 0.0));
+        assert_eq!(v[2], (None, Some(61.5), -1.5, 0.0));
+        assert_eq!(v[3], (None, None, 0.0, 0.0));
+        assert_eq!(v[4], (Some(7.0), None, 0.0, 0.0));
+    }
+
+    /// A baddy at x = 0 is a baddy: only a first byte of 0x80 or more ends
+    /// the section (proved by two real levels; a reference decoder that
+    /// also stopped at 0 lost them and misread the NPCs after them).
+    #[test]
+    fn baddy_at_column_zero_does_not_end_the_section() {
+        let mut tail: Vec<u8> = b"#\n".to_vec();
+        tail.extend_from_slice(&[43, 5, 7]);
+        tail.extend_from_slice(b"\\\\\n");
+        tail.extend_from_slice(&[0, 62, 6]);
+        tail.extend_from_slice(b"\\\\\n");
+        tail.extend_from_slice(&[0xFF, 0xFF, 0xFF, b'\n']);
+        tail.extend_from_slice(&[32 + 3, 32 + 4]);
+        tail.extend_from_slice(b"x.gif#show;\n#\n#\n");
+        let (l, lay) = Level::parse_binary_with_layout(&binary_level(b"GR-V1.03", 13, &tail)).unwrap();
+        assert_eq!((lay.baddy_records, lay.npc_records), (2, 1));
+        assert_eq!((l.baddies[1].x, l.baddies[1].y, l.baddies[1].kind.as_str()), (0.0, 62.0, "6"));
+        assert_eq!(l.npcs[0].image, "x.gif");
+    }
 }
