@@ -4,6 +4,7 @@ pub mod assets;
 pub mod chatlists;
 pub mod combat;
 pub mod dev;
+pub mod filecache;
 pub mod difftest;
 pub mod gmap;
 pub mod gui;
@@ -17,6 +18,7 @@ pub mod scripting;
 pub mod settings;
 pub mod sound;
 pub mod ui;
+pub mod viewer;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

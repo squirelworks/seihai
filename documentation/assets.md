@@ -161,8 +161,11 @@ Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
 ### Not settled or not done
 
 - **Which copy wins.** The resolver prefers a downloaded copy in `levels/`
-  over a shipped one at the root and over `maps/`. What a real client does
-  when both exist is the file-transfer caching question (queue item 9).
+  over a shipped one at the root and over `maps/`. A real client looks for
+  the name as a path from the game folder first, then in its file index, and
+  replaces the file it found in place; `DownloadStore::local_path` follows
+  that for download checks and saves. The scan order of the index when two
+  folders hold the same name is open (`documentation/file-cache.md`).
 - **Tile sheets of other widths.** `pics1.png` in the 2.22 folder is 2048×512
   (128 columns). The notes give 1856×512 for 1.33 to 1.39. How tile ids map on
   that sheet is not in the notes, so the renderer still assumes 128 columns,

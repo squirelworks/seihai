@@ -63,6 +63,10 @@ pub struct Event {
     /// Payload bytes.
     pub len: usize,
     pub fields: Vec<(String, String)>,
+    /// Payload bytes, only when the decoder was asked to keep them
+    /// ([`super::decode::DecodeOptions::keep_raw`]); empty otherwise and
+    /// never written to a trace file.
+    pub raw: Vec<u8>,
 }
 
 impl Event {
@@ -167,6 +171,7 @@ impl Trace {
                 name: unesc(c[5]),
                 len: c[6].parse().map_err(|_| bad("length"))?,
                 fields,
+                raw: Vec::new(),
             });
         }
         Ok(t)
@@ -233,6 +238,7 @@ mod tests {
             name: "LOGIN".into(),
             len: 38,
             fields: vec![("token".into(), "GNW28015".into()), ("account".into(), "<ACCT>".into())],
+            raw: Vec::new(),
         });
         t.events.push(Event {
             conn: "gs0".into(),
@@ -243,6 +249,7 @@ mod tests {
             name: "TOALL".into(),
             len: 9,
             fields: vec![("text".into(), "a|b=c%d\te\n".into())],
+            raw: Vec::new(),
         });
         t
     }

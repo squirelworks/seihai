@@ -5,7 +5,7 @@ mod gani;
 mod level;
 mod objects;
 mod png;
-mod resolve;
+pub(crate) mod resolve;
 mod root;
 mod tiledefs;
 mod coverage;

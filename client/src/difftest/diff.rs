@@ -661,6 +661,7 @@ mod tests {
             name: name.into(),
             len: 1,
             fields: fields.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            raw: Vec::new(),
         }
     }
 

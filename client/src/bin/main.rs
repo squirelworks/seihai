@@ -14,6 +14,7 @@ use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, 
 use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
+use seihai::filecache::FileSession;
 use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
 use seihai::scripting::engine::host::{SessionScripts, WeaponScript};
@@ -79,13 +80,58 @@ impl WorldLoader for RootLoader<'_> {
     }
 }
 
-/// Send what [`sync_world`] asked for: the `.gmap` file, and the
-/// `PLI_ADJACENTLEVEL` messages in one frame.
-fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests) {
+/// Send the file requests the rules ask for.
+fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
+    if msgs.is_empty() {
+        return;
+    }
+    if let Some(c) = conn {
+        if let Err(e) = c.send_messages(&msgs) {
+            eprintln!("file request send failed: {e}");
+        }
+    }
+}
+
+/// For each NPC image of a level: ask the server for a missing file or, if
+/// the file is there, check it (the file-cache rules decide which), and
+/// load the image we have.
+fn npc_image_pass(
+    level: &Level,
+    files: &mut FileSession,
+    conn: Option<&mut Connection>,
+    npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
+) {
+    let mut msgs = Vec::new();
+    for npc in &level.npcs {
+        if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
+            continue;
+        }
+        let m = files.need(&npc.image);
+        if !m.is_empty() {
+            eprintln!("requesting {}", npc.image);
+        }
+        msgs.extend(m);
+        if let Some(data) = files.store.read(&npc.image) {
+            if let Ok((w, _, px)) = read_png_rgba(&data) {
+                npc_images.insert(npc.image.clone(), (w, px));
+            }
+        }
+    }
+    send_file_msgs(conn, msgs);
+}
+
+/// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
+/// one we have), and the `PLI_ADJACENTLEVEL` messages in one frame.
+fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files: &mut FileSession) {
     let Some(c) = conn else { return };
-    if let Some(f) = &req.gmap_file {
-        eprintln!("requesting {f}");
-        let _ = c.send_wantfile(f);
+    if let Some(f) = req.gmap_file.as_ref().or(req.gmap_local.as_ref()) {
+        let msgs = files.need(f);
+        if !msgs.is_empty() {
+            eprintln!("requesting {f}");
+            if let Err(e) = c.send_messages(&msgs) {
+                eprintln!("file request send failed: {e}");
+            }
+        }
     }
     if !req.messages.is_empty() {
         if let Err(e) = c.send_messages(&req.messages) {
@@ -96,6 +142,11 @@ fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests) {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    // `seihai capture ...`: the capture viewer and layout explorer. Reads
+    // files only; no window, no network.
+    if args.first().map(String::as_str) == Some("capture") {
+        std::process::exit(seihai::viewer::cli::run(&args[1..]));
+    }
     let mut assets: Option<PathBuf> = None;
     let mut level_name: Option<String> = None;
     let mut online: Option<String> = None;
@@ -107,6 +158,8 @@ fn main() {
     let mut list_only = false;
     let mut check_assets = false;
     let mut level_info: Vec<String> = Vec::new();
+    let mut version_chain = false;
+    let mut chain_format = seihai::protocol::chain::Format::Text;
     let mut version_given = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
@@ -115,6 +168,7 @@ fn main() {
     let mut cli_serverwarp: Option<bool> = None;
     // None: not given on the command line, so the settings file decides.
     let mut cli_sound: Option<bool> = None;
+    let mut cli_save_downloads: Option<bool> = None;
     while i < args.len() {
         match args[i].as_str() {
             "--assets" | "-a" => {
@@ -155,6 +209,19 @@ fn main() {
                     }
                 }
             }
+            "--version-chain" => version_chain = true,
+            "--chain-format" => {
+                i += 1;
+                chain_format = match args.get(i).map(String::as_str) {
+                    Some("text") => seihai::protocol::chain::Format::Text,
+                    Some("md") => seihai::protocol::chain::Format::Markdown,
+                    Some("tsv") => seihai::protocol::chain::Format::Tsv,
+                    other => {
+                        eprintln!("--chain-format needs text, md or tsv (got {})", other.unwrap_or("nothing"));
+                        std::process::exit(2);
+                    }
+                };
+            }
             "--send-tampercheck" => send_tampercheck = true,
             "--send-showimg" => send_showimg = true,
             "--no-serverwarp" => cli_serverwarp = Some(false),
@@ -162,6 +229,7 @@ fn main() {
             "--no-scripts" => no_scripts = true,
             "--no-sound" => cli_sound = Some(false),
             "--sound" => cli_sound = Some(true),
+            "--no-save-downloads" => cli_save_downloads = Some(false),
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -213,6 +281,8 @@ fn main() {
                 println!("                             the build has an audio device backend");
                 println!("                             (settings file: sound=0)");
                 println!("         --sound             play them even if the settings file says off");
+                println!("         --no-save-downloads  keep downloaded files in memory only, do not");
+                println!("                             write them to disk (settings file: save_downloads=0)");
                 println!("       seihai --assets <dir> --check-assets [--version 2.22]");
                 println!("         --check-assets      resolve and load the files a version uses from the");
                 println!("                             data folder and print what is found; without");
@@ -222,6 +292,16 @@ fn main() {
                 println!("         --level-info        print sizes, offsets and record counts of a binary");
                 println!("                             .graal/.zelda level (no content). Exit 1 if a file");
                 println!("                             does not parse");
+                println!("       seihai --version-chain [--chain-format text|md|tsv] [--version V]");
+                println!("         --version-chain     print what each client build changed against the");
+                println!("                             build before it (all builds, or just --version)");
+                println!("       seihai capture show FILE [--version V] [--dir c2s|s2c] [--id N,NAME] [--time A..B]");
+                println!("                               [--frame A..B] [--format text|tsv|json] [--raw] [--layouts]");
+                println!("       seihai capture layout ID|NAME [--dir c2s|s2c] [--version V]");
+                println!("       seihai capture tables [--tables DIR]");
+                println!("         capture             read a capture (pcap or difftest trace) and print the");
+                println!("                             decoded messages, or show a packet's field layout across");
+                println!("                             versions; login frames are redacted (seihai capture help)");
                 println!("       seihai                  (menu if no mode given)");
                 return;
             }
@@ -266,6 +346,12 @@ fn main() {
         if let Some(p) = &settings.password {
             password = p.clone();
         }
+    }
+    // Print what each build changed against the one before, then exit.
+    if version_chain {
+        let only = version_given.then_some(version);
+        print!("{}", seihai::protocol::chain::render(chain_format, only));
+        return;
     }
     // Use the version saved by the GUI if no CLI --version was given.
     if version == ClientVersion::V205 {
@@ -491,6 +577,8 @@ fn main() {
     // Every lookup of a level, GANI, image or sound goes through this: it
     // knows the folders of the 2.22 data folder and what this version opens.
     let resolver = AssetResolver::new(root.clone(), version.profile());
+    // What to ask the server for, and where downloads are saved.
+    let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -776,9 +864,11 @@ fn main() {
                     Ok(Ok(body)) => {
                         frames_seen += 1;
                         net_state.apply_body(&body);
-                        // Write any completed files and reload levels.
-                        let written = net_state.flush_files(&root.levels_dir());
-                        for name in &written {
+                        // Save completed files by the clients' folder rules,
+                        // settle the replies, and reload levels.
+                        let got = files.process(&mut net_state);
+                        send_file_msgs(conn.as_mut(), got.send);
+                        for name in &got.written {
                             // A neighbour's file (gmap) is not the current level.
                             let is_current = net_state
                                 .current_level_name()
@@ -789,30 +879,14 @@ fn main() {
                                 if session.load_level(resolver.level_path(name)).is_ok() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
-                                    if let Some(level) = &session.current_level {
-                                        for npc in &level.npcs {
-                                            if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
-                                                continue;
-                                            }
-                                            let local = resolver.image(&npc.image);
-                                            if local.is_none() {
-                                                if let Some(c) = conn.as_mut() {
-                                                    let _ = c.send_wantfile(&npc.image);
-                                                    eprintln!("requesting {}", npc.image);
-                                                }
-                                            } else if let Some(path) = local {
-                                                if let Ok(data) = std::fs::read(&path) {
-                                                    if let Ok((w, _, px)) = read_png_rgba(&data) {
-                                                        npc_images.insert(npc.image.clone(), (w, px));
-                                                    }
-                                                }
-                                            }
-                                        }
+                                    if let Some(level) = session.current_level.clone() {
+                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
                                     }
                                 }
                                 eprintln!("loaded {name}");
                             } else if name.ends_with(".png") || name.ends_with(".gif") {
-                                if let Ok(data) = std::fs::read(root.levels_dir().join(name)) {
+                                // A new copy of an image replaces the one in memory.
+                                if let Some(data) = files.store.read(name) {
                                     if let Ok((w, _, px)) = read_png_rgba(&data) {
                                         npc_images.insert(name.clone(), (w, px));
                                         eprintln!("image {name}");
@@ -875,32 +949,13 @@ fn main() {
                             Err(e) => {
                                 eprintln!("level {file} not loaded ({e}); requesting");
                                 session.current_level = None;
-                                if let Some(c) = conn.as_mut() {
-                                    let _ = c.send_wantfile(&file);
-                                }
+                                send_file_msgs(conn.as_mut(), files.need(&file));
                             }
                         }
                         loaded_level = Some(name.clone());
                         // Request missing NPC images.
-                        if let Some(level) = &session.current_level {
-                            for npc in &level.npcs {
-                                if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
-                                    continue;
-                                }
-                                let local = resolver.image(&npc.image);
-                                if local.is_none() {
-                                    if let Some(c) = conn.as_mut() {
-                                        let _ = c.send_wantfile(&npc.image);
-                                        eprintln!("requesting {}", npc.image);
-                                    }
-                                } else if let Some(path) = local {
-                                    if let Ok(data) = std::fs::read(&path) {
-                                        if let Ok((w, _, px)) = read_png_rgba(&data) {
-                                            npc_images.insert(npc.image.clone(), (w, px));
-                                        }
-                                    }
-                                }
-                            }
+                        if let Some(level) = session.current_level.clone() {
+                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
                         }
                     }
                 }
@@ -1036,7 +1091,7 @@ fn main() {
                 // Gmap: the grid, the neighbouring levels, 186 blocks, and
                 // a request for whatever the server still has to send.
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
-                send_world_requests(conn.as_mut(), req);
+                send_world_requests(conn.as_mut(), req, &mut files);
                 dirty = true;
             }
         }
@@ -1283,7 +1338,7 @@ fn main() {
                     session.note_entry(n);
                 }
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
-                send_world_requests(conn.as_mut(), req);
+                send_world_requests(conn.as_mut(), req, &mut files);
             } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
                 if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
@@ -1420,6 +1475,8 @@ fn main() {
                         loaded_level = None;
                         session.leave_gmap();
                         gmap_asked.clear();
+                        // The request lists belong to one connection.
+                        files.new_connection();
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());

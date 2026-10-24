@@ -283,6 +283,10 @@ pub struct SessionState {
     pub file_requests: Vec<String>,
     /// Completed files: (name, bytes).
     pub incoming_files: Vec<(String, Vec<u8>)>,
+    /// The server's mod time (Unix seconds) of a file in `incoming_files`,
+    /// by lower-case name. Only builds whose `PLO_FILE` carries one
+    /// (2.1+) fill it; a file the client saves gets this as its file time.
+    pub incoming_mod_times: std::collections::HashMap<String, u32>,
     /// In-progress large file: (name, accumulated bytes).
     pub large_file: Option<(String, Vec<u8>)>,
     /// Size the server announced for the large file (`PLO_LARGEFILESIZE`).
@@ -657,8 +661,11 @@ impl SessionState {
                 // PLO_FILE, always behind PLO_RAWDATA.
                 let parsed = parse_file_packet(&msg.payload, self.file_has_modtime)
                     .or_else(|| parse_file_packet(&msg.payload, !self.file_has_modtime));
-                if let Some((name, data)) = parsed {
+                if let Some((name, data, mod_time)) = parsed {
                     self.file_requests.push(format!("FILE:{name}"));
+                    if let Some(t) = mod_time.filter(|&t| t != 0) {
+                        self.incoming_mod_times.entry(name.to_ascii_lowercase()).or_insert(t);
+                    }
                     match self.large_file {
                         Some((ref n, ref mut buf)) if n == &name => buf.extend_from_slice(&data),
                         _ => self.incoming_files.push((name, data)),
@@ -1284,27 +1291,47 @@ impl SessionState {
         }
     }
 
-    /// Write every completed file into `dir` and clear the list.
-    /// Returns the names written.
-    pub fn flush_files(&mut self, dir: &std::path::Path) -> Vec<String> {
-        let mut written = Vec::new();
+    /// Take every completed file, with the server's mod time where the
+    /// build sends one. The gmap's own file gives the grid on the way.
+    pub fn take_files(&mut self) -> Vec<IncomingFile> {
+        let mut out = Vec::new();
         for (name, data) in self.incoming_files.drain(..) {
-            // The gmap's own file gives the grid.
             if let Some(g) = self.gmap.as_mut().filter(|g| g.is_name(&name)) {
                 if let Some(map) = Gmap::parse(&String::from_utf8_lossy(&data)) {
                     g.map = Some(map);
                 }
             }
-            let path = dir.join(&name);
+            let mod_time = self.incoming_mod_times.remove(&name.to_ascii_lowercase());
+            out.push(IncomingFile { name, data, mod_time });
+        }
+        out
+    }
+
+    /// Write every completed file into `dir` and clear the list.
+    /// Returns the names written. (The client saves by the real clients'
+    /// folder rules instead: see `filecache`.)
+    pub fn flush_files(&mut self, dir: &std::path::Path) -> Vec<String> {
+        let mut written = Vec::new();
+        for f in self.take_files() {
+            let path = dir.join(&f.name);
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            if std::fs::write(&path, &data).is_ok() {
-                written.push(name);
+            if std::fs::write(&path, &f.data).is_ok() {
+                written.push(f.name);
             }
         }
         written
     }
+}
+
+/// A file the server finished sending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncomingFile {
+    pub name: String,
+    pub data: Vec<u8>,
+    /// The server's mod time (Unix seconds); `None` before 2.1.
+    pub mod_time: Option<u32>,
 }
 
 /// Read a GSHORT: two GCHARs, high 7 bits first.
@@ -1412,7 +1439,8 @@ pub(super) fn read_gint5(b: &[u8]) -> Option<u64> {
 ///
 /// - 2.1+: `GINT5 modtime` + `GCHAR name_len` + name + data + `\n`
 /// - before 2.1 (2.05): `GCHAR name_len` + name + data, with no `\n`
-fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u8>)> {
+fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u8>, Option<u32>)> {
+    let mod_time = if has_modtime { read_gint5(payload).map(|t| t.min(u64::from(u32::MAX)) as u32) } else { None };
     let p = if has_modtime { payload.get(5..)? } else { payload };
     let (&len, rest) = p.split_first()?;
     let name_len = len.wrapping_sub(0x20) as usize;
@@ -1432,7 +1460,7 @@ fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u
     if has_modtime {
         data = data.strip_suffix(b"\n").unwrap_or(data);
     }
-    Some((name, data.to_vec()))
+    Some((name, data.to_vec(), mod_time))
 }
 
 #[cfg(test)]
@@ -1516,6 +1544,26 @@ mod tests {
         state.apply_body(two);
         assert_eq!(state.incoming_files, vec![(name.to_string(), data)]);
         assert_eq!(state.level_name.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn the_servers_file_time_comes_out_with_the_file() {
+        // GINT5 bytes 0,0,1,2,3 are 1*128*128 + 2*128 + 3.
+        let name = "a.png";
+        let mut file = vec![102 + 0x20];
+        file.extend_from_slice(b"  !\"#");
+        file.push(name.len() as u8 + 0x20);
+        file.extend_from_slice(name.as_bytes());
+        file.extend_from_slice(b"xyz\n");
+        let n = file.len();
+        let mut body = vec![100 + 0x20, 0x20, (n >> 7) as u8 + 0x20, (n & 0x7F) as u8 + 0x20, b'\n'];
+        body.extend_from_slice(&file);
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        st.apply_body(&body);
+        let got = st.take_files();
+        assert_eq!(got.len(), 1);
+        assert_eq!((got[0].name.as_str(), got[0].data.as_slice(), got[0].mod_time), (name, &b"xyz"[..], Some(16643)));
+        assert!(st.take_files().is_empty());
     }
 
     #[test]

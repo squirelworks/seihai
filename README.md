@@ -93,12 +93,39 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
 | `--check-assets` | With `--assets`, resolve and load the files a version uses from the data folder and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
 | `--level-info FILE` | Print sizes, section offsets and record counts of a binary `.graal` / `.zelda` level (no content); repeat for more files. Exit code 1 if a file does not parse |
+| `--version-chain` | Print what each client build changed against the build before it (all builds, or the one given with `--version`). `--chain-format text\|md\|tsv` picks the form (`documentation/version-chain.md`) |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
 | `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `<assets>/sounds`, if the build has the `audio-rodio` feature and a sound device opens. Otherwise sound is silent and everything else runs the same |
 | `--sound` | Play sound effects even if the settings file turns them off |
+| `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the assets folder, in the place the real client uses (`documentation/file-cache.md`) |
+
+### Capture viewer
+
+`seihai capture` reads files only (no window, no network). It decodes a lab capture with Seihai's own codecs and prints the messages with their names and field layouts. `documentation/capture-viewer.md` has the details and examples.
+
+| Command | Meaning |
+|---------|---------|
+| `seihai capture show FILE` | Print the messages of a pcap, or of a `difftest trace` file. The version is read from the login token (or the trace header) unless `--version` is given |
+| `seihai capture layout ID\|NAME` | Print one packet's field layout across the version chain, with the fields the tables do not settle marked `?` (unknown) or `~` (partly decoded) |
+| `seihai capture tables` | List the tables in use and check them |
+
+| `show` flag | Meaning |
+|-------------|---------|
+| `--version V` | Client version, for example `2.22` |
+| `--tables DIR` | Read `packet-layouts.tsv` (and `version-chain.tsv`) from `DIR` instead of the built-in tables |
+| `--dir c2s\|s2c`, `--id N,NAME`, `--name NAME`, `--conn gs0` | Keep only that direction, those packets (by id or name, `PLI_`/`PLO_` prefixes pick a direction) or that connection |
+| `--time A..B`, `--frame A..B` | Keep a time range (milliseconds since the connection started) or a range of frame numbers |
+| `--limit N` | Stop after N messages |
+| `--layouts` | Print the table layout under every message |
+| `--raw` | Hex dump of every payload. Undecoded payloads are dumped without this flag |
+| `--format text\|tsv\|json` | Output format (default `text`) |
+| `--out FILE` | Write to `FILE` with mode 600. Refused if `FILE` already exists with a looser mode and the capture contains a login |
+| `--no-mask` | Keep the key, player ids and account name. The password is never shown |
+
+Login frames are redacted by default and their raw bytes are never printed. Keep capture files in a private folder; never commit them.
 
 ### Chat commands and list files
 
@@ -117,18 +144,20 @@ The lists are plain text files in the settings directory (`~/.config/seihai/`, t
 
 Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
 
-Two options are meant to be edited by hand:
+Three options are meant to be edited by hand:
 
 ```
 # Do not follow a server warp (default: 1, follow it)
 follow_serverwarp=0
 # Do not play sound effects (default: 1)
 sound=0
+# Do not write downloaded files to disk (default: 1)
+save_downloads=0
 ```
 
 `follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
 
-`sound` takes the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays and for the optional `audio-rodio` build (`cargo build --release -p seihai --features audio-rodio`, needs the ALSA development files on Linux).
+`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays and for the optional `audio-rodio` build (`cargo build --release -p seihai --features audio-rodio`, needs the ALSA development files on Linux).
 
 ## Features
 
