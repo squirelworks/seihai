@@ -64,7 +64,7 @@ Single code path. Versions are profile rows, not branches.
 
 ### Phase 2 — Assets & Rendering
 - [x] Text level loader (GLEVNW01)
-- [x] Binary loaders (.graal, .zelda)
+- [x] Binary loaders (.graal, .zelda): `.zelda` (Z3-V1.03/.04) has its own strict reader, profile gate and `--level-info` / `--check-assets` support; see `assets.md`
 - [x] Tile-type table (text or arrays.dat)
 - [x] ASCII / PPM board view
 - [x] Sprite sheet / tileset loading
