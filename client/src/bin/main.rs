@@ -289,10 +289,11 @@ fn main() {
                 println!("                             data folder and print what is found; without");
                 println!("                             --version, the five main versions. Exit 1 if a");
                 println!("                             required file is missing or unreadable");
-                println!("       seihai --level-info <file.graal> [--level-info <file> ...]");
+                println!("       seihai --level-info <file.graal|file.zelda> [--level-info <file> ...]");
                 println!("         --level-info        print sizes, offsets and record counts of a binary");
                 println!("                             .graal/.zelda level (no content). Exit 1 if a file");
-                println!("                             does not parse");
+                println!("                             does not parse; a Z3-V1 file must also reach its");
+                println!("                             end with no anomaly");
                 println!("       seihai --version-chain [--chain-format text|md|tsv] [--version V]");
                 println!("         --version-chain     print what each client build changed against the");
                 println!("                             build before it (all builds, or just --version)");
@@ -316,7 +317,26 @@ fn main() {
         let mut failed = false;
         for f in &level_info {
             let name = std::path::Path::new(f).file_name().map_or_else(|| f.clone(), |n| n.to_string_lossy().into_owned());
-            match std::fs::read(f).map_err(|e| e.to_string()).and_then(|d| seihai::assets::Level::parse_binary_with_layout(&d)) {
+            let data = std::fs::read(f).map_err(|e| e.to_string());
+            // Z3-V1 (`.zelda`) has its own layout report (computers, no NPCs
+            // or chests, and every deviation from the layout in words).
+            if let Ok(d) = &data {
+                if seihai::assets::is_zelda(d) {
+                    match seihai::assets::ZeldaLevel::parse(d) {
+                        Ok(z) => {
+                            println!("{name}");
+                            print!("{}", z.layout.summary());
+                            failed |= !z.layout.is_clean();
+                        }
+                        Err(e) => {
+                            eprintln!("{name}: {e}");
+                            failed = true;
+                        }
+                    }
+                    continue;
+                }
+            }
+            match data.and_then(|d| seihai::assets::Level::parse_binary_with_layout(&d)) {
                 Ok((level, layout)) => {
                     println!("{name}");
                     print!("{}", layout.summary(&level));
@@ -1457,7 +1477,7 @@ fn main() {
         // the real client.
         if let Some(w) = net_state.server_warp.take() {
             if !follow_serverwarp {
-                eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.name);
+                eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.display_name());
             } else if let Some(old) = conn.as_ref() {
                 let _ = old.shutdown();
                 conn = None;
@@ -1466,7 +1486,7 @@ fn main() {
                 warp_since = None;
                 cached_arrival = None;
                 let target = w.address();
-                eprintln!("server warp to {:?}: {}", w.name, target.as_deref().unwrap_or("no usable host and port"));
+                eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {
                     Some(a) => seihai::net::login_gserver(
                         &a,
@@ -1483,6 +1503,9 @@ fn main() {
                 match result {
                     Ok((a, mut sess)) => {
                         eprintln!("logged in to {a} as {account} ({})", version.profile().summary());
+                        // The clients keep field 1 as the server's name (without
+                        // the type prefix) and show it in the window title.
+                        window.set_title(&profile.window_title(Some(&w.display_name())));
                         for m in &sess.warnings {
                             eprintln!("{m}");
                         }

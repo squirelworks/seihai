@@ -428,6 +428,14 @@ pub struct SessionState {
     /// and opaque payload. Seihai draws nothing for it.
     pub showimg_relays: usize,
     pub last_showimg: Option<(u16, Vec<u8>)>,
+    /// The images each player in the level shows (id 32 decoded and
+    /// applied). Only players in [`Self::others`] are kept. Nothing draws
+    /// them yet.
+    pub player_images: std::collections::BTreeMap<u16, super::showimg::PlayerImages>,
+    /// Whether this build's id 32 carries the image-record text (read from
+    /// 2.17.1, 2.22 and 2.31). Earlier builds used the four-field emote
+    /// form, which is not decoded here, so their relays stay opaque.
+    pub showimg_records: bool,
     /// `PLO_SERVERWARP` (178), decoded: name, host and port. The last one
     /// received; the client takes it with `take()` and reconnects.
     pub server_warp: Option<ServerWarp>,
@@ -477,6 +485,11 @@ impl SessionState {
             own_prop_ids: Some(p.props.own),
             other_prop_ids: Some(p.props.other),
             combat: p.life.combat,
+            showimg_records: {
+                let all = ClientVersion::all_versions();
+                let at = |v: ClientVersion| all.iter().position(|&x| x == v);
+                at(version) >= at(ClientVersion::V217)
+            },
             ..Default::default()
         }
     }
@@ -609,6 +622,7 @@ impl SessionState {
                 // PLO_DELPLAYER: GSHORT id.
                 if let Some(id) = read_gshort(&msg.payload) {
                     self.others.retain(|o| o.id != id);
+                    self.player_images.remove(&id);
                 }
             }
             13 => {
@@ -830,6 +844,14 @@ impl SessionState {
             32 => {
                 if let Some(r) = parse_showimg_relay(&msg.payload) {
                     self.showimg_relays += 1;
+                    // The client looks the sender up in its level and
+                    // ignores a player it does not have.
+                    let others = &self.others;
+                    self.player_images.retain(|id, _| others.iter().any(|o| o.id == *id));
+                    if self.showimg_records && self.others.iter().any(|o| o.id == r.0) {
+                        let up = super::showimg::parse_showimg_update(&r.1);
+                        super::showimg::apply_showimg_update(self.player_images.entry(r.0).or_default(), &up);
+                    }
                     self.last_showimg = Some(r);
                 }
             }
@@ -1419,6 +1441,69 @@ pub(super) fn split_quoted(s: &str) -> Vec<String> {
     }
     if !cur.is_empty() || s.ends_with(',') {
         out.push(cur);
+    }
+    out
+}
+
+/// Split comma text the way the clients' own list class does (the
+/// `CommaText` setter of 2.17.1, 2.22 and 2.31; read from the three
+/// binaries, 2026-10-25):
+///
+/// - Leading white space (bytes 1 to 0x20) is skipped before each item.
+/// - An item that starts with `"` is quoted: it runs to the closing `"`,
+///   a doubled `""` is one quote, and an unclosed quote runs to the end.
+/// - Any other item runs up to the next byte of 0x20 or less or `,`. So
+///   white space ends an item, and the text after it (if it is not a
+///   comma) starts the next item: `a b,c` is three items.
+/// - After an item, white space is skipped, then one comma, then white
+///   space again. A comma that ends the text adds no empty item; `a,,b`
+///   keeps the empty one in the middle.
+/// - A NUL byte ends the text.
+///
+/// This differs from [`split_quoted`], which keeps spaces inside an item.
+pub(super) fn delphi_comma_text(s: &[u8]) -> Vec<Vec<u8>> {
+    let ws = |c: u8| (1..=0x20).contains(&c);
+    let end = s.iter().position(|&c| c == 0).unwrap_or(s.len());
+    let s = &s[..end];
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < s.len() && ws(s[i]) {
+        i += 1;
+    }
+    while i < s.len() {
+        let mut item = Vec::new();
+        if s[i] == b'"' {
+            i += 1;
+            while i < s.len() {
+                if s[i] == b'"' {
+                    if s.get(i + 1) == Some(&b'"') {
+                        item.push(b'"');
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    break;
+                }
+                item.push(s[i]);
+                i += 1;
+            }
+        } else {
+            let start = i;
+            while i < s.len() && s[i] > 0x20 && s[i] != b',' {
+                i += 1;
+            }
+            item.extend_from_slice(&s[start..i]);
+        }
+        out.push(item);
+        while i < s.len() && ws(s[i]) {
+            i += 1;
+        }
+        if s.get(i) == Some(&b',') {
+            i += 1;
+            while i < s.len() && ws(s[i]) {
+                i += 1;
+            }
+        }
     }
     out
 }
@@ -2262,6 +2347,49 @@ mod tests {
         assert!(st.board_heights.is_none() && st.board_modify2.is_none());
         assert_eq!((st.npc_moves, st.npc_showimgs, st.shoots, st.npc_dels), (0, 0, 0, 0));
         assert!(st.unhandled.is_empty());
+    }
+
+    /// The decoded images of a player the client knows are kept; a sender it
+    /// does not know is ignored; a player who leaves takes them along.
+    #[test]
+    fn showimg_relay_updates_the_images_of_known_players() {
+        let mut st = SessionState { showimg_records: true, ..Default::default() };
+        let relay = |id: u8, text: &[u8]| {
+            let mut p = vec![gc(0), gc(id)];
+            p.extend_from_slice(text);
+            msg(32, &p)
+        };
+        // Player 2 is not in the level yet: nothing is kept.
+        st.apply_body(&relay(2, &[0x29, 0x2a, 0x20, 0x21, b'a']));
+        assert!(st.player_images.is_empty());
+        st.others.push(OtherPlayer {
+            id: 2,
+            x: 0.0,
+            y: 0.0,
+            dir: 0,
+            nick: None,
+            chat: None,
+            chat_timer: Default::default(),
+            account: None,
+            cell: None,
+            sprite: None,
+            status: None,
+            ap: None,
+            sword_power: None,
+        });
+        st.apply_body(&relay(2, &[0x29, 0x2a, 0x20, 0x21, b'a']));
+        assert_eq!(st.player_images[&2][&0].name, b"a");
+        // The real clients' byte empties the list.
+        st.apply_body(&relay(2, &[gc(9)]));
+        assert!(st.player_images[&2].is_empty());
+        st.apply_body(&relay(2, &[0x2b, 0x20, 0x21, b'q']));
+        assert_eq!(st.player_images[&2].len(), 1);
+        st.apply_body(&msg(56, &[gc(0), gc(2)]));
+        assert!(st.player_images.is_empty());
+        // Only the builds read for this form decode it.
+        let on = |v| SessionState::for_version(v).showimg_records;
+        assert!(!on(ClientVersion::V205) && !on(ClientVersion::V133));
+        assert!(on(ClientVersion::V217) && on(ClientVersion::V222) && on(ClientVersion::V231));
     }
 
     /// 32 is `GSHORT id` plus opaque bytes: the real clients' one-byte 9, any

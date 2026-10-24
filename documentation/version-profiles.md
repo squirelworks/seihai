@@ -12,7 +12,7 @@ that row instead of matching on versions.
 | Protocol | client type, encryption generation, listserver (port, token), server→client ids handled, client→server ids sent, language after login, tampercheck (opt-in: constant and re-send rule), UDP | login, listserver fetch, dispatch, send helpers |
 | Props | ids the own-player and other-player prop parsers accept, NPC prop max, old bow form of prop 10, precise positions | prop parsing |
 | Files | modtime in `PLO_FILE`, large files, `LARGEFILESIZE`, default image extension | file replies |
-| Levels | `.graal`, `.nw`, `.gmap`, level heights, cached level links (`PLI 30`) | F5 level picker |
+| Levels | `.graal`, `.zelda` (Z3-V1, every build), `.nw`, `.gmap`, level heights, cached level links (`PLI 30`) | F5 level picker |
 | Health | the client-side death sequence (`life.death`: timer, input lock, dead bit, respawn hearts by AP, `PLI 14` claim) | death and respawn; see `health-death.md` |
 | UI | server list style (direct, one list, tabs), Up/Down chat recall, HUD art, gserver minimap, built-in editor, ganis, emoticons, configurable keys, log window, ghost mode, server name in the title | launcher, game loop |
 

@@ -126,6 +126,7 @@ pub struct Delta {
     pub download_maps: Option<bool>,
     // Levels.
     pub graal: Option<bool>,
+    pub zelda: Option<bool>,
     pub nw: Option<bool>,
     pub gmap: Option<bool>,
     pub heights: Option<bool>,
@@ -174,6 +175,7 @@ impl Delta {
         image_ext: None,
         download_maps: None,
         graal: None,
+        zelda: None,
         nw: None,
         gmap: None,
         heights: None,
@@ -267,6 +269,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.files.download_maps = pick(p.files.download_maps, d.download_maps);
 
     p.levels.graal = pick(p.levels.graal, d.graal);
+    p.levels.zelda = pick(p.levels.zelda, d.zelda);
     p.levels.nw = pick(p.levels.nw, d.nw);
     p.levels.gmap = pick(p.levels.gmap, d.gmap);
     p.levels.heights = pick(p.levels.heights, d.heights);
@@ -338,7 +341,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         image_ext: ".gif",
         download_maps: false,
     },
-    levels: Levels { graal: true, nw: false, gmap: false, heights: false, cached_links: false },
+    levels: Levels { graal: true, zelda: true, nw: false, gmap: false, heights: false, cached_links: false },
     life: Health { death: None, combat: None },
     ui: Ui {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
@@ -369,7 +372,9 @@ pub const CHAIN: &[Step] = &[
         basis: Basis::Binary,
         delta: Delta::NONE,
         source: "origin row (binary of 1.33)",
-        unknown: &[],
+        unknown: &[
+            Unknown { area: "levels", what: "Z3-V1 (.zelda): every binary from 1st Graal to 2.31 compares the level magic with Z3-V1.03 and Z3-V1.04, so the column is yes for every build; whether a build also tries .zelda for a bare level name is in no binary (Seihai tries .graal, then .zelda)" },
+        ],
     },
     Step {
         version: ClientVersion::V134,
@@ -725,6 +730,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
             Unknown { area: "login", what: "id 0 then id 1 listserver flow is untested against a server" },
+            Unknown { area: "showimg", what: "the binary has the id 24 sender with 2.22's send test, and the solo 90 s capture saw none, as that test predicts; the period and a two-player run are not observed, so none is sent" },
         ],
     },
     Step {
@@ -1005,6 +1011,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "files", "download_maps", &fa.download_maps, &fb.download_maps, yes_no);
     let (la, lb) = (&a.levels, &b.levels);
     value_change(&mut o, "levels", "graal", &la.graal, &lb.graal, yes_no);
+    value_change(&mut o, "levels", "zelda", &la.zelda, &lb.zelda, yes_no);
     value_change(&mut o, "levels", "nw", &la.nw, &lb.nw, yes_no);
     value_change(&mut o, "levels", "gmap", &la.gmap, &lb.gmap, yes_no);
     value_change(&mut o, "levels", "heights", &la.heights, &lb.heights, yes_no);
