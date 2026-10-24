@@ -1831,10 +1831,10 @@ mod tests {
         let body = gen5_body(&mut srv, &mut g);
         assert_eq!(body[0], 39 + 0x20);
         assert_eq!(body[12], 2 + 0x20, "props follow the 12-byte tamper message");
-        assert_eq!(&body[13..16], &[43 + 0x20, 1 + 0x20, 15 + 0x20]);
+        assert_eq!(&body[13..16], &[15 + 0x20, 0x20, 43 + 0x20], "X first, then the cell (real 2.22)");
         assert!(!conn.send_gmap_crossing(ClientVersion::V222, &east_crossing(), None).unwrap());
         let body = gen5_body(&mut srv, &mut g);
-        assert_eq!(body, [&[2 + 0x20, 43 + 0x20, 1 + 0x20, 15 + 0x20, 0x20][..], b"\n"].concat());
+        assert_eq!(body, [&[2 + 0x20, 15 + 0x20, 0x20, 43 + 0x20, 1 + 0x20][..], b"\n"].concat());
     }
 
     /// A profile without gmaps writes nothing at a crossing.
