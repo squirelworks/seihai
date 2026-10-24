@@ -110,7 +110,9 @@ impl EnterLevelSender {
     /// stays owed until [`Self::send_pending`]). No I/O.
     pub fn note_level(&mut self, name: &str) -> bool {
         let first = self.level.is_none();
-        if self.level.as_deref() == Some(name) {
+        // Level names are not case-sensitive (a gmap grid may spell one
+        // differently from the server's LEVELNAME).
+        if self.level.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(name)) {
             return false;
         }
         self.level = Some(name.to_string());
@@ -1503,6 +1505,95 @@ mod tests {
         let (mut conn, _srv) = pair();
         conn.login_versioned(ClientVersion::V205, 0x46, "ab", "cd").unwrap();
         assert!(!conn.send_gmap_crossing(ClientVersion::V205, &east_crossing(), None).unwrap());
+    }
+
+    /// The whole path for a 2.31 client on a 2x2 gmap, in process: login
+    /// and the server's gmap messages, the world sync, a walk east across
+    /// the edge and back, and the frames that went out. The server's answers
+    /// are the lab's (name, mod time, board, gmap name).
+    #[test]
+    fn gmap_walk_east_and_back_231_frames() {
+        use crate::assets::Level;
+        use crate::gmap::{sync_world, GmapRules, WorldLoader};
+        use crate::offline::OfflineSession;
+        use std::collections::{HashMap, HashSet};
+
+        struct Files(HashMap<String, Level>);
+        impl WorldLoader for Files {
+            fn gmap_text(&self, _: &str) -> Option<String> {
+                Some("GRMAP001\nWIDTH 2\nHEIGHT 2\nLEVELNAMES\n\"gm_nw.nw\",\"gm_ne.nw\",\n\"gm_sw.nw\",\"gm_se.nw\",\nLEVELNAMESEND\n".into())
+            }
+            fn level(&self, name: &str) -> Option<Level> {
+                self.0.get(name).cloned()
+            }
+        }
+        let v = ClientVersion::V231;
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(v, 0x61, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen5::new(0x61);
+        let mut el = EnterLevelSender::for_version(v);
+        assert!(el.at_login(&mut conn).unwrap());
+        assert_eq!(gen5_body(&mut srv, &mut g), ENTER);
+
+        // The server: 49 (cell 0,0), the level, then the gmap name.
+        let msg = |id: u8, p: &[u8]| [&[id + 0x20][..], p, b"\n"].concat();
+        let warp = [&[0x20 + 116, 0x20 + 61, 0x20 + 50, 0x20, 0x20][..], b"gm2x2.gmap"].concat();
+        let mut net = SessionState::for_version(v);
+        net.apply_body(&[msg(49, &warp), msg(6, b"gm_nw.nw"), msg(6, b"gm2x2.gmap")].concat());
+        assert!(!el.note_level("gm_nw.nw"), "the first level is covered by the login 46");
+
+        let open = |mark: u16| Level::from_board(&vec![mark; 64 * 64]);
+        let files = Files(
+            ["gm_nw.nw", "gm_ne.nw", "gm_sw.nw", "gm_se.nw"].iter().map(|n| (n.to_string(), open(0))).collect(),
+        );
+        let mut session = OfflineSession::new();
+        session.current_level = files.level("gm_nw.nw");
+        session.player_x = 60.0;
+        session.player_y = 10.0;
+        let rules = GmapRules::for_version(v);
+        let mut asked = HashSet::new();
+        let req = sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        // The three neighbours are asked for in one frame, as 35.
+        assert_eq!(req.messages.len(), 3);
+        conn.send_messages(&req.messages).unwrap();
+        let ask = gen5_body(&mut srv, &mut g);
+        assert_eq!(ask.iter().filter(|&&b| b == 35 + 0x20).count(), 3);
+
+        // East: eight half-steps from 60.0; the last one crosses.
+        let mut crossed = None;
+        for _ in 0..8 {
+            session.try_move(0.5, 0.0).unwrap();
+            if let Some(c) = session.take_gmap_crossing() {
+                net.set_gmap_cell(c.to);
+                let sent = conn.send_gmap_crossing(v, &c, None).unwrap();
+                el.crossing(&net.current_level_name().unwrap(), sent);
+                crossed = Some(c);
+            }
+        }
+        assert_eq!(crossed.map(|c| c.to), Some((1, 0)));
+        let east = gen5_body(&mut srv, &mut g);
+        assert_eq!(east, [&ENTER[..], &[2 + 0x20, 43 + 0x20, 1 + 0x20, 78 + 0x20, 0x20, 0x20, b'\n'][..]].concat());
+        // The server answers: new level, mod time, empty board, gmap name.
+        net.apply_body(&[msg(6, b"gm_ne.nw"), msg(39, &[0x20; 5]), msg(0, b""), msg(6, b"gm2x2.gmap")].concat());
+        assert_eq!(net.level_name.as_deref(), Some("gm_ne.nw"));
+        assert!(!el.note_level("gm_ne.nw") && !el.is_pending(), "no second 46 for the answer");
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        assert_eq!(session.gmap.as_ref().unwrap().cell, (1, 0));
+
+        // And back west: one half-step from local 0.0.
+        let c = {
+            session.try_move(-0.5, 0.0).unwrap();
+            session.take_gmap_crossing().unwrap()
+        };
+        net.set_gmap_cell(c.to);
+        let sent = conn.send_gmap_crossing(v, &c, None).unwrap();
+        el.crossing(&net.current_level_name().unwrap(), sent);
+        let west = gen5_body(&mut srv, &mut g);
+        // Local x is 63.5: X2 = (63.5 * 16) << 1 = 2032 = GSHORT 0x2f 0x90.
+        assert_eq!(west, [&ENTER[..], &[2 + 0x20, 43 + 0x20, 0x20, 78 + 0x20, 0x2f, 0x90, b'\n'][..]].concat());
+        assert_eq!(el.sent, 3, "login plus two crossings");
+        assert_eq!(net.current_level_name().as_deref(), Some("gm_nw.nw"));
     }
 
     // --- Lab batch c wiring (2026-10-24) ---

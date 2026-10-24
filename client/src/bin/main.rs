@@ -10,7 +10,8 @@
 //! The asset dir should contain pics1.png and optionally tiledefs.txt
 //! and a levels/ subdirectory.
 
-use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot};
+use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetRoot, Level};
+use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
 use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
@@ -20,11 +21,39 @@ use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
     Framebuffer,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// Gmap files and levels from the asset folder.
+struct RootLoader<'a>(&'a AssetRoot);
+
+impl WorldLoader for RootLoader<'_> {
+    fn gmap_text(&self, name: &str) -> Option<String> {
+        std::fs::read_to_string(self.0.level(name)).ok()
+    }
+
+    fn level(&self, name: &str) -> Option<Level> {
+        Level::load(self.0.level(name)).ok()
+    }
+}
+
+/// Send what [`sync_world`] asked for: the `.gmap` file, and the
+/// `PLI_ADJACENTLEVEL` messages in one frame.
+fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests) {
+    let Some(c) = conn else { return };
+    if let Some(f) = &req.gmap_file {
+        eprintln!("requesting {f}");
+        let _ = c.send_wantfile(f);
+    }
+    if !req.messages.is_empty() {
+        if let Err(e) = c.send_messages(&req.messages) {
+            eprintln!("adjacent-level send failed: {e}");
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -198,6 +227,9 @@ fn main() {
     let mut showimg_clock = Instant::now();
     let mut frames = None;
     let mut loaded_level: Option<String> = None;
+    // Gmaps: what the profile says, and what was already asked of the server.
+    let gmap_rules = GmapRules::for_version(version);
+    let mut gmap_asked: HashSet<String> = HashSet::new();
     // True while the level on screen was built from the server's board.
     let mut level_from_board = false;
 
@@ -389,6 +421,16 @@ fn main() {
                 }
             }
         }
+        // On a gmap another player's position is local to its own cell.
+        let own_cell = session.gmap.as_ref().map(|w| w.cell);
+        let others: Vec<seihai::protocol::OtherPlayer> = others
+            .iter()
+            .map(|o| {
+                let (x, y) = o.position_from(own_cell);
+                seihai::protocol::OtherPlayer { x, y, ..o.clone() }
+            })
+            .collect();
+        let others = others.as_slice();
         // Other players first, so the local player draws on top.
         if body.is_none() || head.is_none() {
             for other in others {
@@ -550,7 +592,13 @@ fn main() {
                         // Write any completed files and reload levels.
                         let written = net_state.flush_files(&root.levels_dir());
                         for name in &written {
-                            if name.ends_with(".nw") {
+                            // A neighbour's file (gmap) is not the current level.
+                            let is_current = net_state
+                                .current_level_name()
+                                .map_or(true, |c| c.eq_ignore_ascii_case(name));
+                            if name.ends_with(".nw") && !is_current {
+                                eprintln!("loaded {name}");
+                            } else if name.ends_with(".nw") {
                                 if session.load_level(root.level(name)).is_ok() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
@@ -609,8 +657,8 @@ fn main() {
             if changed {
                 // True when this batch put the player in a new level.
                 let mut entered = false;
-                if let Some(name) = &net_state.level_name {
-                    if loaded_level.as_ref() != Some(name) {
+                if let Some(name) = &net_state.current_level_name() {
+                    if loaded_level.as_deref().map_or(true, |l| !l.eq_ignore_ascii_case(name)) {
                         entered = true;
                         // The first level after login is not a "level change":
                         // the login send already covers it.
@@ -666,7 +714,13 @@ fn main() {
                 // No local copy: draw the tiles the server sent, as the
                 // real client does, until the file (if any) arrives.
                 if session.current_level.is_none() {
-                    if let Some(tiles) = net_state.board.take() {
+                    // On a gmap the board of the player's level is kept by
+                    // name; otherwise it is the one just sent.
+                    let board = net_state
+                        .current_level_name()
+                        .and_then(|n| net_state.board_of(&n).cloned())
+                        .or_else(|| net_state.board.take());
+                    if let Some(tiles) = board {
                         session.current_level = Some(seihai::assets::Level::from_board(&tiles));
                         level_from_board = true;
                         eprintln!("level from the server's board");
@@ -721,6 +775,10 @@ fn main() {
                         session.player_x, session.player_y, session.player_dir
                     );
                 }
+                // Gmap: the grid, the neighbouring levels, 186 blocks, and
+                // a request for whatever the server still has to send.
+                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
+                send_world_requests(conn.as_mut(), req);
                 dirty = true;
             }
         }
@@ -770,8 +828,35 @@ fn main() {
         }
         if moved {
             dirty = true;
-            // Online: send the new position as PLI_PLAYERPROPS.
-            if let Some(c) = conn.as_mut() {
+            if let Some(cx) = session.take_gmap_crossing() {
+                // The step crossed a gmap edge. The player is in the next
+                // cell already; the frame carries the cell prop and the
+                // wrapped coordinate (not the plain walk update), and the
+                // server follows with the new level.
+                net_state.set_gmap_cell(cx.to);
+                let now = net_state.current_level_name();
+                eprintln!("gmap crossing {:?} -> {:?} at {} {}", cx.from, cx.to, cx.local_x, cx.local_y);
+                if let Some(c) = conn.as_mut() {
+                    match c.send_gmap_crossing(version, &cx, tamper.as_mut()) {
+                        Ok(sent46) => {
+                            if let (Some(el), Some(n)) = (enter_level.as_mut(), now.as_deref()) {
+                                el.crossing(n, sent46);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("send failed: {e}");
+                            conn = None;
+                        }
+                    }
+                }
+                if let Some(n) = &now {
+                    level_from_board = !root.level(n).is_file();
+                }
+                loaded_level = now;
+                let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&root), &mut gmap_asked);
+                send_world_requests(conn.as_mut(), req);
+            } else if let Some(c) = conn.as_mut() {
+                // Online: send the new position as PLI_PLAYERPROPS.
                 if let Err(e) = c.send_walk(&session.player_update()) {
                     eprintln!("send failed: {e}");
                     conn = None;
@@ -887,6 +972,8 @@ fn main() {
                         // A fresh session on the new server.
                         net_state = SessionState::for_version(version);
                         loaded_level = None;
+                        session.leave_gmap();
+                        gmap_asked.clear();
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
