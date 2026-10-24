@@ -18,6 +18,7 @@
 use crate::protocol::{
     encode_pos_classic, encode_pos_precise, ClientVersion, IdSet, TamperSender,
 };
+use crate::assets::Level;
 use std::collections::HashMap;
 
 /// Tiles along one side of a level, and so of a gmap cell.
@@ -119,6 +120,32 @@ impl GmapSession {
     /// The player's level: the grid's, else the one the server named first.
     pub fn current_level(&self) -> Option<String> {
         self.level_at(self.cell).or_else(|| self.level_hint.clone())
+    }
+}
+
+/// The levels around the player, as the walking side sees them: the grid,
+/// the player's cell, and the loaded levels of the other cells. The level of
+/// the player's own cell is `OfflineSession::current_level`.
+#[derive(Debug)]
+pub struct GmapWorld {
+    pub name: String,
+    pub map: Gmap,
+    pub cell: (i32, i32),
+    /// Loaded levels of the other cells (the player's neighbours).
+    pub levels: HashMap<(i32, i32), Level>,
+    /// The last edge crossing a step made, until it is taken.
+    pub crossing: Option<Crossing>,
+}
+
+impl GmapWorld {
+    pub fn new(name: String, map: Gmap, cell: (i32, i32)) -> Self {
+        Self { name, map, cell, levels: HashMap::new(), crossing: None }
+    }
+
+    /// Neighbouring cells that hold a level in the grid but have none
+    /// loaded.
+    pub fn missing(&self) -> Vec<(i32, i32)> {
+        self.map.neighbours(self.cell).into_iter().filter(|c| !self.levels.contains_key(c)).collect()
     }
 }
 

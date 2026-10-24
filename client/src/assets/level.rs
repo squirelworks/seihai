@@ -359,6 +359,7 @@ mod tiletypes_tests {
 }
 
 
+use crate::protocol::layouts::BoardModify2;
 use crate::protocol::BoardModify;
 
 /// A parsed level.
@@ -669,6 +670,51 @@ impl Level {
         }
     }
 
+    /// Layer 0 as a 64×64 board of tile ids, row by row. A tile the level
+    /// does not define is 0.
+    pub fn layer0_board(&self) -> Vec<u16> {
+        let mut board = vec![0u16; 64 * 64];
+        for run in self.boards.iter().filter(|r| r.layer == 0) {
+            if !(0..64).contains(&run.y) {
+                continue;
+            }
+            for (i, t) in run.tiles.iter().enumerate() {
+                let x = run.x + i as i32;
+                if (0..64).contains(&x) {
+                    board[run.y as usize * 64 + x as usize] = tile_id(*t);
+                }
+            }
+        }
+        board
+    }
+
+    /// Replace layer 0 with a 64×64 board of tile ids (the other layers,
+    /// links, signs and chests stay).
+    pub fn set_layer0_board(&mut self, board: &[u16]) {
+        self.boards.retain(|r| r.layer != 0);
+        let rows = board.chunks(64).take(64).enumerate().map(|(y, row)| BoardRun {
+            x: 0,
+            y: y as i32,
+            width: row.len() as i32,
+            layer: 0,
+            tiles: row.iter().map(|&t| tile_code(t)).collect(),
+        });
+        let mut runs: Vec<BoardRun> = rows.collect();
+        runs.append(&mut self.boards);
+        self.boards = runs;
+    }
+
+    /// Apply a `PLO_BOARDMODIFY2` block to layer 0 with its clipping rules
+    /// (see [`BoardModify2::apply_to`]). Returns the tiles written.
+    pub fn apply_board_modify2(&mut self, m: &BoardModify2) -> usize {
+        let mut board = self.layer0_board();
+        let n = m.apply_to(&mut board);
+        if n > 0 {
+            self.set_layer0_board(&board);
+        }
+        n
+    }
+
     /// Get the tile at (x, y) on layer 0, if present.
     pub fn tile_at(&self, x: i32, y: i32) -> Option<Tile> {
         for run in &self.boards {
@@ -972,5 +1018,32 @@ CHEST 8 8 greenrupee 0
         assert!(tt.is_water(10));
         assert!(tt.is_wall(100));
         assert!(!tt.is_wall(0));
+    }
+
+    #[test]
+    fn layer0_board_round_trips_and_keeps_other_layers() {
+        let mut board = vec![0u16; 64 * 64];
+        board[0] = 7;
+        board[64 * 63 + 63] = 4095;
+        let mut level = Level::from_board(&board);
+        level.boards.push(BoardRun { x: 0, y: 0, width: 1, layer: 1, tiles: vec![tile_code(9)] });
+        assert_eq!(level.layer0_board(), board);
+        board[5] = 12;
+        level.set_layer0_board(&board);
+        assert_eq!(level.layer0_board(), board);
+        assert_eq!(level.boards.iter().filter(|r| r.layer == 1).count(), 1);
+        assert_eq!(level.tile_id_at(5, 0), Some(12));
+    }
+
+    #[test]
+    fn board_modify2_clips_at_column_63_on_a_level() {
+        let mut level = Level::from_board(&vec![1u16; 64 * 64]);
+        let m = BoardModify2 { map_x: 0, map_y: 0, x: 62, y: 3, width: 4, height: 2, tiles: vec![9; 8], trailer: vec![] };
+        assert_eq!(level.apply_board_modify2(&m), 4);
+        assert_eq!(level.tile_id_at(61, 3), Some(1));
+        assert_eq!(level.tile_id_at(62, 3), Some(9));
+        assert_eq!(level.tile_id_at(63, 4), Some(9));
+        assert_eq!(level.tile_id_at(0, 4), Some(1), "no wrap to the next row");
+        assert_eq!(level.tile_id_at(62, 5), Some(1));
     }
 }
