@@ -9,6 +9,8 @@ What remains after the current gmaps / script engine / differential testing work
 - [x] Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames. (f8127f4)
 
 ## Next
+- Asset generation track (items 17–21): inventory the playerworld archives, extract reference sheets, generate a self-contained default asset root (tile sheet, body/head, core GANIs, sounds, starter level), and wire it as the fallback so a fresh clone can open and walk offline. Optional generator tool. See `documentation/chiaki-next.md`.
+
 
 - Remaining fields (item 12): ids 24, 46 and 178 implementation is in Seihai #39 (rebased). Once rebased and mergeable, land it. Notes are in Graal_analysis batch g.
 - Differential-testing divergences (item 15): rectangle level links, login player props, 2.22 position flags, early id 46, asset requests, walk speed. Running in the private lab; one PR per divergence.
