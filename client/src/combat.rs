@@ -1171,6 +1171,8 @@ mod tests {
             dir,
             nick: None,
             chat: None,
+            chat_timer: Default::default(),
+            account: None,
             cell: None,
             sprite: Some(sprite),
             status: None,
