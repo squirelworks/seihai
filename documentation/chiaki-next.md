@@ -91,3 +91,15 @@ Read-only first. Only with explicit approval each time. Do not connect to a publ
 - Update `documentation/plannedmilestones.md` when an item is done.
 - If something is blocked on a missing capture or an unresolved rule, write a short note and skip it. Do not invent the missing data.
 - Do not wait for merge. Open the PR and continue to the next item.
+
+### 15. Differential testing divergences
+
+From Seihai #24. Fix these in one PR or split them if they are independent. Confirm each against a lab capture before changing the wire.
+
+- Rectangle level links. Seihai walks through them and never sends the level warp. The real client does. Edge links work.
+- Login messages. Seihai sends no login player props, no file update (id 34) and no process list (id 44).
+- 2.22 position flags. Seihai never sends the `gr.x` and `gr.y` flags. The real client sends them at login and every step.
+- 2.31 early id 46. Seihai sends it before the login burst, and twice. The server then warps the player to the online start level first. The early 46 is the likely cause, but that is not proven.
+- Smaller ones. Asset file requests, walk update fields, walk speed (about 10 tiles per second against 7.8), frame bundling, adjacent level order and the 2.22 crossing prop order.
+
+Do not invent the missing payloads. If a lab capture does not show the exact bytes, leave a note and skip that item.
