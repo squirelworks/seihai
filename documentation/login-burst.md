@@ -68,3 +68,22 @@ default weapon gives which image is not known, so Seihai does not ask for it.
 the byte layout of the 2.22 props (including the `TEXTCODEPAGE` 1252 bytes seen in the
 capture), the 2.17 cut-off at `PLANGUAGE`, that the frame goes out once and only after 182,
 and which builds send it. A weapon image without an extension gets `.gif`.
+
+## Before and after (lab, real client against Seihai, `login` scenario)
+
+Ranked difftest report, default Seihai options (no opt-in senders):
+
+| | real client | Seihai before | Seihai after |
+|---|---|---|---|
+| 2.22 client-to-server messages | 24 | 3 | 21 |
+| 2.22 divergences (high / medium / low) | | 5 / 7 / 2 | 2 / 4 / 2 |
+| 2.31 client-to-server messages | 37 | 4 | 21 |
+| 2.31 divergences (high / medium / low) | | 5 / 8 / 2 | 2 / 5 / 2 |
+
+The messages the real client still sends that Seihai does not are the opt-in
+`TAMPERCHECK` and `SHOWIMGPLAYER` (2.31: 9 and 6 in the run), the `gr` flags and the
+`PLI_ENTERLEVEL` of the next items, and `UDPPORT`. What is left in the medium rows is
+the process list text (real 285 bytes, Seihai 8), the missing `UDPPORT` prop, a
+`wbowi1.png` request, and Seihai's own request for the level file. The missing
+`UPDATEFILE`/`FLAGSET`/`PROCESSLIST`/`PLAYERPROPS` ids no longer appear in the report, and the server's
+`FILEUPTODATE` and `FILESENDFAILED` replies now arrive as they do for the real client.
