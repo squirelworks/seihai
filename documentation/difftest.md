@@ -68,6 +68,8 @@ coordinate `0` or `63.5`, in all four directions.
 
 ## Ranked divergences
 
+Status of each one after the item-15 pull requests: `documentation/difftest-leftovers.md`.
+
 Evidence is the parity run unless it says otherwise. "Both" means 2.22 and 2.31.
 
 ### High (the real client sends something Seihai never sends, or sends it wrongly)
