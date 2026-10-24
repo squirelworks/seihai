@@ -39,6 +39,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("Y / N", &["Y", "N"], "answer the quit question (Enter = yes, Esc = no)"),
     k("F2", &["F2"], "private message to the nearest player"),
     k("Tab", &["Tab"], "show or hide the player list"),
+    k("/ignore /buddy /mute", &[], "chat bar: add a name (/unignore ... removes); /lists shows"),
     k("PgUp / PgDn", &["PageUp", "PageDown"], "scroll the chat"),
     k("F3", &["F3"], "debug information"),
     k("F4", &["F4"], "level editor (not built yet)"),

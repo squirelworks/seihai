@@ -187,6 +187,10 @@ fn main() {
                 println!("                             and logs in again, as the real client does");
                 println!("                             (settings file: follow_serverwarp=0)");
                 println!("         --serverwarp        follow it even if the settings file says off");
+                println!("         chat bar: /ignore NAME, /unignore NAME, /buddy NAME, /unbuddy NAME,");
+                println!("                   /mute NAME, /unmute NAME, /lists (lists are files in the");
+                println!("                   settings directory; /mute sends PLI_MUTEPLAYER where the");
+                println!("                   version has it)");
                 println!("         --no-scripts        do not run the client-side GS1 scripts of level NPCs");
                 println!("                             and weapons (default: they run)");
                 println!("         --no-sound          do not play sound effects (GANI PLAYSOUND cues);");
@@ -274,6 +278,8 @@ fn main() {
     let mut scripts_serial = u64::MAX;
     let mut scripts_clock = Instant::now();
     let mut net_state = SessionState::default();
+    // Buddy, ignore and mute lists from the settings directory.
+    let mut lists = seihai::chatlists::ChatLists::load_default();
     let mut conn: Option<Connection> = None;
     // Opt-in tamper check (`--send-tampercheck`): the build's constant.
     let mut tamper: Option<TamperSender> = None;
@@ -333,6 +339,8 @@ fn main() {
         }
         // Read server traffic the way the chosen version does.
         net_state = SessionState::for_version(version);
+        lists = seihai::chatlists::ChatLists::load_default();
+        net_state.set_filter(lists.filter(&version.profile().protocol.pli));
         scripts = SessionScripts::new(version);
         scripts_serial = u64::MAX;
 
@@ -584,6 +592,9 @@ fn main() {
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
     let mut my_chat = String::new();
+    // How long our own bubble has left, and the clock that runs it.
+    let mut my_chat_timer = seihai::chatlists::BubbleTimer::default();
+    let mut bubble_clock = Instant::now();
     let mut scene = draw(&session, &[], &my_chat, &npc_images);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
@@ -1324,6 +1335,9 @@ fn main() {
                         }
                         // A fresh session on the new server.
                         net_state = SessionState::for_version(version);
+                        // The new server has seen no mute messages yet.
+                        lists.mute_sent = 0;
+                        net_state.set_filter(lists.filter(&version.profile().protocol.pli));
                         loaded_level = None;
                         session.leave_gmap();
                         gmap_asked.clear();
@@ -1365,9 +1379,30 @@ fn main() {
                 input.open(ui::InputMode::Chat);
             } else if let Some((mode, text)) = input.submit() {
                 let sent = match mode {
+                    // /ignore, /buddy, /mute and friends change the lists
+                    // and are not sent as chat.
+                    ui::InputMode::Chat if seihai::chatlists::parse_command(&text).is_some() => {
+                        let cmd = seihai::chatlists::parse_command(&text).unwrap();
+                        let out = seihai::chatlists::apply_command(&cmd, &mut lists, &mut net_state, &profile.protocol.pli);
+                        for n in out.notes {
+                            net_state.push_chat(ChatKind::Admin, "Seihai".into(), n);
+                        }
+                        for (id, on) in out.mute_sends {
+                            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_mute(id, on)) {
+                                eprintln!("mute send failed: {e}");
+                            }
+                        }
+                        dirty = true;
+                        None
+                    }
                     ui::InputMode::Chat => match ui::classify_chat(&text) {
                         ui::ChatSend::Say(t) => {
                             my_chat = t.clone();
+                            my_chat_timer = if t.is_empty() {
+                                seihai::chatlists::BubbleTimer::default()
+                            } else {
+                                seihai::chatlists::BubbleTimer::start()
+                            };
                             dirty = true;
                             if !no_scripts {
                                 scripts.chat(&mut session, &t);
@@ -1457,13 +1492,25 @@ fn main() {
             chat_scroll = chat_scroll.saturating_sub(3);
         }
 
+        // Chat bubbles go down after a few seconds.
+        {
+            let dt = bubble_clock.elapsed().as_millis().min(u32::MAX as u128) as u32;
+            bubble_clock = Instant::now();
+            if net_state.tick_bubbles(dt) {
+                dirty = true;
+            }
+            if my_chat_timer.tick(dt) {
+                my_chat.clear();
+                dirty = true;
+            }
+        }
         if dirty {
             scene = draw(&session, &net_state.others, &my_chat, &npc_images);
             dirty = false;
         }
         let mut frame = scene.clone();
         if show_players {
-            ui::draw_player_list(&mut frame, &me(&net_state, &account), &net_state.others);
+            ui::draw_player_list(&mut frame, &me(&net_state, &account), &net_state.others, &lists.buddy, &net_state.filter);
         }
         if show_debug {
             ui::draw_debug(
