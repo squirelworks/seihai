@@ -7,5 +7,6 @@
 
 pub mod lexer;
 pub mod value;
+pub mod vocab;
 
 pub use value::Val;
