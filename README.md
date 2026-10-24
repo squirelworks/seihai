@@ -101,6 +101,31 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--sound` | Play sound effects even if the settings file turns them off |
 | `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the assets folder, in the place the real client uses (`documentation/file-cache.md`) |
 
+### Capture viewer
+
+`seihai capture` reads files only (no window, no network). It decodes a lab capture with Seihai's own codecs and prints the messages with their names and field layouts. `documentation/capture-viewer.md` has the details and examples.
+
+| Command | Meaning |
+|---------|---------|
+| `seihai capture show FILE` | Print the messages of a pcap, or of a `difftest trace` file. The version is read from the login token (or the trace header) unless `--version` is given |
+| `seihai capture layout ID\|NAME` | Print one packet's field layout across the version chain, with the fields the tables do not settle marked `?` (unknown) or `~` (partly decoded) |
+| `seihai capture tables` | List the tables in use and check them |
+
+| `show` flag | Meaning |
+|-------------|---------|
+| `--version V` | Client version, for example `2.22` |
+| `--tables DIR` | Read `packet-layouts.tsv` (and `version-chain.tsv`) from `DIR` instead of the built-in tables |
+| `--dir c2s\|s2c`, `--id N,NAME`, `--name NAME`, `--conn gs0` | Keep only that direction, those packets (by id or name, `PLI_`/`PLO_` prefixes pick a direction) or that connection |
+| `--time A..B`, `--frame A..B` | Keep a time range (milliseconds since the connection started) or a range of frame numbers |
+| `--limit N` | Stop after N messages |
+| `--layouts` | Print the table layout under every message |
+| `--raw` | Hex dump of every payload. Undecoded payloads are dumped without this flag |
+| `--format text\|tsv\|json` | Output format (default `text`) |
+| `--out FILE` | Write to `FILE` with mode 600. Refused if `FILE` already exists with a looser mode and the capture contains a login |
+| `--no-mask` | Keep the key, player ids and account name. The password is never shown |
+
+Login frames are redacted by default and their raw bytes are never printed. Keep capture files in a private folder; never commit them.
+
 ### Chat commands and list files
 
 In the chat bar (Enter) these are commands, not chat. A name is an account name or a nickname, in any case.

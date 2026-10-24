@@ -18,6 +18,7 @@ pub mod scripting;
 pub mod settings;
 pub mod sound;
 pub mod ui;
+pub mod viewer;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

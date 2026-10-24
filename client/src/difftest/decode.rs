@@ -34,11 +34,16 @@ pub struct DecodeOptions {
     /// Free-text labels stored in the trace header.
     pub client: String,
     pub scenario: String,
+    /// Keep each message's payload bytes in [`Event::raw`] (the capture
+    /// viewer needs them). Never kept for the login frame or for client
+    /// messages on a listserver connection, which carry the account and
+    /// password.
+    pub keep_raw: bool,
 }
 
 impl DecodeOptions {
     pub fn new(version: ClientVersion) -> Self {
-        Self { version, mask: true, client: String::new(), scenario: String::new() }
+        Self { version, mask: true, client: String::new(), scenario: String::new(), keep_raw: false }
     }
 }
 
@@ -51,6 +56,12 @@ pub fn decode_pcap(data: &[u8], opts: &DecodeOptions) -> Result<Trace, String> {
 /// Decode reassembled connections. Connections with no payload (a probe, a
 /// refused connect) are skipped.
 pub fn decode_conns(conns: &[TcpConn], opts: &DecodeOptions) -> Trace {
+    decode_conns_ex(conns, opts).0
+}
+
+/// [`decode_conns`], plus the account name the login frame carried, so a
+/// caller that decodes text itself can mask it the same way.
+pub fn decode_conns_ex(conns: &[TcpConn], opts: &DecodeOptions) -> (Trace, Option<String>) {
     let mut trace = Trace::default();
     trace.set_meta("version", opts.version.label());
     if !opts.client.is_empty() {
@@ -84,7 +95,7 @@ pub fn decode_conns(conns: &[TcpConn], opts: &DecodeOptions) -> Trace {
     }
     trace.set_meta("connections", &(n_ls + n_gs).to_string());
     trace.set_meta("bad_frames", &bad.to_string());
-    trace
+    (trace, masker.account.clone())
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -190,6 +201,7 @@ fn push_event(
         name,
         len,
         fields,
+        raw: Vec::new(),
     });
 }
 
@@ -281,6 +293,11 @@ fn decode_conn(c: &TcpConn, name: &str, kind: Kind, opts: &DecodeOptions, mask: 
                 describe_c2s(ver, id, payload, mask)
             };
             push_event(&mut out, &cx, Dir::C2S, ts, frame_no, id, nm, payload.len(), fields);
+            if opts.keep_raw && !listserver {
+                if let Some(e) = out.last_mut() {
+                    e.raw = payload.to_vec();
+                }
+            }
         }
         frame_no += 1;
     }
@@ -340,6 +357,11 @@ fn decode_conn(c: &TcpConn, name: &str, kind: Kind, opts: &DecodeOptions, mask: 
                 describe_s2c(ver, i32::from(m.id), &m.payload, mask)
             };
             push_event(&mut out, &cx, Dir::S2C, ts, frame_no, i32::from(m.id), nm, m.payload.len(), fields);
+            if opts.keep_raw {
+                if let Some(e) = out.last_mut() {
+                    e.raw = m.payload.clone();
+                }
+            }
         }
         frame_no += 1;
     }
