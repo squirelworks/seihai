@@ -1,11 +1,15 @@
-//! Pose animations of the player: the sword swing, the hurt pose and sitting
-//! (item 22).
+//! Pose animations of the player: the sword swing, the hurt pose, sitting
+//! (item 22), and the idle, walking and swimming figure.
 //!
-//! `idle.gani`, `walk.gani` and `swim.gani` are stepped by walking
-//! (`offline`). The three poses here are *driven by state that already
-//! exists* rather than by a clock of their own, so what is drawn can never
-//! disagree with what the other players are sent:
+//! The poses here are *driven by state that already exists* rather than by a
+//! clock of their own, so what is drawn can never disagree with what the
+//! other players are sent:
 //!
+//! * **Walk** and **swim** show the frame `offline` has stepped to: one GANI
+//!   frame per step taken (every 50 ms on foot, 100 ms swimming), the same
+//!   stepping that plays the footstep cues. **Idle** shows `idle.gani`'s first
+//!   step when the player is not walking. The sprite value the other players
+//!   are sent is not touched.
 //! * **Sword** follows the swing of [`crate::combat::CombatState`]: swing
 //!   step `i` (the sprite value S = 6 + `i` that goes on the wire) shows step
 //!   `i` of `sword.gani`. A GANI `PLAYSOUND` cue after a step is queued as a
@@ -40,6 +44,7 @@ pub struct PoseGanis {
     pub sword: Option<Gani>,
     pub hurt: Option<Gani>,
     pub sit: Option<Gani>,
+    pub idle: Option<Gani>,
 }
 
 /// Which pose is on.
@@ -48,6 +53,9 @@ pub enum PoseKind {
     Sword,
     Hurt,
     Sit,
+    Idle,
+    Walk,
+    Swim,
 }
 
 /// A pose step ready to draw.
@@ -66,17 +74,25 @@ impl PoseKind {
             PoseKind::Sword => "sword.gani",
             PoseKind::Hurt => "hurt.gani",
             PoseKind::Sit => "sit.gani",
+            PoseKind::Idle => "idle.gani",
+            PoseKind::Walk => "walk.gani",
+            PoseKind::Swim => "swim.gani",
         }
     }
 
-    /// The pose a file name belongs to (case-insensitive).
+    /// The pose a file name belongs to (case-insensitive). `walk.gani` and
+    /// `swim.gani` are not here: they load as the stepped motion ganis.
     pub fn from_file(name: &str) -> Option<PoseKind> {
-        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit].into_iter().find(|k| k.file().eq_ignore_ascii_case(name))
+        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle].into_iter().find(|k| k.file().eq_ignore_ascii_case(name))
     }
 }
 
 fn pick(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> {
     gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i.min(g.frame_count() - 1) })
+}
+
+fn pick_player<'a>(kind: PoseKind, p: &'a crate::assets::GaniPlayer) -> Option<PoseFrame<'a>> {
+    (p.gani.frame_count() > 0).then(|| PoseFrame { kind, gani: &p.gani, frame: p.frame.min(p.gani.frame_count() - 1) })
 }
 
 impl OfflineSession {
@@ -86,15 +102,29 @@ impl OfflineSession {
             PoseKind::Sword => self.poses.sword = Some(gani),
             PoseKind::Hurt => self.poses.hurt = Some(gani),
             PoseKind::Sit => self.poses.sit = Some(gani),
+            PoseKind::Idle => self.poses.idle = Some(gani),
+            // Loaded with `set_walk_gani` / `set_swim_gani`.
+            PoseKind::Walk | PoseKind::Swim => {}
         }
     }
 
-    /// The pose to draw now, if any. Not while swimming or dead, and only
-    /// for a pose whose GANI is loaded. A swing wins over hurt, hurt over
-    /// sitting.
+    /// The player stopped walking (no arrow key is held): back to idle.
+    /// True if the pose changed.
+    pub fn stop_walking(&mut self) -> bool {
+        std::mem::take(&mut self.walking)
+    }
+
+    /// The pose to draw now, if any: only for a pose whose GANI is loaded.
+    /// Dead: none. A swing wins over hurt, hurt over sitting, sitting over
+    /// the motion poses: swimming (the `swim.gani` frame), walking (the
+    /// `walk.gani` frame) or idle (`idle.gani`, first step). Swimming has no
+    /// sword, hurt or sit pose.
     pub fn current_pose(&self) -> Option<PoseFrame<'_>> {
-        if self.in_water || self.life.is_dead() {
+        if self.life.is_dead() {
             return None;
+        }
+        if self.in_water {
+            return self.swim_gani.as_ref().and_then(|p| pick_player(PoseKind::Swim, p));
         }
         if let Some(i) = self.combat.swing_frame() {
             if let Some(p) = pick(PoseKind::Sword, &self.poses.sword, i) {
@@ -109,7 +139,12 @@ impl OfflineSession {
         if self.sitting {
             return pick(PoseKind::Sit, &self.poses.sit, 0);
         }
-        None
+        if self.walking {
+            if let Some(p) = self.walk_gani.as_ref().and_then(|p| pick_player(PoseKind::Walk, p)) {
+                return Some(p);
+            }
+        }
+        pick(PoseKind::Idle, &self.poses.idle, 0)
     }
 
     /// Queue the sound cues of a step of `sword.gani`, once, at its offset

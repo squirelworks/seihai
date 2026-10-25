@@ -730,16 +730,14 @@ fn main() {
     } else {
         SoundEngine::off()
     };
-    if sound.is_enabled() {
-        // The animations whose PLAYSOUND cues are played: footsteps and
-        // water, one frame per step taken.
-        for name in ["walk.gani", "swim.gani"] {
-            load_motion_gani(&resolver, &mut session, name);
-        }
+    // walk.gani and swim.gani are stepped once per step taken: their PLAYSOUND
+    // cues are the footsteps and the water, and their frames are what is
+    // drawn, so they load whether or not sound is on.
+    for name in ["walk.gani", "swim.gani"] {
+        load_motion_gani(&resolver, &mut session, name);
     }
-    // The pose animations (sword swing, hurt, sit) are drawn, not only heard,
-    // so they load whether or not sound is on.
-    for name in ["sword.gani", "hurt.gani", "sit.gani"] {
+    // The pose animations (idle, sword swing, hurt, sit) are drawn too.
+    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani"] {
         load_pose_gani(&resolver, &mut session, name);
     }
     let mut sound_serial = session.level_serial;
@@ -1052,9 +1050,7 @@ fn main() {
                             } else if seihai::pose::PoseKind::from_file(name).is_some() {
                                 load_pose_gani(&resolver, &mut session, name);
                             } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
-                                if sound.is_enabled() {
-                                    load_motion_gani(&resolver, &mut session, name);
-                                }
+                                load_motion_gani(&resolver, &mut session, name);
                             } else if name.ends_with(".png") || name.ends_with(".gif") {
                                 // A new copy of an image replaces the one in memory.
                                 if let Some(data) = files.store.read(name) {
@@ -1428,6 +1424,15 @@ fn main() {
                     | seihai::offline::Interaction::Nothing => {}
                 }
             }
+            dirty = true;
+        }
+        // No arrow key held: the player stands (idle animation).
+        if !window.is_key_down(minifb::Key::Left)
+            && !window.is_key_down(minifb::Key::Right)
+            && !window.is_key_down(minifb::Key::Up)
+            && !window.is_key_down(minifb::Key::Down)
+            && session.stop_walking()
+        {
             dirty = true;
         }
         if !input.is_open() && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
