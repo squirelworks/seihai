@@ -12,6 +12,7 @@ pub mod help;
 pub mod life;
 pub mod net;
 pub mod offline;
+pub mod pose;
 pub mod protocol;
 pub mod render;
 pub mod scripting;

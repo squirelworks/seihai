@@ -1,7 +1,7 @@
 //! The built-in default asset set.
 //!
 //! `assets/default/` (the original art, sounds and starter levels of
-//! `documentation/default-assets.md`, 47 KB) is compiled into the binary, so
+//! `documentation/default-assets.md`, 55 KB) is compiled into the binary, so
 //! a fresh download opens a level and walks without any data folder.
 //!
 //! The rest of Seihai finds files by path (`AssetResolver`, the sound
@@ -31,8 +31,11 @@ use super::crc32::crc32_update;
 /// walks the folder and fails when this list and the folder differ.
 pub const FILES: &[(&str, &[u8])] = &[
     ("bodies/body.png", include_bytes!("../../../assets/default/bodies/body.png")),
+    ("gani/hurt.gani", include_bytes!("../../../assets/default/gani/hurt.gani")),
     ("gani/idle.gani", include_bytes!("../../../assets/default/gani/idle.gani")),
+    ("gani/sit.gani", include_bytes!("../../../assets/default/gani/sit.gani")),
     ("gani/swim.gani", include_bytes!("../../../assets/default/gani/swim.gani")),
+    ("gani/sword.gani", include_bytes!("../../../assets/default/gani/sword.gani")),
     ("gani/walk.gani", include_bytes!("../../../assets/default/gani/walk.gani")),
     ("heads/head0.png", include_bytes!("../../../assets/default/heads/head0.png")),
     ("levels/new1.nw", include_bytes!("../../../assets/default/levels/new1.nw")),
@@ -42,6 +45,7 @@ pub const FILES: &[(&str, &[u8])] = &[
     ("shields/shield1.png", include_bytes!("../../../assets/default/shields/shield1.png")),
     ("sounds/steps.wav", include_bytes!("../../../assets/default/sounds/steps.wav")),
     ("sounds/steps2.wav", include_bytes!("../../../assets/default/sounds/steps2.wav")),
+    ("sounds/sword.wav", include_bytes!("../../../assets/default/sounds/sword.wav")),
     ("sounds/water.wav", include_bytes!("../../../assets/default/sounds/water.wav")),
     ("sprites.png", include_bytes!("../../../assets/default/sprites.png")),
     ("state.png", include_bytes!("../../../assets/default/state.png")),

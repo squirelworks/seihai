@@ -93,6 +93,21 @@ fn load_motion_gani(resolver: &AssetResolver, session: &mut OfflineSession, name
     }
 }
 
+/// An RGBA image `(width, pixels)` as a GANI sheet.
+fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
+    seihai::render::Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 }
+}
+
+/// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
+/// first layer that has it. A missing file leaves the plain idle figure.
+fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
+    let (Some(kind), Some(path)) = (seihai::pose::PoseKind::from_file(name), resolver.gani(name)) else { return };
+    match Gani::load(&path) {
+        Ok(g) => session.set_pose_gani(kind, g),
+        Err(e) => eprintln!("cannot read {name}: {e}"),
+    }
+}
+
 /// Send the file requests the rules ask for.
 fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
     if msgs.is_empty() {
@@ -721,6 +736,11 @@ fn main() {
             load_motion_gani(&resolver, &mut session, name);
         }
     }
+    // The pose animations (sword swing, hurt, sit) are drawn, not only heard,
+    // so they load whether or not sound is on.
+    for name in ["sword.gani", "hurt.gani", "sit.gani"] {
+        load_pose_gani(&resolver, &mut session, name);
+    }
     let mut sound_serial = session.level_serial;
 
     let Some(sheet_path) = resolver.image("pics1.png") else {
@@ -785,6 +805,7 @@ fn main() {
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");
+    let sword_sheet = load("swords", "sword1.png");
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
@@ -845,7 +866,19 @@ fn main() {
             }
         }
         let (dx, dy) = player_box_origin(session, view_w, view_h);
+        let pose = session.current_pose();
         match (&body, &head) {
+            (Some(_), Some(_)) if pose.is_some() => {
+                let sheets = seihai::render::PoseSheets {
+                    body: body.as_ref().map(pose_sheet),
+                    head: head.as_ref().map(pose_sheet),
+                    sprites: sprites.as_ref().map(pose_sheet),
+                    sword: sword_sheet.as_ref().map(pose_sheet),
+                };
+                if let Some(p) = pose {
+                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
+                }
+            }
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
                 b,
@@ -1007,6 +1040,8 @@ fn main() {
                             } else if name.to_ascii_lowercase().ends_with(".wav") {
                                 // A new copy of a sound replaces the decoded one.
                                 sound.forget(name);
+                            } else if seihai::pose::PoseKind::from_file(name).is_some() {
+                                load_pose_gani(&resolver, &mut session, name);
                             } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
                                 if sound.is_enabled() {
                                     load_motion_gani(&resolver, &mut session, name);
