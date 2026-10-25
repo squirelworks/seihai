@@ -105,3 +105,7 @@ falls back to the null backend and logs one line.
   extension-to-backend dispatch is still untraced.
 - **Not run against a live session.** Tests cover the engine, the decoder, the
   parser and the session; the GUI loop was not run with a real device.
+
+## Sword cue (item 22)
+
+The sword swing queues the `PLAYSOUND` cue of `sword.gani` when the cue's step is entered, through the same `SoundEvent` queue as the walk and swim cues, so `sword.wav` plays once per swing (the built-in set ships a synthesised `sounds/sword.wav`). No sound, no cue: with `--no-sound` the events are dropped as before.

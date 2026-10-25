@@ -458,6 +458,76 @@ def body_cell(pal, direction, phase):
     return im
 
 
+# Extra body poses (item 22), in the rows after the eight walk poses. Our own
+# convention: the stock sheets are not read for this.
+POSE_WINDUP, POSE_SWING, POSE_SIT, POSE_HURT = 9, 10, 11, 12
+
+
+def body_pose_cell(pal, direction, kind):
+    """One 32x32 body frame of the sword wind-up, sword swing, sit or hurt pose."""
+    P = pal
+    mirror = direction == 3
+    d_eff = 1 if mirror else direction
+    if kind in ("windup", "swing"):
+        # the idle figure with its sword arm redrawn: raised for the wind-up,
+        # stretched forward for the swing
+        im = body_cell(pal, direction, None)
+        if mirror:
+            im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        d = ImageDraw.Draw(im)
+        if d_eff in (0, 2):
+            d.rectangle([21, 8, 25, 19], fill=0)  # clear the idle right arm
+            d.rectangle([20, 8, 21, 14], fill=P["tunic"])
+            if kind == "windup":
+                d.rectangle([22, 5, 24, 9], fill=P["tunic_dk"], outline=P["outline"])
+                d.rectangle([22, 2, 24, 4], fill=P["skin"], outline=P["outline"])
+            elif d_eff == 0:  # forward is up: the arm reaches higher than in the wind-up
+                d.rectangle([22, 3, 24, 8], fill=P["tunic_dk"], outline=P["outline"])
+                d.rectangle([22, 0, 24, 2], fill=P["skin"], outline=P["outline"])
+            else:
+                d.rectangle([22, 13, 24, 17], fill=P["tunic_dk"], outline=P["outline"])
+                d.rectangle([22, 18, 24, 22], fill=P["skin"], outline=P["outline"])
+        else:
+            d.rectangle([14, 8, 18, 18], fill=P["tunic"])
+            d.rectangle([12, 8, 19, 20], fill=P["tunic"], outline=P["outline"])
+            d.rectangle([18, 9, 18, 19], fill=P["tunic_dk"])
+            d.rectangle([12, 16, 19, 18], fill=P["belt"])
+            d.rectangle([12, 16, 13, 18], fill=P["gold"])
+            if kind == "windup":
+                d.rectangle([14, 5, 17, 9], fill=P["tunic_dk"], outline=P["outline"])
+                d.rectangle([14, 2, 17, 4], fill=P["skin"], outline=P["outline"])
+            else:
+                d.rectangle([8, 11, 13, 14], fill=P["tunic_dk"], outline=P["outline"])
+                d.rectangle([4, 11, 7, 14], fill=P["skin"], outline=P["outline"])
+        if mirror:
+            im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        return im
+    if kind == "sit":
+        base = body_cell(pal, d_eff, None)
+        im = Image.new("P", (32, 32), 0)
+        im.paste(base.crop((0, 0, 32, 19)), (0, 6))
+        d = ImageDraw.Draw(im)
+        if d_eff in (0, 2):
+            for x0, dark in ((10, False), (17, True)):
+                d.rectangle([x0, 24, x0 + 4, 27], fill=P["pants_dk"] if dark else P["pants"], outline=P["outline"])
+                d.rectangle([x0, 27, x0 + 4, 30], fill=P["boot"], outline=P["outline"])
+        else:
+            d.rectangle([11, 25, 21, 28], fill=P["pants"], outline=P["outline"])
+            d.rectangle([20, 25, 24, 30], fill=P["boot"], outline=P["outline"])
+            if mirror:
+                im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        return im
+    assert kind == "hurt"
+    base = body_cell(pal, direction, None)
+    lean = {0: -10, 1: -12, 2: 10, 3: 12}[direction]  # away from the facing side
+    im = base.rotate(lean, resample=Image.NEAREST, center=(16, 30), fillcolor=0)
+    d = ImageDraw.Draw(im)
+    for (x, y) in ((3, 6), (27, 8)):  # two small impact sparks
+        d.line([(x - 2, y), (x + 2, y)], fill=P["white"])
+        d.line([(x, y - 2), (x, y + 2)], fill=P["gold"])
+    return im
+
+
 def build_body():
     pal = body_palette()
     sheet = Image.new("P", (128, 720), 0)
@@ -465,6 +535,8 @@ def build_body():
         sheet.paste(body_cell(pal, dr, None), (dr * 32, 0))
         for k in range(8):
             sheet.paste(body_cell(pal, dr, k), (dr * 32, 32 * (1 + k)))
+        for pose, kind in ((POSE_WINDUP, "windup"), (POSE_SWING, "swing"), (POSE_SIT, "sit"), (POSE_HURT, "hurt")):
+            sheet.paste(body_pose_cell(pal, dr, kind), (dr * 32, 32 * pose))
     return sheet, pal
 
 
@@ -736,6 +808,81 @@ def swim_gani():
     return "\n".join(L)
 
 
+SWORD_STEPS = (  # (sword sheet row, body pose) of the five sword.gani steps
+    (0, POSE_WINDUP), (1, POSE_SWING), (2, POSE_SWING), (2, POSE_SWING), (1, POSE_WINDUP))
+
+# Where the sword hand is inside the 48x48 player box, per (pose, direction).
+HAND = {
+    POSE_WINDUP: [(31, 19), (27, 19), (31, 19), (20, 19)],
+    POSE_SWING: [(31, 16), (17, 28), (31, 36), (30, 28)],
+}
+
+
+def sword_pivot(dr):
+    """Where the grip of a (pre-rotation) sword cell lands inside the rotated
+    32x32 cell: the cell is rotated about its centre, counter-clockwise, by
+    90 degrees per direction step (up 0, left 90, down 180, right 270)."""
+    px, py = 0, 10  # grip relative to the centre of the cell, before rotation
+    for _ in range(dr):
+        px, py = py, -px
+    return 16 + px, 16 + py
+
+
+def sword_gani():
+    L = gani_header("sword.gani: 5 steps (wind-up, arc, thrust, thrust, recover); sword.wav after step 0")
+    L += ["// Plays once, then goes back to idle (SETBACKTO).", "SETBACKTO idle",
+          "DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    sprites = gani_sprites([POSE_WINDUP, POSE_SWING])
+    for row, rn in enumerate(("held", "arc", "thrust")):
+        for dr, n in enumerate(("up", "left", "down", "right")):
+            sprites.append(f"SPRITE {300 + 4 * row + dr} SWORD {32 * dr} {32 * row} 32 32 sword {rn} {n}")
+    L += sprites + ["", "ANI"]
+    for k, (row, pose) in enumerate(SWORD_STEPS):
+        for dr in range(DIRS):
+            (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+            hand = HAND[pose][dr]
+            pv = sword_pivot(dr)
+            sw = (hand[0] - pv[0], hand[1] - pv[1])
+            body = f"{200 + 4 * pose + dr} {bx} {by}"
+            head = f"{100 + dr} {hx} {hy}"
+            sword = f"{300 + 4 * row + dr} {sw[0]} {sw[1]}"
+            order = [f"0 {sx} {sy}", sword, body, head] if dr == 0 else [f"0 {sx} {sy}", body, head, sword]
+            L.append(", ".join(order))
+        if k == 0:
+            L.append("PLAYSOUND sword.wav 1.5 2")
+        L.append("")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
+def sit_gani():
+    L = gani_header("sit.gani: sitting (1 step)")
+    L += ["DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    L += gani_sprites([POSE_SIT]) + ["", "ANI"]
+    for dr in range(DIRS):
+        (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+        L.append(f"0 {sx} {sy}, {200 + 4 * POSE_SIT + dr} {bx} {by}, {100 + dr} {hx} {hy + 6}")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
+# Head shift of the hurt pose, away from the facing side (dx, dy per direction).
+HURT_HEAD = [(1, 2), (2, 2), (-1, 2), (-2, 2)]
+
+
+def hurt_gani():
+    L = gani_header("hurt.gani: the pose Seihai shows for the first moments of hurt mode (1 step)")
+    L += ["// The name and the use are Seihai's convention, not a documented real-client one.",
+          "DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    L += gani_sprites([POSE_HURT]) + ["", "ANI"]
+    for dr in range(DIRS):
+        (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+        hdx, hdy = HURT_HEAD[dr]
+        L.append(f"0 {sx} {sy}, {200 + 4 * POSE_HURT + dr} {bx} {by}, {100 + dr} {hx + hdx} {hy + hdy}")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
 # ---------------------------------------------------------------------------
 # Sounds: mono PCM WAV, synthesised
 # ---------------------------------------------------------------------------
@@ -792,6 +939,22 @@ def splash_sound(rng, rate, ms):
             if 0 <= u < 0.07:
                 s += 0.35 * math.sin(2 * math.pi * (f * u + 2200 * u * u)) * math.exp(-u * 45)
         out.append(max(-1, min(1, s)))
+    return out
+
+
+def sword_sound(rng, rate, ms):
+    """A short whoosh: noise through a low-pass whose cut-off sweeps up, under a
+    rising sine chirp, with a soft attack and a faster decay."""
+    n = int(rate * ms / 1000)
+    y, out = 0.0, []
+    for i in range(n):
+        t = i / rate
+        u = i / n
+        env = math.sin(math.pi * min(1.0, u * 1.15)) ** 2 * math.exp(-u * 1.5)
+        a = 0.10 + 0.55 * u
+        y += a * (rng.uniform(-1, 1) - y)
+        chirp = math.sin(2 * math.pi * (700 * t + 2400 * t * t))
+        out.append(max(-1, min(1, (y * 2.6 + 0.22 * chirp) * env)))
     return out
 
 
@@ -939,7 +1102,8 @@ def write_all(out):
     im, p = build_state()
     save_png(im, p, os.path.join(out, "state.png"), 4, 16, True)
 
-    for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani())):
+    for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
+                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani())):
         open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(text)
 
     # the default sheet is the only tile sheet: one line, image,prefix,type,x,y
@@ -949,6 +1113,8 @@ def write_all(out):
     write_wav(os.path.join(out, "sounds", "steps.wav"), 22050, 8, step_sound(r, 22050, 150, 110, 0.35))
     write_wav(os.path.join(out, "sounds", "steps2.wav"), 22050, 8, step_sound(r, 22050, 150, 135, 0.45))
     write_wav(os.path.join(out, "sounds", "water.wav"), 8000, 16, splash_sound(r, 8000, 450))
+    # a separate generator, so the older sounds keep their exact bytes
+    write_wav(os.path.join(out, "sounds", "sword.wav"), 8000, 8, sword_sound(random.Random(SEED + 4), 8000, 260))
 
     for name, fn in (("new1", level_new1), ("new2", level_new2)):
         b, links, objs = fn(random.Random(SEED + 2 + (name == "new2")))
@@ -982,6 +1148,37 @@ def check(out):
     return not bad
 
 
+def gani_frame_into(out, tile, name, step, dr):
+    """Draw one step of a generated GANI onto an RGBA 48x48 tile (preview only);
+    it also proves that the sprite ids a row names are defined."""
+    sheets = {
+        "BODY": Image.open(os.path.join(out, "bodies", "body.png")).convert("RGBA"),
+        "HEAD": Image.open(os.path.join(out, "heads", "head0.png")).convert("RGBA"),
+        "SPRITES": Image.open(os.path.join(out, "sprites.png")).convert("RGBA"),
+        "SWORD": Image.open(os.path.join(out, "swords", "sword1.png")).convert("RGBA"),
+    }
+    defs, rows, cur = {}, [], []
+    in_ani = False
+    for line in open(os.path.join(out, "gani", name + ".gani")).read().splitlines():
+        line = line.strip()
+        if line.startswith("SPRITE "):
+            t = line.split()
+            defs[int(t[1])] = (t[2], *map(int, t[3:7]))
+        elif line == "ANI":
+            in_ani = True
+        elif line == "ANIEND":
+            in_ani = False
+        elif in_ani and "," in line:
+            cur.append(line)
+            if len(cur) == 4:
+                rows.append(cur)
+                cur = []
+    for chunk in rows[step][dr].split(","):
+        sid, x, y = map(int, chunk.split())
+        sh, sx, sy, w, h = defs[sid]
+        tile.alpha_composite(sheets[sh].crop((sx, sy, sx + w, sy + h)), (x, y))
+
+
 def preview(out, path):
     """Contact sheet of our own art, for people to look at (not committed)."""
     S = 4
@@ -991,7 +1188,7 @@ def preview(out, path):
     head = Image.open(os.path.join(out, "heads", "head0.png")).convert("RGBA")
     spr = Image.open(os.path.join(out, "sprites.png")).convert("RGBA")
     W = 1100
-    canvas = Image.new("RGB", (W, 1500), (40, 44, 52))
+    canvas = Image.new("RGB", (W, 1900), (40, 44, 52))
 
     def cell(tid):
         cx, cy = tile_cell(tid)
@@ -1038,6 +1235,13 @@ def preview(out, path):
             tile.alpha_composite(spr.crop((0, 306 + 16 * f, 32, 322 + 16 * f)), (hx, hy + SWIM_HEAD_DROP + 12))
             canvas.paste(tile.resize((96, 96), Image.NEAREST).convert("RGB"), (10 + (dr * 2 + f) * 100, y))
     y += 110
+    d.text((10, y - 14), "item 22 poses from the GANIs (x2): sword.gani 5 steps, then sit.gani and hurt.gani, 4 directions", fill=(200, 200, 200))
+    for dr in range(4):
+        for i, (name, k) in enumerate([("sword", 0), ("sword", 1), ("sword", 2), ("sword", 3), ("sword", 4), ("sit", 0), ("hurt", 0)]):
+            tile = Image.new("RGBA", (48, 48), (72, 160, 56, 255))
+            gani_frame_into(out, tile, name, k, dr)
+            canvas.paste(tile.resize((96, 96), Image.NEAREST).convert("RGB"), (10 + i * 100, y + dr * 100))
+    y += 4 * 100 + 10
     # levels at 1:1 (64x64 tiles = 1024 px) scaled to 0.5
     for i, name in enumerate(("new1", "new2")):
         txt = open(os.path.join(out, "levels", name + ".nw")).read().splitlines()

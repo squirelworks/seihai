@@ -82,6 +82,10 @@ pub struct OfflineSession {
     /// Optional swim animation, stepped instead of the walk one while the
     /// feet are in water.
     pub swim_gani: Option<GaniPlayer>,
+    /// The sword, hurt and sit animations (see [`crate::pose`]).
+    pub poses: crate::pose::PoseGanis,
+    /// Draw the sit pose. Nothing sets it yet: no key is bound.
+    pub sitting: bool,
     /// Sounds from GANI frames entered since the last
     /// [`Self::take_sound_events`].
     pub sound_events: Vec<SoundEvent>,
@@ -231,6 +235,8 @@ impl OfflineSession {
             in_water: false,
             walk_gani: None,
             swim_gani: None,
+            poses: crate::pose::PoseGanis::default(),
+            sitting: false,
             sound_events: Vec::new(),
             player_health: 100,
             last_message: None,

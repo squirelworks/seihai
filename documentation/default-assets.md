@@ -10,7 +10,7 @@ Dated 2026-10-25. Base: `main` at `d5389c2`. Item 20 (wiring) is described under
 
 **Licence:** the same as the Seihai repository (`MIT OR Apache-2.0`, see the workspace `Cargo.toml`), for the generated files and for the generator. Confirmed by the maintainer (2026-10-25): the generated files and the generator use the same licence as the Seihai repository (`MIT OR Apache-2.0`).
 
-## Contents (47.8 KB in 17 files)
+## Contents (54.7 KB in 21 files)
 
 ```
 assets/default/
@@ -25,9 +25,13 @@ assets/default/
   gani/idle.gani             1 step                                                  0.7 KB
   gani/walk.gani             8 steps, footsteps after steps 0 and 4                  2.9 KB
   gani/swim.gani             8 steps, head only, splash after step 0                 1.3 KB
+  gani/sword.gani            5 steps, sword.wav after step 0, SETBACKTO idle         2.3 KB
+  gani/sit.gani              1 step                                                  0.7 KB
+  gani/hurt.gani             1 step                                                  0.9 KB
   sounds/steps.wav           22,050 Hz, 8-bit, mono, 150 ms                          3.3 KB
   sounds/steps2.wav          22,050 Hz, 8-bit, mono, 150 ms (different pitch)        3.3 KB
   sounds/water.wav           8,000 Hz, 16-bit, mono, 450 ms                          7.2 KB
+  sounds/sword.wav           8,000 Hz, 8-bit, mono, 260 ms                           2.1 KB
   levels/new1.nw             starter level, 64x64, GLEVNW01 text                     9.6 KB
   levels/new2.nw             second tiny level (a room), GLEVNW01 text               9.4 KB
   levels/tiledefs/tiledefsOffline.txt   one line, `pics1.png,,0,0,0`
@@ -70,9 +74,9 @@ The foot test the sheet was drawn for: `FOOT_DX = 2.0`, `FOOT_DY = 2.75`, one po
 
 ### Player sheets
 
-- **`body.png` 128x720**: four 32 px direction columns (`x = 0, 32, 64, 96` = up, left, down, right) and 22 rows of 32 px (22 x 32 = 704, plus 16 spare). Row 0 is the idle pose (the cell `draw_player_sprites` reads at `(dir * 32, 0)`); rows 1 to 8 are the eight walk poses (foot-falls at poses 1 and 5). Rows 9 to 21 are empty and reserved. Body sprite id = `200 + 4 * pose + dir`. The "right" column is the "left" column mirrored.
+- **`body.png` 128x720**: four 32 px direction columns (`x = 0, 32, 64, 96` = up, left, down, right) and 22 rows of 32 px (22 x 32 = 704, plus 16 spare). Row 0 is the idle pose (the cell `draw_player_sprites` reads at `(dir * 32, 0)`); rows 1 to 8 are the eight walk poses (foot-falls at poses 1 and 5); rows 9 to 12 are the item 22 poses (9 sword wind-up, 10 sword swing, 11 sit, 12 hurt, our own numbering). Rows 13 to 21 are empty and reserved. Body sprite id = `200 + 4 * pose + dir`. The "right" column is the "left" column mirrored.
 - **`head0.png` 32x560**: one 32 px column, rows `y = 32 * dir` for the four directions (read at `(0, dir * 32)` by `draw_player_sprites`; head sprite id `100 + dir`). Rows from y = 128 down are empty; the extra head poses of other sets (hurt, sword) are not drawn.
-- **`sword1.png` 128x96**: four direction columns by three rows of 32x32 (held, mid-swing with an arc, thrust). No `sword.gani` ships yet, so nothing refers to it; the size matches the contract.
+- **`sword1.png` 128x96**: four direction columns by three rows of 32x32 (held, mid-swing with an arc, thrust). `sword.gani` places these (symbolic sheet `SWORD`, sprite ids `300 + 4 * row + dir`).
 - **`shield1.png` 38x20**: four sprites at `x = 0, 6, 14, 30` of 6x18, 8x20, 16x20 and 8x20 (up, left, down, right). The core GANIs draw no shield (a player without one draws none); the sheet is there for the shield layer.
 - **`sprites.png` 32x338**: the shadow is 24x12 at `(0, 0)`; the two swim rings are 32x16 at `(0, 306)` and `(0, 322)`; everything else is transparent. The renderer skips only fully transparent pixels (`blit_sprite`), so the shadow is a checker-dithered ellipse rather than a soft alpha, and the rings carry an opaque water-coloured ellipse that hides the lower half of the head.
 - **`state.png` 224x145**: the HUD sheet is the one file whose real layout is not documented, and nothing in Seihai reads it yet (`--check-assets` only needs it to load). Ours holds a full, half and empty heart (16x16 at `x = 0, 16, 32`), a rupee, a bomb and an arrow (about 16x16 at `x = 50`, `66`, `82`) and ten 5x7 digits in 8x12 cells at `y = 16`. It is a placeholder with our own layout, not the real `state.png` layout; the 1.38+ layouts use 224x97, and a smaller sheet works for them too (the 145 row count is a superset).
@@ -88,12 +92,15 @@ Our own text files, in the format `Gani::parse` reads: `SPRITE id SHEET x y w h 
 | `idle.gani` | 1 | shadow (id 0), body (200 + dir), head (100 + dir) | none |
 | `walk.gani` | 8 | the same, body pose 1 to 8; body and head bob 0 to 2 px | `steps2.wav 1.5 2` after steps 0 and 4 |
 | `swim.gani` | 8 | head (100 + dir), ring (id 20 or 21, alternating); no body | `water.wav 1.5 2` after step 0; `WAIT 1` after every step |
+| `sword.gani` | 5 | shadow, body (pose 9 or 10), head, sword cell (`SWORD` ids 300..311) | `sword.wav 1.5 2` after step 0; `SETBACKTO idle` |
+| `sit.gani` | 1 | shadow, body (pose 11), head 6 px lower | none |
+| `hurt.gani` | 1 | shadow, body (pose 12, leaning away), head shifted away | none |
 
 Offsets are the idle offsets already in `draw_player_sprites` (`OFFSETS`: shadow, body, head per direction inside the 48x48 player box). The swim head is lowered by 14 px, the number `draw_player_sprites` uses; the 2.22 animation uses 16 or 20 (asset-reference, "not settled"), and this set follows the code so that the GANI and the renderer agree until that is settled.
 
 ### Sounds
 
-Mono PCM WAV files in the stock formats: footsteps at 22,050 Hz 8-bit (`steps.wav` for builds without GANIs, `steps2.wav` for the walk cues), the water sound at 8,000 Hz 16-bit. Synthesised from sine tones with a falling pitch and low-pass filtered noise (footsteps: a thud with a decaying envelope; splash: band-passed noise with four short rising bubble chirps). `decode_wav` reads all three. No sword, bomb or item sound is provided (all are optional in the checks).
+Mono PCM WAV files in the stock formats: footsteps at 22,050 Hz 8-bit (`steps.wav` for builds without GANIs, `steps2.wav` for the walk cues), the water sound at 8,000 Hz 16-bit. Synthesised from sine tones with a falling pitch and low-pass filtered noise (footsteps: a thud with a decaying envelope; splash: band-passed noise with four short rising bubble chirps). `sword.wav` (item 22) is a 260 ms whoosh at 8,000 Hz 8-bit, the stock sword format: noise through a low-pass whose cut-off sweeps up, under a rising sine chirp. `decode_wav` reads all four. No bomb or item sound is provided (all are optional in the checks).
 
 ### Levels
 
@@ -120,7 +127,7 @@ python3 tools/gen_default_assets.py --check         # exit 1 if the tree differs
 python3 tools/gen_default_assets.py --preview /tmp/preview.png   # contact sheet of this art
 ```
 
-Python 3.9 or later and Pillow; no network. The seed is `SEED = 20261025` in the script and every random choice (grass tufts, noise, scatter on the levels) comes from `random.Random(SEED + n)`, so two runs give identical files on the same machine; `--check` compares decoded pixels for the PNGs (not bytes, because zlib output can differ between builds) and bytes for everything else. The tree is small (47.8 KB), so it is committed; the generator is the source of truth, and a change to the art is a change to the script plus a regenerated tree.
+Python 3.9 or later and Pillow; no network. The seed is `SEED = 20261025` in the script and every random choice (grass tufts, noise, scatter on the levels) comes from `random.Random(SEED + n)`, so two runs give identical files on the same machine; `--check` compares decoded pixels for the PNGs (not bytes, because zlib output can differ between builds) and bytes for everything else. The tree is small (54.7 KB), so it is committed; the generator is the source of truth, and a change to the art is a change to the script plus a regenerated tree.
 
 The contract test is `client/tests/default_assets.rs` (`cargo test --test default_assets`): it loads each file with Seihai's own readers and checks sizes, bit depths, the 128x32 grid, that every named tile id lands on its own cell and `blit_tile` draws that cell, the type table (water 11, walls 20 or more, ids below 4096), the GANI structure (1, 8 and 8 steps, four rows each, the cues, sprites inside their sheets), WAV formats and lengths, both levels (every id named, links lead to existing levels and arrive on open floor, chests and signs sit on their art), the offline session (default spawn open, pond swims, a bush blocks) and `AssetResolver` / `check_folder` for 2.05, 2.17, 2.22 and 2.31.
 
@@ -128,7 +135,7 @@ The contract test is `client/tests/default_assets.rs` (`cargo test --test defaul
 
 The set is compiled into the binary and is the last layer of every lookup. The full rules are in `documentation/file-cache.md` (cache layout, naming, search order, what a download does, how `WANTFILE` / `UPDATEFILE` treat built-in files); this is the short version.
 
-1. **Embedded, then written once.** `client/src/assets/builtin.rs` holds every file of `assets/default/` with `include_bytes!` (47.8 KB), and a test fails if that list and the folder differ. The client finds files by path (resolver, sound engine, readers), so at start-up the set is written to `<settings dir>/builtin/<id>/` (`<id>` = CRC-32 of the whole set) and that folder is the lowest layer. The files are written 0444 and a missing or changed one is rewritten from the binary, so the folder is a copy of what is in the executable and nothing else; a new build with new art uses a new `<id>` and leaves the old folder alone. If the settings folder cannot be written the set goes to the system temp folder; if that fails, the client runs without the layer and says so. No network, no shipped data folder next to the exe.
+1. **Embedded, then written once.** `client/src/assets/builtin.rs` holds every file of `assets/default/` with `include_bytes!` (54.7 KB), and a test fails if that list and the folder differ. The client finds files by path (resolver, sound engine, readers), so at start-up the set is written to `<settings dir>/builtin/<id>/` (`<id>` = CRC-32 of the whole set) and that folder is the lowest layer. The files are written 0444 and a missing or changed one is rewritten from the binary, so the folder is a copy of what is in the executable and nothing else; a new build with new art uses a new `<id>` and leaves the old folder alone. If the settings folder cannot be written the set goes to the system temp folder; if that fails, the client runs without the layer and says so. No network, no shipped data folder next to the exe.
 2. **Fallback.** `--assets` is optional. With no folder, a missing folder or an empty one, every lookup falls through to the built-in set; a folder with only some files uses its own where it has them and ours for the rest (file by file). An offline run with no `--assets` and no `--level` starts in `new1.nw` (the launcher's "Play offline" does the same); with `--assets`, behaviour is unchanged. `seihai --check-assets` with no `--assets` checks the built-in set (exit 0 for 1.39, 2.05, 2.17, 2.22 and 2.31, no required file missing, nothing unreadable); with `--assets DIR` it still checks exactly that folder.
 3. **Per-server cache, searched first.** Search order is: the server's cache folder, the user's asset folder, the built-in set. Downloads are written to the cache only; the built-in set is read-only and never a download target (a target under it is refused). `save_downloads` / `--no-save-downloads` still gate writing. Layout and naming: `<cache root>/<host>_<port>[~<server name>]/` with the real clients' sub-folders; the root is `--cache-dir`, then `cache_dir=` in the settings file, then `<settings dir>/cache`.
 4. **Built-in files and the server.** A file only the built-in set has is asked for with `WANTFILE`, with no mod time (never `UPDATEFILE`), so the server's copy can be saved in the cache and win; if the server has none, ours stays. `walk.gani`, `steps.wav` and `steps2.wav` (the real client's first-step requests) are asked for only if there is no copy anywhere, built-in included, which with this set means never in a normal run.
@@ -139,10 +146,24 @@ What was checked, offline, on Xvfb with this set only (screenshots of our own ar
 
 The generator `tools/gen_default_assets.py` already re-emits the whole set from a seed (`--check`, `--preview`), so the optional item 21 tool is mostly done by it; a parameterised front end (tile size, palette) is not part of this PR.
 
+## Poses: sword, sit, hurt (item 22)
+
+`sword.gani`, `sit.gani`, `hurt.gani` and `sounds/sword.wav` are generated by the same script (body rows 9 to 12 and the sword cells come from `body_pose_cell` and `build_sword`; the GANI text from `sword_gani`, `sit_gani` and `hurt_gani`; `--preview` draws every step). Like the rest of the set they are drawn from rectangles, ellipses and rotated copies of our own cells, and the sword sound is synthesised; no corpus image or audio was opened for them. What comes from `asset-reference.md` is only structure: the sword animation has five steps with a sound cue after step 0 and `SETBACKTO idle`, the sit animation has one step, the sword sheet is 128x96.
+
+**How the client uses them** (`client/src/pose.rs`, `render::draw_gani_frame`):
+
+- **S key.** The swing already ran in `combat.rs` (sprite value S = 6 to 10, one step per two 50 ms ticks). Step `i` of the swing now draws step `i` of `sword.gani` over the player's idle figure, and entering a step queues the `PLAYSOUND` cues that follow it, so `sword.wav` plays once when the swing starts. When the swing ends the pose is gone and the idle figure is drawn again; that is what `SETBACKTO idle` says, so the parser keeps the name (`Gani::setback_to`) and the test checks it. The swing is refused in water and while dead (unchanged).
+- **A hit.** A hit that the judge accepts starts hurt mode (`take_hit`, unchanged: 40 ticks in which nothing can hurt the player, sprite S = 32 sent). While the first 500 ms of it run, `hurt.gani` is drawn. This works in the offline session too, because the pose follows the combat state, not the network.
+- **Sit.** `sit.gani` is drawn while `OfflineSession::sitting` is set. Nothing sets it yet, since no key is bound.
+- Priority: swing, then hurt, then sit. No pose while swimming or dead, and none when its GANI is not loaded (a build without GANIs, or a data folder that lacks the file), so the old idle drawing is the fallback.
+
+**Seihai's own conventions, because the real clients' behaviour is not documented here:** the name `hurt.gani` and the idea of playing it on a hit; showing it for 500 ms rather than the whole of hurt mode (the sprite others see lasts the whole of it, and is not changed); the body rows 9 to 12, the sword sprite ids 300 to 311, and the hand positions the sword cells are placed at; sit being a flag with no key; one sword sheet (`sword1.png`) whatever the sword power. The walk and swim animations still only supply sounds, as before: the local player is not drawn with the walk poses (that is outside this item).
+
+No file request is added for these (the first-step list is unchanged); a copy of one of them that arrives from a server is loaded in its place.
+
 ## Not settled
 
-- The licence of the art and sound, until the maintainer confirms (see above).
 - The real `state.png` layout; ours is a placeholder.
 - The swim head offset (14 px in code and here; 16 and 20 in the 2.22 animation).
 - Whether a 1.33 to 1.39 client reads ids on a 1856-wide sheet the same way.
-- The art is functional and small, not final: no hats, no sword animation, no tile variety beyond what the two levels need. Item 21 (generator tool) can grow it.
+- The art is functional and small, not final: no hats, no tile variety beyond what the two levels need. Item 21 (generator tool) can grow it.
