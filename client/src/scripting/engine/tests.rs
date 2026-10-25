@@ -893,3 +893,42 @@ fn weapon_script_with_section_signs_keeps_its_lines() {
         assert!(w.take_log().is_empty());
     }
 }
+
+// ---- text join operators and the chat attribute ----
+
+#[test]
+fn the_users_touch_script_parses_and_sets_the_chat_bubble() {
+    // Line 4 of the script that logged `expected ;`.
+    let src = "//#CLIENTSIDE\nif (playertouchsme) {\n  this.n = 1;\n  chat = player.account SPC \"toouched me last\";\n}\n";
+    let (mut w, id) = npc(src);
+    assert!(w.obj(id).unwrap().diagnostics().is_empty(), "{:?}", w.obj(id).unwrap().diagnostics());
+    w.core.player.account = "bob123".into();
+    w.fire(id, "playertouchsme", &[]);
+    assert_eq!(messages(&mut w), vec!["bob123 toouched me last"]);
+}
+
+#[test]
+fn text_join_operators_put_the_right_separator_between() {
+    let (mut w, id) = npc("if (created) { this.a = \"x\" @ \"y\"; this.b = \"x\" SPC \"y\"; this.c = \"x\" NL \"y\"; this.d = \"x\" TAB \"y\"; message #v(this.a)|#v(this.b)|#v(this.c)|#v(this.d); }");
+    w.fire(id, "created", &[]);
+    assert_eq!(messages(&mut w), vec!["xy|x y|x\ny|x\ty"]);
+}
+
+#[test]
+fn text_join_binds_looser_than_arithmetic_and_tighter_than_and() {
+    let (mut w, id) = npc("if (created) { this.v = 1 + 2 @ 3 * 2; chat = this.v; }");
+    w.fire(id, "created", &[]);
+    assert_eq!(messages(&mut w), vec!["36"]);
+    // `a @ b && c`: the join is evaluated first, then the test.
+    let (w2, id2) = npc("if (1 @ 2 && 1) { message yes; }");
+    assert!(w2.obj(id2).unwrap().diagnostics().is_empty());
+}
+
+#[test]
+fn chat_and_player_attributes_read_and_write() {
+    let (mut w, id) = npc("if (created) { player.chat = player.nick SPC \"says hi\"; chat = player.chat; }");
+    w.core.player.nick = "Bob".into();
+    w.fire(id, "created", &[]);
+    assert_eq!(w.core.player.chat, "Bob says hi");
+    assert_eq!(messages(&mut w), vec!["Bob says hi"]);
+}

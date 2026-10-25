@@ -485,6 +485,12 @@ impl<'a> Parser<'a> {
                     continue;
                 }
                 // In a condition a single `=` compares, as it does in level scripts.
+                // Text join, below comparison and above `&&` (the order of the
+                // GS2 grammar, which has the same four operators).
+                Tok::Op("@") => (BinOp::Cat, 3, false),
+                Tok::Ident(w) if w == "spc" => (BinOp::CatSpc, 3, false),
+                Tok::Ident(w) if w == "nl" => (BinOp::CatNl, 3, false),
+                Tok::Ident(w) if w == "tab" => (BinOp::CatTab, 3, false),
                 Tok::Op("==") | Tok::Op("=") => (BinOp::Eq, 4, false),
                 Tok::Op("!=") => (BinOp::Ne, 4, false),
                 Tok::Op("<") => (BinOp::Lt, 5, false),

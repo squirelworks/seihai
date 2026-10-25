@@ -31,7 +31,7 @@ pub struct Spanned {
 
 const OPS2: &[&str] = &["==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "++", "--"];
 const OPS1: &[&str] = &[
-    "+", "-", "*", "/", "%", "^", "=", "<", ">", "!", "(", ")", "{", "}", "[", "]", ",", ";", "|", ":", "?",
+    "+", "-", "*", "/", "%", "^", "=", "<", ">", "!", "(", ")", "{", "}", "[", "]", ",", ";", "|", ":", "?", "@",
 ];
 
 pub struct Lexer<'a> {
@@ -328,6 +328,6 @@ mod tests {
 
     #[test]
     fn stray_bytes_do_not_stop_the_lexer() {
-        assert_eq!(toks("@ x"), vec![Tok::Str("@".into()), Tok::Ident("x".into())]);
+        assert_eq!(toks("~ x"), vec![Tok::Str("~".into()), Tok::Ident("x".into())]);
     }
 }
