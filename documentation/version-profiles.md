@@ -60,6 +60,12 @@ limits, tampercheck, listserver port). `tools/gen_profile_fixture.py
 PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv` regenerates it,
 and the unit test `rows_match_version_profile_toml` fails if any row differs.
 When the TOMLs change, regenerate the file and fix the rows the test names.
+Default list port: 2.00 uses **14923**, the public legacy-support port (user-confirmed
+2026-10-25; a classic 2.00 login there got a plain zlib id-0 list, 14921 is
+refused); the port the 2.00 build itself carries, 14921, is kept in the TOML as
+`built_in_port`. 2.01 to 2.05 keep 14921 (not run on 14923), 2.17 and later
+14922. The port is the profile's default (`ClientVersion::listserver_port`);
+`--online host:port` and the launcher's port box still decide what is dialled.
 Known exception: 2.16 keeps the 2.16 prop limits its TOML note describes
 (54–74), though the TOML's `props_max` still says 45.
 

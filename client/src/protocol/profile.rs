@@ -783,6 +783,9 @@ mod tests {
         // 2.17's listserver default is 14922.
         assert_eq!(ClientVersion::V217.listserver_port(), 14922);
         assert_eq!(ClientVersion::V205.listserver_port(), 14921);
+        // 2.00 defaults to the public legacy port (14923), 2.01 to 2.05 do not.
+        assert_eq!(ClientVersion::V200.listserver_port(), 14923);
+        assert_eq!(ClientVersion::V201.listserver_port(), 14921);
         assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
     }
 
