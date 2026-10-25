@@ -75,11 +75,11 @@ exactly.
 
 ## The device backend
 
-Real output is the `audio-rodio` cargo feature (`rodio` 0.19 on `cpal`). It is
+Real output is the `audio-rodio` cargo feature (`rodio` 0.19 on `cpal`). It is on by default. It is
 **not built or run**. The box this was written on has no sound card, no
 `pkg-config` and no ALSA development files, so `cpal` cannot build there, and a
 headless box could not play anyway. `cargo build -p seihai` and the tests do not
-touch it. The first build with `--features audio-rodio` on a machine with audio
+touch it. A plain `cargo build --release -p seihai` includes it. On a machine with audio
 is the real test of `rodio_out.rs`. If no device opens at run time, the engine
 falls back to the null backend and logs one line.
 

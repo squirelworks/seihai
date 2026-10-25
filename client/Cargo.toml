@@ -21,10 +21,11 @@ path = "src/bin/main.rs"
 [features]
 # Developer mode (F9 wallhack). On for now; build with
 # `--no-default-features` to compile it out.
-default = ["dev"]
+default = ["dev", "audio-rodio"]
 dev = []
-# Real audio output through rodio/cpal. Off by default; without it the
-# sound engine uses the null backend.
+# Real audio output through rodio/cpal. On by default. On Linux this
+# needs the ALSA development files (libasound2-dev). Build with
+# `--no-default-features --features dev` to compile it out.
 audio-rodio = ["dep:rodio"]
 
 [dev-dependencies]

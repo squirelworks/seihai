@@ -132,7 +132,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
-| `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `sounds/` in the server cache, `<assets>` or the built-in set (first that has the file), if the build has the `audio-rodio` feature and a sound device opens. Otherwise sound is silent and everything else runs the same |
+| `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `sounds/` in the server cache, `<assets>` or the built-in set (first that has the file), if a sound device opens. Otherwise sound is silent and everything else runs the same |
 | `--sound` | Play sound effects even if the settings file turns them off |
 | `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the server's cache folder, in the place the real client uses (`documentation/file-cache.md`) |
 
@@ -191,7 +191,7 @@ save_downloads=0
 
 `follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
 
-`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays and for the optional `audio-rodio` build (`cargo build --release -p seihai --features audio-rodio`, needs the ALSA development files on Linux).
+`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai --no-default-features --features dev`.
 
 ## Features
 
