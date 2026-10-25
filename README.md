@@ -14,7 +14,32 @@ cd seihai
 
 You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `.git`) before any of the commands below. If you are in a parent folder, `git` and `cargo` will fail with "not a git repository" and "could not find Cargo.toml".
 
-## Update and build
+## From a downloaded zip
+
+GitHub's "Download ZIP" of the main branch gives `seihai-main.zip`. It extracts to a folder named `seihai-main`. Put the zip in `~/FU` (or anywhere else) and run:
+
+```bash
+mkdir -p ~/FU
+cd ~/FU
+rm -rf seihai-main
+python3 -m zipfile -e seihai-main.zip ~/FU
+rm -rf seihai
+mv seihai-main seihai
+cd seihai
+cargo build --release -p seihai
+```
+
+You must be inside the `seihai` folder (the one that contains `Cargo.toml`) before `cargo`. A zip has no `.git`, so `git pull` will not work; download a new zip when you want an update.
+
+On Windows (PowerShell), after extracting the zip:
+
+```powershell
+cd seihai-main
+cargo build --release -p seihai
+.\target\release\seihai.exe
+```
+
+## Update and build (from a git clone)
 
 ```bash
 cd seihai
