@@ -200,7 +200,7 @@ save_downloads=0
 - Listserver login and server list
 - Player sprites, chests, signs, and NPC images (requested if missing)
 - Chat bar, PMs, player list, and debug overlay
-- Chat bubbles that expire, and buddy, ignore and mute lists (chat bar commands `/ignore`, `/buddy`, `/mute`, `/lists`)
+- Chat bubbles that expire (your own line stays until you move), a fading chat overlay (Seihai's own, timings assumed: `documentation/chat-log.md`), and buddy, ignore and mute lists (chat bar commands `/ignore`, `/buddy`, `/mute`, `/lists`)
 - Resizable window, scaled 2× by default
 
 ## Known issues

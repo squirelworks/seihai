@@ -1829,18 +1829,12 @@ fn main() {
                     }
                     ui::InputMode::Chat => match ui::classify_chat(&text) {
                         ui::ChatSend::Say(t) => {
-                            my_chat = t.clone();
-                            my_chat_timer = if t.is_empty() {
-                                seihai::chatlists::BubbleTimer::default()
-                            } else {
-                                seihai::chatlists::BubbleTimer::start()
-                            };
+                            // History + bubble + held bubble clock (ui::own_say).
+                            let who = me(&net_state, &account);
+                            ui::own_say(&mut net_state, &who, &t, &mut my_chat, &mut my_chat_timer);
                             dirty = true;
                             if !no_scripts {
                                 scripts.chat(&mut session, &t);
-                            }
-                            if !t.is_empty() {
-                                net_state.push_chat(ChatKind::Say, me(&net_state, &account), t.clone());
                             }
                             let online = conn.is_some();
                             let r = conn.as_mut().map(|c| c.send_chat(&t));
@@ -1948,6 +1942,15 @@ fn main() {
             chat_scroll = chat_scroll.saturating_sub(3);
         }
 
+        // Our own typed line is held over the head until a direction key is
+        // pressed, then goes down like the others (as in the 2.05 client).
+        if !input.is_open()
+            && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
+                .iter()
+                .any(|k| window.is_key_down(*k))
+        {
+            my_chat_timer.release();
+        }
         // Chat bubbles go down after a few seconds.
         {
             let dt = bubble_clock.elapsed().as_millis().min(u32::MAX as u128) as u32;
@@ -1999,7 +2002,7 @@ fn main() {
             seihai::help::draw_hint(&mut frame);
         }
         seihai::help::draw_dev_badge(&mut frame, &session.dev);
-        ui::draw_chat(&mut frame, &net_state.chat_log, chat_scroll, &input);
+        ui::draw_chat_overlay(&mut frame, &net_state.chat_log, net_state.chat_clock_ms, chat_scroll, &input);
         if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {
             let line = match save_screenshot(&frame) {
                 Ok(path) => format!("saved {}", path.display()),

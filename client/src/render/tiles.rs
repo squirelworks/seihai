@@ -217,6 +217,35 @@ impl Framebuffer {
         }
     }
 
+    /// Mix `rgb` into one pixel at `alpha`/255 (0 leaves it, 255 replaces it).
+    pub fn blend_pixel(&mut self, x: i32, y: i32, rgb: [u8; 3], alpha: u8) {
+        if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
+            return;
+        }
+        let i = (y as usize * self.width as usize + x as usize) * 3;
+        let a = u16::from(alpha);
+        for (c, &n) in self.pixels[i..i + 3].iter_mut().zip(rgb.iter()) {
+            *c = ((u16::from(*c) * (255 - a) + u16::from(n) * a + 127) / 255) as u8;
+        }
+    }
+
+    /// [`Self::draw_text`] blended over what is already there at
+    /// `alpha`/255, for text that fades.
+    pub fn draw_text_alpha(&mut self, x: i32, y: i32, text: &str, rgb: [u8; 3], alpha: u8) {
+        let mut cx = x;
+        for ch in text.chars() {
+            let g = super::font::glyph(ch);
+            for (row, bits) in g.iter().enumerate() {
+                for col in 0..5 {
+                    if bits >> (4 - col) & 1 != 0 {
+                        self.blend_pixel(cx + col, y + row as i32, rgb, alpha);
+                    }
+                }
+            }
+            cx += super::font::CELL_W;
+        }
+    }
+
     /// Draw `text` with a one-pixel dark outline, so it reads on any tile.
     pub fn draw_text_outlined(&mut self, x: i32, y: i32, text: &str, rgb: [u8; 3]) {
         for (ox, oy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {

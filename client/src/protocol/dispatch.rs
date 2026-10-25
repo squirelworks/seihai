@@ -266,6 +266,10 @@ pub struct ChatLine {
     pub kind: ChatKind,
     pub from: String,
     pub text: String,
+    /// When the line arrived, on the session's chat clock
+    /// ([`SessionState::chat_clock_ms`]). The on-screen overlay fades a line
+    /// by its age.
+    pub born_ms: u64,
 }
 
 /// Lines kept in the chat history.
@@ -342,6 +346,9 @@ pub struct SessionState {
     pub disconnect_message: Option<String>,
     /// Chat history, oldest first, at most [`CHAT_HISTORY`] lines.
     pub chat_log: Vec<ChatLine>,
+    /// Milliseconds since the session began, advanced by
+    /// [`Self::tick_bubbles`] (one call per frame). Stamps chat lines.
+    pub chat_clock_ms: u64,
     /// Ignored and muted players: their chat, bubbles and PMs are dropped.
     /// Empty by default (nothing hidden); the game loop installs the
     /// lists with [`SessionState::set_filter`].
@@ -1142,7 +1149,7 @@ impl SessionState {
 
     /// Add a line to the chat history.
     pub fn push_chat(&mut self, kind: ChatKind, from: String, text: String) {
-        self.chat_log.push(ChatLine { kind, from, text });
+        self.chat_log.push(ChatLine { kind, from, text, born_ms: self.chat_clock_ms });
         if self.chat_log.len() > CHAT_HISTORY {
             let extra = self.chat_log.len() - CHAT_HISTORY;
             self.chat_log.drain(..extra);
@@ -1188,6 +1195,7 @@ impl SessionState {
     /// Advance the chat bubbles by `dt_ms`. Returns true if one ended, so
     /// the view needs a redraw.
     pub fn tick_bubbles(&mut self, dt_ms: u32) -> bool {
+        self.chat_clock_ms += u64::from(dt_ms);
         let mut ended = false;
         for o in &mut self.others {
             if o.chat_timer.tick(dt_ms) {
