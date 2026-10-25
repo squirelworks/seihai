@@ -1785,21 +1785,22 @@ mod tests {
         server.join().unwrap();
     }
 
-    /// The list is fetched on the port the profile names: 14923 for legacy
-    /// versions (1.41 to 2.04), 14922 for supported ones (2.05 and later),
-    /// and never the dead 14921. Versions with no listserver (1.33 to 1.39)
-    /// borrow 2.05's.
+    /// The list is fetched on the port of the login the profile sends:
+    /// 14923 for the classic login (1.41 to 2.17), 14922 for the gen-5 login
+    /// (2.22 and later), and never the dead 14921. Versions with no
+    /// listserver (1.33 to 1.39) borrow 2.05's classic login.
     #[test]
     fn listserver_port_follows_the_profile() {
-        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
-        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V205.listserver_port(), 14923);
+        assert_eq!(ClientVersion::V217.listserver_port(), 14923);
         assert_eq!(ClientVersion::V222.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V231.listserver_port(), 14922);
         assert_eq!(ClientVersion::V141.listserver_port(), 14923);
-        assert_eq!(ClientVersion::V139.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V139.listserver_port(), 14923);
     }
 
-    /// The builds from 1.41 to 2.04 default to the legacy port, whatever
-    /// port the binary carries.
+    /// The builds from 1.41 to 2.05 default to the classic-login port,
+    /// whatever port the binary carries.
     #[test]
     fn legacy_versions_default_to_the_legacy_port() {
         for v in [
@@ -1810,10 +1811,12 @@ mod tests {
             ClientVersion::V202,
             ClientVersion::V203,
             ClientVersion::V204,
+            ClientVersion::V205,
+            ClientVersion::V210,
+            ClientVersion::V217,
         ] {
             assert_eq!(v.listserver_port(), 14923, "{v:?}");
         }
-        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
     }
 
     /// A dead first address must not stop a working second one.

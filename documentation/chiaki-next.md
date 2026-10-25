@@ -48,4 +48,4 @@ Open the PR for one item, then start the next. Do not wait for merge. The review
 
 ## Port rule (done)
 
-See `documentation/port-rule.md`. 14921 is dead. Legacy (1.41 to 2.04) defaults to 14923, supported (2.05 and later) to 14922, host is always `listserver.graal.in`, the launcher's port box follows the selected version. Confirmed by a public check: 2.00, 2.22, 2.31. Everything else is assumed; see `documentation/version-profiles.md`.
+See `documentation/port-rule.md`. 14921 is dead. The default follows the login type the profile sends: classic login (1.41 to 2.17, including 2.05) 14923, gen-5 login (2.22, 2.3, 2.31) 14922; host is always `listserver.graal.in`, the launcher's port box follows the selected version. Confirmed by the matrix of 2026-10-25 (Seihai's own login): every profile except 2.05, which is assumed. See `documentation/version-profiles.md`.

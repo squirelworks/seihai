@@ -61,15 +61,18 @@ PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv` regenerates it,
 and the unit test `rows_match_version_profile_toml` fails if any row differs.
 When the TOMLs change, regenerate the file and fix the rows the test names.
 Default list endpoint (`documentation/port-rule.md`): every profile dials
-**`listserver.graal.in`**, and 14921 is dead, so none defaults to it. Legacy
-profiles (1.41 to 2.04, classic login) default to **14923**; supported profiles
-(2.05 and later) to **14922**. The host and port the binary carries are kept as
+**`listserver.graal.in`**, and 14921 is dead, so none defaults to it. The public
+listserver answers by login type, not by version or token, so the default
+follows the login the profile sends: profiles that send the classic login
+(`kind` legacy: 1.41 to 2.17, including 2.05) default to **14923**; profiles
+that send the gen-5 login (`kind` supported: 2.22, 2.3, 2.31) default to
+**14922**. The host and port the binary carries are kept as
 `built_in_host` / `built_in_port` (`Listserver::built_in`): history, not what
-Seihai dials. Each profile also carries `kind` (legacy or supported) and
-`status`: **confirmed** for 2.00 (14923), 2.22 and 2.31 (14922), where a public
-check got a list, and **assumed** for every other profile (2.01 to 2.04, 2.05,
-2.1 to 2.17, 2.3), where the rule is applied but nobody ran it. 2.17 is the odd
-one: a classic login on 14922 got no reply. The per-profile table is in
+Seihai dials. Each profile also carries `status`: **confirmed** where a public
+check with Seihai's login for that profile got a list on its port (the matrix of
+2026-10-25: the 15 classic profiles on 14923, 2.22, 2.3 and 2.31 on 14922; a
+real client of those versions was not captured), and **assumed** for 2.05,
+whose classic login was not run. The per-profile table is in
 `client-internals/version-profiles/list-ports.md` in Graal_analysis.
 Defaults are `ClientVersion::listserver_host`, `listserver_port` and
 `listserver_addr`. `--online host:port` is used exactly as given (a bare
