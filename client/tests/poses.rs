@@ -219,3 +219,80 @@ fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
     draw_gani_frame(&mut fb, &gani("sword.gani"), 2, 2, &only, 8, 8);
     assert_ne!(fb.pixels, blank());
 }
+
+// ---- idle, walking and swimming ------------------------------------------
+
+/// A session with every default animation, standing on open floor.
+fn walker() -> OfflineSession {
+    use seihai::assets::{GaniPlayer, Level};
+    let mut s = OfflineSession::new();
+    s.current_level = Some(Level::from_board(&[0u16; 64 * 64]));
+    let mut t = seihai::assets::TileTypes { types: [0; 4096] };
+    t.types[1] = 11; // water
+    s.tiletypes = Some(t);
+    s.player_x = 30.0;
+    s.player_y = 30.0;
+    s.set_pose_gani(PoseKind::Idle, gani("idle.gani"));
+    s.set_walk_gani(GaniPlayer::new(gani("walk.gani")));
+    s.set_swim_gani(GaniPlayer::new(gani("swim.gani")));
+    s
+}
+
+#[test]
+fn standing_is_idle_walking_steps_the_walk_frames_and_stopping_is_idle_again() {
+    let mut s = walker();
+    assert_eq!(pose(&s), Some((PoseKind::Idle, 0)));
+    let frames = gani("walk.gani").frame_count();
+    assert_eq!(frames, 8, "the default walk has 8 steps");
+    // one GANI frame per step taken, the way the footstep cues are stepped
+    let mut seen = Vec::new();
+    for _ in 0..10 {
+        assert!(s.try_move(0.5, 0.0).is_some());
+        seen.push(pose(&s).unwrap());
+    }
+    let expect: Vec<(PoseKind, usize)> = (1..=10).map(|i| (PoseKind::Walk, i % frames)).collect();
+    assert_eq!(seen, expect);
+    // the sprite value other players get does not depend on the pose
+    assert_eq!(s.sprite_value(), s.player_dir);
+    assert!(s.stop_walking());
+    assert_eq!(pose(&s), Some((PoseKind::Idle, 0)));
+    assert!(!s.stop_walking(), "stopping twice changes nothing");
+}
+
+#[test]
+fn a_blocked_step_does_not_start_the_walk_animation() {
+    let mut s = walker();
+    // walk into the board's east edge until a step is refused
+    s.player_x = 58.0;
+    while s.try_move(0.5, 0.0).is_some() {}
+    let (at, frame) = (s.player_x, s.walk_frame());
+    assert!(at > 58.0 && at < 64.0);
+    assert!(s.stop_walking());
+    assert!(s.try_move(0.5, 0.0).is_none());
+    assert_eq!(s.player_x, at);
+    assert_eq!(s.walk_frame(), frame, "a refused step does not step the animation");
+    assert_eq!(pose(&s), Some((PoseKind::Idle, 0)), "a refused step is not walking");
+}
+
+#[test]
+fn in_water_the_swim_animation_is_drawn_and_a_swing_or_hurt_is_not() {
+    let mut s = walker();
+    s.combat.set_rules(Some(COMBAT_205));
+    s.life.set_rules(Some(seihai::protocol::DEATH_205));
+    s.set_pose_gani(PoseKind::Sword, gani("sword.gani"));
+    let tiles: Vec<u16> = (0..64 * 64).map(|i| if (28..40).contains(&(i % 64)) && (20..40).contains(&(i / 64)) { 1 } else { 0 }).collect();
+    s.current_level = Some(seihai::assets::Level::from_board(&tiles));
+    s.player_x = 24.0;
+    s.player_y = 30.0;
+    for _ in 0..6 {
+        s.try_move(0.5, 0.0);
+    }
+    assert!(s.in_water, "the foot is in the pond");
+    let p = s.current_pose().unwrap();
+    assert_eq!(p.kind, PoseKind::Swim);
+    assert!(p.frame < gani("swim.gani").frame_count());
+    // the swim animation is not the walk one
+    let a = art();
+    assert_ne!(draw(&gani("swim.gani"), 0, 2, &a), draw(&gani("walk.gani"), 1, 2, &a));
+    assert_ne!(draw(&gani("walk.gani"), 1, 2, &a), draw(&gani("idle.gani"), 0, 2, &a));
+}

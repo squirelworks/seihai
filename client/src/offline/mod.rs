@@ -88,6 +88,9 @@ pub struct OfflineSession {
     pub npc_ganis: HashMap<String, crate::assets::Gani>,
     /// Draw the sit pose. Nothing sets it yet: no key is bound.
     pub sitting: bool,
+    /// The last step moved the player and no stop has come since: the walk
+    /// animation is drawn instead of idle. Cleared by [`Self::stop_walking`].
+    pub walking: bool,
     /// Sounds from GANI frames entered since the last
     /// [`Self::take_sound_events`].
     pub sound_events: Vec<SoundEvent>,
@@ -241,6 +244,7 @@ impl OfflineSession {
             swim_gani: None,
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
+            walking: false,
             npc_ganis: HashMap::new(),
             sound_events: Vec::new(),
             player_health: 100,
@@ -949,6 +953,7 @@ impl OfflineSession {
             }
         }
         self.armed = true;
+        self.walking = true;
         self.refresh_water();
         // One GANI step per move; each frame entered with a PLAYSOUND cue
         // queues that sound once, at the cue's offset from the player.
