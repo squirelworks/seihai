@@ -95,7 +95,7 @@ The launcher opens. Pick a version, enter your account, and click Connect. Offli
 To skip the launcher:
 
 ```bash
-./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password PASS --version 2.05
+./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14923 --account NAME --password PASS --version 2.05
 ```
 
 To keep the password off the command line, put it in an environment variable and pass the name:

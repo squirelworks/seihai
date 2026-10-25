@@ -23,6 +23,12 @@ pub struct Launcher {
     version_assets: String,
 }
 
+/// The public listserver port for a version label (default 2.05): 14923
+/// for classic-login builds, 14922 for 2.22 and later.
+fn default_port(version: Option<&str>) -> u16 {
+    ClientVersion::from_label(version.unwrap_or("2.05")).unwrap_or(ClientVersion::V205).listserver_port()
+}
+
 impl Launcher {
     pub fn new() -> Self {
         Self::with_error(None)
@@ -43,8 +49,8 @@ impl Launcher {
                 .listserver
                 .as_deref()
                 .and_then(|l| l.split(':').nth(1))
-                .unwrap_or("14922")
-                .to_string(),
+                .map(str::to_string)
+                .unwrap_or_else(|| default_port(s.version.as_deref()).to_string()),
             account: s.account.clone().unwrap_or_default(),
             password: s.password.clone().unwrap_or_default(),
             version: s.version.clone().unwrap_or_else(|| "2.05".into()),
@@ -171,6 +177,10 @@ impl eframe::App for Launcher {
                 });
             ui.checkbox(&mut self.show_advanced, "All versions");
             if self.version != before {
+                // An untouched port follows the new version's default.
+                if self.list_port == default_port(Some(&before)).to_string() {
+                    self.list_port = default_port(Some(&self.version)).to_string();
+                }
                 let label = self.version_enum().label();
                 self.version_assets = Settings::load()
                     .assets_for(label)
@@ -343,4 +353,21 @@ pub fn pick_level(start: &std::path::Path, exts: &[&str]) -> Option<std::path::P
     let _ = eframe::run_native("Pick a level", options, Box::new(|_| Ok(Box::new(picker))));
     let picked = chosen.lock().unwrap().take();
     picked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_port;
+
+    /// The launcher's untouched list port is the public one for the version:
+    /// legacy 14923 for classic-login builds, supported 14922 from 2.22.
+    #[test]
+    fn default_list_port_follows_the_version() {
+        assert_eq!(default_port(None), 14923);
+        assert_eq!(default_port(Some("2.05")), 14923);
+        assert_eq!(default_port(Some("2.17")), 14923);
+        assert_eq!(default_port(Some("2.22")), 14922);
+        assert_eq!(default_port(Some("2.31")), 14922);
+        assert_eq!(default_port(Some("no such version")), 14923);
+    }
 }

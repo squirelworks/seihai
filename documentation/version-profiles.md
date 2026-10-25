@@ -60,12 +60,21 @@ limits, tampercheck, listserver port). `tools/gen_profile_fixture.py
 PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv` regenerates it,
 and the unit test `rows_match_version_profile_toml` fails if any row differs.
 When the TOMLs change, regenerate the file and fix the rows the test names.
-Default list port: 2.00 uses **14923**, the public legacy-support port (user-confirmed
-2026-10-25; a classic 2.00 login there got a plain zlib id-0 list, 14921 is
-refused); the port the 2.00 build itself carries, 14921, is kept in the TOML as
-`built_in_port`. 2.01 to 2.05 keep 14921 (not run on 14923), 2.17 and later
-14922. The port is the profile's default (`ClientVersion::listserver_port`);
-`--online host:port` and the launcher's port box still decide what is dialled.
+Default list endpoint (rule from the user, 2026-10-25): every profile with a
+listserver dials **`listserver.graal.in`**; no profile defaults to 14921 (the
+public service refuses it). Legacy builds (classic single-frame login, 1.41 to
+2.17) use **14923**, supported builds (gen-5 handshake, 2.22, 2.3, 2.31) use
+**14922**. Each profile records `class` and whether it is `confirmed` (seen
+working on the public service) or `assumed` (placed by that rule). Only 2.00
+(14923) and 2.22/2.31 (14922) are confirmed. 1.33 to 1.39 have no listserver in
+the build and borrow 2.05's. The old host and port 14921 that some builds carry
+are prose in the Graal_analysis TOMLs, not data here. Fields: `Listserver { host,
+port, token, class, confirmed }` in `profile.rs`; `ClientVersion::listserver_host`
+and `listserver_port` give the defaults. `--online host:port` and the launcher's
+host and port boxes still decide what is dialled; the launcher's untouched port
+follows the selected version. Tests: `list_endpoints_follow_the_legacy_supported_split`
+and `no_version_resolves_to_the_refused_port`.
+
 Known exception: 2.16 keeps the 2.16 prop limits its TOML note describes
 (54–74), though the TOML's `props_max` still says 45.
 

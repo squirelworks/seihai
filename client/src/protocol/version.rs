@@ -140,7 +140,13 @@ impl ClientVersion {
 
     /// Listserver port, or the 2.05 one for versions without a listserver.
     pub fn listserver_port(self) -> u16 {
-        self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)
+        self.list_version().profile().protocol.listserver.map_or(super::profile::LEGACY_LIST_PORT, |l| l.port)
+    }
+
+    /// Listserver host: `listserver.graal.in` for every profile that has one
+    /// (and for those borrowing 2.05's).
+    pub fn listserver_host(self) -> &'static str {
+        self.list_version().profile().protocol.listserver.map_or(super::profile::LISTSERVER_HOST, |l| l.host)
     }
 
     pub fn listserver_token(self) -> &'static str {

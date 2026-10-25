@@ -4,7 +4,7 @@ This document describes the wire protocol used by Graal Reborn listservers and g
 
 ## Connection Sequence
 
-1. Client connects to the listserver (2.05: `www.graalonline.com:14921`, list name `newmain`; later clients use 14922/14923). On the public service (observed 2026-10-25) 14921 is refused, 14923 answers a classic login with a plain-frame legacy list, and 14922 answers the gen-5 login; see `public-checks.md`.
+1. Client connects to the listserver (the 2.05 build carries an old host and 14921, which are not used; every profile dials `listserver.graal.in`, legacy builds on 14923 and 2.22 and later on 14922; list name `newmain`). On the public service (observed 2026-10-25) 14921 is refused, 14923 answers a classic login with a plain-frame legacy list, and 14922 answers the gen-5 login; see `public-checks.md`.
 2. Client sends account credentials. In 2.05 the first line is client type `0` + key (`Random & 0x7F`) + version token (`GNW03081`) + length-prefixed account and password.
 3. Listserver returns the list of registered gservers.
 4. User selects a server; client opens a second TCP connection to that gserver.

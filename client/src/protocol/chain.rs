@@ -471,7 +471,7 @@ pub const CHAIN: &[Step] = &[
         basis: Basis::Binary,
         delta: Delta {
             encryption: Some(EncryptionGen::Gen3),
-            listserver: Some(Some(Listserver { port: 14923, token: None })),
+            listserver: Some(Some(Listserver::legacy(false))),
             pli: IdDelta::plus_minus(&[], &[31]),
             own_props: IdDelta::plus(&[35, 36]),
             other_props: IdDelta::plus(&[35, 36]),
@@ -497,7 +497,6 @@ pub const CHAIN: &[Step] = &[
         date: "2001-01-10",
         basis: Basis::Binary,
         delta: Delta {
-            listserver: Some(Some(Listserver { port: 14921, token: None })),
             plo: IdDelta::plus(&[42, 44, 45, 150, 151, 153]),
             pli: IdDelta::plus(&[34]),
             death: Some(None),
@@ -508,7 +507,7 @@ pub const CHAIN: &[Step] = &[
         },
         source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, GS1 126 to 134",
         unknown: &[
-            Unknown { area: "listserver", what: "host and port of this build; 14921 is the template value" },
+            Unknown { area: "listserver", what: "the build carries an old host and port 14921 (refused by the public service); neither is used. The endpoint is listserver.graal.in:14923 by the legacy rule (classic login), assumed" },
             Unknown { area: "listserver", what: "whether 1.42 sends the account to the listserver" },
         ],
     },
@@ -519,8 +518,8 @@ pub const CHAIN: &[Step] = &[
         date: "2001-02-01",
         basis: Basis::Binary,
         delta: Delta {
-            // 14923 is the public legacy-support port (the build itself carries 14921).
-            listserver: Some(Some(Listserver { port: 14923, token: None })),
+            // Confirmed: a classic login on 14923 got a plain zlib id-0 list.
+            listserver: Some(Some(Listserver::legacy(true))),
             plo: IdDelta::plus(&[154, 155]),
             gs1_commands: Some(142),
             ..Delta::NONE
@@ -539,15 +538,15 @@ pub const CHAIN: &[Step] = &[
         date: "2001-03-08",
         basis: Basis::Binary,
         delta: Delta {
-            // Back to the build's own port: 2.01 to 2.05 were not run on 14923.
-            listserver: Some(Some(Listserver { port: 14921, token: None })),
+            // Same endpoint as 2.00, but only assumed: not run on 14923.
+            listserver: Some(Some(Listserver::legacy(false))),
             plo: IdDelta::plus(&[46, 156]),
             pli: IdDelta::plus(&[35, 36]),
             gs1_commands: Some(144),
             ..Delta::NONE
         },
         source: "binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144",
-        unknown: &[Unknown { area: "listserver", what: "not run on 14923 (the public legacy port); 14921, the port the build carries, is refused by the public service" }],
+        unknown: &[Unknown { area: "listserver", what: "2.01 to 2.05 were not run on 14923 with a classic login; they are placed there by the rule (classic login = legacy)" }],
     },
     Step {
         version: ClientVersion::V202,
@@ -626,7 +625,7 @@ pub const CHAIN: &[Step] = &[
         },
         source: "binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death and combat rules traced here",
         unknown: &[
-            Unknown { area: "login", what: "listserver host and port differ per server (built-in 14921, Reborn 14922 or 14923)" },
+            Unknown { area: "login", what: "the listserver host and port differ per server; the profile uses listserver.graal.in:14923 (legacy rule, assumed)" },
         ],
     },
     // 2.1 to 2.16 have no binary. Their deltas are release notes and server
@@ -639,7 +638,6 @@ pub const CHAIN: &[Step] = &[
         date: "",
         basis: Basis::Inferred,
         delta: Delta {
-            listserver: Some(Some(Listserver { port: 14922, token: None })),
             plo: IdDelta { plus: &[49], plus_ranges: &[(169, 174)], ..IdDelta::NONE },
             own_props: IdDelta { plus_ranges: &[(43, 45)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(43, 45)], ..IdDelta::NONE },
@@ -764,7 +762,7 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             client_type: Some(5),
             encryption: Some(EncryptionGen::Gen5),
-            listserver: Some(Some(Listserver { port: 14922, token: Some("GNW30123") })),
+            listserver: Some(Some(Listserver::supported(Some("GNW30123"), true))),
             plo: IdDelta::plus(&[186]),
             pli: IdDelta::plus_minus(&[], &[36, 45, 81]),
             tamper: Some(Some(TAMPER_222)),
@@ -789,6 +787,8 @@ pub const CHAIN: &[Step] = &[
         date: "",
         basis: Basis::Inferred,
         delta: Delta {
+            // No binary and no run: the class is carried from 2.31, unconfirmed.
+            listserver: Some(Some(Listserver::supported(Some("GNW30123"), false))),
             plo: IdDelta::plus_minus(&[84, 189], &[44]),
             pli: IdDelta::plus_minus(&[46], &[21]),
             tamper: Some(Some(TAMPER_230)),
@@ -819,6 +819,7 @@ pub const CHAIN: &[Step] = &[
         date: "",
         basis: Basis::Binary,
         delta: Delta {
+            listserver: Some(Some(Listserver::supported(Some("GNW30123"), true))),
             tamper: Some(Some(TAMPER_231)),
             showimg: Some(Some(SHOWIMG_231)),
             login: Some(Some(LOGIN_231)),
@@ -944,10 +945,13 @@ fn yes_no(v: &bool) -> String {
 fn listserver_text(l: &Option<Listserver>) -> String {
     match l {
         None => "none".into(),
-        Some(l) => match l.token {
-            Some(t) => format!("port {}, token {t}", l.port),
-            None => format!("port {}", l.port),
-        },
+        Some(l) => {
+            let sure = if l.confirmed { "confirmed" } else { "assumed" };
+            match l.token {
+                Some(t) => format!("{}:{} ({}, {sure}), token {t}", l.host, l.port, l.class.name()),
+                None => format!("{}:{} ({}, {sure})", l.host, l.port, l.class.name()),
+            }
+        }
     }
 }
 
@@ -1183,9 +1187,11 @@ mod tests {
     }
 
     /// Behaviour is unchanged: every build that existed before the chain
-    /// resolves to exactly the row that was written out by hand. One row was
-    /// changed on purpose afterwards: 2.00's listserver port is 14923, the
-    /// public legacy-support port (it was 14921, the port the build carries).
+    /// resolves to exactly the row that was written out by hand. The
+    /// listserver field was rewritten on purpose afterwards (user rule,
+    /// 2026-10-25): host listserver.graal.in, legacy 14923 or supported 14922,
+    /// with its class and confirmed flag; none is 14921, the port the old
+    /// builds carry.
     #[test]
     fn chain_equals_the_hand_written_rows() {
         let mut seen = 0;

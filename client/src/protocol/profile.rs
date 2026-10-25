@@ -149,13 +149,63 @@ pub enum ServerList {
     Tabs(u8),
 }
 
+/// The public listserver every profile dials by default. (Builds carry old
+/// hosts and port 14921; the public service refuses 14921, so none of them is
+/// a default. They are noted in the profile TOMLs and `public-checks.md`.)
+pub const LISTSERVER_HOST: &str = "listserver.graal.in";
+/// Legacy port: the classic single-frame login (every build up to 2.17).
+pub const LEGACY_LIST_PORT: u16 = 14923;
+/// Supported port: the gen-5 handshake (2.22 and later).
+pub const SUPPORTED_LIST_PORT: u16 = 14922;
+
+/// Which public listserver port a profile's login belongs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListClass {
+    /// Classic login, port 14923.
+    Legacy,
+    /// Gen-5 login, port 14922.
+    Supported,
+}
+
+impl ListClass {
+    pub const fn port(self) -> u16 {
+        match self {
+            ListClass::Legacy => LEGACY_LIST_PORT,
+            ListClass::Supported => SUPPORTED_LIST_PORT,
+        }
+    }
+    pub const fn name(self) -> &'static str {
+        match self {
+            ListClass::Legacy => "legacy",
+            ListClass::Supported => "supported",
+        }
+    }
+}
+
 /// Listserver login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Listserver {
+    /// Always [`LISTSERVER_HOST`].
+    pub host: &'static str,
     pub port: u16,
     /// Token sent at listserver login. 2.22 and 2.31 send `GNW30123`
     /// inside id 7; older clients send their game token.
     pub token: Option<&'static str>,
+    pub class: ListClass,
+    /// The class was seen working on the public service (true), or placed
+    /// by the rule "classic login = legacy, gen-5 = supported" (false).
+    pub confirmed: bool,
+}
+
+impl Listserver {
+    /// Public legacy endpoint (classic login).
+    pub const fn legacy(confirmed: bool) -> Self {
+        Listserver { host: LISTSERVER_HOST, port: LEGACY_LIST_PORT, token: None, class: ListClass::Legacy, confirmed }
+    }
+    /// Public supported endpoint (gen-5 login).
+    pub const fn supported(token: Option<&'static str>, confirmed: bool) -> Self {
+        Listserver { host: LISTSERVER_HOST, port: SUPPORTED_LIST_PORT, token, class: ListClass::Supported, confirmed }
+    }
 }
 
 /// Login, framing and the packets a version speaks.
@@ -678,6 +728,9 @@ mod tests {
         other: Option<IdSet>,
         tampercheck: bool,
         list_port: Option<u16>,
+        list_host: String,
+        list_class: String,
+        list_status: String,
     }
 
     fn parse_ids(s: &str) -> Option<IdSet> {
@@ -698,7 +751,7 @@ mod tests {
             .filter(|l| !l.starts_with('#') && !l.is_empty())
             .map(|l| {
                 let c: Vec<&str> = l.split('\t').collect();
-                assert_eq!(c.len(), 10, "{l}");
+                assert_eq!(c.len(), 13, "{l}");
                 TomlRow {
                     label: c[0].to_string(),
                     token: c[1].to_string(),
@@ -710,6 +763,9 @@ mod tests {
                     other: parse_ids(c[7]),
                     tampercheck: c[8] == "1",
                     list_port: c[9].parse().ok(),
+                    list_host: c[10].to_string(),
+                    list_class: c[11].to_string(),
+                    list_status: c[12].to_string(),
                 }
             })
             .collect()
@@ -742,6 +798,12 @@ mod tests {
             check("tampercheck", p.protocol.tampercheck == t.tampercheck);
             check("sends_language == pli has 37", p.protocol.sends_language == t.pli.contains(37));
             check("listserver port", p.protocol.listserver.map(|l| l.port) == t.list_port);
+            check("listserver host", p.protocol.listserver.map_or("-", |l| l.host) == t.list_host);
+            check("listserver class", p.protocol.listserver.map_or("-", |l| l.class.name()) == t.list_class);
+            check(
+                "listserver status",
+                p.protocol.listserver.map_or("-", |l| if l.confirmed { "confirmed" } else { "assumed" }) == t.list_status,
+            );
             // 2.16: its TOML entry keeps the 2.15 prop limit but notes that
             // 54-74 arrive in 2.16; the row follows the note.
             if t.label != "2.16" {
@@ -752,6 +814,64 @@ mod tests {
             }
         }
         assert!(bad.is_empty(), "rows differ from the TOML: {bad:#?}");
+    }
+
+    /// The public listserver rule (user, 2026-10-25): no profile defaults to
+    /// 14921 (refused), every profile dials `listserver.graal.in`, legacy
+    /// builds use 14923 and supported builds 14922. The expected split is
+    /// written out here: (label, supported, confirmed). 1.33 to 1.39 have no
+    /// listserver of their own and borrow 2.05's.
+    #[test]
+    fn list_endpoints_follow_the_legacy_supported_split() {
+        let table: &[(&str, bool, bool)] = &[
+            ("1.41", false, false),
+            ("1.42", false, false),
+            ("2.00", false, true),
+            ("2.01", false, false),
+            ("2.02", false, false),
+            ("2.02 rev2", false, false),
+            ("2.03", false, false),
+            ("2.04", false, false),
+            ("2.05", false, false),
+            ("2.1", false, false),
+            ("2.12", false, false),
+            ("2.13", false, false),
+            ("2.14", false, false),
+            ("2.15", false, false),
+            ("2.16", false, false),
+            ("2.17", false, false),
+            ("2.22", true, true),
+            ("2.3", true, false),
+            ("2.31", true, true),
+        ];
+        let mut with_list = 0;
+        for p in PROFILES {
+            let Some(l) = p.protocol.listserver else {
+                assert!(p.label.starts_with("1.3"), "{} has no listserver", p.label);
+                continue;
+            };
+            with_list += 1;
+            assert_ne!(l.port, 14921, "{} defaults to the refused port", p.label);
+            assert_eq!(l.host, "listserver.graal.in", "{}", p.label);
+            let &(_, supported, confirmed) =
+                table.iter().find(|(label, _, _)| *label == p.label).unwrap_or_else(|| panic!("{} not in the table", p.label));
+            assert_eq!(l.class, if supported { ListClass::Supported } else { ListClass::Legacy }, "{}", p.label);
+            assert_eq!(l.port, if supported { 14922 } else { 14923 }, "{}", p.label);
+            assert_eq!(l.confirmed, confirmed, "{}", p.label);
+        }
+        assert_eq!(with_list, table.len());
+    }
+
+    /// Through the public API: no version resolves to 14921, all use the one host.
+    #[test]
+    fn no_version_resolves_to_the_refused_port() {
+        for &v in ClientVersion::all_versions() {
+            assert_ne!(v.listserver_port(), 14921, "{v:?}");
+            assert!(matches!(v.listserver_port(), 14922 | 14923), "{v:?}");
+            assert_eq!(v.listserver_host(), "listserver.graal.in", "{v:?}");
+        }
+        // 1.33 to 1.39 borrow 2.05's.
+        assert_eq!(ClientVersion::V139.listserver_port(), ClientVersion::V205.listserver_port());
     }
 
     /// The corrections this table was regenerated for.
@@ -780,12 +900,8 @@ mod tests {
         // A real 2.31 client answers the process-list request with 44.
         assert!(pli(ClientVersion::V231).contains(44));
         assert_eq!(pli(ClientVersion::V230), pli(ClientVersion::V231));
-        // 2.17's listserver default is 14922.
-        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
-        assert_eq!(ClientVersion::V205.listserver_port(), 14921);
-        // 2.00 defaults to the public legacy port (14923), 2.01 to 2.05 do not.
-        assert_eq!(ClientVersion::V200.listserver_port(), 14923);
-        assert_eq!(ClientVersion::V201.listserver_port(), 14921);
+        // 2.17 sends the classic login, so it is a legacy (14923) profile.
+        assert_eq!(ClientVersion::V217.listserver_port(), 14923);
         assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
     }
 

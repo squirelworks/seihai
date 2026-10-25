@@ -68,10 +68,12 @@ What stays open:
   untested.
 - No game-server login has been made. Login frames, file requests, the tamper
   check and chat on a public game server are all still unobserved.
-- Seihai's default list ports are unchanged (see "Port facts"). The profile
-  value is what the original client binary uses, and the fixture is generated
-  from the Graal_analysis profiles; the public service's answer is a separate
-  fact. Use `--online HOST:14923` for classic profiles.
+- Default list endpoints (user rule, 2026-10-25): no profile defaults to 14921;
+  all point at `listserver.graal.in`; legacy builds (classic login, up to 2.17)
+  carry 14923 and supported builds (gen-5, 2.22 and later) carry 14922. Only
+  2.00 (14923) and 2.22/2.31 (14922) are confirmed; every other row is assumed
+  by that rule (2.05 and 2.17 included: the classic 2.17 login got no reply on
+  14922, and 2.05 follows 2.00's classic login). See `version-profiles.md`.
 
 ## The first attempt from the build box
 

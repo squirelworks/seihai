@@ -37,7 +37,7 @@ pub use props::{
     decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_in, parse_player_props_with, PlayerProp,
 };
 pub use profile::{
-    by_label, profile, Basis, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, Listserver, Props, Protocol, ServerList, Ui,
+    by_label, profile, Basis, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListClass, Listserver, Props, Protocol, ServerList, Ui,
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, PROFILES,
 };
 pub use showimg::{

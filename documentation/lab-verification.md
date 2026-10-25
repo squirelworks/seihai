@@ -23,8 +23,8 @@ The checks run Seihai's own code through the examples in `client/examples/`:
 ## 2. Listserver reply
 This was checked against the lab stub's first server frame. A stub is not a real listserver, so the shape still needs a check against one.
 
-- **2.05 (14921):** the client sends a plain zlib frame containing id 0 `newmain`. The reply is a plain zlib frame.
-- **2.17 (14922):** one plain zlib frame with id 0 `newmain` and id 1 account and password, no key and no id 7. The reply is two plain zlib frames: the list (id 0), then ids 2, 3 and 5 (status, site URL, upgrade URL). `fetch_server_list` reads both, with one 500 ms bound for the second.
+- **2.05 (lab stub port; the public legacy port is 14923):** the client sends a plain zlib frame containing id 0 `newmain`. The reply is a plain zlib frame.
+- **2.17 (lab stub port; classic login, public legacy port 14923):** one plain zlib frame with id 0 `newmain` and id 1 account and password, no key and no id 7. The reply is two plain zlib frames: the list (id 0), then ids 2, 3 and 5 (status, site URL, upgrade URL). `fetch_server_list` reads both, with one 500 ms bound for the second.
 - **2.22 (14922):** the client sends id 7 = GCHAR key + `GNW30123newmain`. The reply is a gen-5 frame, ctype 4, keyed with that key, and its iterator starts at the seed.
 - **Body:** the body is id 0 `SVRLIST`: `c count`, then for each server `c 8` followed by 8 GSTRINGs (type+name, language, description, url, version, players, ip, port). After that comes id 2 `STATUS` text.
 - **Parser:** the old `parse_list_reply` expected `name,host,port` text lines and found nothing in this reply. It now parses the GSTRING layout above, plus ids 2–5. Both stub replies are unit tests.
