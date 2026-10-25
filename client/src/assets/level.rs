@@ -453,6 +453,14 @@ impl Level {
             return Ok((z.to_level(), z.layout.to_graal_layout()));
         }
         let magic = &data[0..8];
+        // Text levels and maps are not bitstreams: say so instead of
+        // decoding their letters as board codes.
+        if magic == b"GLEVNW01" || magic == b"GRMAP001" {
+            return Err(format!(
+                "{} is a text file, not a binary level (.graal / .zelda)",
+                String::from_utf8_lossy(magic)
+            ));
+        }
         let codebits = graal_code_bits(magic);
         let mut tiles = vec![0u16; 4096];
         let mut boardindex = 0usize;
@@ -812,7 +820,14 @@ fn parse_npc(lines: &[String]) -> Option<Npc> {
     let x: f32 = header[2].parse().ok()?;
     let y: f32 = header[3].parse().ok()?;
 
-    let script = lines[1..lines.len().saturating_sub(1)]
+    // A block that is only its header line is malformed (no body, no
+    // NPCEND): skip it. A closing NPCEND is dropped from the script; a
+    // block cut off before NPCEND keeps all its lines.
+    if lines.len() < 2 {
+        return None;
+    }
+    let end = if lines[lines.len() - 1].trim() == "NPCEND" { lines.len() - 1 } else { lines.len() };
+    let script = lines[1..end]
         .iter()
         .map(|s| s.as_str())
         .collect::<Vec<_>>()
@@ -1375,6 +1390,43 @@ CHEST 8 8 greenrupee 0
         assert_eq!(lvl.baddies[0].kind, "0");
         assert_eq!(lvl.chests.len(), 1);
         assert_eq!(lvl.chests[0].item, "greenrupee");
+    }
+
+    #[test]
+    fn header_only_npc_block_is_skipped_not_a_panic() {
+        // Synthetic: an NPC header at the end of the file, no body, no NPCEND.
+        let text = "GLEVNW01\nNPC image.png 10 12\n";
+        let lvl = Level::parse(text).unwrap();
+        assert!(lvl.npcs.is_empty());
+        // The same in the middle: the block swallows lines up to the next NPCEND
+        // or the end of the file, and parsing still finishes.
+        let text = "GLEVNW01\nNPC image.png 10 12";
+        assert!(Level::parse(text).unwrap().npcs.is_empty());
+    }
+
+    #[test]
+    fn npc_block_shapes() {
+        // Header and NPCEND only: an NPC with an empty script.
+        let lvl = Level::parse("GLEVNW01\nNPC a.png 1 2\nNPCEND\n").unwrap();
+        assert_eq!(lvl.npcs.len(), 1);
+        assert_eq!(lvl.npcs[0].script, "");
+        // Normal block.
+        let lvl = Level::parse("GLEVNW01\nNPC a.png 1 2\nif (created) {\n}\nNPCEND\n").unwrap();
+        assert_eq!(lvl.npcs[0].script, "if (created) {\n}");
+        // Cut off before NPCEND: the lines read so far are kept.
+        let lvl = Level::parse("GLEVNW01\nNPC a.png 1 2\nsetimg x;").unwrap();
+        assert_eq!(lvl.npcs[0].script, "setimg x;");
+        // Bad header numbers: skipped.
+        assert!(Level::parse("GLEVNW01\nNPC a.png x y\nNPCEND\n").unwrap().npcs.is_empty());
+    }
+
+    #[test]
+    fn binary_reader_refuses_text_levels_and_maps() {
+        for magic in ["GLEVNW01", "GRMAP001"] {
+            let data = format!("{magic}\nWIDTH 2\nHEIGHT 2\n");
+            let e = Level::parse_binary_with_layout(data.as_bytes()).unwrap_err();
+            assert!(e.contains("text file"), "{e}");
+        }
     }
 
     #[test]
