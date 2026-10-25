@@ -81,13 +81,17 @@ nothing about that).
 - `PLO_HURTPLAYER` (40): `GSHORT attacker, GCHAR dx, GCHAR dy, GCHAR power`
   and an optional `GINT3 npc` when 6 or more bytes follow the id. Knockback is
   `(byte - 0x60) / 16` tiles, power `byte - 32` half hearts. It applies when
-  the victim can be hurt, the level is not `noplayerkilling`, and the attacker
-  is within 10 tiles (distance in a straight line); power is capped at one
-  heart. AP is **not** checked: the
-  notes make AP 100 immune to the sword only.
+  the victim can be hurt, the attacker is a known player, AP is not 100, the
+  level is not `noplayerkilling`, the once-a-second stamp and the guild test
+  pass (the same ones as the sword), and the attacker is within 10 tiles
+  (squared distance of the X/Y props at most 100); power is capped at one heart
+  and 0 is accepted. There is no attacker STATUS test. The knockback is
+  `(dx, dy)` (`damage-respawn.md`, "Packet path").
 - `PLO_HITOBJECTS` (46): `GSHORT attacker, GCHAR power*2, GCHAR x*2,
-  GCHAR y*2` and an optional `GINT3 npc`. Decoded into `hits`, **not applied**
-  (below).
+  GCHAR y*2` and an optional `GINT3 npc`. Applied: the hit point is
+  `(b1/2, b2/2)`, the victim's centre is `(X+1.5, Y+2.0)`, a hit lands when the
+  box is strictly under 2 tiles on each axis; same gates and cap as id 40; the
+  knockback is centre minus point.
 - `PLI_HURTPLAYER` (26), the attacker's form: `GSHORT victim, GCHAR (dx+4)*16,
   GCHAR (dy+4)*16, GCHAR power`. `combat::hurtplayer_message` builds it and
   refuses (`Result::Err`) when the victim would: in the profile's send set,
@@ -141,13 +145,12 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
   often. Seihai tests when a props update shows a swing sprite. A victim who
   walks into a swing without a new update from the attacker is not caught, and
   repeats within one swing are stopped by hurt mode.
-- **Id 46 is not applied.** The notes say it hurts a player "whose centre is
-  within 2 tiles of (x, y) on each axis". Where a player's centre is, relative
-  to the X/Y prop, is not in them, so any choice would be a guess.
 - **NPC-sourced hits** (40 with an NPC id) are refused: the NPC's position is
   needed for the 10-tile test and online NPC props are not decoded.
-- **Knockback** (decoded) is not applied. The notes give no rule for how a
-  knockback moves the player (distance, speed, collision).
+- **Knockback** is applied, one tile a tick for five ticks, each step undone
+  when one of 12 body-box probes is blocked (`damage-respawn.md`). Tile
+  `Blocking` and chests block; a walk-through (wallhack) session skips the
+  probes. A push across a gmap cell edge crosses it like a walk step.
 - **Explosions** (`PLO_EXPLOSION` 36, within 1 tile on both axes) and arrows,
   and the `playerhurt` script event, are not done.
 - **Preconditions of a swing** the notes list and Seihai skips: the level or
@@ -156,8 +159,6 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
   traced further.
 - **Swim and editor/pause.** Swimming blocks hits (mode 10). The editor/pause
   exemption has no Seihai equivalent.
-- **Distance rule.** "Within 10 tiles" is taken as a straight-line distance.
-  Graal_analysis words 46's rule per axis and 40's without saying; a per-axis
-  test would accept more hits near the corners.
+- **Distance rule.** Settled by the decompile: the squared distance between the X/Y props is at most 100, for ids 40 and 46 alike (a circle, not per axis).
 - **Lab.** No run against the real client or a server; the layouts and rules
-  are the documents' and the decompile's.
+  are the documents' and the decompile's (2.05 rev 2, 2.17.1, 2.22, 2.31).
