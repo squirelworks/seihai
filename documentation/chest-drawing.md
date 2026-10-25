@@ -23,7 +23,8 @@ The routine, read from the 2.05 client's code:
 
 These are the entries of `arrays.dat` arrays 13 (closed) and 14 (open), so
 2.22 has the same art. A chest also blocks walking as a 2 x 2 box, opened or
-not (`walking-collision.md`), and the A key opens a closed one.
+not (`walking-collision.md`), and the A key opens a closed one, but only from below with the player facing up
+(see "Opening" below).
 
 ## The records
 
@@ -47,6 +48,18 @@ before the NPCs:
 * the built-in sheet (own art, other ids): a chest already on the board under
   the record is left as it is (opened ones get the open tiles, id + 2),
   otherwise the built-in grass chest `64 65 / 80 81` (open `66 67 / 82 83`).
+
+## Opening (real 2.22 client, lab capture 2026-10-25)
+
+With a chest record injected next to a real 2.22 client: the action key (A)
+opens a closed chest only when the player faces **up** with the chest above
+(player below it). Pressed against the chest from the east, west or north side
+(facing west, east or south) it sends nothing. On opening the client asks for
+`chest.wav`, sends `PLI_OPENCHEST` (20) with the chest's top-left tile x and y,
+and draws the chest open at once (no server reply needed). About 1.2 s later it
+sends packet 13 with the position one tile above the chest. It sends no rupee or
+props update. Seihai now opens chests only when facing north.
+(Not checked on 2.05.)
 
 ## Signs
 
