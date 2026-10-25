@@ -16,7 +16,7 @@ What remains after the current gmaps / script engine / differential testing work
 - File transfer leftovers: the `GWEBL001` level cache, the login set of `UPDATEFILE`s and the file-index scan order (`documentation/file-cache.md`).
 - Early builds. A real 2.00-era listserver reply, which is still unobserved. Skipped (item 13): nothing new observed.
 - Public-server checks. Approved (read-only, then chat, warps and file transfer), but the build box could not reach any listserver port on 2026-10-25, so nothing was observed. Checklist and port facts in `documentation/public-checks.md`; run it from a network that reaches ports 14921 to 14923.
-- Level editor: notes are in Graal_analysis `tools/level-editor/` (item 16). Seihai tracking checklist is ready; no implementation started.
+- Level editor (item 24): [x] tracking checklist copied to `documentation/level-editor.md`; [x] first slice, `tools/level-editor` CLI: opens a `.nw` (GLEVNW01 text), `list` (summary, `--rows` dump), `paint` a rectangle of one tile id (bounds and id < 4096 checked), `save` (untouched levels byte-identical; after a paint the BOARD rows are rewritten canonically and every other line is kept; temp file and rename), `--version` 2.22 (default) and 2.17.1, other versions say "not yet" with a reason; 18 tests. Not done: binary levels, any GUI, selection/undo/stamps, link/sign/chest/baddy/NPC editing, 2.05 and older profiles.
 
 ## Done
 

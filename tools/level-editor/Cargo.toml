@@ -4,5 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "level_editor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "level-editor"
+path = "src/main.rs"
+
 [dependencies]
 seihai = { path = "../../client" }
