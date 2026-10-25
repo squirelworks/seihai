@@ -150,6 +150,10 @@ pub struct Chest {
     pub y: i32,
     pub item: String,
     pub sign_index: i32,
+    /// The server sent this chest as already opened (the short record). A
+    /// chest from a level file is closed; one opened in play is tracked by
+    /// the session.
+    pub opened: bool,
 }
 
 /// A 2 x 2 object as the client's tables hold it, `[column][row]`.
@@ -552,15 +556,16 @@ impl Level {
     /// plus 32. An opened chest has no item on the wire, so its item stays
     /// empty. Records too short to hold a position are skipped.
     ///
-    /// The record is all the client has of a chest: it draws nothing for
-    /// it. Whatever the chest looks like is already in the board tiles.
+    /// The client draws the chest from the record (a 2 x 2 blit of the
+    /// closed or open chest tiles), see `render::draw_chests`.
     pub fn add_server_chests(&mut self, records: &[String]) {
         for r in records {
             let b = r.as_bytes();
             if b.len() < 3 {
                 continue;
             }
-            let opened = b[0].wrapping_sub(0x20) == 1;
+            // The client reads any non-zero first byte as "opened".
+            let opened = b[0].wrapping_sub(0x20) != 0;
             let (x, y) = (b[1].wrapping_sub(0x20) as i32, b[2].wrapping_sub(0x20) as i32);
             let (item, sign_index) = match b {
                 [_, _, _, i, s, ..] if !opened => (
@@ -569,7 +574,7 @@ impl Level {
                 ),
                 _ => (String::new(), -1),
             };
-            self.chests.push(Chest { x, y, item, sign_index });
+            self.chests.push(Chest { x, y, item, sign_index, opened });
         }
     }
 
@@ -1307,6 +1312,7 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level, layout: &
                     .and_then(|i| CHEST_ITEMS.get(i))
                     .map_or_else(|| item.to_string(), |n| n.to_string()),
                 sign_index: l[3] as i32 - 32,
+                opened: false,
             });
         }
     }
@@ -1455,6 +1461,7 @@ fn parse_chest(line: &str) -> Option<Chest> {
         y: parts[2].parse().ok()?,
         item: parts[3].to_string(),
         sign_index: parts[4].parse().ok()?,
+        opened: false,
     })
 }
 
@@ -1563,6 +1570,7 @@ mod tests {
         board.add_server_chests(&[opened, closed, "!".into()]);
         assert_eq!(board.chests.len(), 2);
         assert_eq!((board.chests[0].x, board.chests[0].y, board.chests[0].item.as_str()), (23, 19, ""));
+        assert!(board.chests[0].opened && !board.chests[1].opened);
         assert_eq!((board.chests[1].x, board.chests[1].y, board.chests[1].item.as_str(), board.chests[1].sign_index), (5, 6, "greenrupee", 2));
         // A sign: x 7, y 8, text "AB" (alphabet codes 0, 1).
         let sign: String = [0x20u8 + 7, 0x20 + 8, 0x20, 0x21].iter().map(|&b| b as char).collect();

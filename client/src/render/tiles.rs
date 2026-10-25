@@ -236,11 +236,39 @@ impl Framebuffer {
 }
 
 /// Closed chest tile ids of the built-in tile sheet, and the open tile of
-/// each (the open art sits two ids to the right). A level's chest record is a
-/// trigger; the chest itself is drawn from the board, as in the real client.
-/// The built-in sheet has two chests (on grass and on a wood floor), each
-/// 2x2 tiles (`id`, `id + 1`, `id + 16`, `id + 17`).
+/// each (the open art sits two ids to the right). The built-in sheet has two
+/// chests (on grass and on a wood floor), each 2x2 tiles (`id`, `id + 1`,
+/// `id + 16`, `id + 17`). A level that already has one of them on its board
+/// at a chest record keeps it (the open art is swapped in); otherwise the
+/// grass chest is drawn from the record.
 pub const BUILTIN_CHEST_CLOSED: [u16; 8] = [64, 65, 80, 81, 68, 69, 84, 85];
+
+/// The grass chest of the built-in sheet: top-left, top-right, bottom-left,
+/// bottom-right.
+pub const BUILTIN_CHEST_GRASS: [u16; 4] = [64, 65, 80, 81];
+
+/// The chest art of the real 2.05 and 2.22 tile sheets: `arrays.dat` array 13
+/// (closed) and array 14 (open), as top-left, top-right, bottom-left,
+/// bottom-right tile ids. The client draws a chest from its record as a 32x32
+/// blit of these tiles (closed from (896, 240), open from (464, 304) of the
+/// sheet), 2x2 tiles at the record's x and y.
+pub const CHEST_CLOSED_TILES: [u16; 4] = [1784, 1785, 1800, 1801];
+pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
+
+/// The four tiles to draw for a chest record, or `None` when the board
+/// already shows it (built-in sheet with its own chest tiles there).
+/// `board_has_chest` says whether the board has a built-in chest tile under
+/// the record.
+pub fn chest_art(opts: ViewOptions, opened: bool, board_has_chest: bool) -> Option<[u16; 4]> {
+    if opts.builtin_sheet {
+        if board_has_chest {
+            return None;
+        }
+        let d = if opened { 2 } else { 0 };
+        return Some(BUILTIN_CHEST_GRASS.map(|t| t + d));
+    }
+    Some(if opened { CHEST_OPEN_TILES } else { CHEST_CLOSED_TILES })
+}
 
 /// How to draw a view beyond what the level's board says.
 #[derive(Debug, Clone, Copy, Default)]
@@ -256,8 +284,8 @@ pub struct ViewOptions {
 ///
 /// `sheet` is the RGB tile sheet (2048×512 for `pics1.png`).
 /// `view_tiles_w` / `view_tiles_h` is the visible window in tiles.
-/// The player is drawn as a 16×16 marker. Chests and signs are not drawn
-/// by this function: their art is part of the board.
+/// The player is drawn as a 16×16 marker. Chest records are drawn over the
+/// board (see [`chest_art`]); signs are not drawn, their art is the board's.
 pub fn render_view(
     session: &OfflineSession,
     sheet: &[u8],
@@ -318,7 +346,9 @@ pub fn render_view_with(
         }
     }
 
-    // Chests and signs are part of the board (see `ViewOptions`); NPCs next.
+    // Chests are drawn from their records, over the board; signs have no
+    // art of their own. NPCs next.
+    draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y, opts);
     for npc in &level.npcs {
         // An NPC drawn as an animation has no placeholder under it.
         if npc.visible && npc.ani.is_none() {
@@ -328,6 +358,26 @@ pub fn render_view_with(
     }
 
     fb
+}
+
+/// Draw the level's chest records: a 2x2 block of the closed or open chest
+/// tiles at the record's tile position. The client skips a chest whose x or y
+/// is outside 0 to 62.
+#[allow(clippy::too_many_arguments)]
+fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::assets::Level, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32, opts: ViewOptions) {
+    let t = TILE_PX as i32;
+    for c in &level.chests {
+        if !(0..=62).contains(&c.x) || !(0..=62).contains(&c.y) {
+            continue;
+        }
+        let opened = c.opened || session.opened_chests.contains(&(c.x, c.y));
+        let board_has_chest = (0..2).any(|dy| (0..2).any(|dx| tile_at(level, c.x + dx, c.y + dy).is_some_and(|id| BUILTIN_CHEST_CLOSED.contains(&id))));
+        let Some(ids) = chest_art(opts, opened, board_has_chest) else { continue };
+        for (i, id) in ids.into_iter().enumerate() {
+            let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
+            fb.blit_tile(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
+        }
+    }
 }
 
 /// Top-left pixel of the view in level pixels: the camera centres on
@@ -536,6 +586,97 @@ mod tests {
 
     fn red_at(fb: &Framebuffer, x: u32, y: u32) -> u8 {
         fb.pixels[((y * fb.width + x) * 3) as usize]
+    }
+
+    /// A 2048×512 sheet where tile `id` is a flat colour: the id's low byte
+    /// in red, its high byte in green.
+    fn id_sheet() -> Vec<u8> {
+        let mut sheet = vec![0u8; 2048 * 512 * 3];
+        for id in 0..4096u32 {
+            let (col, row) = (id % 16 + (id / 512) * 16, (id / 16) % SHEET_ROWS);
+            for y in 0..16 {
+                for x in 0..16 {
+                    let i = (((row * 16 + y) * 2048) + col * 16 + x) as usize * 3;
+                    sheet[i] = id as u8;
+                    sheet[i + 1] = (id >> 8) as u8;
+                }
+            }
+        }
+        sheet
+    }
+
+    fn id_at(fb: &Framebuffer, x: u32, y: u32) -> u16 {
+        let i = ((y * fb.width + x) * 3) as usize;
+        fb.pixels[i] as u16 | (fb.pixels[i + 1] as u16) << 8
+    }
+
+    /// A level of plain tile 1 with the given chest records, the player
+    /// standing so that the camera sits at (0, 0).
+    fn chest_session(chests: Vec<crate::assets::Chest>) -> OfflineSession {
+        let mut level = crate::assets::Level::from_board(&vec![1u16; 4096]);
+        level.chests = chests;
+        let mut s = OfflineSession::default();
+        s.current_level = Some(level);
+        s.player_x = 10.0;
+        s.player_y = 10.0;
+        s
+    }
+
+    fn chest(x: i32, y: i32, opened: bool) -> crate::assets::Chest {
+        crate::assets::Chest { x, y, item: String::new(), sign_index: -1, opened }
+    }
+
+    /// The tile ids drawn in the 2x2 tiles at level tile (x, y), for a view
+    /// of 20x20 tiles centred on the player.
+    fn drawn_at(s: &OfflineSession, opts: ViewOptions, x: i32, y: i32) -> [u16; 4] {
+        let sheet = id_sheet();
+        let fb = render_view_with(s, &sheet, 2048, 512, 20, 20, opts);
+        let (cx, cy) = camera_origin(s, 20, 20);
+        let (px, py) = (x * 16 - cx, y * 16 - cy);
+        let at = |dx: i32, dy: i32| id_at(&fb, (px + dx * 16 + 8) as u32, (py + dy * 16 + 8) as u32);
+        [at(0, 0), at(1, 0), at(0, 1), at(1, 1)]
+    }
+
+    /// A chest record is drawn from the record: the closed art of arrays 13,
+    /// or the open art of array 14 once it is opened, on a sheet that is not
+    /// the built-in one.
+    #[test]
+    fn a_chest_record_is_drawn_closed_or_open() {
+        let mut s = chest_session(vec![chest(12, 12, false), chest(16, 12, true)]);
+        let foreign = ViewOptions::default();
+        assert_eq!(drawn_at(&s, foreign, 12, 12), [1784, 1785, 1800, 1801], "a closed chest");
+        assert_eq!(drawn_at(&s, foreign, 16, 12), [829, 830, 845, 846], "the server said it is already opened");
+        // Opening the closed one in play swaps it.
+        s.opened_chests.insert((12, 12));
+        assert_eq!(drawn_at(&s, foreign, 12, 12), [829, 830, 845, 846]);
+        // Beside the chests the board is untouched.
+        assert_eq!(drawn_at(&s, foreign, 14, 12), [1, 1, 1, 1]);
+    }
+
+    /// The built-in sheet has no art at the real ids: its own grass chest
+    /// is drawn, open two ids on, unless the board already shows a chest.
+    #[test]
+    fn the_builtin_sheet_gets_its_own_chest_art() {
+        let mut s = chest_session(vec![chest(12, 12, false), chest(16, 12, true)]);
+        let own = ViewOptions { builtin_sheet: true };
+        assert_eq!(drawn_at(&s, own, 12, 12), BUILTIN_CHEST_GRASS);
+        assert_eq!(drawn_at(&s, own, 16, 12), BUILTIN_CHEST_GRASS.map(|t| t + 2));
+        // A wood chest already on the board stays as it is.
+        let level = s.current_level.as_mut().unwrap();
+        for (i, id) in [68u16, 69, 84, 85].into_iter().enumerate() {
+            level.set_tile_id(12 + (i as i32 % 2), 12 + (i as i32 / 2), id);
+        }
+        assert_eq!(drawn_at(&s, own, 12, 12), [68, 69, 84, 85]);
+    }
+
+    /// The client draws a chest only for x and y from 0 to 62.
+    #[test]
+    fn chests_outside_the_board_are_not_drawn() {
+        assert_eq!(chest_art(ViewOptions::default(), false, false), Some(CHEST_CLOSED_TILES));
+        let s = chest_session(vec![chest(63, 12, false), chest(-1, 12, false)]);
+        let sheet = id_sheet();
+        let fb = render_view_with(&s, &sheet, 2048, 512, 70, 20, ViewOptions::default());
+        assert!(fb.pixels.chunks(3).all(|p| !(p[0] == 0x18 && p[1] == 7)), "no closed-chest tile anywhere");
     }
 
     /// On a gmap the view shows the neighbour's tiles past the edge: tile
