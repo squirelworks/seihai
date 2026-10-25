@@ -66,6 +66,13 @@ differences below, chat has no divergence of its own.
 by a `GMAPLEVELX/Y` + `X2/Y2` props message, in one frame, with the new
 coordinate `0` or `63.5`, in all four directions.
 
+## "unstick me" runs (2.22 real and Seihai; 2.31 real)
+
+Scenarios `unstick`, `unstick_jail` and `unstick_npc` are described in
+`unstick-me.md`: the real client sends `unstick me` as plain `CURCHAT`;
+Seihai's bytes are identical; a client-side script's rewrite reaches the wire
+in the real client and (after that PR) in Seihai.
+
 ## Ranked divergences
 
 Status of each one after the item-15 pull requests: `documentation/difftest-leftovers.md`.

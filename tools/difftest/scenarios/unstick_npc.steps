@@ -1,0 +1,7 @@
+# A level NPC with a client-side script that rewrites "unstick me" with
+# `setplayerprop #c` (the pattern real playerworld jails use). What does the
+# client put on the wire?
+start lv_j.nw 30.00 30.50
+wait 36
+chat unstick me
+wait 6

@@ -1,0 +1,11 @@
+# "unstick me" is plain chat (CURCHAT inside PLI_PLAYERPROPS): a normal line
+# for comparison, then "Unstick Me" (capitalised) and "unstick me" after the
+# server's 30 s stand-still time.
+start lv_a.nw 30.00 30.50
+wait 4
+chat hello difftest
+wait 34
+chat Unstick Me
+wait 4
+chat unstick me
+wait 6

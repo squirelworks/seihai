@@ -652,8 +652,14 @@ impl<'a> Run<'a> {
     fn command(&mut self, cmd: &'static Cmd, args: &[Arg]) {
         let vals: Vec<Val> = args
             .iter()
-            .map(|a| match a {
+            .enumerate()
+            .map(|(i, a)| match a {
                 Arg::Num(e) => self.eval(e),
+                // The first word of `setplayerprop` names the property
+                // (`#c` is the chat text, `#n` the nickname, ...). It is a
+                // code, not a message to expand: `setplayerprop #c,hi` must
+                // not turn into `setplayerprop <what was said>,hi`.
+                Arg::Text(t) if i == 0 && cmd.name == "setplayerprop" => Val::Str(t.clone()),
                 Arg::Text(t) => Val::Str(self.expand(t, 0)),
             })
             .collect();
