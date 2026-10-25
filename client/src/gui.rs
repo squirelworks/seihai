@@ -10,7 +10,8 @@ use eframe::egui;
 ///
 /// A port in the settings file (`listserver=host:port`) counts as typed: it
 /// is kept and marked user-set. With no port there, the box shows the
-/// version's default (14923 for legacy versions, 14922 for supported ones,
+/// version's default (14923 for a profile that sends the classic login,
+/// 1.41 to 2.17; 14922 for one that sends the gen-5 login, 2.22 and later;
 /// never the dead 14921) and changes when the version selector does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListEndpoint {
@@ -211,22 +212,31 @@ impl eframe::App for Launcher {
                 let v = self.version_enum();
                 let ls = v.listserver();
                 let kind = match ls.kind {
-                    crate::protocol::ListKind::Legacy => "legacy",
-                    crate::protocol::ListKind::Supported => "supported",
+                    crate::protocol::ListKind::Legacy => "classic login",
+                    crate::protocol::ListKind::Supported => "gen-5 login",
                 };
                 let status = match ls.status {
                     crate::protocol::PortStatus::Confirmed => "confirmed",
                     crate::protocol::PortStatus::Assumed => "assumed",
                 };
+                let hint = match ls.status {
+                    crate::protocol::PortStatus::Confirmed => {
+                        "Seihai's login for this version got a server list on this port from the public listserver. A real client of this version was not captured."
+                    }
+                    crate::protocol::PortStatus::Assumed => {
+                        "The port of this login type. Seihai's login for this version was not run on the public listserver."
+                    }
+                };
                 if self.list.port_user_set {
                     ui.horizontal(|ui| {
-                        ui.small(format!("Port set by you. Default for {}: {} ({kind}, {status})", v.label(), ls.port));
+                        ui.small(format!("Port set by you. Default for {}: {} ({kind}, {status})", v.label(), ls.port))
+                            .on_hover_text(hint);
                         if ui.small_button("Use default").clicked() {
                             self.list.use_default(v);
                         }
                     });
                 } else {
-                    ui.small(format!("Port follows {}: {} ({kind}, {status})", v.label(), ls.port));
+                    ui.small(format!("Port follows {}: {} ({kind}, {status})", v.label(), ls.port)).on_hover_text(hint);
                 }
             }
             ui.label("Account");
@@ -439,15 +449,23 @@ mod tests {
     const V222: ClientVersion = ClientVersion::V222;
 
     /// With nothing saved the port box shows the version's default and
-    /// changes when the version selector does (legacy 14923, supported 14922).
+    /// changes when the version selector does (classic login 14923, gen-5
+    /// login 14922).
     #[test]
     fn port_box_follows_the_selected_version() {
         let mut l = ListEndpoint::from_saved(None, V205);
-        assert_eq!((l.host.as_str(), l.port.as_str(), l.port_user_set), ("listserver.graal.in", "14922", false));
+        assert_eq!((l.host.as_str(), l.port.as_str(), l.port_user_set), ("listserver.graal.in", "14923", false));
         l.follow_version(V200);
         assert_eq!(l.port, "14923");
         l.follow_version(V222);
         assert_eq!(l.port, "14922");
+        // 2.1 to 2.17 send the classic login: their box shows 14923.
+        for v in [ClientVersion::V210, ClientVersion::V212, ClientVersion::V216, ClientVersion::V217] {
+            l.follow_version(v);
+            assert_eq!(l.port, "14923", "{v:?}");
+            l.follow_version(V222);
+            assert_eq!(l.port, "14922");
+        }
         l.follow_version(ClientVersion::V201);
         assert_eq!(l.port, "14923");
         assert_eq!(l.addr(ClientVersion::V201), "listserver.graal.in:14923");

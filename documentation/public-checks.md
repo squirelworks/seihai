@@ -59,10 +59,11 @@ What stays open:
   plain zlib frame on a gen-5 link; game-server frames are still strict.
 - The binary that made these runs sent the gen-5 login for the 2.05 profile.
   The current main sends the classic one for 2.05 (checked on a local mock),
-  so the classic 2.05 login against 14923 follows from the 2.00 result but was
-  not run.
-- A classic login to 14923 with the 2.17 profile was not tried, and nothing
-  tells how a real 2.17 client logs in to the listserver.
+  so the classic 2.05 login against 14923 follows from the matrix result (every
+  other classic profile got a list there) but was not run.
+- A classic login to 14923 with the 2.17 profile was not tried in these two runs
+  (the matrix later got a list), and nothing tells how a real 2.17 client logs in
+  to the listserver.
 - A real 2.00 client sends only id 0 and the list name (no account). Seihai's
   2.00 profile sends the account too. Whether the legacy list needs it is
   untested.
@@ -70,8 +71,30 @@ What stays open:
   check and chat on a public game server are all still unobserved.
 - Seihai's default list endpoint now follows the public service, not the
   binary (`documentation/port-rule.md`): `listserver.graal.in`, 14923 for
-  legacy profiles and 14922 for supported ones. The binary's own host and port
-  are kept as history (`built_in`). An explicit `--online HOST:PORT` still wins.
+  profiles that send the classic login and 14922 for the gen-5 login. The
+  binary's own host and port are kept as history (`built_in`). An explicit
+  `--online HOST:PORT` still wins.
+
+## The port matrix (2026-10-25, 22:43 JST)
+
+The user ran `run_port_matrix.sh` on their own Linux machine: 19 version profiles, each once on port 14922 and once on 14923 of `listserver.graal.in`, one list-only login per run (`--list-only`, no game server, no chat, no warp), each run captured. 38 runs, no ban, rate limit or reset. The account is masked and no frame bytes are kept here; the derived note is `protocol/listserver-login-type-matrix-2026-10-25.md` (and `.tsv`) in Graal_analysis.
+
+| login Seihai sent | profiles | 14922 | 14923 |
+|---|---|---|---|
+| classic (plain zlib id 0 + id 1) | 1.41, 1.42, 2.00, 2.01, 2.02, 2.02 rev 2, 2.03, 2.04, 2.1, 2.12 to 2.17 (15) | no reply for 5.5 s, connection left open (15 of 15) | legacy list, 2 or 4 rows, no status or site lines (15 of 15) |
+| gen-5 (id 7, `GNW30123`) | 2.22, 2.3, 2.31 and the matrix binary's 2.05 | modern list, 8 rows plus status, site and upgrade lines (4 of 4) | modern list, 12 rows (2.31: 17) (4 of 4) |
+
+What it settles:
+
+- **The reply depends on the login type, not on the version or token.** Every classic login got a list on 14923 and nothing on 14922; every gen-5 login got a list on both. So the default port follows the login the profile sends: classic 14923, gen-5 14922 (`documentation/port-rule.md`).
+- This **moved 2.1 to 2.17 from 14922 to 14923**: their profiles send the classic login, which 14922 never answers. (This is the user's GUI port box for those versions.) 2.05 moved too, because the current main sends the classic login for it, see below.
+- The ports of 15 classic profiles and of 2.22, 2.3 and 2.31 are now `confirmed`, with the meaning "Seihai's login for this profile got a list there". A real client of any of these versions was not captured.
+
+What it does not settle:
+
+- **2.05.** The matrix binary sent the gen-5 login for the 2.05 profile (28-byte frame, same shape as 2.22's); both ports answered it. The current main sends the classic login for 2.05, so that login was not run for 2.05. The 2.05 port is `assumed` (14923); a rerun of the matrix with a build of the change that follows from this result would confirm it.
+- The row counts of the legacy list (2 rows in 4 runs, 4 in 11) varied between runs without following the version; the cause was not tested.
+- Everything about game servers: login, chat, warps, files.
 
 ## The first attempt from the build box
 
@@ -123,25 +146,27 @@ binaries, sources and the lab.
 
 | client | host and port the client uses | source | status |
 |---|---|---|---|
-| 2.00, 2.05 | built-in list host, port 14921 (host is the dead original) | binary | 14921 is **refused** on the public service (observed); a classic login is answered on 14923 (observed with the 2.00 profile) |
+| 2.00, 2.05 | built-in list host, port 14921 (host is the dead original) | binary | 14921 is **refused** on the public service (observed); a classic login is answered on 14923 (observed with the 2.00 profile and 14 others in the matrix) |
 | 2.05 rev 2 on Reborn | 14922 or 14923 | earlier notes, public runs | 14923 for a classic login (observed 2.00 profile); 14922 answers only the gen-5 login (observed with the 2.05 profile of the user's binary) |
 | 1.41 | 14923 (the only surviving copy is patched) | binary | open |
-| 2.17 | list host and port from `arrays2.dat`, default 14922 | binary | classic login on 14922: **no reply** (observed, 2 of 2); on 14923 not tried |
+| 2.17 | list host and port from `arrays2.dat`, default 14922 | binary | classic login on 14922: **no reply** (observed, 3 of 3); on 14923 a **legacy list** (matrix, 2026-10-25) |
 | 2.22 | `listserver.graal.in`, then `.graal.cc`, then `.graalonline.biz`, port 14922; token `GNW30123` | binary, lab, public | **answered** on 14922 and 14923 (observed) |
-| 2.31 | as 2.22 | binary, public | **answered** on 14922 (observed) |
+| 2.31 | as 2.22 | binary, public | **answered** on 14922 and 14923 (observed) |
 
 Seihai's per-profile defaults were the ports the client binaries carry (14921
 for 2.00 to 2.05). They now follow the public results: `listserver.graal.in`,
 14923 for 1.41 to 2.04 and 14922 for 2.05 and later, with the binary's value
-kept as `built_in`. Only 2.00, 2.22 and 2.31 are confirmed by a check.
+kept as `built_in`. Only 2.00, 2.22 and 2.31 were confirmed by a check at that
+time. (Superseded by the matrix below: the default follows the login type, and
+18 profiles are confirmed.)
 
 ## Questions this was meant to settle, and their state
 
 | question | state |
 |---|---|
 | Real list text for the server list: item 0, names with spaces, `X ` type prefixes (id 178 field order) | list text observed (row layout, `X ` prefixes, silver rows untagged); id 178 field order still needs a server warp on the wire |
-| Which port answers for clients older than 2.17 | **settled for the classic login: 14923** (14921 refused, 14922 silent) |
-| What 2.17, 2.22 and 2.31 profile logins get from the public service | list level only: 2.22 and 2.31 get the list on 14922; 2.17 gets no reply on 14922 (cause open); game-server logins open |
+| Which port answers for clients older than 2.17 | **settled for the classic login: 14923** (14921 refused, 14922 silent); the matrix confirmed it for all 15 classic profiles |
+| What 2.17, 2.22 and 2.31 profile logins get from the public service | list level only: 2.22 and 2.31 get the list on 14922 and 14923; 2.17 (classic login) gets a legacy list on 14923 and no reply on 14922 (the login type decides, see the matrix); game-server logins open |
 | A 2.00-era listserver reply (overnight item 13) | **observed** (14923): one plain zlib frame, 4 untagged rows, no status messages. Item 13 is unblocked |
 | Login frames of a public game server: PLO/PLI sets, file update, process list, tamper check, whether the tamper value is enforced | open |
 | Chat, warps, normal asset downloads, `PLO_SERVERWARP` on a public server | open |
@@ -161,8 +186,8 @@ environment variable, never on a command line.
    port P'`. The pcaps are never committed or uploaded.
 2. `seihai --online HOST:PORT --account NAME --password-env VAR --version V
    --list-only` for 2.22, then 2.17 and 2.31. Compare ports 14922 and 14923 for
-   a pre-2.17 profile, read-only, one connection each. Next time also try the
-   2.17 profile on 14923.
+   a pre-2.17 profile, read-only, one connection each. (Done for every profile in
+   the matrix of 2026-10-25, including the 2.17 profile on 14923.)
 3. Read the capture with `seihai capture show FILE --version V` (login frames
    are redacted, the account is masked). Record item 0 and the name spelling of
    the list text (id 178 field order) and any prefix on server names.
@@ -179,5 +204,5 @@ environment variable, never on a command line.
 
 ## Applied to the profiles (2026-10-25)
 
-Every profile now defaults to `listserver.graal.in` on the port that gets a list (`documentation/port-rule.md`): legacy 1.41 to 2.04 on 14923, supported 2.05 and later on 14922; nothing defaults to the dead 14921, which stays as `built_in` history on 2.00 to 2.05. Confirmed by a check: 2.00 (14923), 2.22 and 2.31 (14922). Assumed (the rule, not a run): 1.41, 1.42, 2.01 to 2.04, 2.05, 2.1 to 2.17, 2.3. A classic 2.05 login on 14922 and a 2.17 login on 14922 (no reply so far) are the checks that would move those. The launcher's port box follows the selected version; Graal_analysis' version-profile TOMLs carry the same fields (`client-internals/version-profiles/list-ports.md`).
+Every profile now defaults to `listserver.graal.in` on the port that gets a list (`documentation/port-rule.md`), by the login type the profile sends: classic login (1.41 to 2.17, including 2.05) on 14923, gen-5 login (2.22, 2.3, 2.31) on 14922; nothing defaults to the dead 14921, which stays as `built_in` history on 2.00 to 2.05. Confirmed by the matrix of 2026-10-25 (Seihai's own login for the profile got a list on that port; no real client was captured): 1.41, 1.42, 2.00 to 2.04, 2.1, 2.12 to 2.17 (14923), 2.22, 2.3, 2.31 (14922). Assumed: 2.05 only, because its classic login was not run (the matrix binary sent the gen-5 login for 2.05). Running the matrix again with a build of this change, `VERSIONS=2.05`, would confirm it. The launcher's port box follows the selected version; Graal_analysis' version-profile TOMLs carry the same fields (`client-internals/version-profiles/list-ports.md`).
 

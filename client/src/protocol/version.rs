@@ -142,11 +142,12 @@ impl ClientVersion {
     /// for versions without one (1.33 to 1.39).
     pub fn listserver(self) -> Listserver {
         let ls = self.list_version().profile().protocol.listserver;
-        ls.unwrap_or(Listserver::new(ListKind::Supported, PortStatus::Assumed, None, None))
+        ls.unwrap_or(Listserver::new(ListKind::Legacy, PortStatus::Assumed, None, None))
     }
 
-    /// Default listserver port: 14923 for legacy versions, 14922 for
-    /// supported ones. Never the dead 14921.
+    /// Default listserver port: 14923 for a profile that sends the classic
+    /// login (1.41 to 2.17), 14922 for one that sends the gen-5 login (2.22
+    /// and later). Never the dead 14921.
     pub fn listserver_port(self) -> u16 {
         self.listserver().port
     }

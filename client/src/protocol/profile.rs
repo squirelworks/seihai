@@ -151,19 +151,27 @@ pub enum ServerList {
 
 /// The one host every profile dials for its server list.
 pub const LISTSERVER_HOST: &str = "listserver.graal.in";
-/// Default port of a legacy (classic login) profile.
+/// Default port of a profile that sends the classic listserver login.
 pub const LEGACY_LIST_PORT: u16 = 14923;
-/// Default port of a supported (gen-5 era) profile.
+/// Default port of a profile that sends the gen-5 listserver login.
 pub const SUPPORTED_LIST_PORT: u16 = 14922;
 /// Port the public service resets. No profile defaults to it.
 pub const DEAD_LIST_PORT: u16 = 14921;
 
-/// Which public listserver port answers a version's login.
+/// Which public listserver port a profile's list login uses. The public
+/// listserver picks its reply by the login type, not by the version number
+/// or token (matrix run, 2026-10-25): a classic login gets a list on 14923
+/// and no reply on 14922; a gen-5 login gets a list on 14922 and also on
+/// 14923. So the default follows the login the profile sends
+/// (`Connection::login_listserver`: gen-5 only where the profile's
+/// encryption is gen 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ListKind {
-    /// Classic login (1.41 to 2.04): port 14923.
+    /// Classic login (one plain zlib frame, id 0 then id 1): port 14923.
+    /// The profiles 1.41 to 2.17.
     Legacy,
-    /// 2.05 and later: port 14922.
+    /// Gen-5 login (id 7 with `GNW30123`, then a gen-5 frame): port 14922.
+    /// The profiles 2.22, 2.3 and 2.31.
     Supported,
 }
 
@@ -179,9 +187,11 @@ impl ListKind {
 /// Whether a public check of this profile's own login got a list on its port.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortStatus {
-    /// A public check got a list on this port.
+    /// A public check with Seihai's login for this profile got a list on this
+    /// port. It says nothing about a real client of that version, which was
+    /// not captured.
     Confirmed,
-    /// The rule applied to a profile nobody has run on the public service.
+    /// The rule applied to a profile whose own login was not run on the public service.
     Assumed,
 }
 
@@ -873,9 +883,11 @@ mod tests {
         // A real 2.31 client answers the process-list request with 44.
         assert!(pli(ClientVersion::V231).contains(44));
         assert_eq!(pli(ClientVersion::V230), pli(ClientVersion::V231));
-        // 2.17's listserver default is 14922 (supported), 2.05 and 2.00 split on the rule.
-        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
-        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
+        // The default follows the login type: 2.17 sends the classic login (14923),
+        // 2.22 the gen-5 one (14922); 2.05 sends the classic login too.
+        assert_eq!(ClientVersion::V217.listserver_port(), 14923);
+        assert_eq!(ClientVersion::V205.listserver_port(), 14923);
+        assert_eq!(ClientVersion::V222.listserver_port(), 14922);
         assert_eq!(ClientVersion::V200.listserver_port(), 14923);
         assert_eq!(ClientVersion::V201.listserver_port(), 14923);
         assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
@@ -915,38 +927,58 @@ mod tests {
         }
     }
 
-    /// Legacy versions (1.41 to 2.04, classic login) default to 14923 and
-    /// supported ones (2.05 and later) to 14922; 1.33 to 1.39 have no
-    /// listserver and borrow 2.05's.
+    /// The matrix of 2026-10-25 (19 profiles, ports 14922 and 14923, one
+    /// list-only login each): every profile that sends the classic login got
+    /// a list on 14923 and no reply on 14922; every profile that sends the
+    /// gen-5 login got a list on both. The default is 14923 for the classic
+    /// login and 14922 for the gen-5 login, and never 14921. 1.33 to 1.39
+    /// have no listserver and borrow 2.05's (a classic login on 14923).
     #[test]
-    fn legacy_and_supported_split() {
-        let legacy = ["1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04"];
-        let supported = ["2.05", "2.1", "2.12", "2.13", "2.14", "2.15", "2.16", "2.17", "2.22", "2.3", "2.31"];
+    fn login_type_decides_the_default_port() {
+        let classic = [
+            "1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.05", "2.1", "2.12", "2.13", "2.14",
+            "2.15", "2.16", "2.17",
+        ];
+        let gen5 = ["2.22", "2.3", "2.31"];
+        let mut seen = 0;
         for p in PROFILES {
             match p.protocol.listserver {
                 None => {
                     assert!(p.label.starts_with("1.3"), "{} has no listserver", p.label);
-                    assert_eq!(p.version.listserver_port(), 14922, "{}", p.label);
+                    assert_eq!(p.version.listserver_port(), 14923, "{}", p.label);
                 }
                 Some(l) => {
-                    let want = if legacy.contains(&p.label) {
+                    seen += 1;
+                    let want = if classic.contains(&p.label) {
                         ListKind::Legacy
                     } else {
-                        assert!(supported.contains(&p.label), "{} is in neither list", p.label);
+                        assert!(gen5.contains(&p.label), "{} is in neither list", p.label);
                         ListKind::Supported
                     };
                     assert_eq!(l.kind, want, "{}", p.label);
                     assert_eq!(l.port, if want == ListKind::Legacy { 14923 } else { 14922 }, "{}", p.label);
                     assert_eq!(l.port, l.kind.port(), "{}", p.label);
+                    assert_ne!(l.port, DEAD_LIST_PORT, "{}", p.label);
+                    // The kind is the login the code sends: gen-5 only for a gen-5 profile.
+                    assert_eq!(
+                        l.kind == ListKind::Supported,
+                        p.protocol.encryption == EncryptionGen::Gen5,
+                        "{}: kind and the login type that login_listserver sends must agree",
+                        p.label
+                    );
+                    assert_eq!(p.version.listserver_port(), l.port, "{}", p.label);
                 }
             }
         }
-        assert_eq!(legacy.len() + supported.len() + 7, PROFILES.len());
+        assert_eq!(seen, classic.len() + gen5.len());
+        assert_eq!(seen + 7, PROFILES.len());
     }
 
-    /// Only the profiles a public check ran are confirmed: 2.00 on 14923,
-    /// 2.22 and 2.31 on 14922. 2.01 to 2.04, 2.05, 2.1 to 2.17 and 2.3 are
-    /// assumed (the rule, not a check).
+    /// What the matrix of 2026-10-25 confirms: Seihai's own list login for
+    /// 15 classic profiles on 14923 and for 2.22, 2.3 and 2.31 (gen-5) on
+    /// 14922. 2.05 is the exception: the matrix binary sent a gen-5 login for
+    /// 2.05, but this profile sends the classic one, which was not run, so
+    /// its port is assumed. Profiles with no listserver have no status.
     #[test]
     fn port_status_confirmed_versus_assumed() {
         let confirmed: Vec<&str> = PROFILES
@@ -954,10 +986,14 @@ mod tests {
             .filter(|p| p.protocol.listserver.is_some_and(|l| l.status == PortStatus::Confirmed))
             .map(|p| p.label)
             .collect();
-        assert_eq!(confirmed, ["2.00", "2.22", "2.31"]);
-        for v in [ClientVersion::V201, ClientVersion::V204, ClientVersion::V205, ClientVersion::V217, ClientVersion::V230] {
-            assert_eq!(v.listserver().status, PortStatus::Assumed, "{v:?}");
-        }
+        assert_eq!(
+            confirmed,
+            [
+                "1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.1", "2.12", "2.13", "2.14",
+                "2.15", "2.16", "2.17", "2.22", "2.3", "2.31"
+            ]
+        );
+        assert_eq!(ClientVersion::V205.listserver().status, PortStatus::Assumed);
     }
 
     /// `--online host:port` is used exactly as given; a bare listserver host
