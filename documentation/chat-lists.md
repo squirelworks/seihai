@@ -17,7 +17,7 @@ the laundry specs `10-right-click-menu.md` and `14-friends-ignore.md`, and the
 | Ignored players' chat and PMs are dropped | derived (spec 10 and 14) |
 | Muted players' chat and PMs are dropped locally too | **guess**: the notes say "client-local mute set, same filter as ignore"; what a real client hides on mute has not been seen |
 | Mute file `mutedaccounts.txt` | Seihai's own: no real client file for mute has been seen |
-| Chat bubble stays 3 s | **placeholder**: the only documented number is that text set by `setplayerprop #c` stays 3 s from 2.01. The duration of an ordinary bubble is not in the notes |
+| Chat bubble stays 3 s | derived: the 2.05 client counts 60 frames, and the vendor text says chat is shown "at least 3 seconds" (2.01+); the 50 ms frame behind 60 frames = 3 s is **assumed**. Own typed line is held until a direction key (`chat-log.md`) |
 
 ## Where it lives
 
@@ -84,9 +84,10 @@ changes and a line says so.
 
 ## Chat bubbles
 
-A bubble (CURCHAT, prop 12) starts a 3 s timer when it arrives and goes
+A bubble (CURCHAT, prop 12) starts a 3 s timer (60 frames) when it arrives and goes
 down when it ends. An empty text clears it at once. The history line stays.
-Our own bubble is timed the same way. The timer is `BubbleTimer`
+Our own typed line is held until a direction key is pressed, then timed the
+same way (`chat-log.md`). The timer is `BubbleTimer`
 (`chatlists::BUBBLE_MS`), driven by the game loop's frame time.
 
 ## Not done, not known
@@ -105,8 +106,7 @@ Our own bubble is timed the same way. The timer is `BubbleTimer`
   update named them.
 - What a real client hides on Mute, and whether it re-sends 43 after a
   relogin. Seihai sends it only on the command.
-- The duration of an ordinary chat bubble, and whether a bubble comes back
-  when the server re-sends the player's props on a level entry (Seihai
-  starts the 3 s again).
+- The frame length behind "60 frames = 3 s" (50 ms assumed). The 2.05
+  client also restarts the 60 when the server re-sends prop 12, as Seihai does.
 - No lab run: the id 43 bytes and the file behaviour are taken from the
   2.22 capture and tested against it, not re-captured from Seihai.

@@ -25,11 +25,12 @@ use std::path::{Path, PathBuf};
 
 /// How long a chat bubble stays over a speaker, in milliseconds.
 ///
-/// Only one number is documented: from 2.01 the text set by a script's
-/// `setplayerprop #c` "stays 3 s" (vendor text, Graal_analysis
-/// `version-profiles`). The duration of an ordinary chat bubble is not in
-/// the notes, so Seihai uses the same 3 s for every bubble (a labelled
-/// placeholder until a capture or a decompile says otherwise).
+/// The 2.05 client sets a 60 counter when a chat line arrives (prop 12) and
+/// counts it down once per drawn frame, then removes the text; there is no
+/// fade (see `documentation/chat-log.md`). The 2.22 vendor text says chat
+/// text "is always displayed at least 3 seconds". 60 frames of the 50 ms
+/// game frame is 3 s, so the two agree. The frame length is the one
+/// assumption (it was not read from the decompile for the draw loop).
 pub const BUBBLE_MS: u32 = 3000;
 
 /// `PLI_MUTEPLAYER`.
@@ -476,19 +477,39 @@ pub fn menu_items(pli: &IdSet) -> Vec<MenuItem> {
 }
 
 /// A chat bubble's remaining time. Counts down from [`BUBBLE_MS`].
+///
+/// The player's own typed line starts *held*: the 2.05 client gives it a
+/// counter one above the countdown range (61), which does not count down
+/// until a direction key is pressed, and then runs the usual 60. So a line
+/// typed while standing still stays over the head until the player moves.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BubbleTimer {
     left_ms: u32,
+    held: bool,
 }
 
 impl BubbleTimer {
     pub fn start() -> Self {
-        BubbleTimer { left_ms: BUBBLE_MS }
+        BubbleTimer { left_ms: BUBBLE_MS, held: false }
+    }
+
+    /// The timer of a line the player typed: waits for [`Self::release`].
+    pub fn start_held() -> Self {
+        BubbleTimer { left_ms: BUBBLE_MS, held: true }
+    }
+
+    /// A direction key was pressed: a held bubble starts its countdown.
+    pub fn release(&mut self) {
+        self.held = false;
+    }
+
+    pub fn is_held(&self) -> bool {
+        self.held
     }
 
     /// Advance by `dt_ms`. True when this step ended the bubble.
     pub fn tick(&mut self, dt_ms: u32) -> bool {
-        if self.left_ms == 0 {
+        if self.left_ms == 0 || self.held {
             return false;
         }
         self.left_ms = self.left_ms.saturating_sub(dt_ms);
@@ -784,5 +805,27 @@ mod tests {
         // A big step ends it too.
         let mut b = BubbleTimer::start();
         assert!(b.tick(60_000));
+    }
+
+    #[test]
+    fn bubble_is_sixty_frames_of_fifty_ms() {
+        assert_eq!(BUBBLE_MS, 60 * 50);
+    }
+
+    #[test]
+    fn held_bubble_waits_for_release_then_runs_the_full_time() {
+        let mut b = BubbleTimer::start_held();
+        assert!(b.is_held() && b.active());
+        // Standing still: it never counts down, however long it takes.
+        assert!(!b.tick(600_000));
+        assert!(b.active());
+        // A direction key releases it and the usual 60 frames follow.
+        b.release();
+        assert!(!b.is_held());
+        assert!(!b.tick(BUBBLE_MS - 1));
+        assert!(b.tick(1));
+        assert!(!b.active());
+        // An ordinary bubble is not held.
+        assert!(!BubbleTimer::start().is_held());
     }
 }

@@ -12,6 +12,49 @@ use crate::render::{Framebuffer, TILE_PX};
 /// Chat history lines shown at once.
 pub const CHAT_LINES: usize = 6;
 
+/// How long an overlay line stays fully visible, in milliseconds.
+///
+/// **Assumed, not from the real client.** The 2.05 client has no on-screen
+/// chat log to take this from (see `documentation/chat-log.md`).
+pub const OVERLAY_VISIBLE_MS: u64 = 8000;
+/// How long the fade lasts after that. **Assumed.**
+pub const OVERLAY_FADE_MS: u64 = 2000;
+/// How many alpha steps the fade has (the line is gone after the last).
+/// **Assumed.**
+pub const OVERLAY_FADE_STEPS: u64 = 4;
+
+/// The opacity (0..=255) of a chat-overlay line `age_ms` old: full for
+/// [`OVERLAY_VISIBLE_MS`], then [`OVERLAY_FADE_STEPS`] equal steps down to
+/// nothing over [`OVERLAY_FADE_MS`] (204, 153, 102, 51 with the assumed
+/// values), then gone.
+pub fn overlay_alpha(age_ms: u64) -> u8 {
+    if age_ms < OVERLAY_VISIBLE_MS {
+        return 255;
+    }
+    let into = age_ms - OVERLAY_VISIBLE_MS;
+    if into >= OVERLAY_FADE_MS {
+        return 0;
+    }
+    let step = into * OVERLAY_FADE_STEPS / OVERLAY_FADE_MS;
+    (255 * (OVERLAY_FADE_STEPS - step) / (OVERLAY_FADE_STEPS + 1)) as u8
+}
+
+/// The lines the overlay shows at chat-clock time `now_ms`, oldest first,
+/// each with its opacity: the newest [`CHAT_LINES`] lines that have not
+/// faded away. A new line pushes the older ones up (the newest is drawn
+/// lowest).
+pub fn overlay_lines(log: &[ChatLine], now_ms: u64) -> Vec<(&ChatLine, u8)> {
+    let mut v: Vec<(&ChatLine, u8)> = log
+        .iter()
+        .rev()
+        .map(|l| (l, overlay_alpha(now_ms.saturating_sub(l.born_ms))))
+        .take_while(|(_, a)| *a > 0)
+        .take(CHAT_LINES)
+        .collect();
+    v.reverse();
+    v
+}
+
 /// What the input line is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputMode {
@@ -183,13 +226,7 @@ pub fn draw_chat_lines(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, in
     let top = fb.height as i32 - h - 2;
     fb.shade_rect(0, top - 2, w, h + 4, 140);
     for (i, l) in shown.iter().enumerate() {
-        let text = match l.kind {
-            ChatKind::Say => format!("{}: {}", l.from, l.text),
-            ChatKind::Toall => format!("{} (toall): {}", l.from, l.text),
-            ChatKind::Private => format!("{} (PM): {}", l.from, l.text),
-            ChatKind::Admin => format!("{}: {}", l.from, l.text),
-        };
-        fb.draw_text(4, top + i as i32 * line_h, &fit(&text, w - 8), kind_colour(l.kind));
+        fb.draw_text(4, top + i as i32 * line_h, &fit(&chat_line_text(l), w - 8), kind_colour(l.kind));
     }
     if scroll > 0 {
         let more = format!("^{scroll}");
@@ -210,6 +247,57 @@ pub fn draw_chat_lines(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, in
     let n = line.chars().count();
     let line: String = line.chars().skip(n.saturating_sub(max)).collect();
     fb.draw_text(4, y + 1, &line, [0xFF, 0xFF, 0xFF]);
+}
+
+fn chat_line_text(l: &ChatLine) -> String {
+    match l.kind {
+        ChatKind::Say => format!("{}: {}", l.from, l.text),
+        ChatKind::Toall => format!("{} (toall): {}", l.from, l.text),
+        ChatKind::Private => format!("{} (PM): {}", l.from, l.text),
+        ChatKind::Admin => format!("{}: {}", l.from, l.text),
+    }
+}
+
+/// The chat area at the bottom as the game shows it: the input bar always,
+/// and the history as a fading overlay (lines older than
+/// [`OVERLAY_VISIBLE_MS`] fade out over [`OVERLAY_FADE_MS`]). While the
+/// input line is open, or the history is scrolled back (`scroll > 0`), the
+/// full window is drawn instead and nothing fades, so older lines can be
+/// read.
+pub fn draw_chat_overlay(fb: &mut Framebuffer, log: &[ChatLine], now_ms: u64, scroll: usize, input: &Input) {
+    if input.is_open() || scroll > 0 {
+        return draw_chat(fb, log, scroll, input);
+    }
+    // The bar alone (no history lines) ...
+    draw_chat_lines(fb, &[], 0, input, 0);
+    // ... and the live lines above it, newest lowest.
+    let w = fb.width as i32;
+    let line_h = CELL_H + 1;
+    let bar_top = fb.height as i32 - (line_h + 4) - 2 - 2;
+    let lines = overlay_lines(log, now_ms);
+    let n = lines.len() as i32;
+    for (i, (l, alpha)) in lines.into_iter().enumerate() {
+        let y = bar_top - 2 - (n - i as i32) * line_h;
+        // The window's own shade is 140/256; fade it with the text.
+        let keep = 256 - (116 * u16::from(alpha) / 255);
+        fb.shade_rect(0, y - 1, w, line_h, keep);
+        fb.draw_text_alpha(4, y, &fit(&chat_line_text(l), w - 8), kind_colour(l.kind), alpha);
+    }
+}
+
+/// What typing a chat line does on our side: the line goes to the history
+/// (the overlay shows it), becomes our own bubble, and starts the bubble's
+/// clock held until the player moves. An empty line clears the bubble
+/// without a history entry. Returns whether a line was recorded.
+pub fn own_say(state: &mut crate::protocol::SessionState, who: &str, text: &str, bubble: &mut String, timer: &mut crate::chatlists::BubbleTimer) -> bool {
+    *bubble = text.to_string();
+    if text.is_empty() {
+        *timer = crate::chatlists::BubbleTimer::default();
+        return false;
+    }
+    *timer = crate::chatlists::BubbleTimer::start_held();
+    state.push_chat(ChatKind::Say, who.to_string(), text.to_string());
+    true
 }
 
 /// Screen position of a level point, given the camera origin in pixels.
@@ -457,6 +545,7 @@ mod tests {
             kind: ChatKind::Say,
             from: "a".into(),
             text: "hello".into(),
+            born_ms: 0,
         }];
         let mut input = Input::default();
         input.open(InputMode::Chat);
@@ -482,5 +571,148 @@ mod tests {
         assert_eq!(input.text, "two");
         input.recall_next();
         assert_eq!(input.text, "");
+    }
+
+    fn line(kind: ChatKind, from: &str, text: &str, born_ms: u64) -> ChatLine {
+        ChatLine { kind, from: from.into(), text: text.into(), born_ms }
+    }
+
+    fn lit(fb: &Framebuffer, rgb: [u8; 3]) -> bool {
+        fb.pixels.chunks(3).any(|p| p == rgb)
+    }
+
+    #[test]
+    fn overlay_alpha_is_full_then_steps_down_then_gone() {
+        assert_eq!(overlay_alpha(0), 255);
+        assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS - 1), 255);
+        // Four equal steps across the fade.
+        let step = OVERLAY_FADE_MS / OVERLAY_FADE_STEPS;
+        let a: Vec<u8> = (0..OVERLAY_FADE_STEPS).map(|k| overlay_alpha(OVERLAY_VISIBLE_MS + k * step)).collect();
+        assert_eq!(a, [204, 153, 102, 51]);
+        assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS - 1), 51);
+        assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS), 0);
+        assert_eq!(overlay_alpha(10_000_000), 0);
+    }
+
+    #[test]
+    fn overlay_keeps_newest_lines_and_drops_faded_ones() {
+        let log: Vec<ChatLine> = (0..10).map(|i| line(ChatKind::Say, "a", &format!("m{i}"), i * 100)).collect();
+        // All fresh: only the newest CHAT_LINES, oldest first.
+        let v = overlay_lines(&log, 1000);
+        assert_eq!(v.len(), CHAT_LINES);
+        assert_eq!(v[0].0.text, "m4");
+        assert_eq!(v[CHAT_LINES - 1].0.text, "m9");
+        assert!(v.iter().all(|(_, a)| *a == 255));
+        // Late: the oldest have faded away first, the newest linger.
+        let late = OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS + 450;
+        let v = overlay_lines(&log, late);
+        assert_eq!(v.iter().map(|(l, _)| l.text.as_str()).collect::<Vec<_>>(), ["m5", "m6", "m7", "m8", "m9"]);
+        assert!(v[0].1 <= v[4].1, "older lines are never brighter");
+        // Long after: nothing.
+        assert!(overlay_lines(&log, 1_000_000).is_empty());
+        assert!(overlay_lines(&[], 0).is_empty());
+    }
+
+    #[test]
+    fn a_new_line_pushes_older_ones_up() {
+        let mut log = vec![line(ChatKind::Toall, "a", "one", 0)];
+        let mut fb = Framebuffer::new(320, 120);
+        draw_chat_overlay(&mut fb, &log, 0, 0, &Input::default());
+        let rows = |fb: &Framebuffer| -> Vec<i32> {
+            (0..fb.height as i32).filter(|&y| (0..fb.width as i32).any(|x| {
+                let i = (y as usize * fb.width as usize + x as usize) * 3;
+                fb.pixels[i..i + 3] == kind_colour(ChatKind::Toall)
+            })).collect()
+        };
+        let before = rows(&fb);
+        assert!(!before.is_empty(), "the line is drawn");
+        log.push(line(ChatKind::Toall, "a", "two", 10));
+        let mut fb2 = Framebuffer::new(320, 120);
+        draw_chat_overlay(&mut fb2, &log, 10, 0, &Input::default());
+        let after = rows(&fb2);
+        assert!(after.iter().min() < before.iter().min(), "the older line moved up");
+        assert_eq!(after.iter().max(), before.iter().max(), "the newest sits where the last one did");
+    }
+
+    #[test]
+    fn overlay_line_fades_out_of_the_picture() {
+        let log = vec![line(ChatKind::Toall, "a", "hi", 0)];
+        let say = kind_colour(ChatKind::Toall);
+        let draw_at = |now: u64| {
+            let mut fb = Framebuffer::new(200, 80);
+            draw_chat_overlay(&mut fb, &log, now, 0, &Input::default());
+            fb
+        };
+        assert!(lit(&draw_at(0), say), "fresh: full colour");
+        // Mid-fade the text is dimmer than the full colour but still there.
+        let mid = draw_at(OVERLAY_VISIBLE_MS + 1);
+        assert!(!lit(&mid, say));
+        let bare = draw_at(OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS);
+        let none = draw_at(0);
+        assert_ne!(mid.pixels, bare.pixels, "mid-fade differs from gone");
+        assert_ne!(none.pixels, bare.pixels);
+        // Gone: the same picture as an empty log (just the input bar).
+        let mut empty = Framebuffer::new(200, 80);
+        draw_chat_overlay(&mut empty, &[], 0, 0, &Input::default());
+        assert_eq!(bare.pixels, empty.pixels);
+    }
+
+    #[test]
+    fn open_input_or_scrollback_shows_the_whole_window_without_fading() {
+        let log = vec![line(ChatKind::Toall, "a", "old", 0), line(ChatKind::Toall, "a", "newer", 1)];
+        let say = kind_colour(ChatKind::Toall);
+        let late = OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS + 1;
+        let mut input = Input::default();
+        input.open(InputMode::Chat);
+        let mut fb = Framebuffer::new(200, 80);
+        draw_chat_overlay(&mut fb, &log, late, 0, &input);
+        assert!(lit(&fb, say), "the open input shows old lines at full colour");
+        let mut fb = Framebuffer::new(200, 80);
+        draw_chat_overlay(&mut fb, &log, late, 1, &Input::default());
+        assert!(lit(&fb, say), "scrolled back shows them too");
+    }
+
+    #[test]
+    fn typed_line_reaches_history_overlay_and_own_bubble() {
+        let mut st = crate::protocol::SessionState::default();
+        let mut bubble = String::new();
+        let mut timer = crate::chatlists::BubbleTimer::default();
+        // Some time has passed in the session.
+        st.tick_bubbles(5000);
+        assert!(own_say(&mut st, "me", "hello there", &mut bubble, &mut timer));
+        // 1. history
+        assert_eq!(st.chat_log.len(), 1);
+        assert_eq!(st.chat_log[0].from, "me");
+        assert_eq!(st.chat_log[0].text, "hello there");
+        assert_eq!(st.chat_log[0].born_ms, 5000);
+        // 2. overlay
+        let mut fb = Framebuffer::new(320, 120);
+        draw_chat_overlay(&mut fb, &st.chat_log, st.chat_clock_ms, 0, &Input::default());
+        let mut bar = Framebuffer::new(320, 120);
+        draw_chat_overlay(&mut bar, &[], st.chat_clock_ms, 0, &Input::default());
+        assert_ne!(fb.pixels, bar.pixels, "more than the bare input bar is drawn");
+        // 3. own bubble, held while the player stands still
+        assert_eq!(bubble, "hello there");
+        assert!(timer.is_held());
+        assert!(!timer.tick(60_000));
+        assert!(!bubble.is_empty());
+        // Empty line: no history entry, bubble cleared.
+        assert!(!own_say(&mut st, "me", "", &mut bubble, &mut timer));
+        assert_eq!(st.chat_log.len(), 1);
+        assert!(bubble.is_empty());
+    }
+
+    #[test]
+    fn other_kinds_of_chat_go_to_the_overlay_too() {
+        let log = vec![
+            line(ChatKind::Toall, "t", "to everyone", 0),
+            line(ChatKind::Private, "p", "psst", 0),
+            line(ChatKind::Admin, "Seihai", "note", 0),
+        ];
+        let mut fb = Framebuffer::new(320, 120);
+        draw_chat_overlay(&mut fb, &log, 0, 0, &Input::default());
+        for k in [ChatKind::Toall, ChatKind::Private, ChatKind::Admin] {
+            assert!(lit(&fb, kind_colour(k)), "{k:?} line drawn");
+        }
     }
 }
