@@ -893,14 +893,10 @@ fn main() {
             ),
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
-        // What the player carries is drawn over the head. The position is a
-        // placeholder: where the client puts it was not read.
-        if let Some(c) = &session.carried {
-            for (i, col) in c.tiles.iter().enumerate() {
-                for (j, &id) in col.iter().enumerate() {
-                    fb.blit_tile(&sheet, sw, sh, id, dx + 8 + i as i32 * 16, dy - 14 + j as i32 * 16);
-                }
-            }
+        // What the player carries, what is in flight, and the break effects:
+        // sprite-sheet cut-outs with their transparency (see throwing.md).
+        if let Some(sp) = &sprites {
+            seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
@@ -1381,6 +1377,16 @@ fn main() {
             let dt = combat_clock.elapsed().as_millis() as u64;
             combat_clock = Instant::now();
             let mut sprite_changed = session.tick_combat(dt);
+            // Thrown objects and their break effects run on the same clock.
+            if session.tick_throw(dt) {
+                dirty = true;
+            }
+            for l in session.take_landings() {
+                match l.effect {
+                    Some(e) => eprintln!("thrown object {} landed at {:.1},{:.1}: break effect {e}", l.kind, l.x, l.y),
+                    None => eprintln!("thrown object {} landed at {:.1},{:.1}: stays on the ground", l.kind, l.x, l.y),
+                }
+            }
             // A hit pushed the player: the new position goes out like a step.
             sprite_changed |= session.take_knock_moved();
             if !input.is_open() && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
@@ -1406,8 +1412,12 @@ fn main() {
         // player faces.
         let interact = !input.is_open()
             && !session.life.is_dead()
-            && (window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No)
-                || window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No));
+            && seihai::throwing::interact_pressed(
+                session.carried.is_some(),
+                window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No),
+                window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No),
+                window.is_key_pressed(minifb::Key::D, minifb::KeyRepeat::No),
+            );
         if interact {
             if session.reading.take().is_none() {
                 match session.interact() {
@@ -1419,8 +1429,19 @@ fn main() {
                         }
                     }
                     seihai::offline::Interaction::Lifted { kind } => eprintln!("lifted object {kind}"),
-                    seihai::offline::Interaction::Dropped
-                    | seihai::offline::Interaction::Sign(_)
+                    seihai::offline::Interaction::Thrown { kind } => {
+                        eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
+                        if let Some(c) = conn.as_mut() {
+                            match c.send_throw_carried() {
+                                Ok(()) => eprintln!("thrown object {kind}: PLI_THROWCARRIED sent"),
+                                Err(e) => {
+                                    eprintln!("send failed: {e}");
+                                    conn = None;
+                                }
+                            }
+                        }
+                    }
+                    seihai::offline::Interaction::Sign(_)
                     | seihai::offline::Interaction::Nothing => {}
                 }
             }

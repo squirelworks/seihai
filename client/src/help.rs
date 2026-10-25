@@ -30,7 +30,8 @@ const fn k(label: &'static str, keys: &'static [&'static str], does: &'static st
 pub const BINDINGS: &[KeyHelp] = &[
     k("F1 / ?", &["F1"], "show or hide this help"),
     k("Arrow keys", &["Left", "Right", "Up", "Down"], "walk; two at once for a diagonal"),
-    k("A / Space", &["A", "Space"], "read a sign, open a chest, close a sign"),
+    k("A / Space", &["A", "Space"], "read a sign, open a chest, close a sign, lift a bush or rock, throw what you carry"),
+    k("D", &["D"], "throw what you carry (same as A)"),
     k("S", &["S"], "swing the sword (builds with combat rules; others judge the hit)"),
     k("Enter / T", &["Enter", "NumPadEnter", "T"], "open the chat bar (either Enter key, or T); Enter sends what you typed"),
     k("Backspace", &["Backspace"], "delete a typed letter"),

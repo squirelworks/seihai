@@ -202,6 +202,11 @@ impl EnterLevelSender {
     }
 }
 
+/// The `PLI_THROWCARRIED` (11) message: the id and the newline.
+pub fn throw_carried_message() -> Vec<u8> {
+    vec![11 + 0x20, b'\n']
+}
+
 /// `PLI_LEVELWARP` (0): `GCHAR x*2`, `GCHAR y*2` (tiles), level name.
 pub fn levelwarp_message(x: f32, y: f32, level: &str) -> Vec<u8> {
     let mut msg = vec![0x20];
@@ -1002,6 +1007,13 @@ impl Connection {
     pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
         let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
         self.send_messages(&[msg])
+    }
+
+    /// Throw the carried object: `PLI_THROWCARRIED` (11), no payload (the
+    /// 2.05 client sends none; GServer forwards whatever follows the id to
+    /// the level as `PLO_THROWCARRIED` with the sender's id).
+    pub fn send_throw_carried(&mut self) -> io::Result<()> {
+        self.send_messages(&[throw_carried_message()])
     }
 
     /// Warp to `level` at `(x, y)` in tiles (`PLI_LEVELWARP`, id 0):
@@ -2078,6 +2090,11 @@ mod tests {
     /// 10 tiles is 20 half-tiles, 20 tiles is 40, then the level name.
     fn warp_msg() -> Vec<u8> {
         [&[0x20, 20 + 0x20, 40 + 0x20][..], b"lv_c.nw\n"].concat()
+    }
+
+    #[test]
+    fn throw_carried_is_pli_11_with_no_payload() {
+        assert_eq!(throw_carried_message(), vec![11 + 0x20, b'\n']);
     }
 
     #[test]

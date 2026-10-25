@@ -124,7 +124,7 @@ Where each kind is best read from, what clean-up the real file would need, and t
 - **Sword sheet**: 128x96, 17 sprites in the sword animation, sizes between 10x22 and 34x12. Max extent 128x96.
 - **Shield sheet**: 38x20, four sprites at `x = 0, 6, 14, 30` of sizes 6x18, 8x20, 16x20 and 8x20.
 - **Hat/attr1 sheet** (`DEFAULTATTR1`): 192x144 in 48x48 cells (4 x 3), 9 sprites used per animation (`x = 0, 48, 96, 144`, `y = 0, 48, 96`). Optional for a first default set; an animation naming a sheet it cannot find draws nothing.
-- **`sprites.png`**: the shadow is 24x12 at `(0, 0)`; the swim ripple is 32x16 at `(0, 306)` and `(0, 322)`, so the sheet is **at least 32 x 338**. `AssetResolver`/`--check-assets` list `sprites.png`, `state.png` (HUD), `pics1.png`, `body.png`, `head0.png` as required for every version.
+- **`sprites.png`**: the shadow is 24x12 at `(0, 0)`; the swim ripple is 32x16 at `(0, 306)` and `(0, 322)`, so the sheet is **at least 32 x 338**; the carried objects and break pieces of `throwing.md` need **128 x 402** (the 2.22 table's extent is 1016 rows, those are only the rectangles Seihai draws). `AssetResolver`/`--check-assets` list `sprites.png`, `state.png` (HUD), `pics1.png`, `body.png`, `head0.png` as required for every version.
 - **Symbolic sheet names in GANIs:** `BODY`, `HEAD`, `SHIELD`, `SWORD`, `ATTR1`, `SPRITES` stand for the sheet files; the `DEFAULT*` header lines supply their file names (the stock ones name a body, a head and a hat file and a sword file).
 
 ### GANI frame structure

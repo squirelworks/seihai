@@ -174,6 +174,12 @@ pub struct ObjectTables {
     pub cut_into: Vec<Object2x2>,
     pub lift: Vec<Object2x2>,
     pub lift_into: Vec<Object2x2>,
+    /// Array 19: the break effects, `[kind][frame][piece]`, each piece a
+    /// packed `u32` (see [`crate::throwing::unpack_piece`]).
+    pub leaps: Vec<Vec<Vec<u32>>>,
+    /// Array 24: the sprite table, one packed rectangle per sprite id (see
+    /// [`crate::throwing::unpack_sprite_rect`]).
+    pub sprites: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,6 +207,23 @@ fn parse_arr_node(data: &[u8], off: &mut usize, depth: u32) -> Option<ArrNode> {
         }
         Some(ArrNode::List(v))
     }
+}
+
+fn leaps_from(node: Option<&ArrNode>) -> Vec<Vec<Vec<u32>>> {
+    let Some(ArrNode::List(kinds)) = node else { return Vec::new() };
+    kinds
+        .iter()
+        .map(|k| match k {
+            ArrNode::List(frames) => frames
+                .iter()
+                .map(|f| match f {
+                    ArrNode::Ints(v) => v.clone(),
+                    _ => Vec::new(),
+                })
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect()
 }
 
 fn objects_from(node: Option<&ArrNode>) -> Vec<Object2x2> {
@@ -241,6 +264,11 @@ impl ObjectTables {
             cut_into: objects_from(nodes.get(10)),
             lift: objects_from(nodes.get(11)),
             lift_into: objects_from(nodes.get(12)),
+            leaps: leaps_from(nodes.get(19)),
+            sprites: match nodes.get(24) {
+                Some(ArrNode::Ints(v)) => v.clone(),
+                _ => Vec::new(),
+            },
         };
         (!t.cut.is_empty() || !t.lift.is_empty()).then_some(t)
     }

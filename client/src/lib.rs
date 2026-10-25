@@ -20,6 +20,7 @@ pub mod scripting;
 pub mod servercache;
 pub mod settings;
 pub mod sound;
+pub mod throwing;
 pub mod ui;
 pub mod viewer;
 
