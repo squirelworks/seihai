@@ -189,6 +189,84 @@ mod tests {
         check_lab_reply(&parse_list_reply(&body));
     }
 
+    /// One row in the layout the public listserver sent on 2026-10-25
+    /// (item 14): field count 8, then type+name, language, description, url,
+    /// version, players, host, port.
+    fn public_row(name: &str, host: &str, port: &str) -> Vec<u8> {
+        let mut r = vec![8 + 0x20];
+        for f in [name, "English", "desc", "https://x", "Beta Version: 3.0.9", "0", host, port] {
+            r.extend(gs(f));
+        }
+        r
+    }
+
+    fn public_list(rows: &[Vec<u8>]) -> Vec<u8> {
+        let mut b = vec![0x20, rows.len() as u8 + 0x20];
+        for r in rows {
+            b.extend_from_slice(r);
+        }
+        b.push(b'\n');
+        b
+    }
+
+    /// The public list text: eight rows come back as eight rows, a row
+    /// without a type prefix is silver (`-`), a host with a leading dot and
+    /// a name with `?` bytes are kept exactly as sent (the pcap shows the
+    /// server sent both), and the two NUL bytes that follow the last
+    /// newline in the real frames add nothing.
+    #[test]
+    fn public_list_layout_eight_rows() {
+        let mut rows = vec![
+            public_row("P Alpha", "10.0.0.1", "14801"),
+            public_row("U Beta", "login.example", "14911"),
+            public_row("H Jojo???s", "10.0.0.2", "30903"),
+            public_row("Gamma", ".163.252.231.43", "14802"),
+        ];
+        for i in 0..4 {
+            rows.push(public_row(&format!("H Row{i}"), "h.example", "14842"));
+        }
+        let mut body = public_list(&rows);
+        body.extend_from_slice(&[0, 0]);
+        let reply = parse_list_reply(&body);
+        assert_eq!(reply.servers.len(), 8);
+        assert_eq!(reply.servers[2].name, "Jojo???s");
+        assert_eq!(reply.servers[2].kind, "H");
+        assert_eq!(reply.servers[3].kind, "");
+        assert_eq!(reply.servers[3].host, ".163.252.231.43");
+        assert_eq!(reply.servers[3].port, 14802);
+        assert_eq!(reply.servers[7].name, "Row3");
+        assert!(reply.status.is_none() && reply.error.is_none());
+    }
+
+    /// The status frame of the public service: id 2 status text (two
+    /// lines, `\r` between), id 3 site URL, id 5 upgrade URL, then two NULs.
+    /// The "N server(s) online" number is the server's own text and is not a
+    /// row count (it said 9 over a list of 8, and over 12 on port 14923).
+    #[test]
+    fn public_status_frame_layout() {
+        let mut body = b"\"Welcome to X, a.\rThere are 9 server(s) online.\n#https://s.example\n%https://u.example\n".to_vec();
+        body.extend_from_slice(&[0, 0]);
+        let r = parse_list_reply(&body);
+        assert_eq!(r.status.as_deref(), Some("Welcome to X, a.\nThere are 9 server(s) online."));
+        assert_eq!(r.site_url.as_deref(), Some("https://s.example"));
+        assert_eq!(r.upgrade_url.as_deref(), Some("https://u.example"));
+        assert!(r.servers.is_empty());
+    }
+
+    /// A row with fewer than 8 fields is skipped without disturbing the
+    /// rows after it (not seen on the public service; kept as the rule).
+    #[test]
+    fn short_row_is_skipped_and_the_next_row_still_parses() {
+        let mut short = vec![3 + 0x20];
+        for f in ["P Short", "English", "d"] {
+            short.extend(gs(f));
+        }
+        let rows = [public_row("P A", "h", "1"), short, public_row("P B", "h", "2")];
+        let reply = parse_list_reply(&public_list(&rows));
+        let names: Vec<_> = reply.servers.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["A", "B"]);
+    }
+
     #[test]
     fn display_line_shows_all_columns() {
         let e = ServerEntry {

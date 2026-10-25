@@ -40,14 +40,14 @@ Single code path. Versions are profile rows, not branches.
 
 - [x] Version chain (`client/src/protocol/chain.rs`). Each build is a step with a small delta against the build before; `PROFILES` is the resolved chain and equals the old hand-written rows. A generated handler-change table (`seihai --version-chain`, `documentation/version-chain.md`/`.tsv`, checked by a test) lists what changed at each step with its source and what is unknown. Adding a version is one step, not new logic. Still open: the unknown deltas of 2.1 to 2.16 and 2.3 (no binaries), and per-step layouts that are not profile fields. See `documentation/version-chain.md`.
 - [x] Differential testing. Tools, lab runner and first results are in: a capture-to-frame-sequence decoder (`difftest trace`), a differ with a ranked report (`difftest diff`), and a private-namespace scenario runner (`tools/difftest/lab.sh`). First run: 2.22 and 2.31, login, gmap crossing, chat and door/warp, real client against Seihai. Ranked divergences are in `documentation/difftest.md`. Not yet covered: the real 2.17 client (its launcher needs its own UI steps), the server-side warp scenario, and running it in CI.
-- [ ] Public-server checks. Approved for read-only checks, then chat, warps and file transfer, with a few normal lines and no uploads. Attempted 2026-10-25: the build box's network gave no answer on listserver ports 14921, 14922 and 14923, so nothing was observed and no code changed. What was tried, the port facts and the checklist are in `documentation/public-checks.md`.
+- [ ] Public-server checks. Approved for read-only checks, then chat, warps and file transfer, with a few normal lines and no uploads. The build box cannot reach the listserver ports, so the user ran the list checks on their own machine on 2026-10-25: 14921 refused, 14923 answers a classic login with the legacy list, 14922 answers the gen-5 login; the game-server checks are still to do. Results, open points and the checklist are in `documentation/public-checks.md`.
 - [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
 ## Remaining
 
 - Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
 - Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist and the first CLI slice (open, list, paint, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
-- Public-server checks: blocked from the build box. Checklist in `documentation/public-checks.md`.
+- Public-server checks: list checks done from the user's machine (2026-10-25); game-server checks still to do. Results and checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
 
 
