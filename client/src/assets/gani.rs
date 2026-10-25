@@ -53,6 +53,11 @@ pub struct Gani {
     pub default_head: Option<String>,
     pub default_body: Option<String>,
     pub single_direction: bool,
+    /// `SETBACKTO name`: the animation the player returns to when this one
+    /// has played once (`idle` for the sword swing).
+    pub setback_to: Option<String>,
+    /// `LOOP`: the animation repeats until another one is chosen.
+    pub looped: bool,
     pub raw: String,
 }
 
@@ -103,6 +108,8 @@ impl Gani {
         let mut default_head = None;
         let mut default_body = None;
         let mut single_direction = false;
+        let mut setback_to = None;
+        let mut looped = false;
 
         let mut in_ani = false;
         // The step being filled, and sounds that came before its first row.
@@ -137,8 +144,20 @@ impl Gani {
                 in_ani = false;
                 continue;
             }
+            if line == "LOOP" {
+                looped = true;
+                continue;
+            }
             if line == "SINGLEDIRECTION" {
                 single_direction = true;
+                continue;
+            }
+
+            if let Some(rest) = line.strip_prefix("SETBACKTO ") {
+                let name = rest.trim();
+                if !name.is_empty() {
+                    setback_to = Some(name.to_string());
+                }
                 continue;
             }
 
@@ -209,6 +228,8 @@ impl Gani {
             default_head,
             default_body,
             single_direction,
+            setback_to,
+            looped,
             raw: text.to_string(),
         })
     }
@@ -276,6 +297,14 @@ impl GaniPlayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setbackto_names_the_animation_to_return_to() {
+        let g = Gani::parse("SETBACKTO idle\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap();
+        assert_eq!(g.setback_to.as_deref(), Some("idle"));
+        assert_eq!(g.frame_count(), 1);
+        assert_eq!(Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap().setback_to, None);
+    }
 
     #[test]
     fn stepper_wraps() {

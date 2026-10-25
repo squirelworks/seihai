@@ -1,0 +1,221 @@
+//! Item 22: the sword, hurt and sit poses, with Seihai's own default assets.
+//!
+//! State level: the offline session steps `sword.gani` with the swing, plays
+//! its sound cue, shows the hurt pose on a hit and goes back to idle.
+//! Render level: the pose GANIs draw something different from the idle figure
+//! and from each other.
+
+use std::path::{Path, PathBuf};
+
+use seihai::assets::{read_png_rgba, Gani};
+use seihai::combat::HurtPlayer;
+use seihai::offline::OfflineSession;
+use seihai::pose::{PoseKind, HURT_POSE_MS};
+use seihai::protocol::COMBAT_205;
+use seihai::render::{draw_gani_frame, draw_player_sprites, Framebuffer, PoseSheets, Sheet};
+
+fn root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("assets").join("default")
+}
+
+fn gani(name: &str) -> Gani {
+    Gani::load(root().join("gani").join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+/// A session with the 2.05 combat rules and the three pose animations.
+fn session() -> OfflineSession {
+    let mut s = OfflineSession::new();
+    s.combat.set_rules(Some(COMBAT_205));
+    s.life.set_rules(Some(seihai::protocol::DEATH_205));
+    s.player_x = 30.0;
+    s.player_y = 30.0;
+    for k in [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit] {
+        s.set_pose_gani(k, gani(k.file()));
+    }
+    s
+}
+
+fn pose(s: &OfflineSession) -> Option<(PoseKind, usize)> {
+    s.current_pose().map(|p| (p.kind, p.frame))
+}
+
+fn hurt_packet(half: i32) -> HurtPlayer {
+    HurtPlayer { attacker: 7, dx: 0.0, dy: 0.0, half, npc: None }
+}
+
+#[test]
+fn the_s_key_plays_the_sword_animation_and_goes_back_to_idle() {
+    let mut s = session();
+    assert_eq!(pose(&s), None, "idle before the swing");
+    assert!(s.start_swing());
+    assert_eq!(pose(&s), Some((PoseKind::Sword, 0)));
+    // the sound after step 0 is queued once, at the player (cue offset 1.5, 2)
+    let ev = s.take_sound_events();
+    assert_eq!(ev.len(), 1);
+    assert_eq!(ev[0].file, "sword.wav");
+    assert_eq!((ev[0].x, ev[0].y), (31.5, 32.0));
+    // the sprite value other players see follows the same step
+    let mut seen = vec![(pose(&s).unwrap().1, s.sprite_value())];
+    for _ in 0..4 {
+        s.tick_combat(100); // a swing step is 2 ticks of 50 ms
+        seen.push((pose(&s).map_or(usize::MAX, |p| p.1), s.sprite_value()));
+    }
+    let dir = u32::from(s.player_dir);
+    let expect: Vec<(usize, u8)> = (0..5).map(|i| (i, (dir + 4 * (6 + i as u32)) as u8)).collect();
+    assert_eq!(seen[..4], expect[..4]);
+    assert_eq!(seen[4].0, 4);
+    // the swing ends: the pose is gone (sword.gani says SETBACKTO idle)
+    assert!(s.tick_combat(100));
+    assert_eq!(pose(&s), None);
+    assert!(!s.combat.is_swinging());
+    assert_eq!(s.sprite_value(), s.player_dir);
+    assert_eq!(gani("sword.gani").setback_to.as_deref(), Some("idle"));
+    assert!(s.take_sound_events().is_empty(), "no further cue: only step 0 has one");
+}
+
+#[test]
+fn a_swing_in_one_long_tick_still_plays_every_cue_once() {
+    let mut s = session();
+    // a second cue on step 2, to see that skipped steps still count
+    let mut g = gani("sword.gani");
+    g.frames[2].sounds.push(seihai::assets::GaniSound { file: "x.wav".into(), x: 1.5, y: 2.0 });
+    s.set_pose_gani(PoseKind::Sword, g);
+    assert!(s.start_swing());
+    s.tick_combat(10_000);
+    let names: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
+    assert_eq!(names, ["sword.wav", "x.wav"]);
+}
+
+#[test]
+fn no_swing_in_water_or_without_the_gani_and_no_pose_when_dead() {
+    let mut s = session();
+    s.in_water = true;
+    assert!(!s.start_swing());
+    assert_eq!(pose(&s), None);
+    s.in_water = false;
+
+    // no sword.gani loaded: the swing still runs (combat), nothing is drawn, no cue
+    let mut bare = OfflineSession::new();
+    bare.combat.set_rules(Some(COMBAT_205));
+    assert!(bare.start_swing());
+    assert_eq!(pose(&bare), None);
+    assert!(bare.take_sound_events().is_empty());
+    bare.tick_combat(1000);
+
+    // dead: no pose
+    let mut d = session();
+    assert!(d.start_swing());
+    d.damage_half(d.max_hearts, Some(3));
+    d.tick_life(100);
+    assert!(d.life.is_dead());
+    d.tick_combat(0);
+    assert_eq!(pose(&d), None);
+}
+
+#[test]
+fn a_hit_plays_the_hurt_pose_through_the_existing_hurt_path() {
+    let mut s = session();
+    let at = Some((s.player_x + 2.0, s.player_y));
+    let rep = s.receive_hurtplayer(&hurt_packet(1), at);
+    assert_eq!(rep.outcome, Ok(1));
+    assert!(s.combat.is_hurt());
+    assert_eq!(pose(&s), Some((PoseKind::Hurt, 0)));
+    // the sprite others see is still the hurt sprite (S = 32) for the whole hurt mode
+    assert_eq!(s.sprite_value(), s.player_dir + 4 * 32);
+    // the pose is shown for HURT_POSE_MS, hurt mode goes on for its 2 s
+    s.tick_combat(HURT_POSE_MS - 50);
+    assert_eq!(pose(&s), Some((PoseKind::Hurt, 0)));
+    s.tick_combat(100);
+    assert_eq!(pose(&s), None);
+    assert!(s.combat.is_hurt());
+    s.tick_combat(2_000);
+    assert!(!s.combat.is_hurt());
+    assert_eq!(s.sprite_value(), s.player_dir);
+}
+
+#[test]
+fn a_swing_wins_over_hurt_and_sit_shows_only_when_asked() {
+    let mut s = session();
+    s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
+    assert!(s.start_swing());
+    assert_eq!(pose(&s), Some((PoseKind::Sword, 0)));
+    let mut t = session();
+    assert_eq!(pose(&t), None);
+    t.sitting = true;
+    assert_eq!(pose(&t), Some((PoseKind::Sit, 0)));
+    t.in_water = true;
+    assert_eq!(pose(&t), None, "not while swimming");
+}
+
+// ---- render level ------------------------------------------------------------
+
+struct Art {
+    body: (u32, Vec<u8>),
+    head: (u32, Vec<u8>),
+    sprites: (u32, Vec<u8>),
+    sword: (u32, Vec<u8>),
+}
+
+fn art() -> Art {
+    let load = |rel: &str| {
+        let (w, _, px) = read_png_rgba(&std::fs::read(root().join(rel)).unwrap()).unwrap();
+        (w, px)
+    };
+    Art { body: load("bodies/body.png"), head: load("heads/head0.png"), sprites: load("sprites.png"), sword: load("swords/sword1.png") }
+}
+
+fn sheets(a: &Art) -> PoseSheets<'_> {
+    fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
+        Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
+    }
+    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword) }
+}
+
+fn draw(g: &Gani, step: usize, dir: u8, a: &Art) -> Vec<u8> {
+    let mut fb = Framebuffer::new(64, 64);
+    draw_gani_frame(&mut fb, g, step, dir, &sheets(a), 8, 8);
+    fb.pixels.clone()
+}
+
+fn blank() -> Vec<u8> {
+    Framebuffer::new(64, 64).pixels.clone()
+}
+
+#[test]
+fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
+    let a = art();
+    for dir in 0..4u8 {
+        let idle = draw(&gani("idle.gani"), 0, dir, &a);
+        assert_ne!(idle, blank());
+        // idle through the GANI renderer is the same picture draw_player_sprites makes
+        let mut fb = Framebuffer::new(64, 64);
+        draw_player_sprites(&mut fb, &a.body.1, a.body.0, 4, &a.head.1, a.head.0, 4, Some((&a.sprites.1, a.sprites.0, 4)), dir, 8, 8, false);
+        assert_eq!(idle, fb.pixels, "dir {dir}: idle.gani and the built-in idle drawing agree");
+
+        let sword = gani("sword.gani");
+        let steps: Vec<Vec<u8>> = (0..5).map(|i| draw(&sword, i, dir, &a)).collect();
+        let mut all = vec![idle.clone(), draw(&gani("sit.gani"), 0, dir, &a), draw(&gani("hurt.gani"), 0, dir, &a)];
+        all.extend(steps);
+        for i in 0..all.len() {
+            for j in i + 1..all.len() {
+                // sword steps 2 and 3 are the same picture on purpose (the thrust is held for a step)
+                if (i, j) == (5, 6) {
+                    continue;
+                }
+                assert_ne!(all[i], all[j], "dir {dir}: pictures {i} and {j} are the same");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
+    let a = art();
+    let mut fb = Framebuffer::new(64, 64);
+    draw_gani_frame(&mut fb, &gani("sword.gani"), 99, 0, &PoseSheets::default(), 0, 0);
+    assert_eq!(fb.pixels, blank());
+    // the sword sheet alone draws only the sword
+    let only = PoseSheets { sword: sheets(&a).sword, ..PoseSheets::default() };
+    draw_gani_frame(&mut fb, &gani("sword.gani"), 2, 2, &only, 8, 8);
+    assert_ne!(fb.pixels, blank());
+}

@@ -118,8 +118,9 @@ fn player_sheets_have_art_in_every_cell_the_code_reads() {
     assert_eq!(bw / 32, 4);
     assert_eq!(bh / 32, 22);
     for dir in 0..4 {
-        // pose 0 (idle, read by draw_player_sprites) and poses 1..=8 (walk)
-        for pose in 0..=8 {
+        // pose 0 (idle, read by draw_player_sprites), poses 1..=8 (walk) and, from item 22,
+        // 9 sword wind-up, 10 sword swing, 11 sit, 12 hurt
+        for pose in 0..=12 {
             let n = opaque_pixels(&body, bw, dir * 32, pose * 32, 32, 32);
             assert!(n > 150 && n < 700, "body dir {dir} pose {pose}: {n} opaque pixels");
         }
@@ -136,6 +137,13 @@ fn player_sheets_have_art_in_every_cell_the_code_reads() {
         };
         let distinct: HashSet<Vec<u8>> = (1..=8).map(cell).collect();
         assert!(distinct.len() >= 5, "dir {dir}: only {} distinct walk poses", distinct.len());
+        // the four new poses differ from idle and from each other
+        let new: HashSet<Vec<u8>> = [0, 9, 10, 11, 12].into_iter().map(cell).collect();
+        assert_eq!(new.len(), 5, "dir {dir}: idle, wind-up, swing, sit and hurt look alike");
+        // and rows 13..22 stay empty (reserved)
+        for pose in 13..22 {
+            assert_eq!(opaque_pixels(&body, bw, dir * 32, pose * 32, 32, 32), 0, "dir {dir} pose {pose} is reserved");
+        }
     }
     let (hw, hh, head) = read_png_rgba(&read("heads/head0.png")).unwrap();
     assert_eq!((hw, hh), (32, 560));
@@ -256,17 +264,23 @@ fn ganis_parse_with_the_documented_structure() {
     let (bw, bh, body) = read_png_rgba(&read("bodies/body.png")).unwrap();
     let (hw, hh, _) = read_png_rgba(&read("heads/head0.png")).unwrap();
     let (spw, sph, _) = read_png_rgba(&read("sprites.png")).unwrap();
+    let (sww, swh, _) = read_png_rgba(&read("swords/sword1.png")).unwrap();
     let sheet_size = |s: &str| match s {
         "BODY" => (bw, bh),
         "HEAD" => (hw, hh),
         "SPRITES" => (spw, sph),
+        "SWORD" => (sww, swh),
         other => panic!("unexpected sheet {other}"),
     };
     // name, steps, sound cues as (step, file)
-    let want: [(&str, usize, Vec<(usize, &str)>); 3] = [
+    let want: [(&str, usize, Vec<(usize, &str)>); 6] = [
         ("idle", 1, vec![]),
         ("walk", 8, vec![(0, "steps2.wav"), (4, "steps2.wav")]),
         ("swim", 8, vec![(0, "water.wav")]),
+        // item 22: the sword swing has the stock's five steps and a sound after step 0
+        ("sword", 5, vec![(0, "sword.wav")]),
+        ("sit", 1, vec![]),
+        ("hurt", 1, vec![]),
     ];
     for (name, steps, cues) in want {
         let g = Gani::load(root().join("gani").join(format!("{name}.gani"))).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -282,8 +296,14 @@ fn ganis_parse_with_the_documented_structure() {
                     let s = g.sprites.iter().find(|s| s.id == p.sprite_id).unwrap_or_else(|| panic!("{name}: sprite {} undefined", p.sprite_id));
                     let (w, h) = sheet_size(&s.sheet);
                     assert!(s.x >= 0 && s.y >= 0 && (s.x + s.w) as u32 <= w && (s.y + s.h) as u32 <= h, "{name}: sprite {} outside {}", s.id, s.sheet);
-                    // placements stay inside the 48x48 player box (the ripple may reach the bottom edge)
-                    assert!(p.x >= 0 && p.x + s.w <= 48 + 8 && p.y >= 0 && p.y + s.h <= 48 + 8, "{name}: placement {:?}", p);
+                    // placements stay inside the 48x48 player box (the ripple may reach the bottom edge);
+                    // a 32x32 sword cell may hang over the edge by its empty margin
+                    let slack = if s.sheet == "SWORD" { 16 } else { 0 };
+                    assert!(
+                        p.x >= -slack && p.x + s.w <= 48 + 8 + slack && p.y >= -slack && p.y + s.h <= 48 + 8 + slack,
+                        "{name}: placement {:?}",
+                        p
+                    );
                 }
             }
             let got: Vec<&str> = f.sounds.iter().map(|s| s.file.as_str()).collect();
@@ -305,6 +325,24 @@ fn ganis_parse_with_the_documented_structure() {
         let ids: Vec<u32> = idle.frames[0].rows[dir].iter().map(|p| p.sprite_id).collect();
         assert_eq!(ids, vec![0, 200 + dir as u32, 100 + dir as u32]);
     }
+    // sword.gani: five steps that play once and go back to idle; every step has
+    // a body pose 9 or 10 and a sword sprite; sit and hurt use their own body poses
+    let sword = Gani::load(root().join("gani/sword.gani")).unwrap();
+    assert_eq!(sword.setback_to.as_deref(), Some("idle"));
+    assert_eq!(Gani::load(root().join("gani/sit.gani")).unwrap().setback_to, None);
+    for step in &sword.frames {
+        for row in &step.rows {
+            assert!(row.iter().any(|p| (236..244).contains(&p.sprite_id)), "a swing body pose (ids 236..243)");
+            assert!(row.iter().any(|p| (300..312).contains(&p.sprite_id)), "a sword sprite (ids 300..311)");
+        }
+    }
+    let ids = |name: &str, dir: usize| -> Vec<u32> {
+        Gani::load(root().join("gani").join(name)).unwrap().frames[0].rows[dir].iter().map(|p| p.sprite_id).collect()
+    };
+    for dir in 0..4usize {
+        assert!(ids("sit.gani", dir).contains(&(244 + dir as u32)), "sit body pose 11");
+        assert!(ids("hurt.gani", dir).contains(&(248 + dir as u32)), "hurt body pose 12");
+    }
     // swim places no body
     let swim = Gani::load(root().join("gani/swim.gani")).unwrap();
     assert!(swim.frames.iter().all(|f| f.rows.iter().all(|r| r.iter().all(|p| !(200..300).contains(&p.sprite_id)))));
@@ -317,6 +355,7 @@ fn wav_files_decode_in_the_documented_formats() {
         ("steps.wav", 22050u32, 8u16, 80u64, 400u64),
         ("steps2.wav", 22050, 8, 80, 400),
         ("water.wav", 8000, 16, 200, 800),
+        ("sword.wav", 8000, 8, 100, 600),
     ] {
         let data = read(&format!("sounds/{name}"));
         assert_eq!(u16::from_le_bytes([data[20], data[21]]), 1, "{name}: PCM");
@@ -438,10 +477,10 @@ fn resolver_and_check_assets_find_every_file() {
     assert!(root.is_valid());
     for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
         let r = AssetResolver::new(root.clone(), v.profile());
-        for g in ["idle", "walk", "swim"] {
+        for g in ["idle", "walk", "swim", "sword", "sit", "hurt"] {
             assert!(r.gani(g).is_some(), "{}: {g}.gani", v.label());
         }
-        assert!(r.sound("steps2").is_some() && r.sound("water").is_some());
+        assert!(r.sound("steps2").is_some() && r.sound("water").is_some() && r.sound("sword").is_some());
         assert!(r.level("new1.nw").is_some() && r.level("new2.nw").is_some());
         assert!(r.image_in("bodies", "body.png").is_some() && r.image_in("heads", "head0.png").is_some());
         assert!(r.image("sprites.png").is_some() && r.image("state.png").is_some());

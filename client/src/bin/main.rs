@@ -93,6 +93,21 @@ fn load_motion_gani(resolver: &AssetResolver, session: &mut OfflineSession, name
     }
 }
 
+/// An RGBA image `(width, pixels)` as a GANI sheet.
+fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
+    seihai::render::Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 }
+}
+
+/// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
+/// first layer that has it. A missing file leaves the plain idle figure.
+fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
+    let (Some(kind), Some(path)) = (seihai::pose::PoseKind::from_file(name), resolver.gani(name)) else { return };
+    match Gani::load(&path) {
+        Ok(g) => session.set_pose_gani(kind, g),
+        Err(e) => eprintln!("cannot read {name}: {e}"),
+    }
+}
+
 /// Send the file requests the rules ask for.
 fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
     if msgs.is_empty() {
@@ -115,18 +130,19 @@ fn npc_image_pass(
     npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
 ) {
     let mut msgs = Vec::new();
-    for npc in &level.npcs {
-        if npc.image.is_empty() || npc_images.contains_key(&npc.image) {
+    // Each NPC's image and the images its script put up with showimg.
+    for name in level.npcs.iter().flat_map(|n| n.image_names()) {
+        if npc_images.contains_key(name) {
             continue;
         }
-        let m = files.need(&npc.image);
+        let m = files.need(name);
         if !m.is_empty() {
-            eprintln!("requesting {}", npc.image);
+            eprintln!("requesting {name}");
         }
         msgs.extend(m);
-        if let Some(data) = files.store.read(&npc.image) {
+        if let Some(data) = files.store.read(name) {
             if let Ok((w, _, px)) = read_png_rgba(&data) {
-                npc_images.insert(npc.image.clone(), (w, px));
+                npc_images.insert(name.to_string(), (w, px));
             }
         }
     }
@@ -721,6 +737,11 @@ fn main() {
             load_motion_gani(&resolver, &mut session, name);
         }
     }
+    // The pose animations (sword swing, hurt, sit) are drawn, not only heard,
+    // so they load whether or not sound is on.
+    for name in ["sword.gani", "hurt.gani", "sit.gani"] {
+        load_pose_gani(&resolver, &mut session, name);
+    }
     let mut sound_serial = session.level_serial;
 
     let Some(sheet_path) = resolver.image("pics1.png") else {
@@ -785,6 +806,7 @@ fn main() {
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");
+    let sword_sheet = load("swords", "sword1.png");
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
@@ -794,19 +816,18 @@ fn main() {
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
         );
-        // NPC images on top of the gray placeholder.
-        if let Some(level) = &session.current_level {
-            for npc in &level.npcs {
-                if !npc.visible {
-                    continue;
-                }
-                if let Some((w, px)) = npc_imgs.get(&npc.image) {
-                    let dx = (npc.x * 16.0) as i32 - cam_x;
-                    let dy = (npc.y * 16.0) as i32 - cam_y;
-                    fb.blit_sprite(px, *w, 4, 0, 0, *w as i32, (px.len() / (*w as usize * 4)) as i32, dx, dy);
-                }
-            }
-        }
+        // NPC images and animations on top of the gray placeholder, then the
+        // images their scripts put up with showimg.
+        let npc_art = seihai::render::NpcArt {
+            images: npc_imgs,
+            sheets: seihai::render::PoseSheets {
+                body: body.as_ref().map(pose_sheet),
+                head: head.as_ref().map(pose_sheet),
+                sprites: sprites.as_ref().map(pose_sheet),
+                sword: sword_sheet.as_ref().map(pose_sheet),
+            },
+        };
+        seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y);
         // On a gmap another player's position is local to its own cell.
         let own_cell = session.gmap.as_ref().map(|w| w.cell);
         let others: Vec<seihai::protocol::OtherPlayer> = others
@@ -845,7 +866,19 @@ fn main() {
             }
         }
         let (dx, dy) = player_box_origin(session, view_w, view_h);
+        let pose = session.current_pose();
         match (&body, &head) {
+            (Some(_), Some(_)) if pose.is_some() => {
+                let sheets = seihai::render::PoseSheets {
+                    body: body.as_ref().map(pose_sheet),
+                    head: head.as_ref().map(pose_sheet),
+                    sprites: sprites.as_ref().map(pose_sheet),
+                    sword: sword_sheet.as_ref().map(pose_sheet),
+                };
+                if let Some(p) = pose {
+                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
+                }
+            }
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
                 b,
@@ -1007,6 +1040,8 @@ fn main() {
                             } else if name.to_ascii_lowercase().ends_with(".wav") {
                                 // A new copy of a sound replaces the decoded one.
                                 sound.forget(name);
+                            } else if seihai::pose::PoseKind::from_file(name).is_some() {
+                                load_pose_gani(&resolver, &mut session, name);
                             } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
                                 if sound.is_enabled() {
                                     load_motion_gani(&resolver, &mut session, name);
@@ -1424,6 +1459,12 @@ fn main() {
                 scripts_serial = session.level_serial;
                 let label = loaded_level.clone().or_else(|| offline_level.clone()).unwrap_or_default();
                 scripts.load_level(&mut session, &label);
+                // Pictures of this level's NPCs (online they were asked for when the
+                // level arrived; a second pass asks for nothing twice).
+                if let Some(level) = session.current_level.clone() {
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                }
+                dirty = true;
             }
             if moved {
                 scripts.touch(&mut session);
@@ -1478,6 +1519,26 @@ fn main() {
             }
             for l in scripts.world.take_log() {
                 eprintln!("script: {l}");
+            }
+            // A script changed an NPC picture (setimg, showimg): load it.
+            if std::mem::take(&mut scripts.images_changed) {
+                if let Some(level) = session.current_level.clone() {
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                }
+                dirty = true;
+            }
+            // NPC animations (setcharani, setani): load the GANIs they name, then
+            // step them. A missing file is replaced by an empty animation, so the
+            // NPC keeps its image and the name is not looked up again.
+            for name in session.wanted_npc_anis() {
+                let gani = resolver.gani(&format!("{name}.gani")).and_then(|p| Gani::load(p).ok());
+                if gani.is_none() {
+                    eprintln!("NPC animation {name}.gani not found");
+                }
+                session.set_npc_gani(&name, gani.unwrap_or_else(|| Gani::parse("").expect("empty gani")));
+            }
+            if session.tick_npc_anis(dt) {
+                dirty = true;
             }
         }
         if moved {

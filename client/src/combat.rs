@@ -548,6 +548,17 @@ impl CombatState {
         self.swing.is_some()
     }
 
+    /// The swing step the sword is on (0 is the first, sprite S = 6).
+    pub fn swing_frame(&self) -> Option<usize> {
+        self.swing.map(|(i, _)| usize::from(i))
+    }
+
+    /// Milliseconds since hurt mode began, or `None` when not hurt.
+    pub fn hurt_elapsed_ms(&self) -> Option<u64> {
+        let r = self.rules.as_ref()?;
+        (self.hurt_left > 0).then(|| u64::from(r.hurt_ticks - self.hurt_left.min(r.hurt_ticks)) * TICK_MS + self.hurt_acc_ms)
+    }
+
     /// Start the swing. False if the build has no combat rules or a swing
     /// is already out.
     pub fn start_swing(&mut self) -> bool {
@@ -819,14 +830,29 @@ impl OfflineSession {
         if self.life.is_dead() || self.in_water || self.sword_power == 0 || self.warp_pending.is_some() {
             return false;
         }
-        self.combat.start_swing()
+        let started = self.combat.start_swing();
+        if started {
+            self.queue_sword_cues(0);
+        }
+        started
     }
 
     /// Advance the swing and hurt mode by `ms`. True when the sprite others
     /// see changed. A death ends the swing.
     pub fn tick_combat(&mut self, ms: u64) -> bool {
         let cancelled = self.life.is_dead() && self.combat.cancel_swing();
+        let before = self.combat.swing_frame();
         let changed = self.combat.tick(ms);
+        // Each swing step entered plays the cues that follow it in sword.gani
+        // (a swing that ends has entered the steps up to its last).
+        if let Some(b) = before {
+            let swing_steps = self.combat.rules().map_or(1, |r| usize::from(r.swing_sprite_last - r.swing_sprite_first) + 1);
+            let last = self.poses.sword.as_ref().map_or(0, |g| g.frame_count().min(swing_steps).saturating_sub(1));
+            let to = self.combat.swing_frame().unwrap_or(last);
+            for step in b + 1..=to {
+                self.queue_sword_cues(step);
+            }
+        }
         for (ux, uy) in self.combat.take_knock_steps() {
             let moved = self.knock_step(ux, uy);
             self.knock_moved |= moved;

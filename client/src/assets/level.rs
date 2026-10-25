@@ -53,6 +53,42 @@ pub struct Npc {
     pub script: String,
     /// Visibility flag. `hide`/`show` commands toggle this.
     pub visible: bool,
+    /// The part of `image` that is drawn, `(x, y, w, h)` in pixels, set by
+    /// `setimgpart` (`setimg` resets it to the whole image).
+    pub image_part: Option<(i32, i32, i32, i32)>,
+    /// The animation the NPC is drawn with (`setcharani`, `setani`, a
+    /// `showcharacter` NPC), lower case and without `.gani`. While set, the
+    /// NPC is drawn as that animation instead of its image.
+    pub ani: Option<String>,
+    /// Step of `ani` being shown, and the milliseconds spent on it.
+    pub ani_frame: usize,
+    pub ani_ms: u64,
+    /// Images the NPC's script put up with `showimg`, by index.
+    pub images: Vec<NpcImage>,
+}
+
+/// An image a script put up with `showimg index,file,x,y` (index 0 to 199).
+/// `hideimg index` removes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NpcImage {
+    pub index: i64,
+    pub file: String,
+    /// Level position in tiles (the same unit as an NPC's x and y).
+    pub x: f32,
+    pub y: f32,
+    pub part: Option<(i32, i32, i32, i32)>,
+}
+
+impl Npc {
+    /// An NPC with only its image, position and script.
+    pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
+        Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new() }
+    }
+
+    /// Every image file the NPC draws now: its own and its `showimg` ones.
+    pub fn image_names(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.image.as_str()).chain(self.images.iter().map(|i| i.file.as_str())).filter(|n| !n.is_empty())
+    }
 }
 
 /// A level link (LINK record).
@@ -833,13 +869,7 @@ fn parse_npc(lines: &[String]) -> Option<Npc> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    Some(Npc {
-        image,
-        x,
-        y,
-        script,
-        visible: true,
-    })
+    Some(Npc::new(image, x, y, script))
 }
 
 /// Names of the chest item indexes 0 to 24 (`LevelItemType`).
@@ -1060,13 +1090,12 @@ fn parse_binary_sections(magic: &[u8], tail: &[u8], level: &mut Level, layout: &
                 Some(i) => (&body[..i], &body[i + 1..]),
                 None => (body, &body[..0]),
             };
-            level.npcs.push(Npc {
-                image: latin1(image),
-                x: l[0] as f32 - 32.0,
-                y: l[1] as f32 - 32.0,
-                script: latin1(script).replace('\u{a7}', "\n"),
-                visible: true,
-            });
+            level.npcs.push(Npc::new(
+                latin1(image),
+                l[0] as f32 - 32.0,
+                l[1] as f32 - 32.0,
+                latin1(script).replace('\u{a7}', "\n"),
+            ));
         }
     }
 

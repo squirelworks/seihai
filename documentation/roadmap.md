@@ -46,7 +46,7 @@ Single code path. Versions are profile rows, not branches.
 ## Remaining
 
 - Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
-- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist). No implementation started.
+- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist and the first CLI slice (open, list, paint, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
 - Public-server checks: blocked from the build box. Checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
 

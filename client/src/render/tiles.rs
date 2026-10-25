@@ -7,7 +7,7 @@
 //! 16-column blocks of 512 tiles. Tile id `n` lives at column
 //! `n % 16 + (n / 512) * 16`, row `(n / 16) % 32`.
 
-use crate::assets::{tile_id, Level};
+use crate::assets::{tile_id, Gani, Level};
 use crate::offline::OfflineSession;
 
 /// Width of a tile in pixels.
@@ -320,7 +320,8 @@ pub fn render_view_with(
 
     // Chests and signs are part of the board (see `ViewOptions`); NPCs next.
     for npc in &level.npcs {
-        if npc.visible {
+        // An NPC drawn as an animation has no placeholder under it.
+        if npc.visible && npc.ani.is_none() {
             // Placeholder until the image arrives. Request the file if missing.
             draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x80, 0x80, 0x80]);
         }
@@ -429,6 +430,49 @@ pub fn draw_player_sprites(
         }
         fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx + b.0, dy + b.1);
         fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1);
+    }
+}
+
+/// An RGBA (or RGB) image the GANI renderer draws from.
+#[derive(Debug, Clone, Copy)]
+pub struct Sheet<'a> {
+    pub px: &'a [u8],
+    pub w: u32,
+    pub bpp: usize,
+}
+
+/// The sheets a player GANI names symbolically in its `SPRITE` lines.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PoseSheets<'a> {
+    pub body: Option<Sheet<'a>>,
+    pub head: Option<Sheet<'a>>,
+    pub sprites: Option<Sheet<'a>>,
+    pub sword: Option<Sheet<'a>>,
+}
+
+/// Draw one step of a player GANI for direction `dir` (Graal order: 0 up,
+/// 1 left, 2 down, 3 right) with the top-left of the 48x48 player box at
+/// `(dx, dy)`. The placements of the direction's row are drawn in order, so
+/// later ones are on top. A placement whose sprite is not defined, or whose
+/// sheet is not loaded, is skipped. A GANI with a single direction row uses
+/// it for every direction.
+pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8, sheets: &PoseSheets, dx: i32, dy: i32) {
+    let Some(step) = gani.frame(frame) else { return };
+    let Some(row) = step.rows.get(usize::from(dir % 4)).or_else(|| step.rows.first()) else { return };
+    for pl in row {
+        let Some(sp) = gani.sprites.iter().find(|s| s.id == pl.sprite_id) else { continue };
+        let sheet = match sp.sheet.to_ascii_uppercase().as_str() {
+            "BODY" => sheets.body,
+            "HEAD" => sheets.head,
+            "SPRITES" => sheets.sprites,
+            "SWORD" => sheets.sword,
+            _ => None,
+        };
+        if let Some(sh) = sheet {
+            if sp.x >= 0 && sp.y >= 0 {
+                fb.blit_sprite(sh.px, sh.w, sh.bpp, sp.x, sp.y, sp.w, sp.h, dx + pl.x, dy + pl.y);
+            }
+        }
     }
 }
 

@@ -194,17 +194,26 @@ bomb/bow default-weapon ids are not settled).
   folder, the built-in set). The resolver's folder order inside a layer is
   unchanged (`documentation/assets.md`).
 
+## Leftovers worked through (2026-10-25)
+
+Evidence came from the client binaries (disassembled, not run) and the
+existing lab traces; nothing new was captured.
+
+| Point | Result |
+|---|---|
+| Save folders for 1.39 and 2.00 | **Read and implemented** (`filecache::SaveLayout`). 1.33 to 1.41 (1.33, 1.34, 1.35, 1.36, 1.37, 1.38, 1.39 and 1.41 binaries checked): one folder, `levels/webgifs`, for everything saved; the 1.39 routine saves only names ending `.gif`, `.png`, `.mng` (no sound), deletes an existing file first and sets no modification time. 2.00, 2.00 rev 1 to 3, 2.01 and 2.01 rev 1: `sounds` for `.wav`; under `levels` `bomys` (names starting `bomy` or `b_`), `ganis`, `emoticons`, `heads`, `bodies`, `swords`, `shields`, else `webgifs`; **no `hats` folder** (a `hat0.png` goes to `webgifs`) and no `maps`. Hats appear in 2.02 and stay in 2.02 rev 1/2, 2.03, 2.04, 2.05 and both 2.1 test builds. The 1.42 NewMain builds differ from each other (24 has `ganis`, `heads`, `swords`, `shields`; 26 adds `sounds` and `bomys`): left on the full layout, unread. |
+| 2.1 to 2.16 save folders | **Partly settled.** Both 2.1 test builds have the full list with `hats` and **no `maps` rule**; the `maps` folder first shows in 2.17.1. So `download_maps` is not on in the 2.1 test builds; the profile still carries it as on for 2.1 to 2.16 (inferred, left alone so the golden file and the chain table stay as they are). When the rule arrived between the 2.1 tests and 2.17.1 is unknown; no binary exists for 2.1 to 2.16. |
+| Empty cached stream after a failed send | **Settled and implemented** (`Stored::Ignored`). All of 1.39, 2.00, 2.05 rev 2, 2.17.1, 2.22 and 2.31 start the save routine with a guard: a missing or zero-length stream returns at once. Nothing is written, an existing copy is not deleted, nothing is remembered. So the empty stream a failed send leaves behind is simply not saved, and the name is settled by the reply, as before. Seihai now does the same for a zero-length `PLO_FILE`. |
+| The login set of `UPDATEFILE`s (real vs Seihai) | **Checked on the traces** (2.22 and 2.31, real client against Seihai, `labd15`): after item 15 the sets match for the player images, the icons and the gmap; the one remaining difference is `wbowi1.png`, which the real client asks for and Seihai does not (default-weapon ids, below). The level-file requests Seihai sends in its own frames are not in the real trace because the real client takes levels from the board packet and its level cache; that is a cache-state difference, not a rule. |
+| Which default weapon gives `wbowi1.png` | **Evidence only, not wired** (decision: no mapping invented). The server source numbers the default items bow 7, bomb 8; the client's item-name table in 2.22 is in that order; the real 2.22 and 2.31 login asks `wbomb1.png` and then `wbowi1.png`, which is what a client walking default weapons 8 then 7 would do. A capture that names the weapon ids and images in one run would settle it. |
+
 ## Not settled (left alone)
 
 | Open point | Why |
 |---|---|
-| The persistent level cache (`GWEBL001`, DES-based). The format is in Graal_analysis. | Needs the key handling and a capture of the level path with the cache on. Not part of file transfer. |
-| The login set of default `UPDATEFILE`s and whether they are bundled in one frame. | The lab shows three images (and the gmap) but the full list needs a capture with an empty and a full data folder; item 15. |
-| The scan order of the client's file index when two files have the same name in different folders. | Not read in the code that was exported; no capture. The `local_path` order is the one the lookup code shows. |
-| Routing of downloads in 1.39 / 2.00, and in 2.1 to 2.16. | 2.1 to 2.16 are inferred from the neighbours (`download_maps` on); 1.39 and 2.00 save routines were not read. |
-| Whether pre-2.1 clients re-send `UPDATEFILE` for a file already settled. | The 2.05 code has no time in the reply, so "up to date" has no form there; inferred only. |
-| What an empty cached stream after `FILESENDFAILED` does beyond "not asked again". | Not captured. |
+| The persistent level cache (`GWEBL001`, DES-based). The format is in Graal_analysis. | Skipped. Seihai loads levels from the board packet and never needs the cache; reading or writing it needs the key handling and a capture of the level path with the cache on (a real client run twice against the same lab level, then the cache folder and the `PLI_LEVELMODTIME` traffic compared). Not part of file transfer. |
+| The scan order of the client's file index when two files have the same name in different folders. | Not read in the code that was exported; the lookup shows the `local_path` order, which Seihai uses. A capture would be: the same name placed in `levels/webgifs` and `levels/bodies`, with different bytes, and the one the client draws. |
+| Whether pre-2.1 clients re-send `UPDATEFILE` for a file already settled. | The 2.05 code has no time in the reply, so "up to date" has no form there; inferred only. A 2.05 lab run against a server that answers every `UPDATEFILE` with `FILESENDFAILED` would show it. |
 | Exact case folding of names. | Case-insensitive assumed. |
 
-No capture is still needed for what is implemented. Items 14 and 15 (lab runs
-with Seihai on a private server) are where the open rows would be checked.
+No capture is still needed for what is implemented.

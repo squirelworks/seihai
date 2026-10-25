@@ -76,6 +76,10 @@ for `PLI_CLAIMPKER`, see `health-death.md`) and starts **hurt mode**: 40 ticks
 Seihai sends has S = 32. Hurt mode does not lock the controls (the notes say
 nothing about that).
 
+## What is drawn (item 22)
+
+The swing and hurt mode are shown with the player's own animations: the S key plays `sword.gani` step by step in time with the swing (its sound after step 0 is queued at the start), and an accepted hit shows `hurt.gani` for the first 500 ms of hurt mode. Both follow `CombatState`, so they also run in the offline session. The conventions (the hurt file name, the 500 ms) are Seihai's own, not a documented real-client behaviour; see `default-assets.md`, "Poses".
+
 ## Packets
 
 - `PLO_HURTPLAYER` (40): `GSHORT attacker, GCHAR dx, GCHAR dy, GCHAR power`

@@ -6,10 +6,12 @@
 //! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
 pub mod font;
+mod npcs;
 mod tiles;
 
+pub use npcs::{draw_npcs, NpcArt, NPC_DIR};
 pub use tiles::{
-    draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED,
+    draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED,
     Framebuffer, TILE_PX,
 };
 

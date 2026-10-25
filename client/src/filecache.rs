@@ -28,7 +28,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use crate::assets::resolve::{clean_name, lookup};
 use crate::assets::{AssetResolver, AssetRoot, Layer};
 use crate::net::{updatefile_message, wantfile_message};
-use crate::protocol::{SessionState, VersionProfile};
+use crate::protocol::{ClientVersion, SessionState, VersionProfile};
 
 /// Requests of one kind in flight at once. The rest wait in the list, in
 /// order, and go out one by one as replies arrive. Read in 2.00, 2.05 rev
@@ -195,6 +195,38 @@ fn is_level_name(p: &Path) -> bool {
     p.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "nw" | "graal" | "zelda" | "gmap"))
 }
 
+/// How a build's save routine lays out downloads, read in the client
+/// binaries (every build named below was disassembled; none was run).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveLayout {
+    /// 1.33 to 1.41: one folder, `levels/webgifs`, for everything saved. The
+    /// 1.39 routine saves only names ending `.gif`, `.png` or `.mng` (so no
+    /// sound is saved at all), deletes an existing file first and sets no
+    /// modification time; [`download_dir`] gives the folder only.
+    Flat,
+    /// 2.00 and 2.01: `sounds` for `.wav`, and under `levels` the folders
+    /// `bomys`, `ganis`, `emoticons`, `heads`, `bodies`, `swords`, `shields`,
+    /// else `webgifs`. There is no `hats` folder (a `hat0.png` goes to
+    /// `webgifs`) and no `maps`.
+    NoHats,
+    /// 2.02 onward (read in 2.02, 2.03, 2.04, 2.05, both 2.1 test builds,
+    /// 2.17.1, 2.22, 2.31): the list above plus `hats`.
+    Full,
+}
+
+impl SaveLayout {
+    /// The layout of a version. 1.42 (the NewMain builds differ from each
+    /// other) is left on [`SaveLayout::Full`], unread.
+    pub fn of(v: ClientVersion) -> SaveLayout {
+        use ClientVersion::*;
+        match v {
+            V133 | V134 | V135 | V136 | V137 | V138 | V139 | V141 => SaveLayout::Flat,
+            V200 | V201 => SaveLayout::NoHats,
+            _ => SaveLayout::Full,
+        }
+    }
+}
+
 /// The folder (under the game folder) a downloaded file is saved in, as
 /// path components. `name` is the file name the server sent.
 ///
@@ -212,6 +244,9 @@ fn is_level_name(p: &Path) -> bool {
 ///    (`head`), `bodies` (`body`), `swords` (`sword`), `shields` (`shield`);
 ///    else `webgifs`.
 ///
+/// The older builds differ ([`SaveLayout`]): 1.33 to 1.41 put everything in
+/// `levels/webgifs`; 2.00 and 2.01 have the folder list without `hats`.
+///
 /// Seihai's one departure: a level file (`.nw`, `.graal`) goes straight in
 /// `levels`. The real clients take levels from the board packet and their
 /// own level cache, and would put a downloaded `.nw` in `levels/webgifs`;
@@ -221,6 +256,10 @@ pub fn download_dir(profile: &VersionProfile, name: &str) -> Vec<&'static str> {
     let lname = name.trim().to_ascii_lowercase();
     let base = lname.rsplit('/').next().unwrap_or(&lname);
     let ext = base.rfind('.').filter(|&i| i > 0).map(|i| &base[i..]).unwrap_or("");
+    let layout = SaveLayout::of(profile.version);
+    if layout == SaveLayout::Flat {
+        return if matches!(ext, ".nw" | ".graal" | ".zelda") { vec!["levels"] } else { vec!["levels", "webgifs"] };
+    }
     if ext == ".wav" {
         return vec!["sounds"];
     }
@@ -241,7 +280,7 @@ pub fn download_dir(profile: &VersionProfile, name: &str) -> Vec<&'static str> {
         "ganis"
     } else if base.starts_with("emoticon") {
         "emoticons"
-    } else if base.starts_with("hat") && base.as_bytes().get(3).is_some_and(u8::is_ascii_digit) {
+    } else if layout == SaveLayout::Full && base.starts_with("hat") && base.as_bytes().get(3).is_some_and(u8::is_ascii_digit) {
         "hats"
     } else if base.contains("head") {
         "heads"
@@ -284,6 +323,11 @@ pub enum Stored {
     Disk(PathBuf),
     /// Kept in memory only (saving downloads is off).
     Memory,
+    /// A zero-length stream: the real save routine (read in 1.39 to 2.31,
+    /// twelve builds' worth of the same guard) returns at once when the
+    /// stream is missing or empty, so nothing is written, nothing existing is
+    /// deleted and nothing is remembered.
+    Ignored,
 }
 
 /// Saves downloads by the real clients' rules.
@@ -389,6 +433,9 @@ impl DownloadStore {
     /// Level files always go to disk: Seihai loads levels from files.
     pub fn store(&mut self, name: &str, data: &[u8], mod_time: Option<u32>) -> io::Result<Stored> {
         let rel = clean_name(name).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unsafe file name"))?;
+        if data.is_empty() {
+            return Ok(Stored::Ignored);
+        }
         let ext = rel.rfind('.').map(|i| rel[i..].to_ascii_lowercase()).unwrap_or_default();
         let is_level = matches!(ext.as_str(), ".nw" | ".graal" | ".zelda" | ".gmap");
         self.memory.insert(key(name), MemoryFile { data: data.to_vec(), mod_time });
@@ -550,7 +597,7 @@ impl FileSession {
         let mut out = Processed::default();
         let mut next = Vec::new();
         for f in state.take_files() {
-            if self.store.store(&f.name, &f.data, f.mod_time).is_ok() {
+            if self.store.store(&f.name, &f.data, f.mod_time).is_ok_and(|s| s != Stored::Ignored) {
                 out.written.push(f.name.clone());
             }
             next.extend(self.requests.done(&f.name));
@@ -679,6 +726,47 @@ mod tests {
 
     fn dir(v: ClientVersion, name: &str) -> String {
         download_dir(v.profile(), name).join("/")
+    }
+
+    #[test]
+    fn old_builds_lay_downloads_out_by_their_own_routine() {
+        use ClientVersion::*;
+        // 1.33 to 1.41: one folder for everything.
+        for v in [V133, V135, V139, V141] {
+            assert_eq!(SaveLayout::of(v), SaveLayout::Flat);
+            for n in ["a.png", "body.png", "sword1.gif", "x.mng", "walk.gani", "b.wav", "worldmap.png"] {
+                assert_eq!(dir(v, n), "levels/webgifs", "{v:?} {n}");
+            }
+        }
+        assert_eq!(dir(V139, "old.graal"), "levels", "Seihai's level departure holds");
+        // 2.00 and 2.01: the folder list without hats.
+        for v in [V200, V201] {
+            assert_eq!(SaveLayout::of(v), SaveLayout::NoHats);
+            assert_eq!(dir(v, "hat0.png"), "levels/webgifs");
+            assert_eq!(dir(v, "head25.png"), "levels/heads");
+            assert_eq!(dir(v, "walk.gani"), "levels/ganis");
+            assert_eq!(dir(v, "b_x.png"), "levels/bomys");
+            assert_eq!(dir(v, "s.wav"), "sounds");
+            assert_eq!(dir(v, "gm.gmap"), "levels/webgifs", "no maps folder");
+        }
+        // 2.02 onward: hats exist.
+        for v in [V202, V202R2, V203, V204, V205, V210, V217, V231] {
+            assert_eq!(SaveLayout::of(v), SaveLayout::Full);
+            assert_eq!(dir(v, "hat0.png"), "levels/hats", "{v:?}");
+        }
+    }
+
+    #[test]
+    fn an_empty_stream_changes_nothing() {
+        let root = tmp("empty");
+        let mut s = store(ClientVersion::V222, &root, true);
+        assert_eq!(s.store("body.png", b"keep", Some(7)).unwrap(), Stored::Disk(root.join("levels/bodies/body.png")));
+        assert_eq!(s.store("body.png", b"", Some(9)).unwrap(), Stored::Ignored);
+        assert_eq!(fs::read(root.join("levels/bodies/body.png")).unwrap(), b"keep", "the old copy stays");
+        assert_eq!(s.store("new.png", b"", None).unwrap(), Stored::Ignored);
+        assert!(!root.join("levels/webgifs/new.png").exists(), "no empty file is created");
+        assert!(!s.has_any_copy("new.png"), "and nothing is remembered in memory");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
