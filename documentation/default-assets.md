@@ -8,7 +8,7 @@ Dated 2026-10-25. Base: `main` at `d5389c2`. Item 20 (wiring) is described under
 
 **Every file is original.** It was drawn or synthesised by `tools/gen_default_assets.py`: images from rectangles, ellipses, polygons and hand-written palettes (Pillow `ImageDraw` on palette images); sounds from sine tones and filtered noise; the GANIs and levels are text written by the script. Nothing was read from, traced from, recoloured from, resampled from or otherwise derived from any pixel or audio sample of the playerworld archives or the Graal clients, and the images of those archives were not opened for this item. The only things taken from them are the numbers already published in `asset-reference.md` (sheet sizes, grid layouts, frame and sprite counts, sound formats), which describe a file format, not content.
 
-**Licence:** the same as the Seihai repository (`MIT OR Apache-2.0`, see the workspace `Cargo.toml`), for the generated files and for the generator. *The maintainer is asked to confirm this in the PR*; if a different licence is wanted for art and sound (CC0, for example), that is one line in this note and a `LICENSE` file in `assets/default/`.
+**Licence:** the same as the Seihai repository (`MIT OR Apache-2.0`, see the workspace `Cargo.toml`), for the generated files and for the generator. Confirmed by the maintainer (2026-10-25): the generated files and the generator use the same licence as the Seihai repository (`MIT OR Apache-2.0`).
 
 ## Contents (47.8 KB in 17 files)
 
