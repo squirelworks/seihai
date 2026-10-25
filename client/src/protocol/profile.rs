@@ -167,7 +167,7 @@ pub const DEAD_LIST_PORT: u16 = 14921;
 /// encryption is gen 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ListKind {
-    /// Classic login (one plain zlib frame, id 0 then id 1): port 14923.
+    /// Classic login (one plain zlib frame, id 0, then id 1 or not): port 14923.
     /// The profiles 1.41 to 2.17.
     Legacy,
     /// Gen-5 login (id 7 with `GNW30123`, then a gen-5 frame): port 14922.
@@ -193,6 +193,58 @@ pub enum PortStatus {
     Confirmed,
     /// The rule applied to a profile whose own login was not run on the public service.
     Assumed,
+}
+
+/// What a client sends to the listserver at login. The shape follows the
+/// client generation; inside a generation every observed build sends the same
+/// bytes (`documentation/listserver-login.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginShape {
+    /// Shape A: one plain zlib frame, id 0 with the list name `newmain`.
+    /// No account, password, token or key. Real 2.00 and 2.05.
+    NewmainOnly,
+    /// Shape B: one plain zlib frame with id 0 `newmain` then id 1 (account,
+    /// password). No token, key or cipher. Real 2.17.1.
+    NewmainAccount,
+    /// Shape C: a plain zlib frame with id 7 (key byte, token `GNW30123`,
+    /// `newmain`), then a gen-5 frame with id 1. Real 2.22 and 2.31.
+    Gen5,
+}
+
+impl LoginShape {
+    /// `A`, `B` or `C`, as in the notes.
+    pub const fn letter(self) -> &'static str {
+        match self {
+            LoginShape::NewmainOnly => "A",
+            LoginShape::NewmainAccount => "B",
+            LoginShape::Gen5 => "C",
+        }
+    }
+}
+
+/// Where a profile's [`LoginShape`] comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeBasis {
+    /// A real client of this generation was captured in the lab, and the
+    /// shape is what it sent.
+    Captured,
+    /// No capture of this build. The shape is a best guess from a captured
+    /// neighbour (2.01 to 2.04 and 1.42 take 2.00's shape A).
+    Inferred,
+    /// No capture and no evidence for the shape. It is what Seihai sent
+    /// before, kept as it was.
+    Unknown,
+}
+
+impl ShapeBasis {
+    /// The words used in the version-chain table and the launcher's hover text.
+    pub const fn text(self) -> &'static str {
+        match self {
+            ShapeBasis::Captured => "login frame captured from a real client",
+            ShapeBasis::Inferred => "login frame inferred, not captured",
+            ShapeBasis::Unknown => "login frame inferred, not captured; no evidence for this shape",
+        }
+    }
 }
 
 /// The host and port the client binary itself carries. A historical fact:
@@ -222,11 +274,30 @@ pub struct Listserver {
     /// Token sent at listserver login. 2.22 and 2.31 send `GNW30123`
     /// inside id 7; older clients send their game token.
     pub token: Option<&'static str>,
+    /// The frames `Connection::login_listserver` sends for this profile.
+    pub shape: LoginShape,
+    /// Whether that shape is from a captured real client.
+    pub shape_basis: ShapeBasis,
 }
 
 impl Listserver {
+    /// A listserver entry with the default shape of its kind: classic is
+    /// shape B with an unknown basis (what Seihai sent before the lab
+    /// captures), gen-5 is shape C, captured. Use [`Self::shape`] to set
+    /// another.
     pub const fn new(kind: ListKind, status: PortStatus, built_in: Option<BuiltIn>, token: Option<&'static str>) -> Self {
-        Self { host: LISTSERVER_HOST, port: kind.port(), kind, status, built_in, token }
+        let (shape, shape_basis) = match kind {
+            ListKind::Legacy => (LoginShape::NewmainAccount, ShapeBasis::Unknown),
+            ListKind::Supported => (LoginShape::Gen5, ShapeBasis::Captured),
+        };
+        Self { host: LISTSERVER_HOST, port: kind.port(), kind, status, built_in, token, shape, shape_basis }
+    }
+
+    /// The same entry with another login shape and basis.
+    pub const fn shape(mut self, shape: LoginShape, basis: ShapeBasis) -> Self {
+        self.shape = shape;
+        self.shape_basis = basis;
+        self
     }
 
     /// `host:port`, as typed into the launcher or given to `--online`.
@@ -839,9 +910,16 @@ mod tests {
                 "listserver kind",
                 ls.map(|l| if l.kind == ListKind::Legacy { "legacy" } else { "supported" }.to_string()) == t.list_kind,
             );
+            // The TOML records the matrix run of 2026-10-25, which sent Seihai's older
+            // classic login (shape B). A profile that now sends shape A has not been run
+            // with it, so it is assumed here whatever the TOML says.
+            let want_status = match ls {
+                Some(l) if l.shape == LoginShape::NewmainOnly => Some("assumed".to_string()),
+                _ => t.list_status.clone(),
+            };
             check(
                 "listserver port status",
-                ls.map(|l| if l.status == PortStatus::Confirmed { "confirmed" } else { "assumed" }.to_string()) == t.list_status,
+                ls.map(|l| if l.status == PortStatus::Confirmed { "confirmed" } else { "assumed" }.to_string()) == want_status,
             );
             check("built-in host", ls.and_then(|l| l.built_in).map(|b| b.host.to_string()) == t.built_in_host);
             check("built-in port", ls.and_then(|l| l.built_in).map(|b| b.port) == t.built_in_port);
@@ -974,6 +1052,43 @@ mod tests {
         assert_eq!(seen + 7, PROFILES.len());
     }
 
+    /// The login shape per profile and where it comes from: real 2.00, 2.05,
+    /// 2.17.1, 2.22 and 2.31 were captured; 1.42 and 2.01 to 2.04 take shape
+    /// A as an inference; 1.41 and 2.1 to 2.16 keep shape B with no
+    /// evidence; 2.3 is 2.31's shape C by inference.
+    #[test]
+    fn login_shape_and_basis_per_profile() {
+        use LoginShape::*;
+        use ShapeBasis::*;
+        let want = [
+            ("1.41", NewmainAccount, Unknown),
+            ("1.42", NewmainOnly, Inferred),
+            ("2.00", NewmainOnly, Captured),
+            ("2.01", NewmainOnly, Inferred),
+            ("2.02", NewmainOnly, Inferred),
+            ("2.02 rev2", NewmainOnly, Inferred),
+            ("2.03", NewmainOnly, Inferred),
+            ("2.04", NewmainOnly, Inferred),
+            ("2.05", NewmainOnly, Captured),
+            ("2.1", NewmainAccount, Unknown),
+            ("2.12", NewmainAccount, Unknown),
+            ("2.13", NewmainAccount, Unknown),
+            ("2.14", NewmainAccount, Unknown),
+            ("2.15", NewmainAccount, Unknown),
+            ("2.16", NewmainAccount, Unknown),
+            ("2.17", NewmainAccount, Captured),
+            ("2.22", Gen5, Captured),
+            ("2.3", Gen5, Inferred),
+            ("2.31", Gen5, Captured),
+        ];
+        for (label, shape, basis) in want {
+            let l = by_label(label).unwrap().protocol.listserver.unwrap();
+            assert_eq!((l.shape, l.shape_basis), (shape, basis), "{label}");
+        }
+        // 1.33 to 1.39 fetch their list as 2.05.
+        assert_eq!(ClientVersion::V139.listserver().shape, NewmainOnly);
+    }
+
     /// What the matrix of 2026-10-25 confirms: Seihai's own list login for
     /// 15 classic profiles on 14923 and for 2.22, 2.3 and 2.31 (gen-5) on
     /// 14922. 2.05 is the exception: the matrix binary sent a gen-5 login for
@@ -989,10 +1104,14 @@ mod tests {
         assert_eq!(
             confirmed,
             [
-                "1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.1", "2.12", "2.13", "2.14",
-                "2.15", "2.16", "2.17", "2.22", "2.3", "2.31"
+                "1.41", "2.1", "2.12", "2.13", "2.14", "2.15", "2.16", "2.17", "2.22", "2.3", "2.31"
             ]
         );
+        // The profiles that now send shape A (real 2.00 and 2.05, and the
+        // inferred 1.42 and 2.01 to 2.04) were not run with it.
+        for l in ["1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.05"] {
+            assert_eq!(by_label(l).unwrap().protocol.listserver.unwrap().status, PortStatus::Assumed, "{l}");
+        }
         assert_eq!(ClientVersion::V205.listserver().status, PortStatus::Assumed);
     }
 

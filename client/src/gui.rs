@@ -227,6 +227,7 @@ impl eframe::App for Launcher {
                         "The port of this login type. Seihai's login for this version was not run on the public listserver."
                     }
                 };
+                let hint = format!("{hint} Login shape {}: {}.", ls.shape.letter(), ls.shape_basis.text());
                 if self.list.port_user_set {
                     ui.horizontal(|ui| {
                         ui.small(format!("Port set by you. Default for {}: {} ({kind}, {status})", v.label(), ls.port))

@@ -206,3 +206,26 @@ environment variable, never on a command line.
 
 Every profile now defaults to `listserver.graal.in` on the port that gets a list (`documentation/port-rule.md`), by the login type the profile sends: classic login (1.41 to 2.17, including 2.05) on 14923, gen-5 login (2.22, 2.3, 2.31) on 14922; nothing defaults to the dead 14921, which stays as `built_in` history on 2.00 to 2.05. Confirmed by the matrix of 2026-10-25 (Seihai's own login for the profile got a list on that port; no real client was captured): 1.41, 1.42, 2.00 to 2.04, 2.1, 2.12 to 2.17 (14923), 2.22, 2.3, 2.31 (14922). Assumed: 2.05 only, because its classic login was not run (the matrix binary sent the gen-5 login for 2.05). Running the matrix again with a build of this change, `VERSIONS=2.05`, would confirm it. The launcher's port box follows the selected version; Graal_analysis' version-profile TOMLs carry the same fields (`client-internals/version-profiles/list-ports.md`).
 
+
+## Next matrix run (after the authentic list login)
+
+Seihai's list login now matches the real clients (`listserver-login.md`): the real 2.00 and 2.05 frame (id 0 `newmain` only) for 2.00 to 2.05, the best zlib level (`78 DA`) for every listserver login frame, and `--version` winning over the saved version, so a `--version 2.05` run really is 2.05. Run it with a build of this change:
+
+```
+VERSIONS="2.00 2.05 2.17" ./run_port_matrix.sh ./target/release/seihai
+```
+
+Read-only list requests, one per version and port, as before. What each outcome would mean:
+
+| Run | Outcome | Meaning |
+|---|---|---|
+| 2.00 or 2.05 on 14923 | a list | The public service answers the real 2.00/2.05 frame. Mark 2.00 to 2.05 (and, only as a guess, 1.42) `confirmed` on 14923 for shape A. |
+| 2.00 or 2.05 on 14923 | no reply | The public service wants the account in the first frame; shape A is what the lab listserver accepts, not the public one. Say so, and keep the port assumed. |
+| 2.00 or 2.05 on 14922 | no reply | 14922 does not serve classic logins of any shape. |
+| 2.00 or 2.05 on 14922 | a list | 14922 serves shape A; the 2.05 port rule would need a second look. |
+| 2.17 on 14922 | no reply | The `78 DA` header makes no difference for a classic frame (its shape B bytes now equal the real 2.17.1's); 14922 does not serve classic logins. |
+| 2.17 on 14922 | a list | The zlib header was what 14922 checked. |
+| 2.17 on 14923 | a list | `78 DA` is accepted; nothing changes. |
+| 2.17 on 14923 | no reply | The new header broke something that worked with `78 9C`; revert it for classic frames. |
+
+The 2.05 row is the first real classic-2.05 data point: the matrix of 2026-10-25 ran the 2.05 profile as a saved gen-5 profile. Until the run, no port is `confirmed` for shape A, and the other classic profiles stay `confirmed` for the older login with the `78 9C` header.

@@ -22,7 +22,7 @@
 //! `documentation/version-chain.tsv` (a unit test fails when it is stale).
 
 use super::profile::{
-    Basis, BuiltIn, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, PortStatus, Props, Protocol, ServerList, Ui,
+    Basis, BuiltIn, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
@@ -488,7 +488,7 @@ pub const CHAIN: &[Step] = &[
         source: "binary: gen 3 (key byte + LCG insertion), server-list window, PLI 31 gone, props to 36, GS1 111 to 126",
         unknown: &[
             Unknown { area: "listserver", what: "original host and port; the only surviving 1.41 copy is patched for listserver.graal.in and carries 14923. Seihai's classic login got a legacy list on 14923 on 2026-10-25 (14922 stayed silent); a real 1.41 client was not captured" },
-            Unknown { area: "listserver", what: "whether 1.41 sends the account to the listserver" },
+            Unknown { area: "listserver", what: "login frame inferred, not captured, and no evidence for its shape: Seihai keeps shape B (id 0 `newmain`, then id 1 with the account), what it sent before the lab captures; whether a real 1.41 sends the account to the listserver is unknown" },
             Unknown { area: "life", what: "death and combat rules come from the 2.05 template, no 1.41 handler was traced (1.42 clears them)" },
             Unknown { area: "levels", what: "the version-profile TOML lists GLEVNW01 (.nw) as readable by 1.41 and 1.42 and drops it at 2.00; the rows of 1.33 to 2.04 have .graal only" },
         ],
@@ -502,7 +502,9 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             // Classic login: 14923 (matrix run, 2026-10-25). The build itself carries
             // www.graalonline.com:14921 (dead).
-            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Confirmed, Some(BUILT_IN_14921), None))),
+            listserver: Some(Some(
+                Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None).shape(LoginShape::NewmainOnly, ShapeBasis::Inferred),
+            )),
             plo: IdDelta::plus(&[42, 44, 45, 150, 151, 153]),
             pli: IdDelta::plus(&[34]),
             death: Some(None),
@@ -514,7 +516,7 @@ pub const CHAIN: &[Step] = &[
         source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, GS1 126 to 134",
         unknown: &[
             Unknown { area: "listserver", what: "built-in port 14921 is dead; Seihai's classic login got a legacy list on 14923 on 2026-10-25 (14922 stayed silent); a real 1.42 client was not captured" },
-            Unknown { area: "listserver", what: "whether 1.42 sends the account to the listserver" },
+            Unknown { area: "listserver", what: "login frame inferred, not captured: Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; a real 1.42 frame was never captured, and no run on the public service has used shape A, so the port is assumed" },
         ],
     },
     Step {
@@ -526,7 +528,9 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             // 14923 is the port that answers a classic login (checked 2026-10-25, twice for
             // 2.00). The build itself carries www.graalonline.com:14921, which is dead.
-            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Confirmed, Some(BUILT_IN_14921), None))),
+            listserver: Some(Some(
+                Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None).shape(LoginShape::NewmainOnly, ShapeBasis::Captured),
+            )),
             plo: IdDelta::plus(&[154, 155]),
             gs1_commands: Some(142),
             ..Delta::NONE
@@ -534,7 +538,7 @@ pub const CHAIN: &[Step] = &[
         source: "binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142; list port 14923 from the public checks of 2026-10-25 (built-in www.graalonline.com:14921)",
         unknown: &[
             Unknown { area: "login", what: "props sent at login (verified for 2.05 only)" },
-            Unknown { area: "listserver", what: "a real 2.00 client's reply was not captured; the public port 14923 answered Seihai's classic login with a plain zlib id-0 list (4 rows) and 14922 stayed silent, on 2026-10-25" },
+            Unknown { area: "listserver", what: "Seihai now sends the real 2.00 frame (shape A, captured in the lab: id 0 `newmain` only, no account). That frame has not been run on the public service. The 2026-10-25 matrix used Seihai's older classic login (shape B), which 14923 answered with a plain zlib id-0 list (4 rows) while 14922 stayed silent; the port is assumed for shape A until a run. A real 2.00's reply was not captured" },
             Unknown { area: "token", what: "the token is not in gs2lib, so a stock GServer-v2 does not know it" },
         ],
     },
@@ -545,15 +549,18 @@ pub const CHAIN: &[Step] = &[
         date: "2001-03-08",
         basis: Basis::Binary,
         delta: Delta {
-            // Listserver: unchanged from 2.00 (classic login, 14923, confirmed). Checked for 2.01,
-            // 2.02, 2.02 rev 2, 2.03 and 2.04 on 2026-10-25; the later steps carry the value.
+            // Listserver: the 2.00 login shape A as a best guess (the builds carry the same
+            // built-in list as 2.00 and 2.05), so inferred, not captured; later steps carry it.
+            listserver: Some(Some(
+                Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None).shape(LoginShape::NewmainOnly, ShapeBasis::Inferred),
+            )),
             plo: IdDelta::plus(&[46, 156]),
             pli: IdDelta::plus(&[35, 36]),
             gs1_commands: Some(144),
             ..Delta::NONE
         },
         source: "binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144",
-        unknown: &[Unknown { area: "listserver", what: "2.01 to 2.04 (and 2.02 rev 2): Seihai's classic login got a legacy list on 14923 and nothing on 14922 on 2026-10-25; a real client of these builds was not captured; 14921, the port the build carries, is dead" }],
+        unknown: &[Unknown { area: "listserver", what: "2.01 to 2.04 (and 2.02 rev 2): login frame inferred, not captured. Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; no real client of these builds was captured and no run on the public service has used shape A, so the port is assumed. The 2026-10-25 matrix used Seihai's older shape B: a legacy list on 14923, nothing on 14922. 14921, the port the build carries, is dead" }],
     },
     Step {
         version: ClientVersion::V202,
@@ -622,7 +629,9 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             // This profile sends the classic login, so it takes the classic-login port, 14923
             // (not checked with this login: see the unknown entry).
-            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None))),
+            listserver: Some(Some(
+                Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None).shape(LoginShape::NewmainOnly, ShapeBasis::Captured),
+            )),
             plo: IdDelta::plus(&[168]),
             nw: Some(true),
             gmap: Some(true),
@@ -635,7 +644,7 @@ pub const CHAIN: &[Step] = &[
         },
         source: "binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death and combat rules traced here",
         unknown: &[
-            Unknown { area: "listserver", what: "this profile sends the classic login, which no public run has used for 2.05: the 2026-10-25 matrix binary sent the gen-5 login for 2.05 and both 14922 and 14923 answered it. 14923 answered the classic login of every other classic profile, so 14923 is assumed here" },
+            Unknown { area: "listserver", what: "this profile now sends the real 2.05 frame (shape A, captured in the lab: id 0 `newmain` only). No public run has used it: the 2026-10-25 matrix binary sent the gen-5 login for 2.05 (the saved-version override, since fixed) and both 14922 and 14923 answered that. 14923 answered the older classic login (shape B) of every other classic profile, so 14923 is assumed here" },
         ],
     },
     // 2.1 to 2.16 have no binary. Their deltas are release notes and server
@@ -650,7 +659,7 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             // Classic login: 14923 (checked for 2.1 and 2.12 to 2.16 on 2026-10-25; 14922 stayed
             // silent). The 2.1 test builds carry www.graalonline.com:14922.
-            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Confirmed, Some(BUILT_IN_14922), None))),
+            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Confirmed, Some(BUILT_IN_14922), None))), // shape B, no evidence
             plo: IdDelta { plus: &[49], plus_ranges: &[(169, 174)], ..IdDelta::NONE },
             own_props: IdDelta { plus_ranges: &[(43, 45)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(43, 45)], ..IdDelta::NONE },
@@ -670,7 +679,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "binary", what: "no 2.1 release binary; every value of this step is inferred" },
             Unknown { area: "token", what: "the 2.1 test builds still send the 2.05 token, so GNW31101 is from gs2lib only" },
             Unknown { area: "protocol", what: "PLO 170 to 174 are placed here from the notes, the test builds handle only up to 169" },
-            Unknown { area: "listserver", what: "2.1 to 2.16 have no client binary: the port was checked with Seihai's classic login only (list on 14923, silence on 14922, 2026-10-25); no real client of these builds was captured" },
+            Unknown { area: "listserver", what: "2.1 to 2.16 have no client binary: login frame inferred, not captured. Seihai keeps shape B (id 0 `newmain`, then id 1), what it sent before the lab captures, with no evidence for it. The port was checked with that frame only (list on 14923, silence on 14922, 2026-10-25); no real client of these builds was captured" },
             Unknown { area: "pli", what: "client send set is carried from 2.05" },
             Unknown { area: "props", what: "player props 43 to 45 and the NPC prop limit 43 are not confirmed for a 2.1 release" },
             Unknown { area: "life", what: "death rule without the name-group test is inferred (the delimiter is not in the 2.1 test binaries)" },
@@ -751,7 +760,9 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             // Classic login: 14923 (checked 2026-10-25; 14922 stayed silent). The host and port
             // the client reads come from arrays2.dat, not the binary.
-            listserver: Some(Some(Listserver::new(ListKind::Legacy, PortStatus::Confirmed, None, None))),
+            listserver: Some(Some(
+                Listserver::new(ListKind::Legacy, PortStatus::Confirmed, None, None).shape(LoginShape::NewmainAccount, ShapeBasis::Captured),
+            )),
             plo: IdDelta { plus: &[179], plus_ranges: &[(175, 177), (181, 185)], ..IdDelta::NONE },
             pli: IdDelta::plus(&[39, 40, 43, 44, 45]),
             tampercheck: Some(true),
@@ -766,7 +777,7 @@ pub const CHAIN: &[Step] = &[
         unknown: &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
-            Unknown { area: "login", what: "how a real 2.17 client logs in to the listserver was not captured; Seihai's classic login (id 0 then id 1 in one plain frame) got a legacy list on 14923 and no reply on 14922 on 2026-10-25" },
+            Unknown { area: "login", what: "the real 2.17.1 login to a lab listserver was captured: shape B (one plain zlib frame, id 0 `newmain` then id 1 with the account, no token), which Seihai sends. What the public service does for a real 2.17.1 was not observed; Seihai's frame got a legacy list on 14923 and no reply on 14922 on 2026-10-25 (with the default zlib header 78 9C; Seihai now sends 78 DA like the real client, not yet run)" },
             Unknown { area: "showimg", what: "the binary has the id 24 sender with 2.22's send test, and the solo 90 s capture saw none, as that test predicts; the period and a two-player run are not observed, so none is sent" },
         ],
     },
@@ -808,7 +819,10 @@ pub const CHAIN: &[Step] = &[
             plo: IdDelta::plus_minus(&[84, 189], &[44]),
             pli: IdDelta::plus_minus(&[46], &[21]),
             // Gen-5 login like 2.31: 14922 answered it on 2026-10-25 (no 2.3 build exists).
-            listserver: Some(Some(Listserver::new(ListKind::Supported, PortStatus::Confirmed, None, Some("GNW30123")))),
+            // No 2.3 build exists, so shape C is inferred from 2.31, not captured.
+            listserver: Some(Some(
+                Listserver::new(ListKind::Supported, PortStatus::Confirmed, None, Some("GNW30123")).shape(LoginShape::Gen5, ShapeBasis::Inferred),
+            )),
             tamper: Some(Some(TAMPER_230)),
             showimg: Some(None),
             login: Some(None),
@@ -984,6 +998,7 @@ fn listserver_text(l: &Option<Listserver>) -> String {
             if let Some(tok) = l.token {
                 t.push_str(&format!(", token {tok}"));
             }
+            t.push_str(&format!(", login shape {} ({})", l.shape.letter(), l.shape_basis.text()));
             t
         }
     }
@@ -1237,6 +1252,8 @@ mod tests {
             // without them.
             let got = strip_field(&format!("{p:?}"), "login: ", ", udp:");
             let got = strip_field(&got, ", link_boxes: ", " }");
+            // The login shape and its basis (`Listserver::shape`) came later too.
+            let got = if got.contains(", shape: ") { strip_field(&got, ", shape: ", " }") } else { got };
             if got != want {
                 let at = got.bytes().zip(want.bytes()).position(|(a, b)| a != b).unwrap_or(got.len().min(want.len()));
                 let ctx = |s: &str| s[at.saturating_sub(60)..(at + 80).min(s.len())].to_string();

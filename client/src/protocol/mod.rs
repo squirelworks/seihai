@@ -29,7 +29,7 @@ pub use dispatch::{
     latin1, read_gint3, read_gshort, script_text, split_messages, sword_power_from_wire, ChatKind, ChatLine, IncomingFile, Message, OtherPlayer, SessionState, Splitter,
 };
 pub use extras::MapSpec;
-pub use frame::{read_zlib_frame, write_zlib_frame, zlib_compress, zlib_decompress};
+pub use frame::{read_zlib_frame, write_zlib_frame, write_zlib_frame_best, zlib_compress, zlib_compress_best, zlib_decompress};
 pub use gen3::Gen3;
 pub use gen5::{choose_comp, read_frame, read_frame_or_plain, write_frame, Gen5, Gen5Comp};
 pub use list::{parse_list_reply, parse_svrlist, ListReply, ServerEntry};
@@ -37,8 +37,8 @@ pub use props::{
     decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_in, parse_player_props_with, PlayerProp,
 };
 pub use profile::{
-    by_label, profile, Basis, BuiltIn, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, PortStatus, Props, Protocol,
-    ServerList, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
+    by_label, profile, Basis, BuiltIn, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol,
+    ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
     PROFILES, SUPPORTED_LIST_PORT,
 };
 pub use showimg::{

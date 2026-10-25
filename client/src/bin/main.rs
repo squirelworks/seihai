@@ -193,6 +193,7 @@ fn main() {
     let mut version_chain = false;
     let mut chain_format = seihai::protocol::chain::Format::Text;
     let mut version_given = false;
+    let mut account_given = false;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
     let mut no_scripts = false;
@@ -231,6 +232,7 @@ fn main() {
             "--account" => {
                 i += 1;
                 if let Some(a) = args.get(i) {
+                    account_given = true;
                     account = a.clone();
                 }
             }
@@ -410,7 +412,7 @@ fn main() {
     }
     // An empty path (an empty field in the settings window) is no folder.
     assets = assets.filter(|p| !p.as_os_str().is_empty());
-    if account == "player" {
+    if !account_given {
         if let Some(a) = &settings.account {
             account = a.clone();
         }
@@ -426,12 +428,9 @@ fn main() {
         print!("{}", seihai::protocol::chain::render(chain_format, only));
         return;
     }
-    // Use the version saved by the GUI if no CLI --version was given.
-    if version == ClientVersion::V205 {
-        if let Some(v) = &settings.version {
-            version = ClientVersion::from_label(v).unwrap_or(ClientVersion::V205);
-        }
-    }
+    // `--version` wins; the version saved by the GUI applies only when the
+    // flag was not given (a given 2.05 is not replaced by the saved one).
+    version = settings.version_with(version_given.then_some(version));
     // `--online host:port` is used as given. A listserver host with no port
     // gets the selected version's default port.
     if let Some(a) = online.as_mut() {

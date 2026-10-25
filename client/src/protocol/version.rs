@@ -142,7 +142,9 @@ impl ClientVersion {
     /// for versions without one (1.33 to 1.39).
     pub fn listserver(self) -> Listserver {
         let ls = self.list_version().profile().protocol.listserver;
-        ls.unwrap_or(Listserver::new(ListKind::Legacy, PortStatus::Assumed, None, None))
+        ls.unwrap_or(
+            Listserver::new(ListKind::Legacy, PortStatus::Assumed, None, None).shape(super::profile::LoginShape::NewmainOnly, super::profile::ShapeBasis::Inferred),
+        )
     }
 
     /// Default listserver port: 14923 for a profile that sends the classic
