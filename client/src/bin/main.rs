@@ -1842,17 +1842,41 @@ fn main() {
                             if !t.is_empty() {
                                 net_state.push_chat(ChatKind::Say, me(&net_state, &account), t.clone());
                             }
-                            conn.as_mut().map(|c| c.send_chat(&t))
+                            let online = conn.is_some();
+                            let r = conn.as_mut().map(|c| c.send_chat(&t));
+                            match &r {
+                                Some(Ok(())) => eprintln!("chat: sent {} characters as chat (CURCHAT), bubble and log set", t.chars().count()),
+                                Some(Err(_)) => {}
+                                None => eprintln!("chat: not sent, not connected (shown in the bubble and log only; online: {online})"),
+                            }
+                            r
                         }
                         ui::ChatSend::Toall(t) if !t.is_empty() => {
                             net_state.push_chat(ChatKind::Toall, me(&net_state, &account), t.clone());
-                            conn.as_mut().map(|c| c.send_toall(&t))
+                            match conn.as_mut().map(|c| c.send_toall(&t)) {
+                                Some(r) => {
+                                    if r.is_ok() {
+                                        eprintln!("chat: sent {} characters as toall", t.chars().count());
+                                    }
+                                    Some(r)
+                                }
+                                None => {
+                                    eprintln!("chat: toall not sent, not connected");
+                                    None
+                                }
+                            }
                         }
                         ui::ChatSend::Toall(_) => None,
                     },
                     ui::InputMode::Pm { id, name } if !text.trim().is_empty() => {
                         net_state.push_chat(ChatKind::Private, format!("to {name}"), text.clone());
-                        conn.as_mut().map(|c| c.send_pm(&[id], &text))
+                        let r = conn.as_mut().map(|c| c.send_pm(&[id], &text));
+                        match &r {
+                            Some(Ok(())) => eprintln!("chat: sent {} characters as a PM to {name}", text.chars().count()),
+                            Some(Err(_)) => {}
+                            None => eprintln!("chat: PM not sent, not connected"),
+                        }
+                        r
                     }
                     ui::InputMode::Pm { .. } => None,
                 };

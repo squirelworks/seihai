@@ -33,6 +33,12 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    /// Text join: `@`, and `SPC`, `NL`, `TAB` (the same with a space, a
+    /// line break or a tab between).
+    Cat,
+    CatSpc,
+    CatNl,
+    CatTab,
 }
 
 impl BinOp {
@@ -52,6 +58,10 @@ impl BinOp {
             BinOp::Ge => ">=",
             BinOp::And => "&&",
             BinOp::Or => "||",
+            BinOp::Cat => "@",
+            BinOp::CatSpc => "SPC",
+            BinOp::CatNl => "NL",
+            BinOp::CatTab => "TAB",
         }
     }
 }

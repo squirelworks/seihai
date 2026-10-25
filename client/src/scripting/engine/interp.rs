@@ -308,6 +308,13 @@ impl<'a> Run<'a> {
 
     fn builtin_get(&self, name: &str) -> Val {
         let p = &self.core.player;
+        match name {
+            "chat" => return Val::Str(self.obj.message.clone()),
+            "player.chat" => return Val::Str(p.chat.clone()),
+            "player.account" => return Val::Str(p.account.clone()),
+            "player.nick" => return Val::Str(p.nick.clone()),
+            _ => {}
+        }
         Val::Num(match name {
             "x" => self.obj.x,
             "y" => self.obj.y,
@@ -334,6 +341,15 @@ impl<'a> Run<'a> {
         let n = v.num();
         let id = self.obj.id;
         match name {
+            // The object's chat bubble: the same as `message`.
+            "chat" => {
+                self.obj.message = v.text();
+                self.core.effects.push(Effect::Message { obj: id, text: v.text() });
+            }
+            "player.chat" => {
+                self.core.player.chat = v.text();
+                self.core.effects.push(Effect::SetPlayerProp { code: "#c".into(), value: v.text() });
+            }
             "x" => {
                 self.obj.x = n;
                 self.core.effects.push(Effect::SetPos { obj: id, x: n, y: self.obj.y });
@@ -430,6 +446,15 @@ impl<'a> Run<'a> {
 
     fn binop(&mut self, op: BinOp, l: Val, r: Val) -> Val {
         match op {
+            BinOp::Cat | BinOp::CatSpc | BinOp::CatNl | BinOp::CatTab => {
+                let sep = match op {
+                    BinOp::CatSpc => " ",
+                    BinOp::CatNl => "\n",
+                    BinOp::CatTab => "\t",
+                    _ => "",
+                };
+                Val::Str(format!("{}{sep}{}", l.text(), r.text()))
+            }
             BinOp::Add => {
                 if as_number(&l).is_none() && l.is_str() || as_number(&r).is_none() && r.is_str() {
                     return Val::Str(format!("{}{}", l.text(), r.text()));

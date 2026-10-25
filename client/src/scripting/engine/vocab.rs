@@ -406,6 +406,12 @@ pub static BUILTIN_VARS: &[(&str, Era, bool)] = &[
     ("tokenscount", V202, false),
     ("paramscount", V203, false),
     ("weaponscount", V204, false),
+    // GS2-style names, used by scripts on servers that run NPCs (GServer GS2
+    // reference); `chat` is the object's bubble text, like `message`.
+    ("chat", V21, true),
+    ("player.chat", V21, true),
+    ("player.account", V21, false),
+    ("player.nick", V21, false),
 ];
 
 pub fn builtin_var(name: &str, era: Era) -> Option<(&'static str, bool)> {
