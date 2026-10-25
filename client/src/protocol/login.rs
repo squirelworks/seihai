@@ -114,6 +114,27 @@ pub fn weapon_images(weapons: &[Weapon]) -> Vec<String> {
         .collect()
 }
 
+/// The weapon image the real 2.22 client asks for when the server sends a
+/// default weapon (`PLO_DEFAULTWEAPON`, 43) with this id.
+///
+/// Only pairs a lab run showed: with the server's ids filtered to 7 alone the
+/// client asked `wbowi1.png`; ids 12, 20, 21, 22 and 23 sent after login made
+/// it ask `wbomb2.png`, `wbowi2.png`, `wbowi3.png`, `wbowi4.png` and
+/// `wbomb3.png`. Id 8 is left out: `wbomb1.png` was asked whether or not id 8
+/// was sent, so the capture does not tie it to that id. Nothing is invented
+/// for other ids.
+pub fn default_weapon_image(id: u8) -> Option<&'static str> {
+    match id {
+        7 => Some("wbowi1.png"),
+        12 => Some("wbomb2.png"),
+        20 => Some("wbowi2.png"),
+        21 => Some("wbowi3.png"),
+        22 => Some("wbowi4.png"),
+        23 => Some("wbomb3.png"),
+        _ => None,
+    }
+}
+
 /// The icon file for a status name: `plisticon` and the lower-case name
 /// (`No PMs` gives `plisticonno pms.png`).
 pub fn status_icon(status: &str) -> String {
@@ -224,6 +245,17 @@ impl LoginBurst {
         let mut out = Vec::new();
         let mut names = wear_images(&state.player_props, state.own_prop_ids.as_ref());
         names.extend(weapon_images(&state.weapons));
+        // Default weapons the server sent: the real client asks for their
+        // images too (`wbowi1.png` for id 7).
+        names.extend(
+            state
+                .default_weapons
+                .iter()
+                .filter_map(|&id| default_weapon_image(id))
+                .map(str::to_string)
+                .filter(|n| !names.contains(n))
+                .collect::<Vec<_>>(),
+        );
         if self.info.status_icons {
             names.extend(state.status_list.iter().map(|s| status_icon(s)));
         }
@@ -319,6 +351,44 @@ mod tests {
         let m = login_props_message(&LOGIN_231, &own_props(), "acct", None);
         let ids: Vec<u8> = parse_player_props_in(&m[1..m.len() - 1], false, None).iter().map(|p| p.id).collect();
         assert_eq!(ids, [0, 11, 13, 18, 33, 52, 75, 76]);
+    }
+
+    #[test]
+    fn default_weapon_images_follow_the_lab_pairs() {
+        assert_eq!(default_weapon_image(7), Some("wbowi1.png"));
+        assert_eq!(default_weapon_image(20), Some("wbowi2.png"));
+        assert_eq!(default_weapon_image(23), Some("wbomb3.png"));
+        // No pair seen: id 8 (wbomb1.png comes with or without it), others.
+        assert_eq!(default_weapon_image(8), None);
+        assert_eq!(default_weapon_image(0), None);
+        assert_eq!(default_weapon_image(99), None);
+    }
+
+    #[test]
+    fn login_burst_asks_the_image_of_default_weapon_7() {
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
+        let mut st = burst_state();
+        st.default_weapons = vec![8, 7];
+        st.process_list_requests = 1;
+        let mut asked = Vec::new();
+        b.take(&st, "acct", |n| {
+            asked.push(n.to_string());
+            vec![n.as_bytes().to_vec()]
+        }, Vec::new, Vec::new);
+        // wbowi1.png is already asked for by the Bow weapon: once only; a
+        // server without the Bow weapon but with default id 7 gets it too.
+        assert_eq!(asked.iter().filter(|n| *n == "wbowi1.png").count(), 1);
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
+        let mut st = burst_state();
+        st.weapons.retain(|w| w.name != "Bow");
+        st.default_weapons = vec![8, 7];
+        st.process_list_requests = 1;
+        let mut asked = Vec::new();
+        b.take(&st, "acct", |n| {
+            asked.push(n.to_string());
+            vec![n.as_bytes().to_vec()]
+        }, Vec::new, Vec::new);
+        assert!(asked.contains(&"wbowi1.png".to_string()));
     }
 
     fn burst_state() -> SessionState {
