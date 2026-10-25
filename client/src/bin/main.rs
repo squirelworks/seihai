@@ -1783,10 +1783,16 @@ fn main() {
 
         // Enter opens the chat bar, and sends it when it is open. F2 opens
         // a PM to the nearest player.
-        if window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No) {
+        let enter = window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
+            || window.is_key_pressed(minifb::Key::NumPadEnter, minifb::KeyRepeat::No);
+        let talk = !confirm_quit && window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No);
+        if !confirm_quit && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
             if !input.is_open() {
+                eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T" });
                 input.open(ui::InputMode::Chat);
+                dirty = true;
             } else if let Some((mode, text)) = input.submit() {
+                eprintln!("chat: Enter pressed, {} characters typed", text.chars().count());
                 let sent = match mode {
                     // /ignore, /buddy, /mute and friends change the lists
                     // and are not sent as chat.

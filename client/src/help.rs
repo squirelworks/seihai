@@ -32,7 +32,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("Arrow keys", &["Left", "Right", "Up", "Down"], "walk; two at once for a diagonal"),
     k("A / Space", &["A", "Space"], "read a sign, open a chest, close a sign"),
     k("S", &["S"], "swing the sword (builds with combat rules; others judge the hit)"),
-    k("Enter", &["Enter"], "open the chat bar; send what you typed"),
+    k("Enter / T", &["Enter", "NumPadEnter", "T"], "open the chat bar (either Enter key, or T); Enter sends what you typed"),
     k("Backspace", &["Backspace"], "delete a typed letter"),
     k("Up / Down", &[], "in the chat bar: earlier lines (1.39 and later)"),
     k("Esc", &["Escape"], "close the chat bar or a sign; else ask to quit"),

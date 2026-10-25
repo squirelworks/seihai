@@ -54,6 +54,28 @@ pub struct Input {
     recall_pos: Option<usize>,
 }
 
+/// What a chat key press does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatKeyAction {
+    None,
+    /// Open the chat line.
+    Open,
+    /// Send what is typed and close the line.
+    Submit,
+}
+
+/// The chat keys. Enter (either Enter key) or T opens the line when it is
+/// closed, and Enter sends it when it is open. While it is open `T` is just a
+/// letter. The real clients open the line on Enter and on T and send the
+/// typed text as the CURCHAT player prop.
+pub fn chat_key_action(open: bool, enter: bool, talk: bool) -> ChatKeyAction {
+    match (open, enter, talk) {
+        (true, true, _) => ChatKeyAction::Submit,
+        (false, true, _) | (false, false, true) => ChatKeyAction::Open,
+        _ => ChatKeyAction::None,
+    }
+}
+
 impl Input {
     pub fn open(&mut self, mode: InputMode) {
         self.mode = Some(mode);
@@ -355,6 +377,21 @@ pub fn nearest(others: &[OtherPlayer], x: f32, y: f32) -> Option<&OtherPlayer> {
         let db = (b.x - x).powi(2) + (b.y - y).powi(2);
         da.total_cmp(&db)
     })
+}
+
+#[cfg(test)]
+mod chat_key_tests {
+    use super::*;
+
+    #[test]
+    fn enter_and_t_open_and_enter_sends() {
+        assert_eq!(chat_key_action(false, true, false), ChatKeyAction::Open);
+        assert_eq!(chat_key_action(false, false, true), ChatKeyAction::Open);
+        assert_eq!(chat_key_action(false, false, false), ChatKeyAction::None);
+        assert_eq!(chat_key_action(true, true, false), ChatKeyAction::Submit);
+        // T while typing is a letter, not a key action.
+        assert_eq!(chat_key_action(true, false, true), ChatKeyAction::None);
+    }
 }
 
 #[cfg(test)]
