@@ -1939,24 +1939,27 @@ fn main() {
             }
             let f4 = window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No);
             let f5 = window.is_key_pressed(minifb::Key::F5, minifb::KeyRepeat::No);
-            if (f4 || f5) && !profile.ui.editor {
-                // 2.3 moved the editor and level loading to GraalEditor.
-                net_state.push_chat(
-                    ChatKind::Admin,
-                    "Seihai".into(),
-                    format!("{} has no built-in editor", profile.label),
-                );
-            } else if f4 {
-                eprintln!("F4: level editor not yet implemented");
-            }
-            if f5 && profile.ui.editor {
-                let exts = profile.level_extensions();
-                if let Some(path) = seihai::gui::pick_level(resolver.root().levels_dir().as_path(), &exts) {
-                    if let Err(e) = session.load_level(&path) {
-                        eprintln!("load failed: {e}");
-                    } else {
-                        eprintln!("loaded {}", path.display());
-                        dirty = true;
+            for (pressed, is_f4) in [(f4, true), (f5, false)] {
+                if !pressed {
+                    continue;
+                }
+                match ui::editor_key(profile.ui.editor, &profile.label, frames.is_some(), is_f4) {
+                    ui::EditorKey::Refuse(msg) => {
+                        net_state.push_chat(ChatKind::Admin, "Seihai".into(), msg);
+                    }
+                    ui::EditorKey::Run if is_f4 => eprintln!("F4: level editor not yet implemented"),
+                    ui::EditorKey::Run => {
+                        let exts = profile.level_extensions();
+                        if let Some(path) =
+                            seihai::gui::pick_level(resolver.root().levels_dir().as_path(), &exts)
+                        {
+                            if let Err(e) = session.load_level(&path) {
+                                eprintln!("load failed: {e}");
+                            } else {
+                                eprintln!("loaded {}", path.display());
+                                dirty = true;
+                            }
+                        }
                     }
                 }
             }

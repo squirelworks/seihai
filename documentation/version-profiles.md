@@ -42,7 +42,7 @@ changes, each step's source and what is still unknown. See `version-chain.md`.
 - **Game window**: the title follows the version (2.05+ add the server name).
   The minimap appears from 2.1 (set by the game server). Up/Down recall of
   typed chat lines appears in 1.39. F4/F5 (editor and level loading) are gone in
-  2.3+, and F5 only lists the level formats the version can open.
+  2.3+, and F5 only lists the level formats the version can open. While online F4 and F5 are refused with a chat line (see `implementation.md`).
 
 ## Basis
 

@@ -34,7 +34,7 @@ No system SDL2. The `render` module provides:
 - permanent chat bar at the bottom
 - chest/sign/NPC markers
 - windowed binary via `minifb` (`cargo run -p seihai`)
-- F5 opens a file picker for `.nw` / `.graal` / `.zelda`
+- F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
 - Play offline button in the GUI skips the connection
 
 The player sprite is shifted down 12 px so the feet sit on the collision tile.
