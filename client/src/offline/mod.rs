@@ -162,6 +162,8 @@ pub struct OfflineSession {
     /// Per attacker id: the second of the day it was last judged (see
     /// `CombatRules::judge_throttle`).
     pub judged_at: std::collections::HashMap<u16, u32>,
+    /// A hit's knockback moved the player since the last [`OfflineSession::take_knock_moved`].
+    pub(crate) knock_moved: bool,
     /// File name of the level loaded last with [`Self::load_level`].
     loaded_file: Option<String>,
 }
@@ -271,6 +273,7 @@ impl OfflineSession {
             entered: None,
             no_pk: false,
             judged_at: HashMap::new(),
+            knock_moved: false,
             loaded_file: None,
         }
     }
@@ -958,6 +961,57 @@ impl OfflineSession {
             }
         }
         Some(self.player_update())
+    }
+
+    /// True if the point `(fx, fy)` (tiles, current-cell coordinates) is
+    /// blocked for a knocked-back body: a wall tile (or off the board) or
+    /// inside a chest. Developer mode skips the test.
+    fn blocked_point(&self, fx: f32, fy: f32) -> bool {
+        if self.dev.wallhack() {
+            return false;
+        }
+        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
+            if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking {
+                return true;
+            }
+        }
+        match &self.current_level {
+            Some(level) => level.chests.iter().any(|c| fx >= c.x as f32 && fx < c.x as f32 + 2.0 && fy >= c.y as f32 && fy < c.y as f32 + 2.0),
+            None => false,
+        }
+    }
+
+    /// One knockback step along the unit vector `(ux, uy)`: one tile, then
+    /// the twelve probe points of the body box ([`crate::combat::KNOCKBACK_PROBES`])
+    /// must all be free, or the step is taken back. Returns true if the
+    /// player moved. Not while a warp is pending.
+    pub(crate) fn knock_step(&mut self, ux: f32, uy: f32) -> bool {
+        if self.warp_pending.is_some() || self.life.is_dead() {
+            return false;
+        }
+        let (nx, ny) = (self.player_x + ux * crate::combat::KNOCKBACK_STEP_TILES, self.player_y + uy * crate::combat::KNOCKBACK_STEP_TILES);
+        if !self.gmap_step_ok(nx, ny) {
+            return false;
+        }
+        if crate::combat::KNOCKBACK_PROBES.iter().any(|&(px, py)| self.blocked_point(nx + px, ny + py)) {
+            return false;
+        }
+        self.player_x = nx;
+        self.player_y = ny;
+        if let Some(w) = &self.gmap {
+            if let Resolved::Crossed(c) = w.map.resolve(w.cell, (self.player_x, self.player_y)) {
+                self.cross_to(c);
+            }
+        }
+        self.armed = true;
+        self.refresh_water();
+        true
+    }
+
+    /// True once if a hit's knockback moved the player since the last call:
+    /// the caller sends the new position like a step.
+    pub fn take_knock_moved(&mut self) -> bool {
+        std::mem::take(&mut self.knock_moved)
     }
 
     /// Attach a walk GANI. Stepped on every successful move.

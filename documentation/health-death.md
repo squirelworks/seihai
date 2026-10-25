@@ -117,8 +117,8 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   the notes do not say.
 - **Hurt state** (mode 3 for 40 ticks) is now modelled for hits from other
   players (`documentation/combat.md`). Script `hurt` and `damage_half` are
-  still not gated by it, and knockback and the `playerhurt` script event are
-  not done.
+  still not gated by it, the `playerhurt` script event is not done (knockback is, see
+  `damage-respawn.md`).
 - **Damage amounts** are resolved for sword hits (`combat.md`, "Damage").
   `damage_half` still takes half hearts from its caller; script `hurt` is not
   yet routed through the hit rules.

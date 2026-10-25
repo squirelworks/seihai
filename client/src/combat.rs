@@ -31,6 +31,62 @@ pub const PLO_HITOBJECTS: u8 = 46;
 /// The dead bit of STATUS (prop 18): other players can see it.
 pub const STATUS_DEAD: u8 = 0x08;
 
+/// Knockback (read in 2.05 rev 2, 2.17.1, 2.22 and 2.31; the same in all
+/// four): a hit stores a direction (the packet's `dx, dy`; from the
+/// attacker to the victim for a sword; a zero vector means east) scaled to
+/// length 1. In each of the first `KNOCKBACK_TICKS` ticks of hurt mode the
+/// victim moves one tile along it, and then every probe point of the body
+/// box must be free, or that step is taken back.
+pub const KNOCKBACK_TICKS: u16 = 5;
+/// Tiles moved per knockback tick.
+pub const KNOCKBACK_STEP_TILES: f32 = 1.0;
+/// The twelve points tested after a knockback step, relative to the X/Y
+/// props: the top, left, bottom and right edges of a box 0.6 to 2.4 tiles
+/// across and 1.1 to 2.9 tiles down (three points per edge, the corners
+/// twice).
+pub const KNOCKBACK_PROBES: [(f32, f32); 12] = [
+    (0.6, 1.1),
+    (1.5, 1.1),
+    (2.4, 1.1),
+    (0.6, 1.1),
+    (0.6, 2.0),
+    (0.6, 2.9),
+    (0.6, 2.9),
+    (1.5, 2.9),
+    (2.4, 2.9),
+    (2.4, 1.1),
+    (2.4, 2.0),
+    (2.4, 2.9),
+];
+/// Where a player's centre lies relative to its X/Y props (tiles): the
+/// point `PLO_HITOBJECTS` and the sword box are measured from.
+pub const HIT_CENTRE: (f32, f32) = (1.5, 2.0);
+/// `PLO_HITOBJECTS` hurts a player whose centre is strictly less than this
+/// many tiles from the hit point on each axis.
+pub const HITOBJECTS_BOX_TILES: f32 = 2.0;
+
+/// The knockback direction for a hit vector: length 1, and east when the
+/// vector is exactly zero.
+pub fn knockback_unit(dx: f32, dy: f32) -> (f32, f32) {
+    let (dx, dy) = if dx == 0.0 && dy == 0.0 { (1.0, 0.0) } else { (dx, dy) };
+    let len = (dx * dx + dy * dy).sqrt();
+    if len > 0.0 {
+        (dx / len, dy / len)
+    } else {
+        (dx, dy)
+    }
+}
+
+/// What a packet hit needs besides the packet: the same attacker-side gates
+/// as a sword swing (`documentation/damage-respawn.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PacketGates {
+    /// The attacker's "(guild)" tag is in the victim's nickname.
+    pub friendly: bool,
+    /// The attacker was already judged in this second.
+    pub repeat: bool,
+}
+
 /// Where a player stands and which way it faces. Tiles; `dir` is 0 up,
 /// 1 left, 2 down, 3 right.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -75,9 +131,9 @@ pub enum Reject {
     AttackerBlocked,
     /// This attacker was already judged in this second.
     Throttled,
-    /// Id 46 is decoded but not applied: where a player's centre is, for its
-    /// "within 2 tiles" test, is not in the notes.
-    CentreUnknown,
+    /// `PLO_HITOBJECTS`: the player's centre is 2 or more tiles from the
+    /// hit point on an axis.
+    OutOfBlast,
 }
 
 /// Whether the player can be hurt right now.
@@ -311,30 +367,82 @@ fn within(a: (f32, f32), b: (f32, f32), half_tiles_range: u8) -> bool {
     dx * dx + dy * dy <= r * r
 }
 
-/// The victim's judgement of a `PLO_HURTPLAYER`. It applies only when the
-/// victim can be hurt and the attacker is within the profile's range
-/// (10 tiles); the power is capped at one heart. `attacker_at` is where the
-/// attacker is, in the victim's coordinates, or `None` when it is not known.
-/// A hit from an NPC has no known position and is refused. Unlike the
-/// sword, nothing in the notes makes AP 100 immune to this packet, so AP is
-/// not checked here.
-pub fn judge_hurtplayer(rules: &CombatRules, h: &HurtPlayer, attacker_at: Option<(f32, f32)>, v: &Victim) -> Result<i32, Reject> {
-    if h.npc.is_some() {
+/// The gates `PLO_HURTPLAYER` and `PLO_HITOBJECTS` share, in the order the
+/// client runs them (read in 2.05 rev 2 and 2.22): the victim can be hurt,
+/// the attacker is a known player (an NPC source is refused here), the
+/// victim's AP is not 100, the level is not `noplayerkilling`, the attacker
+/// was not already judged this second, its `(tag)` is not in the victim's
+/// nickname, and the attacker is within the profile's range (10 tiles).
+fn packet_gates(
+    rules: &CombatRules,
+    npc: Option<u32>,
+    attacker_at: Option<(f32, f32)>,
+    v: &Victim,
+    g: PacketGates,
+) -> Result<(), Reject> {
+    if npc.is_some() {
         return Err(Reject::NpcSource);
     }
     v.state.check()?;
+    let at = attacker_at.ok_or(Reject::TooFar)?;
+    if v.ap == rules.immune_ap {
+        return Err(Reject::Immune);
+    }
     if v.no_pk {
         return Err(Reject::NoPkZone);
     }
-    let at = attacker_at.ok_or(Reject::TooFar)?;
+    if rules.judge_throttle && g.repeat {
+        return Err(Reject::Throttled);
+    }
+    if g.friendly {
+        return Err(Reject::Friendly);
+    }
     if !within(at, (v.x, v.y), rules.hurtplayer_range_half) {
         return Err(Reject::TooFar);
     }
-    let half = h.half.min(i32::from(rules.packet_hit_cap_half));
-    if half <= 0 {
-        return Err(Reject::NoDamage);
+    Ok(())
+}
+
+/// The victim's judgement of a `PLO_HURTPLAYER` with the default gates (no
+/// guild match, not a repeat): see [`judge_hurtplayer_gated`].
+pub fn judge_hurtplayer(rules: &CombatRules, h: &HurtPlayer, attacker_at: Option<(f32, f32)>, v: &Victim) -> Result<i32, Reject> {
+    judge_hurtplayer_gated(rules, h, attacker_at, v, PacketGates::default())
+}
+
+/// The victim's judgement of a `PLO_HURTPLAYER`: the shared packet gates
+/// ([`PacketGates`]), then the power capped at one heart. A power of 0 is
+/// accepted (hurt mode and knockback start, no hearts change). `attacker_at`
+/// is where the attacker is, in the victim's coordinates, or `None` when it
+/// is not known. A hit from an NPC has no known position and is refused.
+pub fn judge_hurtplayer_gated(
+    rules: &CombatRules,
+    h: &HurtPlayer,
+    attacker_at: Option<(f32, f32)>,
+    v: &Victim,
+    g: PacketGates,
+) -> Result<i32, Reject> {
+    packet_gates(rules, h.npc, attacker_at, v, g)?;
+    Ok(h.half.clamp(0, i32::from(rules.packet_hit_cap_half)))
+}
+
+/// The victim's judgement of a `PLO_HITOBJECTS`: the shared packet gates,
+/// then the player's centre (`X + 1.5, Y + 2.0`) must be strictly under 2
+/// tiles from the hit point on each axis. Power is capped at one heart as
+/// for id 40. Returns the half hearts and the knockback vector (from the hit
+/// point to the player's centre, not yet scaled).
+pub fn judge_hitobjects(
+    rules: &CombatRules,
+    h: &HitObjects,
+    attacker_at: Option<(f32, f32)>,
+    v: &Victim,
+    g: PacketGates,
+) -> Result<(i32, (f32, f32)), Reject> {
+    packet_gates(rules, h.npc, attacker_at, v, g)?;
+    let (dx, dy) = (v.x + HIT_CENTRE.0 - h.x, v.y + HIT_CENTRE.1 - h.y);
+    if dx.abs() >= HITOBJECTS_BOX_TILES || dy.abs() >= HITOBJECTS_BOX_TILES {
+        return Err(Reject::OutOfBlast);
     }
-    Ok(half)
+    Ok((h.half.clamp(0, i32::from(rules.packet_hit_cap_half)), (dx, dy)))
 }
 
 /// What the attacker knows about a player it might hit, from that player's
@@ -408,6 +516,11 @@ pub struct CombatState {
     swing: Option<(u8, u64)>,
     hurt_left: u16,
     hurt_acc_ms: u64,
+    /// Knockback direction (unit vector) of the hit that started hurt mode.
+    knock: Option<(f32, f32)>,
+    /// Knockback steps that came due in the ticks just run; the session
+    /// takes them with [`CombatState::take_knock_steps`].
+    knock_steps: Vec<(f32, f32)>,
 }
 
 /// One client tick, in milliseconds.
@@ -460,12 +573,26 @@ impl CombatState {
         self.swing.take().is_some()
     }
 
-    /// Hurt mode starts (40 ticks).
+    /// Hurt mode starts (40 ticks), with no knockback.
     pub fn start_hurt(&mut self) {
+        self.start_hurt_knock(None);
+    }
+
+    /// Hurt mode starts (40 ticks). `knock` is the hit vector: the player is
+    /// pushed one tile a tick along it for the first five ticks (the vector
+    /// is scaled to length 1; a zero vector pushes east).
+    pub fn start_hurt_knock(&mut self, knock: Option<(f32, f32)>) {
         if let Some(r) = &self.rules {
             self.hurt_left = r.hurt_ticks;
             self.hurt_acc_ms = 0;
+            self.knock = knock.map(|(x, y)| knockback_unit(x, y));
+            self.knock_steps.clear();
         }
+    }
+
+    /// The knockback steps (unit vectors) that came due since the last call.
+    pub fn take_knock_steps(&mut self) -> Vec<(f32, f32)> {
+        std::mem::take(&mut self.knock_steps)
     }
 
     /// The SPRITE (17) value to send for a player facing `dir`: the swing
@@ -497,7 +624,21 @@ impl CombatState {
             self.hurt_acc_ms += ms;
             let ticks = (self.hurt_acc_ms / TICK_MS) as u16;
             self.hurt_acc_ms %= TICK_MS;
-            self.hurt_left = self.hurt_left.saturating_sub(ticks);
+            // The client counts down first and pushes while the counter is
+            // still within the first five ticks of hurt mode.
+            for _ in 0..ticks {
+                if self.hurt_left == 0 {
+                    break;
+                }
+                self.hurt_left -= 1;
+                if let Some(k) = self.knock {
+                    if self.hurt_left + KNOCKBACK_TICKS >= r.hurt_ticks {
+                        self.knock_steps.push(k);
+                    } else {
+                        self.knock = None;
+                    }
+                }
+            }
         }
         self.sprite(0) != before
     }
@@ -540,7 +681,7 @@ impl OfflineSession {
     /// only a victim at the profile's `heal_min_ap` or more; below it the
     /// hit changes no hearts and still starts hurt mode, as does a power of
     /// 0. Returns the half hearts taken (negative: healed, 0: none).
-    fn take_hit(&mut self, half: i32, attacker: Option<u16>) -> Result<i32, Reject> {
+    fn take_hit(&mut self, half: i32, attacker: Option<u16>, knock: (f32, f32)) -> Result<i32, Reject> {
         if self.life.is_dead() {
             return Err(Reject::Dead);
         }
@@ -552,7 +693,7 @@ impl OfflineSession {
             let healed = (self.hearts_half() - applied).min(self.max_hearts);
             self.set_hearts_half(healed);
         }
-        self.combat.start_hurt();
+        self.combat.start_hurt_knock(Some(knock));
         Ok(applied)
     }
 
@@ -573,27 +714,68 @@ impl OfflineSession {
                 if let (true, true, Some(id)) = (r.judge_throttle, reaches, id) {
                     s.repeat = self.judged_at.insert(id, second) == Some(second);
                 }
-                judge_sword(&r, &s, &v).and_then(|h| self.take_hit(h, id))
+                // Knockback runs from the attacker to the victim.
+                let knock = (v.x - s.pose.x, v.y - s.pose.y);
+                judge_sword(&r, &s, &v).and_then(|h| self.take_hit(h, id, knock))
             }
         };
         HitReport { kind: HitKind::Sword, attacker: id, outcome }
     }
 
-    /// A `PLO_HURTPLAYER`. `attacker_at` is where the attacker is, in this
-    /// player's coordinates. A no-player-killing level refuses it.
+    /// The stamp of the hit judge: true when this attacker was already
+    /// judged in `second`. The client stamps an attacker once the victim's
+    /// state, AP and level have passed, before the guild and range tests.
+    fn stamp_attacker(&mut self, rules: &CombatRules, id: u16, second: Option<u32>, npc: bool) -> bool {
+        let v = self.victim();
+        let reaches = v.state == Vulnerability::Hurtable && v.ap != rules.immune_ap && !v.no_pk;
+        match (rules.judge_throttle && reaches && !npc, second) {
+            (true, Some(sec)) => self.judged_at.insert(id, sec) == Some(sec),
+            _ => false,
+        }
+    }
+
+    /// A `PLO_HURTPLAYER` with the default gates (see
+    /// [`OfflineSession::receive_hurtplayer_gated`]).
     pub fn receive_hurtplayer(&mut self, h: &HurtPlayer, attacker_at: Option<(f32, f32)>) -> HitReport {
+        self.receive_hurtplayer_gated(h, attacker_at, false, None)
+    }
+
+    /// A `PLO_HURTPLAYER`. `attacker_at` is where the attacker is, in this
+    /// player's coordinates. The packet goes through the sword's gates: AP
+    /// 100, a no-player-killing level, the once-a-second limit per attacker
+    /// (`second` is the client's second of the day, `None` skips the limit),
+    /// the guild tag (`friendly`) and the 10-tile range. The victim is pushed
+    /// along the packet's `dx, dy`.
+    pub fn receive_hurtplayer_gated(&mut self, h: &HurtPlayer, attacker_at: Option<(f32, f32)>, friendly: bool, second: Option<u32>) -> HitReport {
         let outcome = match self.combat.rules().copied() {
             None => Err(Reject::NotInBuild),
-            Some(r) => judge_hurtplayer(&r, h, attacker_at, &self.victim()).and_then(|half| self.take_hit(half, Some(h.attacker))),
+            Some(r) => {
+                let repeat = attacker_at.is_some() && self.stamp_attacker(&r, h.attacker, second, h.npc.is_some());
+                judge_hurtplayer_gated(&r, h, attacker_at, &self.victim(), PacketGates { friendly, repeat })
+                    .and_then(|half| self.take_hit(half, Some(h.attacker), (h.dx, h.dy)))
+            }
         };
         HitReport { kind: HitKind::HurtPlayer, attacker: Some(h.attacker), outcome }
     }
 
-    /// A `PLO_HITOBJECTS`. The notes say it hurts a player whose centre is
-    /// within 2 tiles of `(x, y)` on each axis, but not where a player's
-    /// centre is, so Seihai decodes it and applies nothing.
-    pub fn receive_hitobjects(&mut self, h: &HitObjects) -> HitReport {
-        HitReport { kind: HitKind::HitObjects, attacker: Some(h.attacker), outcome: Err(Reject::CentreUnknown) }
+    /// A `PLO_HITOBJECTS` with the default gates.
+    pub fn receive_hitobjects(&mut self, h: &HitObjects, attacker_at: Option<(f32, f32)>) -> HitReport {
+        self.receive_hitobjects_gated(h, attacker_at, false, None)
+    }
+
+    /// A `PLO_HITOBJECTS`: the same gates as [`Self::receive_hurtplayer_gated`],
+    /// then the player's centre (`X + 1.5, Y + 2.0`) must be under 2 tiles
+    /// from `(x, y)` on each axis. The victim is pushed away from that point.
+    pub fn receive_hitobjects_gated(&mut self, h: &HitObjects, attacker_at: Option<(f32, f32)>, friendly: bool, second: Option<u32>) -> HitReport {
+        let outcome = match self.combat.rules().copied() {
+            None => Err(Reject::NotInBuild),
+            Some(r) => {
+                let repeat = attacker_at.is_some() && self.stamp_attacker(&r, h.attacker, second, h.npc.is_some());
+                judge_hitobjects(&r, h, attacker_at, &self.victim(), PacketGates { friendly, repeat })
+                    .and_then(|(half, knock)| self.take_hit(half, Some(h.attacker), knock))
+            }
+        };
+        HitReport { kind: HitKind::HitObjects, attacker: Some(h.attacker), outcome }
     }
 
     /// Judge everything that arrived: `swings` (ids of players whose props
@@ -627,12 +809,16 @@ impl OfflineSession {
             out.push(self.receive_sword(Some(o.id), &s, second));
         }
         for h in hits {
+            let attacker = match h {
+                IncomingHit::Hurt(h) => h.attacker,
+                IncomingHit::Objects(h) => h.attacker,
+            };
+            let other = others.iter().find(|o| o.id == attacker);
+            let at = other.map(|o| o.position_from(own_cell));
+            let friendly = matches!((other.and_then(|o| o.nick.as_deref()), own_nick), (Some(a), Some(v)) if same_guild(a, v));
             match h {
-                IncomingHit::Hurt(h) => {
-                    let at = others.iter().find(|o| o.id == h.attacker).map(|o| o.position_from(own_cell));
-                    out.push(self.receive_hurtplayer(h, at));
-                }
-                IncomingHit::Objects(h) => out.push(self.receive_hitobjects(h)),
+                IncomingHit::Hurt(h) => out.push(self.receive_hurtplayer_gated(h, at, friendly, Some(second))),
+                IncomingHit::Objects(h) => out.push(self.receive_hitobjects_gated(h, at, friendly, Some(second))),
             }
         }
         out
@@ -666,6 +852,10 @@ impl OfflineSession {
             for step in b + 1..=to {
                 self.queue_sword_cues(step);
             }
+        }
+        for (ux, uy) in self.combat.take_knock_steps() {
+            let moved = self.knock_step(ux, uy);
+            self.knock_moved |= moved;
         }
         changed || cancelled
     }
@@ -901,14 +1091,16 @@ mod tests {
         let v = victim(20.0, 20.0);
         assert_eq!(judge_hurtplayer(&R, &hurt(1, 9), Some((20.0, 20.0)), &v), Ok(2));
         assert_eq!(judge_hurtplayer(&R, &hurt(1, 1), Some((20.0, 20.0)), &v), Ok(1));
-        assert_eq!(judge_hurtplayer(&R, &hurt(1, 0), Some((20.0, 20.0)), &v), Err(Reject::NoDamage));
+        assert_eq!(judge_hurtplayer(&R, &hurt(1, 0), Some((20.0, 20.0)), &v), Ok(0), "power 0 still hurts: hurt mode and knockback, no hearts");
     }
 
     #[test]
-    fn hurtplayer_ignores_ap_and_refuses_the_unhurtable_and_npcs() {
+    fn hurtplayer_has_the_swords_gates_and_refuses_the_unhurtable_and_npcs() {
         let mut v = victim(20.0, 20.0);
         v.ap = 100;
-        assert_eq!(judge_hurtplayer(&R, &hurt(1, 2), Some((20.0, 20.0)), &v), Ok(2), "the notes make AP 100 immune to the sword only");
+        assert_eq!(judge_hurtplayer(&R, &hurt(1, 2), Some((20.0, 20.0)), &v), Err(Reject::Immune), "AP 100 is immune to packet hits too (2.05 and 2.22 read)");
+        v.ap = 99;
+        assert_eq!(judge_hurtplayer(&R, &hurt(1, 2), Some((20.0, 20.0)), &v), Ok(2));
         v.state = Vulnerability::Dead;
         assert_eq!(judge_hurtplayer(&R, &hurt(1, 2), Some((20.0, 20.0)), &v), Err(Reject::Dead));
         let from_npc = HurtPlayer { npc: Some(4), ..hurt(1, 2) };
@@ -1005,6 +1197,7 @@ mod tests {
         assert!(s.combat.is_hurt());
         s.tick_combat(50);
         assert!(!s.combat.is_hurt(), "40 ticks, 2 s");
+        (s.player_x, s.player_y) = (22.0, 20.0); // the first hit pushed the player away
         assert_eq!(s.receive_sword(Some(9), &swinger(3, sw(10, 3)), 30).outcome, Ok(1));
         assert_eq!(s.hearts_half(), 10);
     }
@@ -1070,14 +1263,6 @@ mod tests {
         assert_eq!((r.kind, r.outcome), (HitKind::HurtPlayer, Ok(2)));
         assert_eq!(s.hearts_half(), 10);
         assert!(s.combat.is_hurt());
-    }
-
-    #[test]
-    fn hitobjects_is_decoded_and_not_applied() {
-        let mut s = session();
-        let h = HitObjects { attacker: 1, half: 2, x: 22.0, y: 20.0, npc: None };
-        assert_eq!(s.receive_hitobjects(&h).outcome, Err(Reject::CentreUnknown));
-        assert_eq!(s.hearts_half(), 12);
     }
 
     #[test]
@@ -1221,7 +1406,7 @@ mod tests {
                 (HitKind::Sword, Some(10), Ok(2)),
                 (HitKind::Sword, Some(11), Err(Reject::AlreadyHurt)),
                 (HitKind::HurtPlayer, Some(11), Err(Reject::AlreadyHurt)),
-                (HitKind::HitObjects, Some(11), Err(Reject::CentreUnknown)),
+                (HitKind::HitObjects, Some(11), Err(Reject::AlreadyHurt)),
             ],
             "an unknown id (99) is skipped"
         );
@@ -1364,5 +1549,191 @@ mod tests {
             st.apply_body(&plo8(5, &sw_props));
             assert!(st.swings.is_empty(), "{}: no swing is noticed", v.label());
         }
+    }
+
+    // ---- packet gates, id 46 and knockback (damage-respawn leftovers) ----
+
+    fn hits(x: f32, y: f32, half: i32) -> HitObjects {
+        HitObjects { attacker: 1, half, x, y, npc: None }
+    }
+
+    #[test]
+    fn packet_hits_share_the_swords_once_a_second_and_guild_gates() {
+        let mut s = open_session(22.0, 20.0);
+        let at = Some((24.0, 20.0));
+        // Hurt mode over, and the player back where the attacker aims.
+        let reset = |s: &mut OfflineSession| {
+            s.tick_combat(2_000);
+            (s.player_x, s.player_y) = (22.0, 20.0);
+        };
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(7, 1), at, false, Some(40)).outcome, Ok(1));
+        reset(&mut s);
+        // Same attacker, same second of the day: dropped (the stamp is per attacker).
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(7, 1), at, false, Some(40)).outcome, Err(Reject::Throttled));
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(7, 1), at, false, Some(41)).outcome, Ok(1), "the next second counts");
+        reset(&mut s);
+        // The stamp is shared with the sword: a swing judged in second 42 stamps the attacker too.
+        let swing = Swinger { pose: at_pose(24.0, 20.0, 1), ..swinger(1, sw(8, 1)) };
+        assert_eq!(s.receive_sword(Some(7), &swing, 42).outcome, Ok(1));
+        reset(&mut s);
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(7, 1), at, false, Some(42)).outcome, Err(Reject::Throttled));
+        // The guild tag refuses it, after the stamp.
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(8, 1), at, true, Some(50)).outcome, Err(Reject::Friendly));
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(8, 1), at, false, Some(50)).outcome, Err(Reject::Throttled), "stamped even though the guild test refused it");
+    }
+
+    fn at_pose(x: f32, y: f32, dir: u8) -> Pose {
+        Pose { x, y, dir }
+    }
+
+    #[test]
+    fn a_level_flagged_no_player_killing_does_not_stamp_the_attacker() {
+        let mut s = session();
+        s.no_pk = true;
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(3, 1), Some((24.0, 20.0)), false, Some(5)).outcome, Err(Reject::NoPkZone));
+        s.no_pk = false;
+        assert_eq!(s.receive_hurtplayer_gated(&hurt(3, 1), Some((24.0, 20.0)), false, Some(5)).outcome, Ok(1));
+    }
+
+    #[test]
+    fn hitobjects_hurts_a_player_whose_centre_is_under_2_tiles_from_the_point() {
+        let rules = R;
+        let v = victim(20.0, 20.0); // centre (21.5, 22.0)
+        let g = PacketGates::default();
+        let at = Some((20.0, 20.0));
+        let ok = |x: f32, y: f32| judge_hitobjects(&rules, &hits(x, y, 2), at, &v, g).map(|(h, _)| h);
+        assert_eq!(ok(21.5, 22.0), Ok(2), "on the centre");
+        assert_eq!(ok(23.0, 23.5), Ok(2), "1.5 tiles off on each axis");
+        assert_eq!(ok(23.5, 22.0), Err(Reject::OutOfBlast), "exactly 2 tiles in x is out");
+        assert_eq!(ok(21.5, 20.0), Err(Reject::OutOfBlast), "exactly 2 tiles in y is out");
+        assert_eq!(ok(21.5, 20.5), Ok(2));
+        // The X/Y props themselves are not the centre: a point on them is 1.5 and 2.0 tiles away.
+        assert_eq!(ok(20.0, 20.0), Err(Reject::OutOfBlast));
+        // Power is capped at one heart, and 0 is accepted.
+        assert_eq!(judge_hitobjects(&rules, &hits(21.5, 22.0, 9), at, &v, g).map(|(h, _)| h), Ok(2));
+        assert_eq!(judge_hitobjects(&rules, &hits(21.5, 22.0, 0), at, &v, g).map(|(h, _)| h), Ok(0));
+        // The knockback runs from the point to the centre.
+        assert_eq!(judge_hitobjects(&rules, &hits(21.0, 21.0, 1), at, &v, g).map(|(_, k)| k), Ok((0.5, 1.0)));
+        // Same gates as id 40: range, AP, NPC source.
+        assert_eq!(judge_hitobjects(&rules, &hits(21.5, 22.0, 1), Some((31.0, 20.0)), &v, g), Err(Reject::TooFar));
+        assert_eq!(judge_hitobjects(&rules, &HitObjects { npc: Some(2), ..hits(21.5, 22.0, 1) }, at, &v, g), Err(Reject::NpcSource));
+        let mut immune = v;
+        immune.ap = 100;
+        assert_eq!(judge_hitobjects(&rules, &hits(21.5, 22.0, 1), at, &immune, g), Err(Reject::Immune));
+    }
+
+    #[test]
+    fn hitobjects_through_the_session_hurts_and_pushes_away_from_the_point() {
+        let mut s = session(); // player at (22, 20), centre (23.5, 22.0)
+        let r = s.receive_hitobjects(&hits(22.5, 22.0, 1), Some((22.0, 20.0)));
+        assert_eq!((r.kind, r.outcome), (HitKind::HitObjects, Ok(1)));
+        assert_eq!(s.hearts_half(), 11);
+        s.tick_combat(50);
+        assert_eq!((s.player_x, s.player_y), (23.0, 20.0), "pushed one tile east, away from a point to the west");
+    }
+
+    #[test]
+    fn knockback_scales_to_one_tile_and_a_zero_vector_goes_east() {
+        assert_eq!(knockback_unit(0.0, 0.0), (1.0, 0.0));
+        assert_eq!(knockback_unit(3.0, 0.0), (1.0, 0.0));
+        assert_eq!(knockback_unit(0.0, -2.0), (0.0, -1.0));
+        let (x, y) = knockback_unit(3.0, 4.0);
+        assert!((x - 0.6).abs() < 1e-6 && (y - 0.8).abs() < 1e-6);
+    }
+
+    fn open_session(x: f32, y: f32) -> OfflineSession {
+        use crate::assets::{Level, TileTypes};
+        let mut s = session();
+        let tiles: Vec<u16> = vec![0; 64 * 64];
+        s.current_level = Some(Level::from_board(&tiles));
+        s.tiletypes = Some(TileTypes { types: [0; 4096] });
+        s.player_x = x;
+        s.player_y = y;
+        s
+    }
+
+    #[test]
+    fn a_hit_pushes_one_tile_a_tick_for_five_ticks_and_then_stops() {
+        let mut s = open_session(30.0, 30.0);
+        let h = HurtPlayer { dx: 2.0, dy: 0.0, ..hurt(1, 2) };
+        assert_eq!(s.receive_hurtplayer(&h, Some((28.0, 30.0))).outcome, Ok(2));
+        assert_eq!(s.take_knock_moved(), false, "nothing has moved before the first tick");
+        let mut seen = vec![];
+        for _ in 0..8 {
+            s.tick_combat(50);
+            seen.push(s.player_x);
+        }
+        assert_eq!(seen, vec![31.0, 32.0, 33.0, 34.0, 35.0, 35.0, 35.0, 35.0], "five tiles in 250 ms");
+        assert!(s.take_knock_moved(), "the caller is told to send the position");
+        assert!(!s.take_knock_moved());
+        assert!(s.combat.is_hurt(), "hurt mode runs on for 40 ticks");
+        assert_eq!(s.player_y, 30.0);
+    }
+
+    #[test]
+    fn knockback_steps_are_counted_in_whole_ticks_not_in_calls() {
+        let mut s = open_session(30.0, 30.0);
+        s.receive_hurtplayer(&HurtPlayer { dx: 0.0, dy: 3.0, ..hurt(1, 2) }, Some((30.0, 28.0)));
+        s.tick_combat(20);
+        s.tick_combat(20);
+        assert_eq!(s.player_y, 30.0, "40 ms is not a tick yet");
+        s.tick_combat(20);
+        assert_eq!(s.player_y, 31.0);
+        s.tick_combat(1_000);
+        assert_eq!(s.player_y, 35.0, "one big step of time still pushes only five tiles");
+    }
+
+    #[test]
+    fn a_wall_in_the_way_takes_the_step_back_and_the_push_goes_on_next_tick() {
+        use crate::assets::{Level, TileTypes};
+        let mut s = open_session(30.0, 30.0);
+        // A wall column at tile x = 34 (types[1] = 22 is a wall).
+        let tiles: Vec<u16> = (0..64 * 64).map(|i| if i % 64 == 34 { 1 } else { 0 }).collect();
+        s.current_level = Some(Level::from_board(&tiles));
+        let mut t = TileTypes { types: [0; 4096] };
+        t.types[1] = 22;
+        s.tiletypes = Some(t);
+        s.receive_hurtplayer(&HurtPlayer { dx: 1.0, dy: 0.0, ..hurt(1, 2) }, Some((28.0, 30.0)));
+        let mut xs = vec![];
+        for _ in 0..5 {
+            s.tick_combat(50);
+            xs.push(s.player_x);
+        }
+        // The body box reaches 2.4 tiles right of X: at X = 32 its right edge is at 34.4, in the wall.
+        assert_eq!(xs, vec![31.0, 31.0, 31.0, 31.0, 31.0]);
+        assert!(s.take_knock_moved(), "the first step did move");
+    }
+
+    #[test]
+    fn a_sword_hit_pushes_away_from_the_attacker() {
+        let mut s = open_session(30.0, 30.0);
+        // Attacker west of the victim, facing east.
+        let sw = Swinger { pose: Pose { x: 28.0, y: 30.0, dir: 3 }, ..swinger(3, sw(8, 3)) };
+        assert_eq!(s.receive_sword(Some(5), &sw, 1).outcome, Ok(1));
+        s.tick_combat(50);
+        assert_eq!((s.player_x, s.player_y), (31.0, 30.0));
+    }
+
+    #[test]
+    fn knockback_does_nothing_without_a_hit_or_after_death() {
+        let mut s = open_session(30.0, 30.0);
+        s.tick_combat(500);
+        assert_eq!((s.player_x, s.player_y), (30.0, 30.0));
+        s.set_hearts_half(1);
+        s.receive_hurtplayer(&hurt(1, 2), Some((30.0, 30.0)));
+        s.tick_life(50);
+        assert!(s.life.is_dead());
+        let at = (s.player_x, s.player_y);
+        s.tick_combat(500);
+        assert_eq!((s.player_x, s.player_y), at, "a dead player is not pushed");
+    }
+
+    #[test]
+    fn knockback_probes_form_the_body_box() {
+        assert_eq!(KNOCKBACK_PROBES.len(), 12);
+        let (minx, maxx) = KNOCKBACK_PROBES.iter().fold((9.0f32, 0.0f32), |a, p| (a.0.min(p.0), a.1.max(p.0)));
+        let (miny, maxy) = KNOCKBACK_PROBES.iter().fold((9.0f32, 0.0f32), |a, p| (a.0.min(p.1), a.1.max(p.1)));
+        assert_eq!((minx, maxx, miny, maxy), (0.6, 2.4, 1.1, 2.9));
+        assert_eq!(((minx + maxx) / 2.0, (miny + maxy) / 2.0), HIT_CENTRE, "the box is centred on the hit centre");
     }
 }

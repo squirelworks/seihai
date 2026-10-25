@@ -1240,7 +1240,7 @@ fn main() {
                                 | seihai::combat::Reject::NoPkZone
                                 | seihai::combat::Reject::Friendly
                                 | seihai::combat::Reject::AttackerBlocked
-                                | seihai::combat::Reject::CentreUnknown)) => {
+                                | seihai::combat::Reject::OutOfBlast)) => {
                                     eprintln!("hit by {:?} ({:?}) refused: {why:?}", r.attacker, r.kind);
                                 }
                                 Err(_) => {}
@@ -1366,6 +1366,8 @@ fn main() {
             let dt = combat_clock.elapsed().as_millis() as u64;
             combat_clock = Instant::now();
             let mut sprite_changed = session.tick_combat(dt);
+            // A hit pushed the player: the new position goes out like a step.
+            sprite_changed |= session.take_knock_moved();
             if !input.is_open() && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
                 sprite_changed = true;
             }

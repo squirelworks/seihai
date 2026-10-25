@@ -34,31 +34,74 @@ by `noplayerkilling`.
 save rules are in `health-death.md`, "Respawn destination". The name group is
 2.05 only; 2.1 test 2 and everything later keep just the gmap-list rule.
 
+## Knockback (settled, implemented)
+
+Read in 2.05 rev 2, 2.17.1, 2.22 and 2.31; the shape is the same in all four
+and the 12-point table is identical in all four, so it is one constant set for
+every profile that has combat rules.
+
+- The hurt routine takes hearts, a knockback vector (dx, dy) and starts hurt
+  mode (mode 3, counter 40). The vector is scaled to length 1 tile; a zero
+  vector means east.
+- For the first 5 ticks of hurt mode (counter 39 down to 35, after the
+  decrement) the player moves 1 tile along the vector each tick, then 12
+  body-box probe points are tested; if any is blocked, that tick's step is
+  undone (the push continues next tick from the old place). Total reach on open
+  ground: 5 tiles in 250 ms.
+- The probes lie on the edges of a box 0.6 to 2.4 tiles across and 1.1 to 2.9
+  tiles down from (X, Y), the position props: three points per edge, the four
+  corners counted twice. The box is centred on (X+1.5, Y+2.0), the same centre
+  that id 46 uses.
+- Sources of the vector: a sword hit pushes from the attacker's position to the
+  victim's; `PLO_HURTPLAYER` carries `(dx, dy)` in its bytes; `PLO_HITOBJECTS`
+  uses the victim's centre minus the hit point.
+
+## Packet path (corrected from the first notes)
+
+Read in 2.05 rev 2 and 2.22. `PLO_HURTPLAYER` (40) and `PLO_HITOBJECTS` (46)
+go through the same gates as the sword, in this order: attacker is a known
+player; victim hurtable; AP is not 100; level not `noplayerkilling`; the
+once-a-second stamp per attacker (the same table the sword uses, and stamped
+before the guild test); the `(tag)` guild test; the per-player field test
+(below); then for 40 the distance test (squared distance of X/Y at most 100, i.e.
+10 tiles) and for 46 the box test (hit point is (b1/2, b2/2); the victim's
+centre is (X+1.5, Y+2.0); strictly under 2 tiles on each axis). There is
+**no** attacker STATUS test on the packet path. The power is capped at one
+heart; a power of 0 is accepted (hurt mode and knockback, no hearts).
+
 ## Implemented
 
 Profile-gated through `CombatRules` and `DeathRules` (`entry_name_group`), with
 tests: the signed damage with the heal rule, `noplayerkilling` (set by the
 script command, cleared when a level loads), the guild test, the status gate,
 the once-a-second limit per attacker, the signed sword-power decode, the entry
-save rule (`OfflineSession::note_entry`, `name_group`, `Gmap::list_index`).
+save rule (`OfflineSession::note_entry`, `name_group`, `Gmap::list_index`),
+knockback (`combat::KNOCKBACK_*`, `OfflineSession::knock_step`), the packet
+gates of ids 40 and 46 (AP, throttle, guild, power 0) and id 46's box. The
+knockback constants are in `combat.rs`, not in `CombatRules`, because they are
+the same in every build read; this keeps `profiles_golden.txt` unchanged.
+
+## Verdicts on the leftovers
+
+| Item | Verdict |
+|---|---|
+| Knockback of a hit | implemented (above) |
+| Per-player field compared in packet 40 | documented and skipped: it is a parent/owner link, zero for ordinary players, so the compare is always true for them. Inferred, not seen on a wire. Capture that would settle it: a real 2.22 client hit by a 40 whose attacker id is a player that owns something (a horse or similar); none is available offline |
+| Guild test in the packet path | settled: it applies (implemented) |
+| Id 46 | settled and implemented |
+| Bomb, arrow, baddy powers | documented and skipped: the hurt routine's callers use 0.5 hearts by default and 1 for certain object types, but which object kind maps to bomb, arrow or baddy was not resolved, and Seihai has no bomb, arrow or baddy objects to send them. Capture: a real client hit by a server-side bomb and by an arrow, read the power byte |
+| End-of-respawn save | needs capture: respawn the real client twice online (first with the server's level-warp reply delayed) and see whether the next respawn point is the death spot |
+| CURPOWER on damage | needs capture: a real client at 12 half hearts hit by an injected id 40, trace for a PLI_PLAYERPROPS with CURPOWER |
 
 ## Open
 
-- **A per-player field compared in the packet path.** `PLO_HURTPLAYER` is
-  dropped unless a per-player field of the attacker equals the victim's. Its
-  meaning is not traced (a level or area marker is likely). Not checked.
+- **The per-player field** (see the table): skipped, inferred to be always true
+  for ordinary players.
 - **Status bit 0x20.** The sword gate needs it clear; the earlier notes only say
   "a numeric field is not negative". Seihai applies the mask as given.
-- **Which hurt routines use which power.** The routine that hurts the player
-  takes a power in hearts and a knockback vector. The sword path's exact
-  knockback is not read off; bombs, arrows and baddies call it with their own
-  powers that were not mapped. Knockback is not applied.
 - **Kick animation exclusion.** A sword hit is skipped while the attacker is in
   its kick animation (2.05, by gani name) or has object id 3 (2.17.1 and
   later). It cannot be seen from the props, so it is not applied.
-- **The guild test in the packet path.** The test is in the routine shared by
-  swings and some packets; whether `PLO_HURTPLAYER` goes through it was not
-  established. Seihai applies it to swings only.
 - **Gmap list order and timing.** The client indexes the current gmap's level
   list; Seihai takes the named cells in file order, case-insensitively, and
   uses the gmap it holds when the entry is noted. A real client may update its
