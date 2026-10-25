@@ -1,64 +1,47 @@
-# Next work for Chiaki — asset generation track
+# Next work for Chiaki — GANI expansion and follow-on
 
-Current queue after items 1–15 and 16. Open the PR for one item, then start the next. Do not wait for merge.
+Asset track (items 17–20) is merged. Default set is in `assets/default/` and wired as the built-in fallback. Licence confirmed as MIT OR Apache-2.0.
 
-## Immediate (still running)
+Open the PR for one item, then start the next. Do not wait for merge.
 
-### Item 15 — Differential-testing divergences
+## Immediate
 
-Running in the private lab. One PR per divergence (rectangle links, login props, 2.22 position flags, early id 46, asset requests, walk speed, etc.). Check each fix against a lab capture first; skip with a note if the bytes are not shown.
+### Item 22 — Expand the default GANIs
 
-## After item 15 — original assets for Seihai
+The default set currently has only `idle.gani`, `walk.gani`, and `swim.gani`. The reference notes in `documentation/asset-reference.md` already measured the stock layouts.
 
-The playerworld archives supply reference material. Goal: a clean, self-contained default asset set that ships with Seihai so a fresh download can open a level and walk without relying on a server or the original client files.
+- Add `sword.gani` (5 frames, sound cue after frame 0, `SETBACKTO idle`).
+- Add `sit.gani` (1 frame).
+- Add a simple hurt pose (or a short `hurt.gani`) that the hit path can play.
+- Wire the S key to play the sword animation and a hit to play the hurt pose.
+- Keep the existing sound cues (`steps2.wav`, `water.wav`); add a short `sword.wav` if the generator can synthesise one.
+- Output: the new GANI files under `assets/default/gani/`, an update to `tools/gen_default_assets.py` so they regenerate, and a short note in `documentation/default-assets.md`. Tests that the parser reads them and the offline session steps them.
 
-### Item 17 — Inventory the playerworld archives
-The extra archives are already inventoried. See `documentation/inventories/playerworlds-extra-inventory-2026-10-25.md` and the matching `.tsv`. Use that as the starting point; do not re-scan the whole set unless a specific world needs a deeper look. Note the sensitive Lumina-1 GRACC001 account exports — do not open or use them.
+### Item 23 — Script-to-GANI
 
+The script engine has stubs for `setimg`, `showimg`, and `hideimg`. The offline session already has the hooks.
 
+- Make `setimg` change the drawn sprite (or the NPC's GANI) so a script can switch an NPC between idle and walk.
+- Make `showimg` / `hideimg` toggle the NPC's visible flag and have the renderer honour it.
+- Cover at least one real NPC script from the library that uses these commands (smoke test, ignored if the script is not in the tree).
+- Output: the wiring in the offline session and a test that a scripted `setimg` changes what is drawn.
 
-- Scan the archives that were handed over.
-- Produce a short inventory: counts of .nw / .graal / .zelda / .gmap, PNG/GIF/MNG sheets, GANI files, WAV/MP3, tiledefs, NPC scripts.
-- Flag anything that looks like a complete starter set (pics1-style sheet, body/head sheets, idle/walk GANIs, basic sounds, one or two small levels).
-- Output: a note in `documentation/asset-inventory.md` plus a tsv of file counts by type. No raw files committed.
+### Item 24 — Level editor (first slice)
 
-### Item 18 — Extract and clean reference sheets
+Notes are in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, tracking checklist).
 
-- Pull the most usable tile sheets, body/head/sword/shield sheets, and core GANIs into a private working folder.
-- Document the tile id mapping that Seihai already uses (column `(t % 16) + (t / 512) * 16`, row `(t / 16) % 32`) and confirm it matches the sheets.
-- Note which sheets are 4-bit palette PNGs vs true-colour, and which need the existing palette reader.
-- Output: a short `documentation/asset-reference.md` describing the best source files and any clean-up steps. Do not commit the original sheets.
+- Copy the checklist into Seihai `documentation/level-editor.md`.
+- Start a CLI under `tools/level-editor/` that can open a `.nw`, list tiles, paint a rectangle of one tile id, and save.
+- Keep the version selector in mind (2.22 first). No GUI yet.
+- Output: the CLI plus a note. The client parsers are already there.
 
-### Item 19 — Generate a default asset root
+## After that (pick up when ready)
 
-- Create a new `assets/default/` tree under the repo (or a sibling folder that the build can copy) containing:
-  - A minimal pics1-style tile sheet (grass, bush, rock, water, wall, chest, sign) that matches Seihai's 128-column assumption and the foot-test offsets.
-  - Body and head sheets sufficient for the four walk directions plus idle and swim (head-only in water).
-  - The core GANIs (idle, walk, swim) with the sound cues already fixed in the parser.
-  - A handful of short WAV footsteps and a swim sound.
-  - One small starter level (text GLEVNW01 or .nw) with a few links, a sign, and a chest so offline play has something to open immediately.
-- Gate by version profile where it matters (older builds may need different sheet widths).
-- Output: the asset tree plus a note in `documentation/default-assets.md`. The assets themselves stay out of the main source tree if they are large; document how to fetch or generate them.
-
-### Item 20 — Wire the default assets into the client
-
-- Update `AssetResolver` and the `--assets` default so a missing or empty assets folder falls back to the built-in set.
-- Make `seihai --check-assets` succeed against the default set for the profiles that matter (2.05, 2.17, 2.22, 2.31).
-- Confirm the offline starter level loads, the player walks and swims, and the chest/sign render without green or yellow placeholder boxes.
-- Output: a Seihai PR that adds the fallback path and a test that the default set loads.
-
-### Item 21 — Simple asset generator tool (optional)
-
-- A small CLI under `tools/` that can re-emit the default tile sheet, body sheet, and starter level from parameters (seed, tile size, colour palette). Useful for regenerating if the sheets ever need to change.
-- Output: the tool plus a one-page note. Skip if the hand-crafted set is already solid.
-
-## Still open (do not drop)
-
+- Combat leftovers: knockback on a hit, the packet-40 field, bomb/arrow/baddy damage. Needs a lab capture or a careful reading of the existing notes.
+- GIF/MNG decoder (optional). The corpora have ~30k GIFs and ~2k MNGs; Seihai has no decoder. A simple GIF reader would let the client load heads and swords that ship as `.gif` in older worlds.
 - Item 13 — Early builds: a real 2.00-era listserver reply (still unobserved).
-- Item 14 — Public-server checks: blocked from the build box; checklist is in `documentation/public-checks.md`. Needs a network that can reach 14921–14923.
-- Level editor implementation: notes are in Graal_analysis `tools/level-editor/`. Copy the checklist into Seihai `documentation/` and start the tool when the asset track is under way.
-- Damage/respawn leftovers (knockback, packet-40 field, bombs/arrows/baddies) and file-transfer leftovers (`GWEBL001`, login UPDATEFILE set) remain documented; pick them up after the asset track or interleave if a lab capture makes one of them easy.
+- Item 14 — Public-server checks: blocked from the build box. Checklist is in `documentation/public-checks.md`. Needs a network that can reach listserver.graal.in:14921–14923. Port 14923 is the legacy port for pre-2.17 clients.
 
 ## Order
 
-Open the PR for one item, then start the next. Do not wait for merge. The reviewer will catch up. Item 15 stays first until its PRs land.
+Open the PR for one item, then start the next. Do not wait for merge. The reviewer will catch up.
