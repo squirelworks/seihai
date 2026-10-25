@@ -46,7 +46,14 @@ Read from the client's walking routine (derived facts only).
   diagonal between two touching walls is gone; the box cannot pass such a
   gap sideways anyway.)
 * A player whose body box already overlaps a wall (put there by a warp) may
-  walk out, as before.
+  step to any place that is less inside it, and nowhere else (`body_overlap`:
+  nine points inside the box, not the edge probes). Before, "is the body
+  clear" meant "none of the four facings' edge probes is blocked". The right
+  and bottom probes sit on the tile line just outside the box, so a body
+  resting against a wall by its right or bottom edge (any position with
+  x + 2.5 or y + 3 on a tile line, one half-tile step in two) counted as
+  inside the wall, and a body counted as inside could walk through anything:
+  the intermittent "walks over rocks" (user report, 2026-10-25).
 * The feet point is kept for links, water and scripts (`touch`).
 * `facing_point()` (what the A key probes) now uses the client's
   "one tile beyond the middle of the leading edge" table: up `(x + 1.5, y)`,
@@ -57,6 +64,14 @@ Read from the client's walking routine (derived facts only).
 
 ## Open
 
+* **Not checked against a real client.** The lab was in use; the report's
+  "blocks too far ahead" is unverified. The derived rule has two asymmetries
+  worth knowing: a probe exactly on a tile line truncates into the tile to its
+  right or below, so a body can stop half a tile short of a wall on its right
+  or bottom (the tiles' left and top edges stop flush), and the 2-tile-wide
+  box does not fit a 1-tile gap. A lab walk to settle the stopping positions
+  is still to do. The missing corner nudge is the likeliest cause of "stuck
+  where it should let me through".
 * The 0.1-tile corner nudge is not implemented. Positions on the wire are in
   half tiles, and a nudged position is not one. Nudging is also why the
   client slides around corners without stopping.
