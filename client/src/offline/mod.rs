@@ -4,7 +4,7 @@
 //! without a network connection. Behavior is provisional and will
 //! be refined against the original client’s offline/tutorial paths.
 
-use crate::assets::{GaniPlayer, Level, Link, TileKind, TileTypes};
+use crate::assets::{GaniPlayer, Level, Link, Object2x2, ObjectTables, TileKind, TileTypes};
 use crate::sound::SoundEvent;
 use crate::dev::DevMode;
 use crate::gmap::{Crossing, GmapWorld, Resolved};
@@ -88,6 +88,10 @@ pub const LINK_BOX: [(f32, f32, f32, f32); 4] = [
 pub struct OfflineSession {
     pub current_level: Option<Level>,
     pub tiletypes: Option<TileTypes>,
+    /// The cut and lift tables of `arrays.dat`, if one was loaded.
+    pub object_tables: Option<ObjectTables>,
+    /// What the player is carrying after a lift: the object's tiles.
+    pub carried: Option<Carried>,
     pub player_x: f32,
     pub player_y: f32,
     pub player_dir: u8,
@@ -207,9 +211,21 @@ pub enum RespawnTo {
     InPlace,
 }
 
+/// An object the player lifted: which lift entry it was and its tiles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Carried {
+    pub kind: usize,
+    pub tiles: Object2x2,
+}
+
 /// What an interact press did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Interaction {
+    /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
+    /// lift table.
+    Lifted { kind: usize },
+    /// The carried object was put down.
+    Dropped,
     /// A closed chest was opened at `(x, y)`; `got` describes the item.
     Chest { x: i32, y: i32, item: String, got: String },
     /// A sign is being read.
@@ -249,6 +265,8 @@ impl OfflineSession {
         Self {
             current_level: None,
             tiletypes: None,
+            object_tables: None,
+            carried: None,
             player_x: 30.0,
             player_y: 30.0,
             player_dir: DIR_SOUTH,
@@ -470,6 +488,14 @@ impl OfflineSession {
         if self.life.is_dead() {
             return Interaction::Nothing;
         }
+        // The A key tries to lift first, then reads a sign or opens a chest.
+        // With something in the hands it puts it down.
+        if self.carried.take().is_some() {
+            return Interaction::Dropped;
+        }
+        if let Some(kind) = self.try_lift() {
+            return Interaction::Lifted { kind };
+        }
         let Some(level) = &self.current_level else {
             return Interaction::Nothing;
         };
@@ -582,8 +608,66 @@ impl OfflineSession {
     /// Load type-0 collision from `arrays.dat` (first array = nowall list).
     /// Tiles in the list get type 0 (passable); everything else gets type 22.
     pub fn load_tiletypes_arrays<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<(), String> {
+        let path = path.as_ref();
         self.tiletypes = Some(TileTypes::load_arrays(path)?);
+        // The same file holds the cut and lift tables.
+        self.object_tables = std::fs::read(path).ok().and_then(|d| ObjectTables::parse(&d));
         Ok(())
+    }
+
+    /// The point the 2.05 client probes for lifting and for the sword's cut,
+    /// from the sprite's top-left, by facing: north `(x + 1.5, y)`, west
+    /// `(x - 0.5, y + 2)`, south `(x + 1.5, y + 4)`, east `(x + 3.5, y + 2)`.
+    /// That is one tile beyond the middle of the walking body box's leading
+    /// edge (see `documentation/walking-collision.md`).
+    pub fn probe_point(&self) -> (f32, f32) {
+        let (x, y) = (self.player_x, self.player_y);
+        match self.player_dir {
+            DIR_NORTH => (x + 1.5, y),
+            DIR_WEST => (x - 0.5, y + 2.0),
+            DIR_EAST => (x + 3.5, y + 2.0),
+            _ => (x + 1.5, y + 4.0),
+        }
+    }
+
+    /// The tile under [`Self::probe_point`].
+    fn probe_tile(&self) -> (i32, i32) {
+        let (px, py) = self.probe_point();
+        (px.floor() as i32, py.floor() as i32)
+    }
+
+    /// Lift the object in front of the player, if the glove allows it.
+    ///
+    /// The glove power `g` allows the first `g + 2` entries of the lift
+    /// table (a bare hand lifts the first two: the bush and the pot-like
+    /// block; a glove the heavier ones). The object's four tiles on the board
+    /// are replaced by the table's "left behind" tiles and the player carries
+    /// it. Not while swimming, carrying, or dead.
+    pub fn try_lift(&mut self) -> Option<usize> {
+        if self.life.is_dead() || self.in_water || self.carried.is_some() {
+            return None;
+        }
+        let tables = self.object_tables.as_ref()?;
+        let max = usize::from(self.glove_power) + 2;
+        let (px, py) = self.probe_tile();
+        let (kind, ax, ay) = self.current_level.as_ref()?.find_object(&tables.lift, max, px, py)?;
+        let tiles = tables.lift[kind];
+        let left = tables.lift_into.get(kind).copied()?;
+        self.current_level.as_mut()?.put_object(ax, ay, &left);
+        self.carried = Some(Carried { kind, tiles });
+        Some(kind)
+    }
+
+    /// The sword's cut: the cuttable object in front of the player (the same
+    /// probe point as the lift) is replaced by what it leaves behind.
+    /// Returns the table entry that was cut.
+    pub fn try_cut(&mut self) -> Option<usize> {
+        let tables = self.object_tables.as_ref()?;
+        let (px, py) = self.probe_tile();
+        let (kind, ax, ay) = self.current_level.as_ref()?.find_object(&tables.cut, tables.cut.len(), px, py)?;
+        let left = tables.cut_into.get(kind).copied()?;
+        self.current_level.as_mut()?.put_object(ax, ay, &left);
+        Some(kind)
     }
 
     /// Current player state as a protocol update.
@@ -1114,6 +1198,7 @@ mod tests {
     }
 
     use super::*;
+    use crate::assets::ObjectTables;
 
     #[test]
     fn chest_and_sign_interact() {
@@ -1198,6 +1283,167 @@ mod tests {
 
     fn walk(s: &mut OfflineSession, dx: f32, dy: f32, steps: usize) -> usize {
         (0..steps).filter(|_| s.try_move(dx, dy).is_some()).count()
+    }
+
+    // ---- cutting and lifting ------------------------------------------------
+
+    /// An `arrays.dat` with the structure of the client's: 9 walking lists
+    /// (here empty), then the cut table (array 9), what a cut leaves (10),
+    /// the lift table (11) and what a lift leaves (12), each a nested list
+    /// of 2 x 2 objects stored `[column][row]`.
+    fn object_arrays(cut: &[[[u32; 2]; 2]], cut_into: &[[[u32; 2]; 2]], lift: &[[[u32; 2]; 2]], lift_into: &[[[u32; 2]; 2]]) -> Vec<u8> {
+        fn objs(out: &mut Vec<u8>, list: &[[[u32; 2]; 2]]) {
+            out.extend_from_slice(&((1u32 << 16) | list.len() as u32).to_be_bytes());
+            for o in list {
+                out.extend_from_slice(&((1u32 << 16) | 2).to_be_bytes());
+                for col in o {
+                    out.extend_from_slice(&2u32.to_be_bytes());
+                    for v in col {
+                        out.extend_from_slice(&v.to_be_bytes());
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for _ in 0..9 {
+            out.extend_from_slice(&0u32.to_be_bytes());
+        }
+        objs(&mut out, cut);
+        objs(&mut out, cut_into);
+        objs(&mut out, lift);
+        objs(&mut out, lift_into);
+        out
+    }
+
+    const BUSH: [[u32; 2]; 2] = [[2, 18], [3, 19]];
+    const BUSH_CUT: [[u32; 2]; 2] = [[677, 693], [678, 694]];
+    const BLOCK: [[u32; 2]; 2] = [[512, 528], [513, 529]];
+    const BLOCK_LEFT: [[u32; 2]; 2] = [[1802, 1818], [1803, 1819]];
+    const ROCK: [[u32; 2]; 2] = [[34, 50], [35, 51]];
+    const ROCK_LEFT: [[u32; 2]; 2] = [[1834, 1850], [1835, 1851]];
+
+    fn put(l: &mut Level, ax: i32, ay: i32, o: [[u32; 2]; 2]) {
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!(l.set_tile_id(ax + i as i32, ay + j as i32, o[i][j] as u16));
+            }
+        }
+    }
+
+    fn get(l: &Level, ax: i32, ay: i32) -> [[u32; 2]; 2] {
+        let mut o = [[0; 2]; 2];
+        for i in 0..2 {
+            for j in 0..2 {
+                o[i][j] = u32::from(l.tile_id_at(ax + i as i32, ay + j as i32).unwrap());
+            }
+        }
+        o
+    }
+
+    fn object_session(glove: u8) -> OfflineSession {
+        let data = object_arrays(&[BUSH, [[420, 436], [421, 437]]], &[BUSH_CUT, [[679, 695], [680, 696]]], &[BUSH, BLOCK, ROCK], &[BUSH_CUT, BLOCK_LEFT, ROCK_LEFT]);
+        let mut lvl = level(|_, _| 2047);
+        put(&mut lvl, 20, 20, BUSH);
+        put(&mut lvl, 30, 20, BLOCK);
+        put(&mut lvl, 40, 20, ROCK);
+        let mut s = OfflineSession::new();
+        s.current_level = Some(lvl);
+        s.tiletypes = Some(types());
+        s.object_tables = ObjectTables::parse(&data);
+        s.glove_power = glove;
+        s
+    }
+
+    /// Stand below the object whose top-left tile is `(ax, ay)`, facing it:
+    /// the probe point (x + 1.5, y) falls in the object's bottom row.
+    fn face_up_at(s: &mut OfflineSession, ax: i32, ay: i32) {
+        s.player_x = ax as f32 - 0.5;
+        s.player_y = ay as f32 + 1.5;
+        s.player_dir = DIR_NORTH;
+    }
+
+    #[test]
+    fn object_tables_parse_the_nested_arrays() {
+        let t = ObjectTables::parse(&object_arrays(&[BUSH], &[BUSH_CUT], &[ROCK], &[ROCK_LEFT])).unwrap();
+        assert_eq!(t.cut, vec![[[2, 18], [3, 19]]]);
+        assert_eq!(t.cut_into, vec![[[677, 693], [678, 694]]]);
+        assert_eq!(t.lift[0], [[34, 50], [35, 51]]);
+        assert_eq!(t.lift_into[0], [[1834, 1850], [1835, 1851]]);
+        // A file with only walking lists has no tables; a cut-off one is refused.
+        assert!(ObjectTables::parse(&[0, 0, 0, 0]).is_none());
+        let mut bad = object_arrays(&[BUSH], &[BUSH_CUT], &[ROCK], &[ROCK_LEFT]);
+        bad.truncate(bad.len() - 3);
+        assert!(ObjectTables::parse(&bad).is_none());
+    }
+
+    #[test]
+    fn the_sword_cuts_a_bush_by_its_tiles_and_not_grass_or_a_rock() {
+        let mut s = object_session(0);
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.try_cut(), Some(0));
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT);
+        // Nothing left to cut.
+        assert_eq!(s.try_cut(), None);
+        // A point beside the object cuts nothing.
+        let mut s = object_session(0);
+        face_up_at(&mut s, 22, 20);
+        assert_eq!(s.try_cut(), None);
+        // A rock is not in the cut table.
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.try_cut(), None);
+    }
+
+    #[test]
+    fn a_swing_cuts_when_it_starts() {
+        let mut s = object_session(0);
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        s.sword_power = 1;
+        face_up_at(&mut s, 20, 20);
+        assert!(s.start_swing());
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT);
+    }
+
+    #[test]
+    fn a_bare_hand_lifts_a_bush_and_the_block_but_not_the_rock() {
+        let mut s = object_session(0);
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 0 });
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT, "the bush leaves its stump");
+        assert_eq!(s.carried.as_ref().unwrap().tiles, [[2u16, 18], [3, 19]]);
+        // Hands full: A puts it down.
+        assert_eq!(s.interact(), Interaction::Dropped);
+        assert!(s.carried.is_none());
+
+        face_up_at(&mut s, 30, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 1 });
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 30, 20), BLOCK_LEFT);
+        s.carried = None;
+
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.interact(), Interaction::Nothing, "the rock needs a glove");
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK);
+    }
+
+    #[test]
+    fn a_glove_lifts_the_rock() {
+        let mut s = object_session(1);
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 2 });
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK_LEFT);
+        assert_eq!(s.carried.as_ref().unwrap().kind, 2);
+    }
+
+    #[test]
+    fn no_lift_while_swimming_or_without_the_tables() {
+        let mut s = object_session(2);
+        face_up_at(&mut s, 20, 20);
+        s.in_water = true;
+        assert_eq!(s.try_lift(), None);
+        s.in_water = false;
+        s.object_tables = None;
+        assert_eq!(s.try_lift(), None);
+        assert_eq!(s.try_cut(), None);
     }
 
     #[test]

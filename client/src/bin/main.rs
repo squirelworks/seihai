@@ -895,6 +895,15 @@ fn main() {
             ),
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
+        // What the player carries is drawn over the head. The position is a
+        // placeholder: where the client puts it was not read.
+        if let Some(c) = &session.carried {
+            for (i, col) in c.tiles.iter().enumerate() {
+                for (j, &id) in col.iter().enumerate() {
+                    fb.blit_tile(&sheet, sw, sh, id, dx + 8 + i as i32 * 16, dy - 14 + j as i32 * 16);
+                }
+            }
+        }
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
         fb.draw_hud(session.player_health, session.rupees);
@@ -1413,7 +1422,10 @@ fn main() {
                             let _ = c.send_open_chest(x, y);
                         }
                     }
-                    seihai::offline::Interaction::Sign(_) | seihai::offline::Interaction::Nothing => {}
+                    seihai::offline::Interaction::Lifted { kind } => eprintln!("lifted object {kind}"),
+                    seihai::offline::Interaction::Dropped
+                    | seihai::offline::Interaction::Sign(_)
+                    | seihai::offline::Interaction::Nothing => {}
                 }
             }
             dirty = true;
