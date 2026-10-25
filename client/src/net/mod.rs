@@ -13,7 +13,7 @@ pub use udp::{
 
 use crate::protocol::{
     bz2_compress, choose_comp, encode_pos_classic, read_zlib_frame, write_frame, write_gstring,
-    write_login, write_zlib_frame, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5, TamperSender,
+    write_login, write_zlib_frame, write_zlib_frame_best, zlib_compress, ClientVersion, EncryptionGen, Gen3, Gen5, LoginShape, TamperSender,
     Gen5Comp, IdSet, LevelRequest, ListReply, LoginRequest, PlayerUpdate, SessionState,
 };
 use crate::offline::OfflineSession;
@@ -572,20 +572,22 @@ impl Connection {
         self.stream.flush()
     }
 
-    /// Log in to a listserver and ask for the server list.
+    /// Log in to a listserver and ask for the server list. The shape is the
+    /// profile's [`crate::protocol::LoginShape`]:
     ///
-    /// - 2.22+: a plain zlib frame with id 7 = `GCHAR key` + `GNW30123`
-    ///   + `newmain`, then a gen-5 frame with id 1 = account and password.
-    ///   Replies are gen-5 frames keyed with the same key.
-    /// - Older: one plain zlib frame with id 0 `newmain` and id 1. There
-    ///   is no cipher on this link.
-    /// - 2.00 is not covered by either form. A real 2.00 client sends one
-    ///   plain zlib frame of `GCHAR 0` + `newmain` + LF and nothing else: no
-    ///   account, password, token or key (lab capture 2026-10-24). What a
-    ///   2.00-era listserver sends back is unobserved; the lab only fed
-    ///   2.00 the 2.17-style two plain frames, which it parsed. Seihai
-    ///   does not implement a 2.00 listserver path and does not send this
-    ///   frame; this note is the whole of it.
+    /// - C (2.22, 2.3, 2.31): a plain zlib frame with id 7 = `GCHAR key` +
+    ///   `GNW30123` + `newmain`, then a gen-5 frame with id 1 = account and
+    ///   password. Replies are gen-5 frames keyed with the same key.
+    /// - B (2.17 and the builds with no capture from 1.41 and 2.1 to 2.16):
+    ///   one plain zlib frame with id 0 `newmain` and id 1. There is no
+    ///   cipher on this link.
+    /// - A (the real 2.00 and 2.05, and 1.42 and 2.01 to 2.04 as a best
+    ///   guess): one plain zlib frame of id 0 + `newmain` + LF and nothing
+    ///   else: no account, password, token or key (lab captures). The reply
+    ///   is read as for the others; no public run has used this frame yet.
+    ///
+    /// The plain frames are compressed at the best zlib level (`78 DA`),
+    /// like the real clients'.
     pub fn login_listserver(
         &mut self,
         version: ClientVersion,
@@ -593,22 +595,27 @@ impl Connection {
         account: &str,
         password: &str,
     ) -> io::Result<()> {
+        let shape = version.listserver().shape;
+        if shape == LoginShape::NewmainOnly {
+            self.send_raw(&write_zlib_frame_best(b" newmain\n")?)?;
+            return self.stream.flush();
+        }
         let mut serverlist = vec![1 + 0x20];
         write_gstring(&mut serverlist, account)?;
         write_gstring(&mut serverlist, password)?;
         serverlist.push(b'\n');
-        if version.encryption() == EncryptionGen::Gen5 {
+        if shape == LoginShape::Gen5 {
             let mut hs = vec![7 + 0x20, (key & 0x7F) + 0x20];
             hs.extend_from_slice(version.listserver_token().as_bytes());
             hs.extend_from_slice(b"newmain\n");
-            self.send_raw(&write_zlib_frame(&hs)?)?;
+            self.send_raw(&write_zlib_frame_best(&hs)?)?;
             self.gen5 = Some(Gen5::new(key));
             self.gen5_in = Some(Gen5::new(key));
             self.send_messages(&[serverlist])
         } else {
             let mut body = b" newmain\n".to_vec();
             body.extend_from_slice(&serverlist);
-            self.send_raw(&write_zlib_frame(&body)?)?;
+            self.send_raw(&write_zlib_frame_best(&body)?)?;
             self.stream.flush()
         }
     }
@@ -1254,7 +1261,9 @@ mod tests {
     fn gen5_listserver_login() {
         let (mut conn, mut srv) = pair();
         conn.login_listserver(ClientVersion::V222, 0x66, "ab", "cd").unwrap();
-        assert_eq!(read_frame(&mut srv), b"'\x86GNW30123newmain\n");
+        let first = wire(&mut srv);
+        assert_eq!(&first[2..4], &[0x78, 0xDA], "the id 7 frame is compressed at the best level");
+        assert_eq!(crate::protocol::zlib_decompress(&first[2..]).unwrap(), b"'\x86GNW30123newmain\n");
         let raw = read_raw(&mut srv);
         let mut g = Gen5::new(0x66);
         assert_eq!(raw[0], Gen5Comp::None as u8);
@@ -1271,12 +1280,48 @@ mod tests {
         assert_eq!(reply.status.as_deref(), Some("Lab listserver"));
     }
 
-    /// 2.05 listserver login: one plain zlib frame, id 0 then id 1.
+    /// The raw bytes of the next frame on the wire, length prefix and all.
+    fn wire(srv: &mut TcpStream) -> Vec<u8> {
+        let mut len = [0u8; 2];
+        srv.read_exact(&mut len).unwrap();
+        let mut body = vec![0u8; u16::from_be_bytes(len) as usize];
+        srv.read_exact(&mut body).unwrap();
+        [&len[..], &body].concat()
+    }
+
+    /// Shape A, the real 2.00 and 2.05: one plain zlib frame, id 0 `newmain`
+    /// and LF, 17 bytes on the wire, header 78 DA, and nothing after it.
+    /// 1.42 and 2.01 to 2.04 send it as an inference.
     #[test]
-    fn classic_listserver_login() {
-        let (mut conn, mut srv) = pair();
-        conn.login_listserver(ClientVersion::V205, 0x66, "ab", "cd").unwrap();
-        assert_eq!(read_frame(&mut srv), b" newmain\n!\"ab\"cd\n");
+    fn shape_a_listserver_login() {
+        for v in [ClientVersion::V142, ClientVersion::V200, ClientVersion::V201, ClientVersion::V204, ClientVersion::V205] {
+            assert_eq!(v.listserver().shape, LoginShape::NewmainOnly, "{}", v.label());
+            let (mut conn, mut srv) = pair();
+            conn.login_listserver(v, 0x66, "ab", "cd").unwrap();
+            let raw = wire(&mut srv);
+            assert_eq!(raw.len(), 2 + 17, "{}: 17-byte zlib stream, as the real client", v.label());
+            assert_eq!(&raw[2..4], &[0x78, 0xDA], "{}", v.label());
+            assert_eq!(crate::protocol::zlib_decompress(&raw[2..]).unwrap(), b" newmain\n", "{}", v.label());
+            // No account or password in it, and nothing follows.
+            drop(conn);
+            let mut rest = Vec::new();
+            srv.read_to_end(&mut rest).unwrap();
+            assert!(rest.is_empty(), "{}: nothing after the frame", v.label());
+        }
+    }
+
+    /// Shape B, the real 2.17.1: one plain zlib frame, id 0 then id 1, 78 DA.
+    /// The builds with no capture (1.41 and 2.1 to 2.16) keep it.
+    #[test]
+    fn shape_b_listserver_login() {
+        for v in [ClientVersion::V141, ClientVersion::V210, ClientVersion::V216, ClientVersion::V217] {
+            assert_eq!(v.listserver().shape, LoginShape::NewmainAccount, "{}", v.label());
+            let (mut conn, mut srv) = pair();
+            conn.login_listserver(v, 0x66, "ab", "cd").unwrap();
+            let raw = wire(&mut srv);
+            assert_eq!(&raw[2..4], &[0x78, 0xDA], "{}", v.label());
+            assert_eq!(crate::protocol::zlib_decompress(&raw[2..]).unwrap(), b" newmain\n!\"ab\"cd\n", "{}", v.label());
+        }
     }
 
     /// GServer's gen-2 test is "type 0, then a known token": 1.39 sends
@@ -1770,7 +1815,7 @@ mod tests {
         let (done_tx, done_rx) = mpsc::channel::<()>();
         let server = std::thread::spawn(move || {
             let (mut srv, login) = accept_plain_listserver(&listener);
-            assert_eq!(login, b" newmain\n!\"ab\"cd\n");
+            assert_eq!(login, b" newmain\n", "2.05 sends shape A: id 0 only");
             send_plain(&mut srv, b"$Bad account or password.\n");
             let _ = done_rx.recv();
         });

@@ -147,6 +147,15 @@ impl Settings {
 }
 
 impl Settings {
+    /// The client version to run. An explicit `--version` wins over the
+    /// version the GUI saved; the saved one applies only when the flag was
+    /// not given; with neither, the default (2.05). `cli` is `Some` only when
+    /// `--version` was given, even if it names the default.
+    pub fn version_with(&self, cli: Option<crate::protocol::ClientVersion>) -> crate::protocol::ClientVersion {
+        use crate::protocol::ClientVersion;
+        cli.or_else(|| self.version.as_deref().and_then(ClientVersion::from_label)).unwrap_or(ClientVersion::V205)
+    }
+
     /// Whether sound effects are on. The command line wins over the
     /// settings file, and the file wins over the default (on). `cli` is
     /// `Some(false)` for `--no-sound` and `Some(true)` for `--sound`.
@@ -218,6 +227,21 @@ impl AsRef<Path> for Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_version_wins_over_the_saved_one() {
+        use crate::protocol::ClientVersion;
+        let saved = Settings::parse("version=2.22\n");
+        // `--version 2.05` (the default value, but given) is not replaced.
+        assert_eq!(saved.version_with(Some(ClientVersion::V205)), ClientVersion::V205);
+        assert_eq!(saved.version_with(Some(ClientVersion::V217)), ClientVersion::V217);
+        // No flag: the saved version applies.
+        assert_eq!(saved.version_with(None), ClientVersion::V222);
+        // Neither: the default.
+        assert_eq!(Settings::parse("").version_with(None), ClientVersion::V205);
+        // An unreadable saved label is no saved version.
+        assert_eq!(Settings::parse("version=nope\n").version_with(None), ClientVersion::V205);
+    }
 
     #[test]
     fn serverwarp_is_followed_by_default() {
