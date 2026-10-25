@@ -457,6 +457,43 @@ impl Level {
             .extend(lines.iter().filter_map(|l| parse_link(&format!("LINK {l}"))));
     }
 
+    /// Add the server's `PLO_LEVELCHEST` records: `opened, x, y` and, for a
+    /// chest the player has not opened, `item, sign index`, every byte
+    /// plus 32. An opened chest has no item on the wire, so its item stays
+    /// empty. Records too short to hold a position are skipped.
+    ///
+    /// The record is all the client has of a chest: it draws nothing for
+    /// it. Whatever the chest looks like is already in the board tiles.
+    pub fn add_server_chests(&mut self, records: &[String]) {
+        for r in records {
+            let b = r.as_bytes();
+            if b.len() < 3 {
+                continue;
+            }
+            let opened = b[0].wrapping_sub(0x20) == 1;
+            let (x, y) = (b[1].wrapping_sub(0x20) as i32, b[2].wrapping_sub(0x20) as i32);
+            let (item, sign_index) = match b {
+                [_, _, _, i, s, ..] if !opened => (
+                    CHEST_ITEMS.get(i.wrapping_sub(0x20) as usize).map(|s| s.to_string()).unwrap_or_default(),
+                    s.wrapping_sub(0x20) as i32,
+                ),
+                _ => (String::new(), -1),
+            };
+            self.chests.push(Chest { x, y, item, sign_index });
+        }
+    }
+
+    /// Add the server's `PLO_LEVELSIGN` records (`x, y, text`, see
+    /// [`decode_sign_record`]).
+    pub fn add_server_signs(&mut self, records: &[String]) {
+        self.signs.extend(
+            records
+                .iter()
+                .filter_map(|r| decode_sign_record(r.as_bytes()))
+                .map(|(x, y, text)| Sign { x, y, text }),
+        );
+    }
+
     /// Load a .nw or .graal file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let path = path.as_ref();
@@ -1366,6 +1403,24 @@ pub fn decode_sign_record(line: &[u8]) -> Option<(i32, i32, String)> {
 mod tests {
     use super::*;
     use crate::assets::crc32;
+
+    #[test]
+    fn server_chest_and_sign_records_reach_the_level() {
+        let mut board = Level::from_board(&[0; 4096]);
+        // Opened chest at (23, 19): three bytes. Closed chest at (5, 6):
+        // item 0 (green rupee), sign 2.
+        let opened: String = [0x21u8, 0x20 + 23, 0x20 + 19].iter().map(|&b| b as char).collect();
+        let closed: String = [0x20u8, 0x20 + 5, 0x20 + 6, 0x20, 0x22].iter().map(|&b| b as char).collect();
+        board.add_server_chests(&[opened, closed, "!".into()]);
+        assert_eq!(board.chests.len(), 2);
+        assert_eq!((board.chests[0].x, board.chests[0].y, board.chests[0].item.as_str()), (23, 19, ""));
+        assert_eq!((board.chests[1].x, board.chests[1].y, board.chests[1].item.as_str(), board.chests[1].sign_index), (5, 6, "greenrupee", 2));
+        // A sign: x 7, y 8, text "AB" (alphabet codes 0, 1).
+        let sign: String = [0x20u8 + 7, 0x20 + 8, 0x20, 0x21].iter().map(|&b| b as char).collect();
+        board.add_server_signs(&[sign]);
+        assert_eq!(board.signs.len(), 1);
+        assert_eq!((board.signs[0].x, board.signs[0].y, board.signs[0].text.as_str()), (7, 8, "AB"));
+    }
 
     #[test]
     fn link_keeps_player_coordinate() {

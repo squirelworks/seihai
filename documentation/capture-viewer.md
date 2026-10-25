@@ -223,6 +223,13 @@ The tool was also run read-only on the private lab pcaps of 2.17, 2.22 and 2.31
 correctly for all captures named after a version. Output was only counted, never
 stored; see the pull request for the counts.
 
+## Capture file kinds
+
+The reader takes Ethernet pcaps and the two Linux cooked kinds. `tcpdump -i any`
+writes the cooked kind (link type 276, "cooked v2", 20-byte header; type 113 is
+the older 16-byte form). The 2.22 public-server run was captured that way and
+showed 0 messages until the reader learned link type 276.
+
 ## Open
 
 * No GUI, no live capture, no follow mode.

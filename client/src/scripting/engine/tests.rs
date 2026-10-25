@@ -869,3 +869,27 @@ fn corpus_parses_and_runs_without_panicking() {
     println!("diagnostics: {diag_kinds:?}");
     println!("most common unknown commands: {:?}", &top[..top.len().min(25)]);
 }
+
+#[test]
+fn diagnostic_names_the_object_and_shows_the_line() {
+    let mut w = ScriptWorld::new(Era::V21);
+    w.add(ObjSpec::weapon("w1", "a.png", "hide;\nsay 2 3\n"));
+    w.add(ObjSpec::npc("block.png", 4.0, 5.5, "if (playerenters) {\n  say 2 3\n  hide;\n}\n"));
+    let log = w.take_log();
+    assert!(log.iter().any(|l| l.starts_with("object 0 (weapon w1): line 2: expected `;`") && l.ends_with("[say 2 3]")), "{log:?}");
+    assert!(log.iter().any(|l| l.starts_with("object 1 (npc block.png at 4,5.5): line 2:") && l.contains("[say 2 3]")), "{log:?}");
+}
+
+#[test]
+fn weapon_script_with_section_signs_keeps_its_lines() {
+    // The server's weapon packet writes line breaks as `§`; a UTF-8 server
+    // sends it as C2 A7. Both must give a script with real lines.
+    let body = "//#CLIENTSIDE\u{a7}//#GS1\u{a7}if (playerenters) {\u{a7}  hearts = 2;\u{a7}}\u{a7}";
+    for bytes in [body.as_bytes().to_vec(), body.chars().map(|c| c as u32 as u8).collect::<Vec<u8>>()] {
+        let text = crate::protocol::script_text(&bytes);
+        assert_eq!(text.lines().count(), 5, "{text:?}");
+        let mut w = ScriptWorld::new(Era::V21);
+        w.add(ObjSpec::weapon("w", "", &text));
+        assert!(w.take_log().is_empty());
+    }
+}

@@ -307,7 +307,19 @@ impl ScriptWorld {
         let parsed = parse(&spec.script, self.core.era);
         let compiled = compile(&parsed);
         for d in &compiled.diagnostics {
-            self.core.note(format!("object {id}: {d}"));
+            // Say what the object is and show the line, so a log line can
+            // be matched to a script without the level at hand.
+            let who = match spec.kind {
+                ObjKind::Weapon => format!("weapon {}", spec.name),
+                ObjKind::Npc => format!("npc {} at {},{}", if spec.image.is_empty() { "-" } else { &spec.image }, spec.x, spec.y),
+            };
+            let src: String = spec
+                .script
+                .lines()
+                .nth((d.line as usize).saturating_sub(1))
+                .map(|l| l.trim().chars().take(80).collect())
+                .unwrap_or_default();
+            self.core.note(format!("object {id} ({who}): {d} [{src}]"));
         }
         self.objects.push(Some(ScriptObject {
             id,

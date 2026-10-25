@@ -98,13 +98,26 @@ pub fn parse_weapon_add(b: &[u8]) -> Option<Weapon> {
             }
             1 => {
                 let n = read_gshort(b.get(i + 1..)?)? as usize;
-                w.script = Some(latin1(b.get(i + 3..i + 3 + n)?));
+                w.script = Some(script_text(b.get(i + 3..i + 3 + n)?));
                 i += 3 + n;
             }
             _ => break,
         }
     }
     Some(w)
+}
+
+/// A weapon script from the wire. The server writes a line break as `§`:
+/// the one byte 0xA7 from a Latin-1 server, the two bytes C2 A7 from one
+/// that sends UTF-8. Both become `\n`, so the script keeps its lines (as a
+/// single `//` comment line it would do nothing). Text that is valid UTF-8
+/// is read as UTF-8, the rest as Latin-1.
+pub fn script_text(b: &[u8]) -> String {
+    let s = match std::str::from_utf8(b) {
+        Ok(s) => s.to_string(),
+        Err(_) => latin1(b),
+    };
+    s.replace('\u{a7}', "\n")
 }
 
 /// Message splitter that carries a partial message from one body to the
