@@ -141,11 +141,24 @@ impl SessionScripts {
         self.apply(session);
     }
 
-    /// The player typed a chat line.
-    pub fn chat(&mut self, session: &mut OfflineSession, text: &str) {
+    /// The player typed a chat line: `playerchats` runs on every object, and
+    /// the text to send is returned.
+    ///
+    /// A script can change that text with `setplayerprop #c,...` (or
+    /// `player.chat = ...`). The real client does not put the typed line on
+    /// the wire until its scripts have run, so the changed text is what goes
+    /// out (and what the bubble shows). This is how worlds stop "unstick me"
+    /// in a jail: a client-side NPC rewrites the line and the server never
+    /// sees it (lab capture, `documentation/unstick-me.md`). Without a
+    /// script change the typed text comes back as it was.
+    pub fn chat(&mut self, session: &mut OfflineSession, text: &str) -> String {
+        // A "#c" left by an earlier, unrelated script is not an answer to
+        // this line.
+        session.props.remove("#c");
         self.sync_player(session);
         self.world.chat(text);
         self.apply(session);
+        session.props.remove("#c").unwrap_or_else(|| text.to_string())
     }
 
     /// Apply the world's pending effects to the session. What the session
@@ -584,5 +597,40 @@ mod tests {
         s.arrive(x, y);
         assert_eq!((s.player_x, s.player_y), (12.0, 3.0));
         assert!(s.warp_pending.is_none() && s.pending_link.is_none());
+    }
+
+    const UNSTICK_JAIL: &str = "GLEVNW01\n\
+        NPC - 20 20\n\
+        //#CLIENTSIDE\n\
+        if (playerchats && strequals(#c,unstick me)) { setplayerprop #c,Cant use unstick me here!; }\n\
+        NPCEND\n";
+
+    #[test]
+    fn a_script_can_rewrite_the_typed_line_before_it_is_sent() {
+        let mut s = session(UNSTICK_JAIL);
+        let mut sc = SessionScripts::new(ClientVersion::V222);
+        sc.load_level(&mut s, "jail.nw");
+        assert_eq!(sc.chat(&mut s, "unstick me"), "Cant use unstick me here!");
+        // The match is the script's, so other lines pass untouched.
+        assert_eq!(sc.chat(&mut s, "hello there"), "hello there");
+        // And the answer is not kept for the next line.
+        assert!(!s.props.contains_key("#c"));
+    }
+
+    #[test]
+    fn a_stale_chat_prop_is_not_taken_for_the_answer() {
+        let mut s = session("GLEVNW01\n");
+        let mut sc = SessionScripts::new(ClientVersion::V222);
+        sc.load_level(&mut s, "x.nw");
+        s.props.insert("#c".into(), "left over".into());
+        assert_eq!(sc.chat(&mut s, "unstick me"), "unstick me");
+    }
+
+    #[test]
+    fn without_scripts_the_line_goes_out_as_typed() {
+        let mut s = session(DOOR);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "town.nw");
+        assert_eq!(sc.chat(&mut s, "unstick me"), "unstick me");
     }
 }

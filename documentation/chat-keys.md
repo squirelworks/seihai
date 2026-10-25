@@ -23,3 +23,7 @@ send are printed on stderr. If neither stderr line appears after Enter, the
 key did not reach the program (window focus on the user's desktop); if the
 second appears, the line was sent and the server's reaction is the thing to
 look at.
+
+`unstick me` is not special to the client: it is sent as an ordinary line and
+the server handles it. A `playerchats` script can rewrite the line before it
+goes out, as in the real client. See `unstick-me.md`.

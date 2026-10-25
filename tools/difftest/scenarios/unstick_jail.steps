@@ -1,0 +1,6 @@
+# The same chat line in a level listed in the server's jaillevels
+# (lv_jail.nw, added to the lab options): the server must not warp.
+start lv_jail.nw 30.00 30.50
+wait 36
+chat unstick me
+wait 6

@@ -1829,13 +1829,14 @@ fn main() {
                     }
                     ui::InputMode::Chat => match ui::classify_chat(&text) {
                         ui::ChatSend::Say(t) => {
+                            // The playerchats scripts run first and may rewrite the
+                            // line (a jail NPC turns "unstick me" into something
+                            // else); the real client sends only what is left.
+                            let t = if no_scripts { t } else { scripts.chat(&mut session, &t) };
                             // History + bubble + held bubble clock (ui::own_say).
                             let who = me(&net_state, &account);
                             ui::own_say(&mut net_state, &who, &t, &mut my_chat, &mut my_chat_timer);
                             dirty = true;
-                            if !no_scripts {
-                                scripts.chat(&mut session, &t);
-                            }
                             let online = conn.is_some();
                             let r = conn.as_mut().map(|c| c.send_chat(&t));
                             match &r {
