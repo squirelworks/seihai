@@ -21,11 +21,14 @@ pub struct SessionScripts {
     /// Effects the session cannot apply itself (sound, network, effects
     /// on the picture), for the caller to act on.
     pub unhandled: Vec<Effect>,
+    /// Set when a script changed an NPC image (`setimg`, `showimg`), so the
+    /// host can load the new picture. The host clears it.
+    pub images_changed: bool,
 }
 
 impl SessionScripts {
     pub fn new(version: ClientVersion) -> Self {
-        SessionScripts { world: ScriptWorld::new(Era::for_version(version)), was_reading: false, unhandled: Vec::new() }
+        SessionScripts { world: ScriptWorld::new(Era::for_version(version)), was_reading: false, unhandled: Vec::new(), images_changed: false }
     }
 
     /// Replace the level's scripts with those of `session`'s current
@@ -167,10 +170,89 @@ impl SessionScripts {
                         n.visible = visible;
                     }
                 }
-                Effect::SetImg { obj, file, .. } => {
+                // `setimg`, `setgif`, `setimgpart`, `setgifpart`: the NPC's image (the
+                // whole of it, or the part), and the NPC is shown. A name ending
+                // in `.gani` picks that animation instead (Seihai's convention, see
+                // `documentation/npc-images.md`); a plain image takes the NPC out
+                // of any animation.
+                Effect::SetImg { obj, file, part } => {
+                    self.images_changed = true;
                     if let Some(n) = self.level_npc(s, obj) {
-                        n.image = file;
                         n.visible = true;
+                        if file.to_ascii_lowercase().ends_with(".gani") {
+                            set_ani(n, &file);
+                        } else {
+                            n.image = file;
+                            n.image_part = part.map(|(x, y, w, h)| (x as i32, y as i32, w as i32, h as i32));
+                            n.ani = None;
+                        }
+                    }
+                }
+                Effect::SetCharAni { obj, ani, .. } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        set_ani(n, &ani);
+                    }
+                }
+                // `setani name,params` is the same for an NPC that is not a character.
+                Effect::Command { obj, ref name, ref args } if name == "setani" => {
+                    let a = args.first().map(|v| v.text()).unwrap_or_default();
+                    if let Some(n) = self.level_npc(s, obj) {
+                        set_ani(n, &a);
+                    }
+                }
+                // `showcharacter`: the NPC is drawn as a character; idle until a
+                // `setcharani` says otherwise.
+                Effect::Command { obj, ref name, .. } if name == "showcharacter" => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        if n.ani.is_none() {
+                            set_ani(n, "idle");
+                        }
+                    }
+                }
+                // `showimg index,file,x,y`: image `index` at a level position. Using
+                // an index again replaces that image.
+                Effect::Command { obj, ref name, ref args } if name == "showimg" => {
+                    self.images_changed = true;
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
+                    let img = crate::assets::NpcImage {
+                        index: num(0) as i64,
+                        file: args.get(1).map(|v| v.text()).unwrap_or_default(),
+                        x: num(2) as f32,
+                        y: num(3) as f32,
+                        part: None,
+                    };
+                    if let Some(n) = self.level_npc(s, obj) {
+                        match n.images.iter_mut().find(|i| i.index == img.index) {
+                            // The same file only moves, and keeps its part.
+                            Some(old) if old.file == img.file => {
+                                old.x = img.x;
+                                old.y = img.y;
+                            }
+                            Some(old) => *old = img,
+                            None => {
+                                n.images.push(img);
+                                n.images.sort_by_key(|i| i.index);
+                            }
+                        }
+                    }
+                }
+                // `changeimgpart index,x,y,w,h`: the part of image `index` that shows.
+                Effect::Command { obj, ref name, ref args } if name == "changeimgpart" => {
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
+                    let index = num(0) as i64;
+                    let part = (num(1).clamp(0.0, 16000.0) as i32, num(2).clamp(0.0, 16000.0) as i32, num(3).clamp(0.0, 220.0) as i32, num(4).clamp(0.0, 220.0) as i32);
+                    if let Some(n) = self.level_npc(s, obj) {
+                        if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
+                            i.part = Some(part);
+                        }
+                    }
+                }
+                // `hideimg index`: image `index` is deleted.
+                Effect::Command { obj, ref name, ref args } if name == "hideimg" => {
+                    self.images_changed = true;
+                    let index = args.first().map_or(0.0, |v| v.num()) as i64;
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.images.retain(|i| i.index != index);
                     }
                 }
                 // The world has already moved the object; copy its position.
@@ -238,6 +320,17 @@ impl SessionScripts {
             return None;
         }
         s.current_level.as_mut()?.npcs.get_mut(o.tag)
+    }
+}
+
+/// Put an NPC in the animation a script named (see `npcart::ani_name`).
+fn set_ani(n: &mut crate::assets::Npc, raw: &str) {
+    if let Some(name) = crate::npcart::ani_name(raw) {
+        if n.ani.as_deref() != Some(name.as_str()) {
+            n.ani = Some(name);
+            n.ani_frame = 0;
+            n.ani_ms = 0;
+        }
     }
 }
 

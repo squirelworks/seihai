@@ -320,7 +320,8 @@ pub fn render_view_with(
 
     // Chests and signs are part of the board (see `ViewOptions`); NPCs next.
     for npc in &level.npcs {
-        if npc.visible {
+        // An NPC drawn as an animation has no placeholder under it.
+        if npc.visible && npc.ani.is_none() {
             // Placeholder until the image arrives. Request the file if missing.
             draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x80, 0x80, 0x80]);
         }

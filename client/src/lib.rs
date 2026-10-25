@@ -11,6 +11,7 @@ pub mod gui;
 pub mod help;
 pub mod life;
 pub mod net;
+pub mod npcart;
 pub mod offline;
 pub mod pose;
 pub mod protocol;
