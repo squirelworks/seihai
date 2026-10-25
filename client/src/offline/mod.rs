@@ -1128,11 +1128,17 @@ impl OfflineSession {
         self.dev.wallhack() || !WALK_PROBES[dir].iter().any(|&(px, py)| self.blocked_point(x + px, y + py))
     }
 
-    /// True if the whole body box is clear at `(x, y)`: none of the probes of
-    /// any facing is blocked. A player who is not (put in a wall by a warp)
-    /// may walk out.
-    fn body_clear(&self, x: f32, y: f32) -> bool {
-        (0..4).all(|d| self.can_walk(x, y, d))
+    /// How many of the nine points inside the body box (x + 0.525, 1.5 and
+    /// 2.475 across, y + 1.025, 2.0 and 2.975 down) are on a wall or a chest.
+    /// Zero for any position the walking test lets a player reach: a body
+    /// that touches a wall with its right or bottom edge is not inside it.
+    /// (The edge probes of [`WALK_PROBES`] are not used for this: the right
+    /// and bottom ones sit on the tile line just outside the box, so a body
+    /// resting against a wall would count as inside it.)
+    fn body_overlap(&self, x: f32, y: f32) -> usize {
+        const XS: [f32; 3] = [0.525, 1.5, 2.475];
+        const YS: [f32; 3] = [1.025, 2.0, 2.975];
+        XS.iter().flat_map(|&px| YS.iter().map(move |&py| (px, py))).filter(|&(px, py)| self.blocked_point(x + px, y + py)).count()
     }
 
     /// Move the player by (dx, dy) if the body box can go there.
@@ -1141,7 +1147,7 @@ impl OfflineSession {
     /// updates facing from the dominant axis. A diagonal is two axis steps
     /// tested one after the other, so it slides along the open axis.
     /// A player already standing in a blocked tile (put there by a
-    /// warp, say) may walk out. Nothing moves while a warp is pending.
+    /// warp, say) may step to any place that is less inside it. Nothing moves while a warp is pending.
     /// Returns the emitted `PlayerUpdate` if the move succeeded.
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
         if dx == 0.0 && dy == 0.0 || self.life.is_dead() {
@@ -1162,10 +1168,16 @@ impl OfflineSession {
         // earlier ones left. A diagonal is two steps, so it slides along a
         // wall without any extra rule.
         let (x0, y0) = (self.player_x, self.player_y);
-        let stuck = !self.body_clear(x0, y0);
         let (mut x, mut y) = (x0, y0);
         let mut try_step = |s: &Self, mx: f32, my: f32, dir: usize| {
-            if s.gmap_step_ok(x + mx, y + my) && (stuck || s.can_walk(x + mx, y + my, dir)) {
+            // A body that is inside a wall (put there by a warp) may only
+            // step to a place that is less inside it; every other body
+            // takes the plain edge test.
+            let ok = s.can_walk(x + mx, y + my, dir) || {
+                let here = s.body_overlap(x, y);
+                here > 0 && s.body_overlap(x + mx, y + my) < here
+            };
+            if s.gmap_step_ok(x + mx, y + my) && ok {
                 x += mx;
                 y += my;
             }
@@ -1777,16 +1789,67 @@ mod tests {
 
     #[test]
     fn a_player_inside_a_wall_can_walk_out() {
-        // Walls in columns 20 and 21; the body edges 19.5 and 21.5 put its
-        // right side in the wall.
+        // Walls in columns 20 and 21; a body at x = 19.0 spans 19.5 to 21.5,
+        // so it is half in the wall. It may step back out (left) ...
         let mut s = body_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 19.0, 10.0);
-        assert!(s.try_move(0.5, 0.0).is_some());
-        assert!(s.try_move(0.5, 0.0).is_some());
-        assert_eq!(s.player_x, 20.0);
-        // out of the wall, now it blocks again
-        let mut s = body_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 17.0, 10.0);
-        assert!(s.try_move(0.5, 0.0).is_none() || s.player_x == 17.5);
-        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 0);
+        assert!(s.try_move(-0.5, 0.0).is_some());
+        assert_eq!(s.player_x, 18.5);
+        // ... and, once out, the wall blocks it again.
+        assert_eq!(walk(&mut s, -0.5, 0.0, 3), 3);
+        assert_eq!(s.player_x, 17.0);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 0, "clear of the wall, it blocks again");
+    }
+
+    /// The screenshots' bug: a body resting against a wall by its right or
+    /// bottom edge was counted as "inside" it (the right and bottom probes
+    /// sit on the tile line outside the box), and a body counted as inside
+    /// walked through anything. Walking down along a wall at x = 17.5 (right
+    /// edge on the tile line, wall column 20) must not open the wall.
+    #[test]
+    fn resting_against_a_wall_does_not_unlock_walking_through_it() {
+        let tiles = |x: i32, y: i32| if x == 20 && (10..=12).contains(&y) { WALL } else { OPEN };
+        let mut s = body_at(level(tiles), 17.5, 5.0);
+        // walk down past the wall: nothing in the way for a body at 17.5 (right probes are not used going down)
+        assert_eq!(walk(&mut s, 0.0, 0.5, 20), 20);
+        assert_eq!(s.player_x, 17.5);
+        // now beside the wall's rows again from below; go back up and stop next to it
+        let mut s = body_at(level(tiles), 17.5, 8.0);
+        assert!(s.try_move(0.0, 0.5).is_some());
+        assert!(s.try_move(0.0, 0.5).is_some());
+        // beside the wall now (box rows overlap 10..12): the wall still blocks stepping right
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 0, "x = {}", s.player_x);
+        assert_eq!(s.player_x, 17.5);
+        // and diagonal pushes slide along it instead of through it
+        assert_eq!(walk(&mut s, 0.5, 0.5, 3), 3);
+        assert_eq!(s.player_x, 17.5);
+    }
+
+    /// Same at the bottom edge: a body whose bottom edge rests on a wall row.
+    #[test]
+    fn resting_on_a_wall_row_does_not_unlock_walking_through_it() {
+        let tiles = |x: i32, y: i32| if y == 20 && (10..=12).contains(&x) { WALL } else { OPEN };
+        // y + 3.0 = 20.0: the bottom edge is on the tile line above the wall row.
+        let mut s = body_at(level(tiles), 8.5, 16.5);
+        assert_eq!(walk(&mut s, 0.0, 0.5, 10), 0);
+        // slide sideways above the wall, then try down again
+        assert_eq!(walk(&mut s, 0.5, 0.0, 2), 2);
+        assert_eq!(walk(&mut s, 0.0, 0.5, 10), 0, "y = {}", s.player_y);
+        assert_eq!(s.player_y, 16.5);
+    }
+
+    /// Rocks one tile apart: a two-tile body does not fit between them, and a
+    /// body beside one is not freed by it.
+    #[test]
+    fn a_body_overlap_of_zero_for_every_position_reached_by_walking() {
+        let tiles = |x: i32, y: i32| if (x * 7 + y * 13) % 5 == 0 { WALL } else { OPEN };
+        let mut s = body_at(level(|x, y| if (6..40).contains(&x) && (6..40).contains(&y) { tiles(x, y) } else { OPEN }), 2.0, 2.0);
+        // a long scripted walk of mixed directions
+        let dirs = [(0.5, 0.0), (0.0, 0.5), (-0.5, 0.0), (0.0, -0.5), (0.5, 0.5), (-0.5, 0.5), (0.5, -0.5)];
+        for i in 0..4000usize {
+            let (dx, dy) = dirs[(i / 7 + i / 31) % dirs.len()];
+            s.try_move(dx, dy);
+            assert_eq!(s.body_overlap(s.player_x, s.player_y), 0, "step {i} at ({}, {})", s.player_x, s.player_y);
+        }
     }
 
     #[test]
