@@ -432,6 +432,11 @@ fn main() {
             version = ClientVersion::from_label(v).unwrap_or(ClientVersion::V205);
         }
     }
+    // `--online host:port` is used as given. A listserver host with no port
+    // gets the selected version's default port.
+    if let Some(a) = online.as_mut() {
+        *a = version.complete_list_addr(a);
+    }
     // Check the data folder for one version or the five main ones, print, exit.
     if check_assets {
         let root = match &assets {

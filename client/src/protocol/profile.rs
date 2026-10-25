@@ -149,13 +149,80 @@ pub enum ServerList {
     Tabs(u8),
 }
 
+/// The one host every profile dials for its server list.
+pub const LISTSERVER_HOST: &str = "listserver.graal.in";
+/// Default port of a legacy (classic login) profile.
+pub const LEGACY_LIST_PORT: u16 = 14923;
+/// Default port of a supported (gen-5 era) profile.
+pub const SUPPORTED_LIST_PORT: u16 = 14922;
+/// Port the public service resets. No profile defaults to it.
+pub const DEAD_LIST_PORT: u16 = 14921;
+
+/// Which public listserver port answers a version's login.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListKind {
+    /// Classic login (1.41 to 2.04): port 14923.
+    Legacy,
+    /// 2.05 and later: port 14922.
+    Supported,
+}
+
+impl ListKind {
+    pub const fn port(self) -> u16 {
+        match self {
+            ListKind::Legacy => LEGACY_LIST_PORT,
+            ListKind::Supported => SUPPORTED_LIST_PORT,
+        }
+    }
+}
+
+/// Whether a public check of this profile's own login got a list on its port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortStatus {
+    /// A public check got a list on this port.
+    Confirmed,
+    /// The rule applied to a profile nobody has run on the public service.
+    Assumed,
+}
+
+/// The host and port the client binary itself carries. A historical fact:
+/// it is not what Seihai dials.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuiltIn {
+    pub host: &'static str,
+    pub port: u16,
+}
+
+/// What the 2.00 to 2.05 builds carry (DES-hidden): `www.graalonline.com:14921`.
+pub const BUILT_IN_14921: BuiltIn = BuiltIn { host: "www.graalonline.com", port: 14921 };
+/// What the 2.1 test builds carry: `www.graalonline.com:14922`.
+pub const BUILT_IN_14922: BuiltIn = BuiltIn { host: "www.graalonline.com", port: 14922 };
+
 /// Listserver login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Listserver {
+    /// Always [`LISTSERVER_HOST`].
+    pub host: &'static str,
+    /// The port dialled by default: [`ListKind::port`] of `kind`.
     pub port: u16,
+    pub kind: ListKind,
+    pub status: PortStatus,
+    /// What the binary carries, where it was read. History only.
+    pub built_in: Option<BuiltIn>,
     /// Token sent at listserver login. 2.22 and 2.31 send `GNW30123`
     /// inside id 7; older clients send their game token.
     pub token: Option<&'static str>,
+}
+
+impl Listserver {
+    pub const fn new(kind: ListKind, status: PortStatus, built_in: Option<BuiltIn>, token: Option<&'static str>) -> Self {
+        Self { host: LISTSERVER_HOST, port: kind.port(), kind, status, built_in, token }
+    }
+
+    /// `host:port`, as typed into the launcher or given to `--online`.
+    pub fn addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
 }
 
 /// Login, framing and the packets a version speaks.
@@ -678,6 +745,11 @@ mod tests {
         other: Option<IdSet>,
         tampercheck: bool,
         list_port: Option<u16>,
+        list_host: Option<String>,
+        list_kind: Option<String>,
+        list_status: Option<String>,
+        built_in_host: Option<String>,
+        built_in_port: Option<u16>,
     }
 
     fn parse_ids(s: &str) -> Option<IdSet> {
@@ -692,13 +764,17 @@ mod tests {
         Some(set)
     }
 
+    fn opt(s: &str) -> Option<String> {
+        (s != "-").then(|| s.to_string())
+    }
+
     fn toml_rows() -> Vec<TomlRow> {
         include_str!("profile_toml.tsv")
             .lines()
             .filter(|l| !l.starts_with('#') && !l.is_empty())
             .map(|l| {
                 let c: Vec<&str> = l.split('\t').collect();
-                assert_eq!(c.len(), 10, "{l}");
+                assert_eq!(c.len(), 15, "{l}");
                 TomlRow {
                     label: c[0].to_string(),
                     token: c[1].to_string(),
@@ -710,6 +786,11 @@ mod tests {
                     other: parse_ids(c[7]),
                     tampercheck: c[8] == "1",
                     list_port: c[9].parse().ok(),
+                    list_host: opt(c[10]),
+                    list_kind: opt(c[11]),
+                    list_status: opt(c[12]),
+                    built_in_host: opt(c[13]),
+                    built_in_port: c[14].parse().ok(),
                 }
             })
             .collect()
@@ -741,7 +822,19 @@ mod tests {
             check("npc_max", p.props.npc_max == t.npc_max);
             check("tampercheck", p.protocol.tampercheck == t.tampercheck);
             check("sends_language == pli has 37", p.protocol.sends_language == t.pli.contains(37));
-            check("listserver port", p.protocol.listserver.map(|l| l.port) == t.list_port);
+            let ls = p.protocol.listserver;
+            check("listserver port", ls.map(|l| l.port) == t.list_port);
+            check("listserver host", ls.map(|l| l.host.to_string()) == t.list_host);
+            check(
+                "listserver kind",
+                ls.map(|l| if l.kind == ListKind::Legacy { "legacy" } else { "supported" }.to_string()) == t.list_kind,
+            );
+            check(
+                "listserver port status",
+                ls.map(|l| if l.status == PortStatus::Confirmed { "confirmed" } else { "assumed" }.to_string()) == t.list_status,
+            );
+            check("built-in host", ls.and_then(|l| l.built_in).map(|b| b.host.to_string()) == t.built_in_host);
+            check("built-in port", ls.and_then(|l| l.built_in).map(|b| b.port) == t.built_in_port);
             // 2.16: its TOML entry keeps the 2.15 prop limit but notes that
             // 54-74 arrive in 2.16; the row follows the note.
             if t.label != "2.16" {
@@ -780,13 +873,103 @@ mod tests {
         // A real 2.31 client answers the process-list request with 44.
         assert!(pli(ClientVersion::V231).contains(44));
         assert_eq!(pli(ClientVersion::V230), pli(ClientVersion::V231));
-        // 2.17's listserver default is 14922.
+        // 2.17's listserver default is 14922 (supported), 2.05 and 2.00 split on the rule.
         assert_eq!(ClientVersion::V217.listserver_port(), 14922);
-        assert_eq!(ClientVersion::V205.listserver_port(), 14921);
-        // 2.00 defaults to the public legacy port (14923), 2.01 to 2.05 do not.
+        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
         assert_eq!(ClientVersion::V200.listserver_port(), 14923);
-        assert_eq!(ClientVersion::V201.listserver_port(), 14921);
+        assert_eq!(ClientVersion::V201.listserver_port(), 14923);
         assert_eq!(profile(ClientVersion::V217).props.npc_max, 73);
+    }
+
+    /// The port rule (documentation/port-rule.md): 14921 is dead, so no
+    /// profile defaults to it, and the binary's own port never decides it.
+    #[test]
+    fn no_profile_defaults_to_14921() {
+        for p in PROFILES {
+            if let Some(l) = p.protocol.listserver {
+                assert_ne!(l.port, DEAD_LIST_PORT, "{}", p.label);
+            }
+            assert_ne!(p.version.listserver_port(), DEAD_LIST_PORT, "{}", p.label);
+        }
+        // The dead port is still recorded as history: the 2.00 to 2.05 builds carry it.
+        let built_in = |v: ClientVersion| profile(v).protocol.listserver.and_then(|l| l.built_in);
+        assert_eq!(built_in(ClientVersion::V200).map(|b| b.port), Some(DEAD_LIST_PORT));
+        assert_eq!(built_in(ClientVersion::V205).map(|b| b.port), Some(DEAD_LIST_PORT));
+    }
+
+    /// Every profile with a listserver, and every version through
+    /// `listserver_host`, dials `listserver.graal.in`.
+    #[test]
+    fn every_profile_host_is_listserver_graal_in() {
+        for p in PROFILES {
+            if let Some(l) = p.protocol.listserver {
+                assert_eq!(l.host, "listserver.graal.in", "{}", p.label);
+            }
+            assert_eq!(p.version.listserver_host(), "listserver.graal.in", "{}", p.label);
+            assert_eq!(
+                p.version.listserver_addr(),
+                format!("listserver.graal.in:{}", p.version.listserver_port()),
+                "{}",
+                p.label
+            );
+        }
+    }
+
+    /// Legacy versions (1.41 to 2.04, classic login) default to 14923 and
+    /// supported ones (2.05 and later) to 14922; 1.33 to 1.39 have no
+    /// listserver and borrow 2.05's.
+    #[test]
+    fn legacy_and_supported_split() {
+        let legacy = ["1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04"];
+        let supported = ["2.05", "2.1", "2.12", "2.13", "2.14", "2.15", "2.16", "2.17", "2.22", "2.3", "2.31"];
+        for p in PROFILES {
+            match p.protocol.listserver {
+                None => {
+                    assert!(p.label.starts_with("1.3"), "{} has no listserver", p.label);
+                    assert_eq!(p.version.listserver_port(), 14922, "{}", p.label);
+                }
+                Some(l) => {
+                    let want = if legacy.contains(&p.label) {
+                        ListKind::Legacy
+                    } else {
+                        assert!(supported.contains(&p.label), "{} is in neither list", p.label);
+                        ListKind::Supported
+                    };
+                    assert_eq!(l.kind, want, "{}", p.label);
+                    assert_eq!(l.port, if want == ListKind::Legacy { 14923 } else { 14922 }, "{}", p.label);
+                    assert_eq!(l.port, l.kind.port(), "{}", p.label);
+                }
+            }
+        }
+        assert_eq!(legacy.len() + supported.len() + 7, PROFILES.len());
+    }
+
+    /// Only the profiles a public check ran are confirmed: 2.00 on 14923,
+    /// 2.22 and 2.31 on 14922. 2.01 to 2.04, 2.05, 2.1 to 2.17 and 2.3 are
+    /// assumed (the rule, not a check).
+    #[test]
+    fn port_status_confirmed_versus_assumed() {
+        let confirmed: Vec<&str> = PROFILES
+            .iter()
+            .filter(|p| p.protocol.listserver.is_some_and(|l| l.status == PortStatus::Confirmed))
+            .map(|p| p.label)
+            .collect();
+        assert_eq!(confirmed, ["2.00", "2.22", "2.31"]);
+        for v in [ClientVersion::V201, ClientVersion::V204, ClientVersion::V205, ClientVersion::V217, ClientVersion::V230] {
+            assert_eq!(v.listserver().status, PortStatus::Assumed, "{v:?}");
+        }
+    }
+
+    /// `--online host:port` is used exactly as given; a bare listserver host
+    /// gets the version's default port.
+    #[test]
+    fn command_line_address_wins() {
+        let v = ClientVersion::V200;
+        assert_eq!(v.complete_list_addr("listserver.graal.in:14922"), "listserver.graal.in:14922");
+        assert_eq!(v.complete_list_addr("example.org:14921"), "example.org:14921");
+        assert_eq!(v.complete_list_addr("listserver.graal.in"), "listserver.graal.in:14923");
+        assert_eq!(ClientVersion::V222.complete_list_addr("listserver.graal.in"), "listserver.graal.in:14922");
+        assert_eq!(v.complete_list_addr("10.0.0.5"), "10.0.0.5");
     }
 
     /// Cached level links (`PLI_LEVELWARPMOD`): rows with evidence or an

@@ -68,10 +68,10 @@ What stays open:
   untested.
 - No game-server login has been made. Login frames, file requests, the tamper
   check and chat on a public game server are all still unobserved.
-- Seihai's default list ports are unchanged (see "Port facts"). The profile
-  value is what the original client binary uses, and the fixture is generated
-  from the Graal_analysis profiles; the public service's answer is a separate
-  fact. Use `--online HOST:14923` for classic profiles.
+- Seihai's default list endpoint now follows the public service, not the
+  binary (`documentation/port-rule.md`): `listserver.graal.in`, 14923 for
+  legacy profiles and 14922 for supported ones. The binary's own host and port
+  are kept as history (`built_in`). An explicit `--online HOST:PORT` still wins.
 
 ## The first attempt from the build box
 
@@ -130,10 +130,10 @@ binaries, sources and the lab.
 | 2.22 | `listserver.graal.in`, then `.graal.cc`, then `.graalonline.biz`, port 14922; token `GNW30123` | binary, lab, public | **answered** on 14922 and 14923 (observed) |
 | 2.31 | as 2.22 | binary, public | **answered** on 14922 (observed) |
 
-Seihai's per-profile defaults (14921 for 2.00 to 2.05, 14922 for 2.1 to 2.31,
-14923 for 1.41) are unchanged: they follow the client binaries, and the
-profile fixture is generated from the Graal_analysis version profiles. The
-public results above say which port to give `--online` for each profile.
+Seihai's per-profile defaults were the ports the client binaries carry (14921
+for 2.00 to 2.05). They now follow the public results: `listserver.graal.in`,
+14923 for 1.41 to 2.04 and 14922 for 2.05 and later, with the binary's value
+kept as `built_in`. Only 2.00, 2.22 and 2.31 are confirmed by a check.
 
 ## Questions this was meant to settle, and their state
 
@@ -179,5 +179,5 @@ environment variable, never on a command line.
 
 ## Applied to the profiles (2026-10-25)
 
-The 2.00 profile's default list port is now 14923 (`ClientVersion::V200.listserver_port()`), from the user's confirmation and the 2.00 run above. 2.01 to 2.05 stay on 14921 and 2.17 on 14922: none of them was run on 14923 with the classic login, so nothing is claimed for them. The Graal_analysis version-profile TOML has the same change (`[v200]`, with the build's 14921 as `built_in_port`).
+Every profile now defaults to `listserver.graal.in` on the port that gets a list (`documentation/port-rule.md`): legacy 1.41 to 2.04 on 14923, supported 2.05 and later on 14922; nothing defaults to the dead 14921, which stays as `built_in` history on 2.00 to 2.05. Confirmed by a check: 2.00 (14923), 2.22 and 2.31 (14922). Assumed (the rule, not a run): 1.41, 1.42, 2.01 to 2.04, 2.05, 2.1 to 2.17, 2.3. A classic 2.05 login on 14922 and a 2.17 login on 14922 (no reply so far) are the checks that would move those. The launcher's port box follows the selected version; Graal_analysis' version-profile TOMLs carry the same fields (`client-internals/version-profiles/list-ports.md`).
 

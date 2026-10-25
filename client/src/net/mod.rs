@@ -1785,28 +1785,35 @@ mod tests {
         server.join().unwrap();
     }
 
-    /// The list is fetched on the port the profile names: 14923 for 1.41 and
-    /// 2.00 (the public legacy port), 14921 for 1.42 and 2.01 to 2.05 (the
-    /// port the builds carry; not run on 14923), 14922 for 2.17 and 2.22. Versions with no listserver
-    /// (1.33 to 1.39) borrow 2.05's.
+    /// The list is fetched on the port the profile names: 14923 for legacy
+    /// versions (1.41 to 2.04), 14922 for supported ones (2.05 and later),
+    /// and never the dead 14921. Versions with no listserver (1.33 to 1.39)
+    /// borrow 2.05's.
     #[test]
     fn listserver_port_follows_the_profile() {
-        assert_eq!(ClientVersion::V205.listserver_port(), 14921);
+        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
         assert_eq!(ClientVersion::V217.listserver_port(), 14922);
         assert_eq!(ClientVersion::V222.listserver_port(), 14922);
         assert_eq!(ClientVersion::V141.listserver_port(), 14923);
-        assert_eq!(ClientVersion::V139.listserver_port(), 14921);
+        assert_eq!(ClientVersion::V139.listserver_port(), 14922);
     }
 
-    /// 2.00 defaults to the public legacy-support port; the builds around it
-    /// keep the port they carry (they were not run on 14923).
+    /// The builds from 1.41 to 2.04 default to the legacy port, whatever
+    /// port the binary carries.
     #[test]
-    fn v200_defaults_to_the_legacy_port_and_its_neighbours_do_not() {
-        assert_eq!(ClientVersion::V200.listserver_port(), 14923);
-        for v in [ClientVersion::V142, ClientVersion::V201, ClientVersion::V202, ClientVersion::V203, ClientVersion::V204, ClientVersion::V205] {
-            assert_eq!(v.listserver_port(), 14921, "{v:?}");
+    fn legacy_versions_default_to_the_legacy_port() {
+        for v in [
+            ClientVersion::V141,
+            ClientVersion::V142,
+            ClientVersion::V200,
+            ClientVersion::V201,
+            ClientVersion::V202,
+            ClientVersion::V203,
+            ClientVersion::V204,
+        ] {
+            assert_eq!(v.listserver_port(), 14923, "{v:?}");
         }
-        assert_eq!(ClientVersion::V217.listserver_port(), 14922);
+        assert_eq!(ClientVersion::V205.listserver_port(), 14922);
     }
 
     /// A dead first address must not stop a working second one.

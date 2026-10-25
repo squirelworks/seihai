@@ -56,16 +56,27 @@ table; GServer-v2 and gs2lib for tokens and the server's version branches.
 
 `client/src/protocol/profile_toml.tsv` holds the per-version data from the
 Graal_analysis version-profile TOMLs (token, server and client id sets, prop
-limits, tampercheck, listserver port). `tools/gen_profile_fixture.py
+limits, tampercheck, listserver endpoint). `tools/gen_profile_fixture.py
 PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv` regenerates it,
 and the unit test `rows_match_version_profile_toml` fails if any row differs.
 When the TOMLs change, regenerate the file and fix the rows the test names.
-Default list port: 2.00 uses **14923**, the public legacy-support port (user-confirmed
-2026-10-25; a classic 2.00 login there got a plain zlib id-0 list, 14921 is
-refused); the port the 2.00 build itself carries, 14921, is kept in the TOML as
-`built_in_port`. 2.01 to 2.05 keep 14921 (not run on 14923), 2.17 and later
-14922. The port is the profile's default (`ClientVersion::listserver_port`);
-`--online host:port` and the launcher's port box still decide what is dialled.
+Default list endpoint (`documentation/port-rule.md`): every profile dials
+**`listserver.graal.in`**, and 14921 is dead, so none defaults to it. Legacy
+profiles (1.41 to 2.04, classic login) default to **14923**; supported profiles
+(2.05 and later) to **14922**. The host and port the binary carries are kept as
+`built_in_host` / `built_in_port` (`Listserver::built_in`): history, not what
+Seihai dials. Each profile also carries `kind` (legacy or supported) and
+`status`: **confirmed** for 2.00 (14923), 2.22 and 2.31 (14922), where a public
+check got a list, and **assumed** for every other profile (2.01 to 2.04, 2.05,
+2.1 to 2.17, 2.3), where the rule is applied but nobody ran it. 2.17 is the odd
+one: a classic login on 14922 got no reply. The per-profile table is in
+`client-internals/version-profiles/list-ports.md` in Graal_analysis.
+Defaults are `ClientVersion::listserver_host`, `listserver_port` and
+`listserver_addr`. `--online host:port` is used exactly as given (a bare
+`--online listserver.graal.in` gets the version's default port). The launcher's
+port box shows the selected version's default and changes with the version
+selector until the user types a port (or the settings file holds one), which it
+then keeps and marks as set by the user; "Use default" hands it back.
 Known exception: 2.16 keeps the 2.16 prop limits its TOML note describes
 (54–74), though the TOML's `props_max` still says 45.
 

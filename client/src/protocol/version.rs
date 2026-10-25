@@ -2,7 +2,7 @@
 //!
 //! The version switch. What each version does is in `profile.rs`.
 
-use super::profile::VersionProfile;
+use super::profile::{ListKind, Listserver, PortStatus, VersionProfile};
 
 /// Encryption generation used on the game socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,14 +138,43 @@ impl ClientVersion {
         p.life.death.is_some() && p.protocol.pli.contains(crate::life::PLI_CLAIMPKER)
     }
 
-    /// Listserver port, or the 2.05 one for versions without a listserver.
+    /// The listserver this version dials by default: its own, or 2.05's
+    /// for versions without one (1.33 to 1.39).
+    pub fn listserver(self) -> Listserver {
+        let ls = self.list_version().profile().protocol.listserver;
+        ls.unwrap_or(Listserver::new(ListKind::Supported, PortStatus::Assumed, None, None))
+    }
+
+    /// Default listserver port: 14923 for legacy versions, 14922 for
+    /// supported ones. Never the dead 14921.
     pub fn listserver_port(self) -> u16 {
-        self.list_version().profile().protocol.listserver.map_or(14921, |l| l.port)
+        self.listserver().port
+    }
+
+    /// Default listserver host: always `listserver.graal.in`.
+    pub fn listserver_host(self) -> &'static str {
+        self.listserver().host
+    }
+
+    /// Default `host:port` of this version's listserver.
+    pub fn listserver_addr(self) -> String {
+        self.listserver().addr()
     }
 
     pub fn listserver_token(self) -> &'static str {
         let p = self.profile();
         p.protocol.listserver.and_then(|l| l.token).unwrap_or(p.token)
+    }
+
+    /// A listserver address as given on the command line: `host:port` is
+    /// kept exactly (an explicit port always wins), and a listserver host with
+    /// no port gets this version's default port. Anything else is unchanged.
+    pub fn complete_list_addr(self, addr: &str) -> String {
+        if !addr.contains(':') && addr.contains("listserver") {
+            format!("{addr}:{}", self.listserver_port())
+        } else {
+            addr.to_string()
+        }
     }
 
     /// The version to fetch the server list as. 1.33–1.39 have no
