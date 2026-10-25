@@ -467,6 +467,66 @@ pub fn nearest(others: &[OtherPlayer], x: f32, y: f32) -> Option<&OtherPlayer> {
     })
 }
 
+/// What F4 / F5 do, given whether the build has the built-in editor and
+/// whether we are connected to a server.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EditorKey {
+    /// Run the key (F4 editor stub, F5 level picker).
+    Run,
+    /// Show this line in chat instead, and do nothing else.
+    Refuse(String),
+}
+
+/// Decide F4 (`is_f4`) or F5. Online the editor is refused with the real
+/// client's own text (`MainWindow-Error7`, seen in 2.00, 2.17.1, 2.22 and
+/// 2.31). The real 2.17.1 F5 opens a position window and never loads levels, so
+/// its online text for the older F5 level loader is not known: that line is
+/// inferred.
+pub fn editor_key(has_editor: bool, label: &str, online: bool, is_f4: bool) -> EditorKey {
+    if !has_editor {
+        // 2.3 moved the editor and level loading to GraalEditor.
+        return EditorKey::Refuse(format!("{label} has no built-in editor"));
+    }
+    if online {
+        return EditorKey::Refuse(if is_f4 {
+            "You cannot open the editor in the online mode.".into()
+        } else {
+            // Inferred wording, not from a real client.
+            "You are online and this feature is not available".into()
+        });
+    }
+    EditorKey::Run
+}
+
+#[cfg(test)]
+mod editor_key_tests {
+    use super::*;
+
+    #[test]
+    fn online_refuses_both_keys() {
+        assert_eq!(
+            editor_key(true, "2.17", true, true),
+            EditorKey::Refuse("You cannot open the editor in the online mode.".into())
+        );
+        assert_eq!(
+            editor_key(true, "2.17", true, false),
+            EditorKey::Refuse("You are online and this feature is not available".into())
+        );
+    }
+
+    #[test]
+    fn offline_runs_and_no_editor_refuses() {
+        assert_eq!(editor_key(true, "2.17", false, true), EditorKey::Run);
+        assert_eq!(editor_key(true, "2.17", false, false), EditorKey::Run);
+        for online in [false, true] {
+            assert_eq!(
+                editor_key(false, "2.3", online, false),
+                EditorKey::Refuse("2.3 has no built-in editor".into())
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod chat_key_tests {
     use super::*;
