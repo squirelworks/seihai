@@ -176,3 +176,8 @@ environment variable, never on a command line.
 6. Turn what the captures settle into profile-gated code with synthetic tests,
    update `packet-layouts.tsv` and the version-chain unknowns, and leave the
    rest as notes.
+
+## Applied to the profiles (2026-10-25)
+
+The 2.00 profile's default list port is now 14923 (`ClientVersion::V200.listserver_port()`), from the user's confirmation and the 2.00 run above. 2.01 to 2.05 stay on 14921 and 2.17 on 14922: none of them was run on 14923 with the classic login, so nothing is claimed for them. The Graal_analysis version-profile TOML has the same change (`[v200]`, with the build's 14921 as `built_in_port`).
+

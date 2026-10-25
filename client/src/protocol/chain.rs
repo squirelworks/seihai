@@ -518,11 +518,17 @@ pub const CHAIN: &[Step] = &[
         token: "GNW24011",
         date: "2001-02-01",
         basis: Basis::Binary,
-        delta: Delta { plo: IdDelta::plus(&[154, 155]), gs1_commands: Some(142), ..Delta::NONE },
-        source: "binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142",
+        delta: Delta {
+            // 14923 is the public legacy-support port (the build itself carries 14921).
+            listserver: Some(Some(Listserver { port: 14923, token: None })),
+            plo: IdDelta::plus(&[154, 155]),
+            gs1_commands: Some(142),
+            ..Delta::NONE
+        },
+        source: "binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142; list port 14923 from the public check of 2026-10-25 (built-in 14921)",
         unknown: &[
             Unknown { area: "login", what: "props sent at login (verified for 2.05 only)" },
-            Unknown { area: "listserver", what: "reply format; the first frame is known, no reply was observed" },
+            Unknown { area: "listserver", what: "a real 2.00 client's reply was not captured; the public port 14923 answered Seihai's classic login with a plain zlib id-0 list (4 rows) on 2026-10-25" },
             Unknown { area: "token", what: "the token is not in gs2lib, so a stock GServer-v2 does not know it" },
         ],
     },
@@ -532,9 +538,16 @@ pub const CHAIN: &[Step] = &[
         token: "GNW23021",
         date: "2001-03-08",
         basis: Basis::Binary,
-        delta: Delta { plo: IdDelta::plus(&[46, 156]), pli: IdDelta::plus(&[35, 36]), gs1_commands: Some(144), ..Delta::NONE },
+        delta: Delta {
+            // Back to the build's own port: 2.01 to 2.05 were not run on 14923.
+            listserver: Some(Some(Listserver { port: 14921, token: None })),
+            plo: IdDelta::plus(&[46, 156]),
+            pli: IdDelta::plus(&[35, 36]),
+            gs1_commands: Some(144),
+            ..Delta::NONE
+        },
         source: "binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144",
-        unknown: &[],
+        unknown: &[Unknown { area: "listserver", what: "not run on 14923 (the public legacy port); 14921, the port the build carries, is refused by the public service" }],
     },
     Step {
         version: ClientVersion::V202,
@@ -1170,7 +1183,9 @@ mod tests {
     }
 
     /// Behaviour is unchanged: every build that existed before the chain
-    /// resolves to exactly the row that was written out by hand.
+    /// resolves to exactly the row that was written out by hand. One row was
+    /// changed on purpose afterwards: 2.00's listserver port is 14923, the
+    /// public legacy-support port (it was 14921, the port the build carries).
     #[test]
     fn chain_equals_the_hand_written_rows() {
         let mut seen = 0;
