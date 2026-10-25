@@ -45,3 +45,7 @@ Notes are in Graal_analysis `tools/level-editor/` (2.22 reference, version delta
 ## Order
 
 Open the PR for one item, then start the next. Do not wait for merge. The reviewer will catch up.
+
+## Port rule (do this next)
+
+See `documentation/port-rule.md`. 14921 is dead. Legacy defaults to 14923, supported defaults to 14922, host is listserver.graal.in. Launcher follows the version. Do not leave 2.01–2.04 on 14921.
