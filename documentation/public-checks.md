@@ -1,9 +1,79 @@
 # Public-server checks (overnight item 14)
 
-Status: **blocked from the build box; nothing was observed.** This page says
-what was tried, what happened, what the sources already say about the
-listserver ports, and the exact checklist to run when a network path exists.
-No wire code or table row changed because of it.
+Status: **list checks done from the user's own machine on 2026-10-25 (two
+runs); the game-server checks are still to do.** The build box itself cannot
+reach any listserver port. This page says what the first public results were
+and what they settle, what was tried from the build box, what the sources say
+about the listserver ports, and the checklist for the rest.
+
+## First public results (2026-10-25, 11:50 and 11:53 JST)
+
+The user ran the read-only list check (`--list-only` for 2.22, 2.17, 2.31, 2.05
+and 2.00, with a packet capture in the second run) from their own Linux
+machine. The account is masked here, and no game-server address or name is
+recorded. The derived note with the frame layouts and per-run table is
+`protocol/public-listserver-2026-10-25.md` and its `.tsv` in Graal_analysis.
+
+| run | profile | port | login | result |
+|---|---|---|---|---|
+| both | 2.22, 2.31 | 14922 | gen-5 | list of 8 rows, welcome, site and upgrade lines |
+| both | 2.05 (user's binary, gen-5 login) | 14922 | gen-5 | same list |
+| 1 | 2.05 (user's binary) | 14923 | gen-5 | failed once: `unknown gen-5 compression byte 0x78` |
+| 2 | 2.05 (user's binary) | 14923 | gen-5 | list of 12 rows: 4 legacy rows, then the 8 current rows |
+| both | 2.00 | 14923 | classic | legacy list: 4 rows, no welcome, site or upgrade lines |
+| both | 2.17 | 14922 | classic | no reply for 5 s: `Resource temporarily unavailable (os error 11)` |
+| both | 2.05 | 14921 | gen-5 | connection refused (a TCP reset to the first SYN) |
+
+What this settles:
+
+- **14921 is dead.** The service resets it at once. A refused connection on
+  14921 now says so and points at 14923.
+- **14923 serves the legacy list.** A classic login (one plain zlib frame with
+  id 0 and id 1) gets ONE plain zlib frame back: an id 0 list of 4 rows (count
+  byte 4, 8 fields each, all untagged) and no id 2, 3 or 5. This is the first
+  real 2.00-era listserver reply (item 13 can now start from it).
+- **14922 does not answer a classic login** (the 2.17 profile): the server
+  accepts the connection, sends nothing and stays open. Seihai now reports
+  "the listserver sent no reply within 5 s" instead of os error 11. Whether a
+  real 2.17 client logs in differently is still not known.
+- **14922 reply:** two gen-5 zlib frames, a list (id 0) and then ids 2, 3 and
+  5. 14923 answers a gen-5 login with the legacy list first (sent right after
+  the id 7 frame, before the login message), then those same two frames.
+  Seihai keeps both lists in order.
+- **"9 server(s) online" over 8 rows is not a dropped row.** The id 0 count
+  byte was 8, and exactly 8 complete rows (all with 8 fields) used up the
+  payload. The 9 is in the server's status text and does not follow the row
+  count (still 9 over 12 rows on 14923).
+- **The host `.xxx.xxx.xxx.xx` with missing leading characters is what the
+  server sent** (15 bytes, in both lists). The parser keeps it as received.
+- **The `???` in a name is on the wire** (three literal `0x3F` bytes).
+- **The reply timing matters.** On 14923 the two current frames arrive about
+  0.35 s after the legacy list. The wait for more frames after the first list
+  was 500 ms; it is now 1.5 s, and a status frame ends it at once.
+
+What stays open:
+
+- The one 2.05 failure on 14923 (a plain zlib frame, first byte 0x78, read by
+  the gen-5 reader) did not repeat in run 2, and the run that failed has no
+  capture. Cause unknown. As a precaution a listserver reply now accepts a
+  plain zlib frame on a gen-5 link; game-server frames are still strict.
+- The binary that made these runs sent the gen-5 login for the 2.05 profile.
+  The current main sends the classic one for 2.05 (checked on a local mock),
+  so the classic 2.05 login against 14923 follows from the 2.00 result but was
+  not run.
+- A classic login to 14923 with the 2.17 profile was not tried, and nothing
+  tells how a real 2.17 client logs in to the listserver.
+- A real 2.00 client sends only id 0 and the list name (no account). Seihai's
+  2.00 profile sends the account too. Whether the legacy list needs it is
+  untested.
+- No game-server login has been made. Login frames, file requests, the tamper
+  check and chat on a public game server are all still unobserved.
+- Seihai's default list ports are unchanged (see "Port facts"). The profile
+  value is what the original client binary uses, and the fixture is generated
+  from the Graal_analysis profiles; the public service's answer is a separate
+  fact. Use `--online HOST:14923` for classic profiles.
+
+## The first attempt from the build box
 
 ## What was approved
 
@@ -16,7 +86,7 @@ changes, no scanning, no bypassing anything.
 
 **Port confirmation (user, 2026-10-25):** port 14923 is the legacy support port on listserver.graal.in. For pre-2.17 clients use 14923; 14922 serves 2.17 and later. The earlier open question (14921 vs 14923) is settled.
 
-## What was tried (2026-10-25, 03:08 to 03:10 JST)
+### What was tried (2026-10-25, 03:08 to 03:10 JST)
 
 Seihai built from this branch, version profile 2.22, from the box's own
 network. Every attempt to connect to a listserver port got no answer at all.
@@ -53,25 +123,26 @@ binaries, sources and the lab.
 
 | client | host and port the client uses | source | status |
 |---|---|---|---|
-| 2.00, 2.05 | built-in list host, port 14921 (host is the dead original) | binary | needs a redirect for Reborn |
-| 2.05 rev 2 on Reborn | 14922 or 14923 | earlier notes | **open**: which of them (or 14921) the public service answers for pre-2.17 clients is not observed |
+| 2.00, 2.05 | built-in list host, port 14921 (host is the dead original) | binary | 14921 is **refused** on the public service (observed); a classic login is answered on 14923 (observed with the 2.00 profile) |
+| 2.05 rev 2 on Reborn | 14922 or 14923 | earlier notes, public runs | 14923 for a classic login (observed 2.00 profile); 14922 answers only the gen-5 login (observed with the 2.05 profile of the user's binary) |
 | 1.41 | 14923 (the only surviving copy is patched) | binary | open |
-| 2.17 | list host and port from `arrays2.dat`, default 14922 | binary | profile says 14922; not run against the public service |
-| 2.22 | `listserver.graal.in`, then `.graal.cc`, then `.graalonline.biz`, port 14922; token `GNW30123` | binary, lab | matches the lab listserver; not run against the public service |
-| 2.31 | as 2.22 | binary | not run publicly |
+| 2.17 | list host and port from `arrays2.dat`, default 14922 | binary | classic login on 14922: **no reply** (observed, 2 of 2); on 14923 not tried |
+| 2.22 | `listserver.graal.in`, then `.graal.cc`, then `.graalonline.biz`, port 14922; token `GNW30123` | binary, lab, public | **answered** on 14922 and 14923 (observed) |
+| 2.31 | as 2.22 | binary, public | **answered** on 14922 (observed) |
 
 Seihai's per-profile defaults (14921 for 2.00 to 2.05, 14922 for 2.1 to 2.31,
-14923 for 1.41) are unchanged. The pre-2.17 port question stays open, as does
-whether the public listserver answers a 2.17 id 0 + id 1 exchange.
+14923 for 1.41) are unchanged: they follow the client binaries, and the
+profile fixture is generated from the Graal_analysis version profiles. The
+public results above say which port to give `--online` for each profile.
 
 ## Questions this was meant to settle, and their state
 
 | question | state |
 |---|---|
-| Real list text for the server list: item 0, names with spaces, `X ` type prefixes (id 178 field order) | open |
-| Which port answers for clients older than 2.17 | open |
-| What 2.17, 2.22 and 2.31 profile logins get from the public service | open |
-| A 2.00-era listserver reply (overnight item 13) | not observed; item 13 skipped |
+| Real list text for the server list: item 0, names with spaces, `X ` type prefixes (id 178 field order) | list text observed (row layout, `X ` prefixes, silver rows untagged); id 178 field order still needs a server warp on the wire |
+| Which port answers for clients older than 2.17 | **settled for the classic login: 14923** (14921 refused, 14922 silent) |
+| What 2.17, 2.22 and 2.31 profile logins get from the public service | list level only: 2.22 and 2.31 get the list on 14922; 2.17 gets no reply on 14922 (cause open); game-server logins open |
+| A 2.00-era listserver reply (overnight item 13) | **observed** (14923): one plain zlib frame, 4 untagged rows, no status messages. Item 13 is unblocked |
 | Login frames of a public game server: PLO/PLI sets, file update, process list, tamper check, whether the tamper value is enforced | open |
 | Chat, warps, normal asset downloads, `PLO_SERVERWARP` on a public server | open |
 
@@ -81,7 +152,8 @@ capture of them.)
 
 ## Checklist for when a path exists
 
-Run from a network that reaches the listserver ports. Keep the password in an
+Steps 1 and 2 were done by the user on 2026-10-25 (see above); the rest are
+still to do. Run from a network that reaches the listserver ports. Keep the password in an
 environment variable, never on a command line.
 
 1. Capture only the target traffic into a private folder (directory mode 700,
@@ -89,7 +161,8 @@ environment variable, never on a command line.
    port P'`. The pcaps are never committed or uploaded.
 2. `seihai --online HOST:PORT --account NAME --password-env VAR --version V
    --list-only` for 2.22, then 2.17 and 2.31. Compare ports 14922 and 14923 for
-   a pre-2.17 profile, read-only, one connection each.
+   a pre-2.17 profile, read-only, one connection each. Next time also try the
+   2.17 profile on 14923.
 3. Read the capture with `seihai capture show FILE --version V` (login frames
    are redacted, the account is masked). Record item 0 and the name spelling of
    the list text (id 178 field order) and any prefix on server names.

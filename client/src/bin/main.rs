@@ -491,7 +491,7 @@ fn main() {
                 return;
             }
             Err(e) => {
-                eprintln!("listserver failed: {e}");
+                eprintln!("{}", seihai::net::list_failure_text(addr, &e));
                 std::process::exit(1);
             }
         }
@@ -576,7 +576,7 @@ fn main() {
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
-            if addr.contains("14921") || addr.contains("14922") || addr.contains("listserver") {
+            if addr.contains("14921") || addr.contains("14922") || addr.contains("14923") || addr.contains("listserver") {
                 match Connection::fetch_server_list(addr, version, &account, &password) {
                     Ok(reply) => {
                         if let Some(err) = &reply.error {
@@ -599,7 +599,7 @@ fn main() {
                             }
                         }
                     }
-                    Err(e) => eprintln!("listserver failed: {e}"),
+                    Err(e) => eprintln!("{}", seihai::net::list_failure_text(addr, &e)),
                 }
             }
         }

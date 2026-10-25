@@ -122,6 +122,27 @@ pub fn read_frame<R: std::io::Read>(
     r: &mut R,
     cipher: &mut Gen5,
 ) -> std::io::Result<Vec<u8>> {
+    read_frame_inner(r, cipher, false)
+}
+
+/// As [`read_frame`], but a frame whose first byte is the zlib header
+/// (`0x78`, never a valid gen-5 compression byte) is read as a plain zlib
+/// frame and leaves the cipher alone. For listserver replies: the public
+/// listserver on 14923 answers a classic login with plain zlib frames and a
+/// gen-5 login with gen-5 frames, and one 2.05 run against it failed with
+/// `unknown gen-5 compression byte 0x78` (cause not captured).
+pub fn read_frame_or_plain<R: std::io::Read>(
+    r: &mut R,
+    cipher: &mut Gen5,
+) -> std::io::Result<Vec<u8>> {
+    read_frame_inner(r, cipher, true)
+}
+
+fn read_frame_inner<R: std::io::Read>(
+    r: &mut R,
+    cipher: &mut Gen5,
+    allow_plain: bool,
+) -> std::io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 2];
     r.read_exact(&mut len_buf)?;
     let total = u16::from_be_bytes(len_buf) as usize;
@@ -134,6 +155,10 @@ pub fn read_frame<R: std::io::Read>(
         0x02 => Gen5Comp::None,
         0x04 => Gen5Comp::Zlib,
         0x06 => Gen5Comp::Bz2,
+        0x78 if allow_plain => {
+            return super::zlib_decompress(&raw)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e));
+        }
         other => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,

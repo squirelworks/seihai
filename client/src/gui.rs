@@ -125,7 +125,7 @@ impl Launcher {
                     settings.save();
                 }
             }
-            Err(e) => self.status = format!("listserver failed: {e}"),
+            Err(e) => self.status = crate::net::list_failure_text(&addr, &e),
         }
     }
 }

@@ -437,9 +437,39 @@ pub fn login_gserver(
 /// How long one address gets to accept a connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// After the server list arrives, how long to wait for the status text,
-/// site URL and upgrade URL that some listservers send in a later frame.
-const LIST_TAIL_WAIT: Duration = Duration::from_millis(500);
+/// After the first server list arrives, how long to wait for more frames:
+/// the status text, site URL and upgrade URL that some listservers send in
+/// a later frame, and (on the public 14923 port) a second id 0 list. On the
+/// public service the second list and the status came about 350 ms after
+/// the first list, so 500 ms left little margin on a slower link.
+const LIST_TAIL_WAIT: Duration = Duration::from_millis(1500);
+
+/// A read that timed out before any reply came in is reported as what it
+/// is. The raw error on Linux is "Resource temporarily unavailable (os
+/// error 11)", which reads like a system fault. The public listserver on
+/// 14922 stays silent (and keeps the connection open) when it gets a classic
+/// plain-frame login.
+fn list_read_error(e: io::Error) -> io::Error {
+    match e.kind() {
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => io::Error::new(
+            io::ErrorKind::TimedOut,
+            "the listserver sent no reply within 5 s (it accepted the connection but stayed silent)",
+        ),
+        _ => e,
+    }
+}
+
+/// The text for a failed list fetch. A refused connection on port 14921
+/// gets a pointer to the port that answered: the public listserver
+/// refused 14921 on 2026-10-25 and answered a classic (2.00-style) login on
+/// 14923.
+pub fn list_failure_text(addr: &str, e: &io::Error) -> String {
+    let mut s = format!("listserver failed: {e}");
+    if e.kind() == io::ErrorKind::ConnectionRefused && addr.ends_with(":14921") {
+        s.push_str(" (the public listserver refuses port 14921; it answered a classic login on 14923)");
+    }
+    s
+}
 
 /// Try each address in order and return the first stream that connects.
 /// Fails with the last error, or `NotFound` if `addrs` is empty.
@@ -607,12 +637,12 @@ impl Connection {
                 }
                 let _ = conn.stream.set_read_timeout(Some(left));
             }
-            let body = match conn.read_body() {
+            let body = match conn.read_list_body() {
                 Ok(b) => b,
                 // Past the server list (or the status), a timeout, close or
                 // bad frame just ends the reply.
                 Err(_) if reply.status.is_some() || !reply.servers.is_empty() => break,
-                Err(e) => return Err(e),
+                Err(e) => return Err(list_read_error(e)),
             };
             let part = parse_list_reply(&body);
             reply.servers.extend(part.servers);
@@ -635,6 +665,15 @@ impl Connection {
     pub fn read_body(&mut self) -> io::Result<Vec<u8>> {
         match self.gen5_in.as_mut() {
             Some(g) => crate::protocol::read_frame(&mut self.stream, g),
+            None => read_zlib_frame(&mut self.stream),
+        }
+    }
+
+    /// As [`Self::read_body`] for a listserver reply: on a gen-5 link a plain
+    /// zlib frame (first byte `0x78`) is accepted too.
+    fn read_list_body(&mut self) -> io::Result<Vec<u8>> {
+        match self.gen5_in.as_mut() {
+            Some(g) => crate::protocol::read_frame_or_plain(&mut self.stream, g),
             None => read_zlib_frame(&mut self.stream),
         }
     }
@@ -1505,8 +1544,8 @@ mod tests {
         let reply =
             Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
         let took = t.elapsed();
-        assert!(took >= Duration::from_millis(400), "returned too early: {took:?}");
-        assert!(took < Duration::from_secs(3), "waited too long: {took:?}");
+        assert!(took >= Duration::from_millis(1400), "returned too early: {took:?}");
+        assert!(took < Duration::from_secs(4), "waited too long: {took:?}");
         assert_eq!(reply.servers.len(), 1);
         assert!(reply.status.is_none() && reply.site_url.is_none() && reply.upgrade_url.is_none());
         done_tx.send(()).unwrap();
@@ -1585,7 +1624,7 @@ mod tests {
         server.join().unwrap();
     }
 
-    /// The same plain flow when only the list frame arrives: the 500 ms
+    /// The same plain flow when only the list frame arrives: the tail wait
     /// bound applies to plain frames too.
     #[test]
     fn fetch_server_list_217_without_second_frame_is_bounded() {
@@ -1602,12 +1641,112 @@ mod tests {
         let reply =
             Connection::fetch_server_list(&addr, ClientVersion::V217, "ab", "cd").unwrap();
         let took = t.elapsed();
-        assert!(took >= Duration::from_millis(400), "returned too early: {took:?}");
-        assert!(took < Duration::from_secs(3), "waited too long: {took:?}");
+        assert!(took >= Duration::from_millis(1400), "returned too early: {took:?}");
+        assert!(took < Duration::from_secs(4), "waited too long: {took:?}");
         assert_eq!(reply.servers.len(), 1);
         assert!(reply.status.is_none());
         done_tx.send(()).unwrap();
         server.join().unwrap();
+    }
+
+    /// Body of an id 0 list with the given names, as the public service
+    /// sends it (count byte, then per row a field count of 8 and 8 gstrings).
+    fn named_list_body(names: &[&str]) -> Vec<u8> {
+        let mut b = vec![0x20, names.len() as u8 + 0x20];
+        for n in names {
+            b.push(8 + 0x20);
+            for f in [n, "English", "d", "http://x", "Version: 1", "0", "127.0.0.1", "14802"] {
+                b.extend(gs(f));
+            }
+        }
+        b.push(b'\n');
+        b
+    }
+
+    /// The public 14923 shape seen on 2026-10-25 (item 14), 2.22-style gen-5
+    /// login: one id 0 list with the old rows right after the handshake, a
+    /// second id 0 list with the current rows about 350 ms later, then the
+    /// status frame. Both lists must come back, in that order, and the
+    /// status ends the wait.
+    #[test]
+    fn fetch_server_list_two_lists_then_status() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, key) = accept_listserver(&listener);
+            let mut out = Gen5::new(key);
+            send_gen5(&mut srv, &mut out, &named_list_body(&["Old A", "Old B"]));
+            std::thread::sleep(Duration::from_millis(350));
+            send_gen5(&mut srv, &mut out, &named_list_body(&["P New A", "U New B", "H New C"]));
+            send_gen5(&mut srv, &mut out, &tail_body());
+            let _ = done_rx.recv();
+        });
+        let t = Instant::now();
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
+        assert!(t.elapsed() < Duration::from_millis(1200), "status should end the wait");
+        let names: Vec<_> = reply.servers.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["Old A", "Old B", "New A", "New B", "New C"]);
+        assert_eq!(reply.servers[2].kind, "P");
+        assert!(reply.status.is_some());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    /// A plain zlib frame inside a gen-5 listserver reply (first byte 0x78,
+    /// never a gen-5 comp byte) is read as plain and does not advance the
+    /// cipher, so the gen-5 frames after it still decode. One 2.05 run
+    /// against the public 14923 port failed here with "unknown gen-5
+    /// compression byte 0x78"; the cause was not captured.
+    #[test]
+    fn fetch_server_list_accepts_a_plain_frame_on_a_gen5_link() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut srv, key) = accept_listserver(&listener);
+            let mut out = Gen5::new(key);
+            send_plain(&mut srv, &named_list_body(&["Old A"]));
+            send_gen5(&mut srv, &mut out, &named_list_body(&["P New A"]));
+            send_gen5(&mut srv, &mut out, &tail_body());
+            let _ = done_rx.recv();
+        });
+        let reply =
+            Connection::fetch_server_list(&addr, ClientVersion::V222, "ab", "cd").unwrap();
+        let names: Vec<_> = reply.servers.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["Old A", "New A"]);
+        assert!(reply.status.is_some());
+        done_tx.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn refused_14921_points_at_14923() {
+        let refused = io::Error::from(io::ErrorKind::ConnectionRefused);
+        assert!(list_failure_text("example.org:14921", &refused).contains("14923"));
+        assert!(!list_failure_text("example.org:14922", &refused).contains("14923"));
+        let other = io::Error::from(io::ErrorKind::TimedOut);
+        assert!(!list_failure_text("example.org:14921", &other).contains("14923"));
+    }
+
+    /// The strict reader still refuses a plain frame on a gen-5 link (game
+    /// servers never send one).
+    #[test]
+    fn strict_gen5_reader_refuses_plain_frame() {
+        let frame = write_zlib_frame(b"x\n").unwrap();
+        let err = crate::protocol::read_frame(&mut frame.as_slice(), &mut Gen5::new(1)).unwrap_err();
+        assert!(err.to_string().contains("0x78"));
+    }
+
+    /// A read timeout before any reply reads as "no reply", not os error 11.
+    #[test]
+    fn silent_listserver_error_says_so() {
+        let e = list_read_error(io::Error::from(io::ErrorKind::WouldBlock));
+        assert_eq!(e.kind(), io::ErrorKind::TimedOut);
+        assert!(e.to_string().contains("no reply"), "{e}");
+        let other = list_read_error(io::Error::new(io::ErrorKind::InvalidData, "bad"));
+        assert_eq!(other.to_string(), "bad");
     }
 
     /// 2.05 uses the same plain flow, and a listserver error text ends the
