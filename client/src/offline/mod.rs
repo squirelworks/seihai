@@ -92,6 +92,15 @@ pub struct OfflineSession {
     pub object_tables: Option<ObjectTables>,
     /// What the player is carrying after a lift: the object's tiles.
     pub carried: Option<Carried>,
+    /// Objects in flight, break effects playing, and thrown things that stay
+    /// (see [`crate::throwing`]).
+    pub thrown: Vec<crate::throwing::Thrown>,
+    pub leaps: Vec<crate::throwing::Leap>,
+    pub grounded: Vec<crate::throwing::Grounded>,
+    /// Landings since the last [`Self::take_landings`].
+    landings: Vec<Landing>,
+    /// Milliseconds carried over between flight ticks.
+    throw_ms: u64,
     pub player_x: f32,
     pub player_y: f32,
     pub player_dir: u8,
@@ -221,14 +230,26 @@ pub struct Carried {
     pub tiles: Object2x2,
 }
 
+/// A thrown object coming down.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Landing {
+    /// Lift-table entry of the object.
+    pub kind: usize,
+    /// Break effect started (a row of the break table), `None` for an
+    /// object that stays on the ground.
+    pub effect: Option<usize>,
+    pub x: f32,
+    pub y: f32,
+}
+
 /// What an interact press did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Interaction {
     /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
     /// lift table.
     Lifted { kind: usize },
-    /// The carried object was put down.
-    Dropped,
+    /// The carried object was thrown; `kind` is its lift-table entry.
+    Thrown { kind: usize },
     /// A closed chest was opened at `(x, y)`; `got` describes the item.
     Chest { x: i32, y: i32, item: String, got: String },
     /// A sign is being read.
@@ -270,6 +291,11 @@ impl OfflineSession {
             tiletypes: None,
             object_tables: None,
             carried: None,
+            thrown: Vec::new(),
+            leaps: Vec::new(),
+            grounded: Vec::new(),
+            landings: Vec::new(),
+            throw_ms: 0,
             player_x: 30.0,
             player_y: 30.0,
             player_dir: DIR_SOUTH,
@@ -493,9 +519,9 @@ impl OfflineSession {
             return Interaction::Nothing;
         }
         // The A key tries to lift first, then reads a sign or opens a chest.
-        // With something in the hands it puts it down.
-        if self.carried.take().is_some() {
-            return Interaction::Dropped;
+        // With something in the hands it throws it.
+        if let Some(c) = self.throw_carried() {
+            return Interaction::Thrown { kind: c };
         }
         if let Some(kind) = self.try_lift() {
             return Interaction::Lifted { kind };
@@ -599,6 +625,7 @@ impl OfflineSession {
         self.opened_chests.clear();
         self.reading = None;
         self.no_pk = false;
+        self.clear_throws();
         self.level_serial += 1;
         Ok(())
     }
@@ -660,6 +687,106 @@ impl OfflineSession {
         self.current_level.as_mut()?.put_object(ax, ay, &left);
         self.carried = Some(Carried { kind, tiles });
         Some(kind)
+    }
+
+    /// Throw what the player carries: it leaves from above the head and flies
+    /// the way the player faces ([`crate::throwing`]). Returns the lift-table
+    /// entry thrown, `None` with empty hands or when dead.
+    pub fn throw_carried(&mut self) -> Option<usize> {
+        if self.life.is_dead() {
+            return None;
+        }
+        let c = self.carried.take()?;
+        self.thrown.push(crate::throwing::Thrown::launch(c.kind, self.player_x, self.player_y, self.player_dir));
+        Some(c.kind)
+    }
+
+    /// Drop every object in flight and every effect (a level change).
+    fn clear_throws(&mut self) {
+        self.thrown.clear();
+        self.leaps.clear();
+        self.grounded.clear();
+        self.landings.clear();
+        self.throw_ms = 0;
+    }
+
+    /// Whether a thrown object's wall probe at `(fx, fy)` ends its flight:
+    /// a wall tile, or off the board with no neighbour. Type 20 is the one
+    /// wall type objects fly through. (Hits on NPCs, players and chests are
+    /// open: see `documentation/throwing.md`.)
+    fn throw_blocked(&self, fx: f32, fy: f32) -> bool {
+        let Some(level) = &self.current_level else { return false };
+        let outside = !(0.0..64.0).contains(&fx) || !(0.0..64.0).contains(&fy);
+        let Some(types) = &self.tiletypes else { return outside && self.gmap.is_none() };
+        if self.kind_at_point(level, types, fx, fy) != TileKind::Blocking {
+            return false;
+        }
+        let inside = (0.0..64.0).contains(&fx) && (0.0..64.0).contains(&fy);
+        if inside {
+            if let Some(id) = level.tile_id_at(fx as i32, fy as i32) {
+                return types.types.get(usize::from(id)).copied() != Some(crate::throwing::TYPE_THROW_THROUGH);
+            }
+        }
+        true
+    }
+
+    /// Whether the water test point is on a water tile.
+    fn throw_in_water(&self, fx: f32, fy: f32) -> bool {
+        match (&self.current_level, &self.tiletypes) {
+            (Some(level), Some(types)) => self.kind_at_point(level, types, fx, fy) == TileKind::Water,
+            _ => false,
+        }
+    }
+
+    /// Advance flights and break effects by `ms` on their 50 ms tick.
+    /// Returns true if anything moved (the scene needs a redraw).
+    pub fn tick_throw(&mut self, ms: u64) -> bool {
+        if self.thrown.is_empty() && self.leaps.is_empty() {
+            self.throw_ms = 0;
+            return false;
+        }
+        self.throw_ms += ms;
+        let mut moved = false;
+        while self.throw_ms >= crate::throwing::TICK_MS {
+            self.throw_ms -= crate::throwing::TICK_MS;
+            self.throw_tick();
+            moved = true;
+        }
+        moved
+    }
+
+    fn throw_tick(&mut self) {
+        use crate::throwing as t;
+        // Effects: one frame per tick, gone after the last.
+        let tables = self.object_tables.as_ref();
+        self.leaps.retain_mut(|l| {
+            l.frame += 1;
+            (l.frame as usize) < t::leap_frames(tables, l.kind).len()
+        });
+        for mut o in std::mem::take(&mut self.thrown) {
+            o.step();
+            let (wx, wy) = o.wall_probe();
+            if o.ticks_left > 0 && !self.throw_blocked(wx, wy) {
+                self.thrown.push(o);
+                continue;
+            }
+            if t::stays_on_ground(o.sprite) {
+                if let Some(sprite) = o.sprite {
+                    self.grounded.push(t::Grounded { sprite, x: o.x, y: o.y });
+                }
+                self.landings.push(Landing { kind: o.kind, effect: None, x: o.x, y: o.y });
+                continue;
+            }
+            let (ox, oy) = o.water_probe();
+            let kind = t::leap_kind(o.sprite, self.throw_in_water(ox, oy));
+            self.leaps.push(t::Leap { kind, x: o.x, y: o.ground, frame: -1 });
+            self.landings.push(Landing { kind: o.kind, effect: Some(kind), x: o.x, y: o.ground });
+        }
+    }
+
+    /// The landings since the last call.
+    pub fn take_landings(&mut self) -> Vec<Landing> {
+        std::mem::take(&mut self.landings)
     }
 
     /// The sword's cut: the cuttable object in front of the player (the same
@@ -976,6 +1103,7 @@ impl OfflineSession {
         w.cell = c.to;
         w.crossing = Some(c);
         // A new cell is a new level to the script engine too.
+        self.clear_throws();
         self.level_serial += 1;
         self.player_x = c.local_x;
         self.player_y = c.local_y;
@@ -1416,9 +1544,11 @@ mod tests {
         assert_eq!(s.interact(), Interaction::Lifted { kind: 0 });
         assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT, "the bush leaves its stump");
         assert_eq!(s.carried.as_ref().unwrap().tiles, [[2u16, 18], [3, 19]]);
-        // Hands full: A puts it down.
-        assert_eq!(s.interact(), Interaction::Dropped);
+        // Hands full: A throws it.
+        assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });
         assert!(s.carried.is_none());
+        assert_eq!(s.thrown.len(), 1);
+        s.thrown.clear();
 
         face_up_at(&mut s, 30, 20);
         assert_eq!(s.interact(), Interaction::Lifted { kind: 1 });
@@ -2358,4 +2488,218 @@ mod tests {
         let files: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
         assert_eq!(files.last().map(String::as_str), Some("water.wav"));
     }
+    // ---- throwing -----------------------------------------------------
+
+    /// Lift the bush at (20, 20) and stand at `(px, py)` facing `dir`.
+    fn carrying_bush(px: f32, py: f32, dir: u8) -> OfflineSession {
+        let mut s = object_session(0);
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 0 });
+        s.player_x = px;
+        s.player_y = py;
+        s.player_dir = dir;
+        s
+    }
+
+    #[test]
+    fn the_interact_key_throws_what_is_carried_and_nothing_else_when_empty() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });
+        assert!(s.carried.is_none());
+        assert_eq!(s.thrown.len(), 1);
+        let o = &s.thrown[0];
+        assert_eq!((o.x, o.y, o.ground, o.dir, o.ticks_left), (10.5, 28.625, 31.0, DIR_EAST, 9));
+        // Empty hands, nothing in front: no throw.
+        s.thrown.clear();
+        s.player_x = 5.0;
+        s.player_y = 5.0;
+        assert_eq!(s.interact(), Interaction::Nothing);
+        assert!(s.thrown.is_empty());
+        assert_eq!(s.throw_carried(), None);
+    }
+
+    #[test]
+    fn a_dead_player_does_not_throw() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.player_health = 0;
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        s.tick_life(10);
+        if s.life.is_dead() {
+            assert_eq!(s.throw_carried(), None);
+            assert!(s.carried.is_some());
+        }
+    }
+
+    #[test]
+    fn a_throw_flies_nine_ticks_then_the_bush_breaks_into_leaves() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.throw_carried();
+        // Less than a tick: nothing moves.
+        assert!(!s.tick_throw(49));
+        assert_eq!(s.thrown[0].x, 10.5);
+        assert!(s.tick_throw(1));
+        assert_eq!(s.thrown[0].x, 11.5);
+        for _ in 0..7 {
+            s.tick_throw(50);
+        }
+        assert_eq!(s.thrown[0].ticks_left, 1);
+        assert!(s.take_landings().is_empty());
+        s.tick_throw(50);
+        assert!(s.thrown.is_empty());
+        let l = s.take_landings();
+        assert_eq!(l.len(), 1);
+        assert_eq!((l[0].kind, l[0].effect), (0, Some(crate::throwing::LEAP_BUSH)));
+        assert_eq!((l[0].x, l[0].y), (19.5, 31.0));
+        // The effect shows its 7 frames, one per tick, then is gone.
+        assert_eq!(s.leaps.len(), 1);
+        assert_eq!(s.leaps[0].frame, -1);
+        for f in 0..7 {
+            s.tick_throw(50);
+            assert_eq!(s.leaps.len(), 1, "frame {f} is shown");
+            assert_eq!(s.leaps[0].frame, f);
+        }
+        s.tick_throw(50);
+        assert!(s.leaps.is_empty(), "removed once past the last frame");
+        assert!(!s.tick_throw(50));
+    }
+
+    #[test]
+    fn a_wall_ends_the_flight_early() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        // After k steps the wall probe is (11.5 + k, 32): a wall at tile
+        // (14, 32) is hit on the third step.
+        s.current_level.as_mut().unwrap().set_tile_id(14, 32, WALL);
+        s.throw_carried();
+        for _ in 0..2 {
+            s.tick_throw(50);
+        }
+        assert_eq!(s.thrown.len(), 1);
+        s.tick_throw(50);
+        assert!(s.thrown.is_empty());
+        let l = s.take_landings();
+        assert_eq!(l[0].x, 13.5);
+    }
+
+    #[test]
+    fn the_type_the_throw_passes_is_not_a_wall_to_it() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.tiletypes.as_mut().unwrap().types[WALL as usize] = 20;
+        s.current_level.as_mut().unwrap().set_tile_id(14, 32, WALL);
+        s.throw_carried();
+        for _ in 0..4 {
+            s.tick_throw(50);
+        }
+        assert_eq!(s.thrown.len(), 1, "type 20 is flown through");
+        // The same tile as a real wall (22) stops it.
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.current_level.as_mut().unwrap().set_tile_id(14, 32, WALL);
+        s.throw_carried();
+        for _ in 0..4 {
+            s.tick_throw(50);
+        }
+        assert!(s.thrown.is_empty());
+    }
+
+    #[test]
+    fn the_board_edge_ends_the_flight() {
+        let mut s = carrying_bush(58.0, 30.0, DIR_EAST);
+        s.throw_carried();
+        for _ in 0..9 {
+            s.tick_throw(50);
+        }
+        // the probe 59.5 + k leaves the board at k = 5
+        assert!(s.thrown.is_empty());
+        let l = s.take_landings();
+        assert_eq!(l.len(), 1);
+        assert!(l[0].x < 64.0, "stopped at the edge, x {}", l[0].x);
+    }
+
+    #[test]
+    fn landing_in_water_splashes_and_a_rock_breaks_into_rock_pieces() {
+        // Water where the object's own probe point ends up.
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.throw_carried();
+        // end: x = 19.5, y = 28.625 + 1.8 = 30.425 -> probe (20.5, 31.425)
+        s.current_level.as_mut().unwrap().set_tile_id(20, 31, WATER);
+        for _ in 0..9 {
+            s.tick_throw(50);
+        }
+        assert_eq!(s.take_landings()[0].effect, Some(crate::throwing::LEAP_SPLASH));
+        // A rock (lift entry 2 -> sprite 265) breaks into the rock pieces.
+        let mut s = object_session(1);
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 2 });
+        assert_eq!(s.interact(), Interaction::Thrown { kind: 2 });
+        for _ in 0..9 {
+            s.tick_throw(50);
+        }
+        assert_eq!(s.take_landings()[0].effect, Some(crate::throwing::LEAP_ROCK));
+    }
+
+    #[test]
+    fn a_bomb_stays_where_it_lands() {
+        let mut s = object_session(0);
+        s.player_x = 10.0;
+        s.player_y = 30.0;
+        let mut o = crate::throwing::Thrown::launch(0, 10.0, 30.0, DIR_SOUTH);
+        o.sprite = Some(65);
+        s.thrown.push(o);
+        for _ in 0..9 {
+            s.tick_throw(50);
+        }
+        assert!(s.thrown.is_empty());
+        assert!(s.leaps.is_empty(), "no break effect for a bomb");
+        assert_eq!(s.grounded.len(), 1);
+        assert_eq!(s.grounded[0].sprite, 65);
+        assert_eq!(s.take_landings()[0].effect, None);
+    }
+
+    #[test]
+    fn the_four_directions_fly_their_own_way() {
+        for (dir, dx, dz) in [(DIR_NORTH, 0.0, -9.0), (DIR_WEST, -9.0, 0.0), (DIR_SOUTH, 0.0, 9.0), (DIR_EAST, 9.0, 0.0)] {
+            let mut s = carrying_bush(30.0, 30.0, dir);
+            s.throw_carried();
+            let (x0, z0) = (s.thrown[0].x, s.thrown[0].ground);
+            for _ in 0..4 {
+                s.tick_throw(50);
+            }
+            let o = &s.thrown[0];
+            assert!((o.x - x0 - dx * 4.0 / 9.0).abs() < 1e-3 && (o.ground - z0 - dz * 4.0 / 9.0).abs() < 1e-3, "dir {dir}");
+        }
+    }
+
+    #[test]
+    fn a_new_level_drops_flights_and_effects() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.throw_carried();
+        s.tick_throw(50);
+        s.clear_throws();
+        assert!(s.thrown.is_empty() && s.leaps.is_empty() && s.take_landings().is_empty());
+    }
+
+    #[test]
+    fn break_tables_come_from_arrays_dat_when_it_has_them() {
+        // a minimal file: nine empty arrays, four object arrays, then a break table
+        // (array 19) with one kind of one frame, and a sprite table (array 24)
+        let mut data = object_arrays(&[BUSH], &[BUSH_CUT], &[BUSH], &[BUSH_CUT]);
+        for _ in 13..19 {
+            data.extend_from_slice(&0u32.to_be_bytes());
+        }
+        data.extend_from_slice(&((1u32 << 16) | 1).to_be_bytes()); // kinds
+        data.extend_from_slice(&((1u32 << 16) | 1).to_be_bytes()); // frames
+        data.extend_from_slice(&1u32.to_be_bytes()); // pieces
+        data.extend_from_slice(&((7u32 << 16) | (3 << 8) | 0xfe).to_be_bytes());
+        for _ in 20..24 {
+            data.extend_from_slice(&0u32.to_be_bytes());
+        }
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&((1u32 << 24) | (2 << 12) | (3 << 6) | 4).to_be_bytes());
+        let t = ObjectTables::parse(&data).unwrap();
+        assert_eq!(t.leaps, vec![vec![vec![(7u32 << 16) | (3 << 8) | 0xfe]]]);
+        assert_eq!(crate::throwing::leap_frames(Some(&t), 0), vec![vec![(7u16, 3i8, -2i8)]]);
+        assert_eq!(crate::throwing::sprite_rect(Some(&t), 0), Some((2, 4, 6, 8)));
+        // ids the file lacks fall back to the built-in rect
+        assert_eq!(crate::throwing::sprite_rect(Some(&t), 261), Some((0, 338, 32, 32)));
+    }
+
 }

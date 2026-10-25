@@ -49,14 +49,13 @@ so nothing is cuttable or liftable there.
 
 ## Open (not read, not invented)
 
-* **Throwing.** The client throws the carried object; the flight, the
-  landing, the shatter and the damage were not read. Here A just puts the
-  object down (it disappears).
+* **Throwing** is implemented (see `throwing.md`); what a thrown object
+  does to NPCs, players and baddies it hits was not read.
 * **What a cut or a lift drops** (rupees, hearts, bombs): the spawn routine
   takes the entry index and was not read, so nothing drops.
-* **Where the carried object is drawn** over the head and the carrying
-  gani (the walk-while-carrying pose): the placeholder draws the four tiles
-  above the head.
+* **The carrying gani** (the walk-while-carrying pose) was not read. The
+  carried object is drawn as its own sprite (not the board tiles) above the
+  head; see `throwing.md`.
 * **Telling the server.** The client writes the changed tiles into the level
   for everyone (a board-modify the client sends). Seihai edits only its own
   copy, so other players do not see the bush vanish and a re-entry restores

@@ -650,7 +650,9 @@ def build_shield():
 
 
 # ---------------------------------------------------------------------------
-# sprites.png (32 x 338): shadow at (0,0) 24x12, ripples at y=306 and y=322
+# sprites.png (128 x 402): shadow at (0,0) 24x12, ripples at y=306 and y=322,
+# lifted-object sprites at y=338/370 and the break-apart pieces (see the
+# rect table in documentation/throwing.md)
 # ---------------------------------------------------------------------------
 
 WATER_RGB = (48, 112, 208)  # same as the tile sheet's 'water'
@@ -662,7 +664,11 @@ def build_sprites():
     p.add("water", WATER_RGB)
     p.add("ring", (150, 196, 248))
     p.add("white", (248, 248, 248))
-    sheet = Image.new("P", (32, 338), 0)
+    for n, c in [("ink", (40, 32, 36)), ("leaf_dk", (30, 110, 50)), ("leaf", (60, 168, 70)), ("leaf_lt", (140, 220, 110)),
+                 ("rock", (140, 140, 150)), ("rock_dk", (84, 84, 98)), ("rock_lt", (200, 200, 212)),
+                 ("clay", (190, 112, 60)), ("clay_dk", (128, 68, 40)), ("clay_lt", (236, 168, 104))]:
+        p.add(n, c)
+    sheet = Image.new("P", (128, 402), 0)
     d = ImageDraw.Draw(sheet)
     # The renderer skips only fully transparent pixels, so the shadow is a
     # 50 % checker dither instead of a soft alpha.
@@ -678,7 +684,66 @@ def build_sprites():
         d.ellipse([2, y0 + 3, 29, y0 + 14], fill=p["water"])
         d.ellipse([4 - grow // 2, y0 + 5 - grow // 2, 27 + grow // 2, y0 + 12 + grow // 2], outline=p["ring"])
         d.point([(9, y0 + 8), (21, y0 + 9), (15, y0 + 6)], fill=p["white"])
+    draw_throw_art(d, p)
     return sheet, p
+
+
+def draw_throw_art(d, p):
+    """Original art for the lifted objects (32x32, transparent around the
+    object) and the pieces they break into. Positions are the sprite table's."""
+    ink = p["ink"]
+
+    def bush(x, y):
+        d.ellipse([x + 2, y + 6, x + 29, y + 30], fill=p["leaf"], outline=ink)
+        d.ellipse([x + 7, y + 2, x + 24, y + 16], fill=p["leaf"], outline=ink)
+        d.ellipse([x + 5, y + 18, x + 16, y + 28], fill=p["leaf_dk"])
+        d.ellipse([x + 18, y + 14, x + 27, y + 25], fill=p["leaf_dk"])
+        d.line([(x + 11, y + 6), (x + 17, y + 5)], fill=p["leaf_lt"], width=2)
+        d.point([(x + 8, y + 12), (x + 22, y + 11), (x + 14, y + 17)], fill=p["leaf_lt"])
+
+    def pot(x, y):
+        d.polygon([(x + 5, y + 8), (x + 26, y + 8), (x + 29, y + 26), (x + 22, y + 30), (x + 9, y + 30), (x + 2, y + 26)], fill=p["clay"], outline=ink)
+        d.rectangle([x + 4, y + 4, x + 27, y + 9], fill=p["clay_lt"], outline=ink)
+        d.line([(x + 7, y + 13), (x + 7, y + 24)], fill=p["clay_lt"], width=2)
+        d.line([(x + 23, y + 14), (x + 25, y + 26)], fill=p["clay_dk"], width=2)
+
+    def stone(x, y, fill, shade, light, big=False):
+        r = 1 if big else 4
+        d.polygon([(x + 6, y + 4 + r), (x + 14, y + 2 + r // 2), (x + 25, y + 5), (x + 30, y + 15), (x + 28, y + 27), (x + 16, y + 31), (x + 4, y + 27), (x + 2, y + 14)], fill=fill, outline=ink)
+        d.polygon([(x + 16, y + 31), (x + 28, y + 27), (x + 30, y + 15), (x + 22, y + 20), (x + 18, y + 27)], fill=shade)
+        d.line([(x + 7, y + 8 + r), (x + 15, y + 5 + r)], fill=light, width=2)
+        d.point([(x + 9, y + 14), (x + 12, y + 17)], fill=light)
+        if big:
+            d.line([(x + 10, y + 22), (x + 17, y + 17), (x + 23, y + 21)], fill=ink)
+
+    bush(0, 338)
+    pot(32, 338)
+    stone(64, 338, p["rock"], p["rock_dk"], p["rock_lt"])
+    stone(96, 338, p["rock_dk"], p["ink"], p["rock"])
+    stone(96, 370, p["rock"], p["rock_dk"], p["rock_lt"], big=True)
+
+    # leaf bits (16x16) at (44, 0) and (60, 0)
+    for x in (44, 60):
+        d.polygon([(x + 3, 12), (x + 8, 2), (x + 13, 12), (x + 8, 14)], fill=p["leaf"], outline=p["leaf_dk"])
+        d.line([(x + 8, 3), (x + 8, 13)], fill=p["leaf_lt"])
+    # chunks: rock 16x16 at (24..40, 82..98), pot 16x14 at (56..72, 82..96)
+    def chunk(x, y, w, h, fill, shade, light, k):
+        pts = [(x + 2, y + h - 3), (x + 3 + k, y + 2), (x + w - 4, y + 3 + k), (x + w - 2, y + h - 4), (x + w // 2, y + h - 1)]
+        d.polygon(pts, fill=fill, outline=ink)
+        d.line([(x + 5, y + h - 4), (x + w - 5, y + h - 5)], fill=shade)
+        d.point([(x + 5 + k, y + 5)], fill=light)
+    for i, (x, y) in enumerate(((24, 82), (40, 82), (24, 98), (40, 98))):
+        chunk(x, y, 16, 16, p["rock"], p["rock_dk"], p["rock_lt"], i % 3)
+    for i, (x, y) in enumerate(((56, 82), (72, 82), (56, 96), (72, 96))):
+        chunk(x, y, 16, 14, p["clay"], p["clay_dk"], p["clay_lt"], i % 3)
+    # water splash: two 30x30 frames at (24, 114) and (54, 114)
+    for x, grow in ((24, 0), (54, 3)):
+        c = x + 15
+        d.ellipse([c - 12 - grow, 114 + 15 - 6 - grow, c + 12 + grow, 114 + 15 + 6 + grow], outline=p["ring"])
+        d.ellipse([c - 6, 114 + 15 - 3, c + 6, 114 + 15 + 3], outline=p["white"])
+        d.line([(c - 3, 114 + 12 - grow), (c - 4, 114 + 5 - grow)], fill=p["white"], width=2)
+        d.line([(c + 3, 114 + 12 - grow), (c + 5, 114 + 4 - grow)], fill=p["white"], width=2)
+        d.point([(c, 114 + 3 - grow), (c - 8, 114 + 9), (c + 9, 114 + 8)], fill=p["ring"])
 
 
 # ---------------------------------------------------------------------------

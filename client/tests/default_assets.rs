@@ -65,7 +65,7 @@ fn image_sizes_formats_and_palettes() {
         ("heads/head0.png", 32, 560, 4, true),
         ("swords/sword1.png", 128, 96, 4, true),
         ("shields/shield1.png", 38, 20, 4, true),
-        ("sprites.png", 32, 338, 4, true),
+        ("sprites.png", 128, 402, 4, true),
         ("state.png", 224, 145, 4, true),
     ];
     for (file, w, h, depth, trns) in sheets {
@@ -169,7 +169,7 @@ fn player_sheets_have_art_in_every_cell_the_code_reads() {
 #[test]
 fn sprites_sheet_has_the_shadow_and_both_ripples() {
     let (w, h, px) = read_png_rgba(&read("sprites.png")).unwrap();
-    assert!(w >= 32 && h >= 338);
+    assert!(w >= 128 && h >= 402);
     // shadow 24x12 at (0, 0): drawn, and not a solid box (dithered ellipse)
     let shadow = opaque_pixels(&px, w, 0, 0, 24, 12);
     assert!(shadow > 40 && shadow < 24 * 12 / 2 + 10, "shadow pixels {shadow}");
@@ -178,8 +178,29 @@ fn sprites_sheet_has_the_shadow_and_both_ripples() {
         let n = opaque_pixels(&px, w, 0, y, 32, 16);
         assert!(n > 150, "ripple at y={y}: {n}");
     }
-    // nothing between them is drawn outside the three regions
-    assert_eq!(opaque_pixels(&px, w, 0, 12, 32, 294), 0);
+    // nothing between the shadow and the ripples is drawn below the break pieces
+    assert_eq!(opaque_pixels(&px, w, 0, 144, 128, 162), 0);
+}
+
+#[test]
+fn sprites_sheet_has_the_carried_objects_and_the_break_pieces() {
+    use seihai::throwing::{builtin_sprite_rect, CARRY_SPRITES};
+    let (w, h, px) = read_png_rgba(&read("sprites.png")).unwrap();
+    // every carried object is drawn inside its own 32x32 cut-out, with
+    // transparent corners (the board tile around it is not part of it)
+    for id in CARRY_SPRITES {
+        let (x, y, rw, rh) = builtin_sprite_rect(id).unwrap();
+        assert!((x + rw) as u32 <= w && (y + rh) as u32 <= h, "sprite {id} inside the sheet");
+        let n = opaque_pixels(&px, w, x as u32, y as u32, rw as u32, rh as u32);
+        assert!(n > 350 && n < (rw * rh) as usize - 60, "sprite {id}: {n} opaque pixels of {}", rw * rh);
+        assert_eq!(opaque_pixels(&px, w, x as u32, y as u32, 2, 2), 0, "sprite {id}: corner is transparent");
+    }
+    // the break pieces (leaves, rock, pot) and the two splash frames carry art
+    for id in [25u16, 26, 96, 97, 98, 99, 100, 101, 102, 103, 326, 327] {
+        let (x, y, rw, rh) = builtin_sprite_rect(id).unwrap();
+        assert!((x + rw) as u32 <= w && (y + rh) as u32 <= h, "sprite {id} inside the sheet");
+        assert!(opaque_pixels(&px, w, x as u32, y as u32, rw as u32, rh as u32) > 20, "sprite {id} has art");
+    }
 }
 
 // ---- tile ids ----------------------------------------------------------------

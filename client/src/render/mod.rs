@@ -7,8 +7,10 @@
 
 pub mod font;
 mod npcs;
+mod throw;
 mod tiles;
 
+pub use throw::{draw_sprite, draw_throw_layer};
 pub use npcs::{draw_npcs, NpcArt, NPC_DIR};
 pub use tiles::{
     draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED,
