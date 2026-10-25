@@ -282,6 +282,8 @@ pub const TYPE_LAVA: u8 = 12;
 pub const TYPE_WALL_MIN: u8 = 20;
 /// Type given to tiles that `arrays.dat` does not list as passable.
 const TYPE_HARD_WALL: u8 = 22;
+/// Chair (bench, couch): walkable, and the player sits on it.
+pub const TYPE_CHAIR: u8 = 3;
 
 /// What a tile does to a walking player.
 ///
@@ -378,7 +380,7 @@ impl TileTypes {
         }
         let mut arrays: Vec<Vec<usize>> = Vec::new();
         let mut off = 0usize;
-        while arrays.len() < 4 && off + 4 <= data.len() {
+        while arrays.len() < 7 && off + 4 <= data.len() {
             let count = u32::from_be_bytes(data[off..off + 4].try_into().unwrap()) as usize;
             let end = off.saturating_add(4).saturating_add(count.saturating_mul(4));
             if end > data.len() || (!arrays.is_empty() && count > 4096) {
@@ -408,7 +410,24 @@ impl TileTypes {
                 types[id] = if lava.contains(&id) { TYPE_LAVA } else { TYPE_WATER };
             }
         }
+        // Array 4: chair tiles (benches, chairs, couches). Every one is also in
+        // the passable list; they keep walking behaviour and only get the
+        // chair type byte (3, as in the tile-type list of the scripting
+        // language). Arrays 5 and 6 (the two halves of a bed) are not read.
+        if let Some(chairs) = arrays.get(4) {
+            for &id in chairs.iter().filter(|&&id| id < 4096) {
+                if types[id] == 0 {
+                    types[id] = TYPE_CHAIR;
+                }
+            }
+        }
         Ok(TileTypes { types })
+    }
+
+    /// True if `id` is a chair tile (type 3): standing on it draws the sit
+    /// pose.
+    pub fn is_chair(&self, id: u16) -> bool {
+        self.raw(id) == Some(TYPE_CHAIR)
     }
 
     /// The raw type byte for `id`, if the id is on the table.
@@ -463,6 +482,22 @@ mod tiletypes_tests {
             }
         }
         data
+    }
+
+    /// Array 4 (chair tiles) marks passable tiles as chairs and never makes a
+    /// wall walkable; bed arrays 5 and 6 are left alone.
+    #[test]
+    fn arrays_chair_list_marks_chairs() {
+        // passable: 0, 8, 9; chairs: 8 and 40 (not passable); bed top: 9
+        let data = arrays_blob(&[&[0, 8, 9], &[], &[], &[], &[8, 40], &[9], &[]]);
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        assert!(t.is_chair(8));
+        assert_eq!(t.kind(8), TileKind::Open, "a bench is walkable");
+        assert!(!t.is_chair(40) && t.is_wall(40), "a wall in the chair list stays a wall");
+        assert!(!t.is_chair(0) && !t.is_chair(9));
+        // a file with fewer arrays has no chairs
+        let t = TileTypes::parse_arrays(&arrays_blob(&[&[0, 8]])).unwrap();
+        assert!(!t.is_chair(8));
     }
 
     #[test]

@@ -115,7 +115,8 @@ pub struct OfflineSession {
     pub poses: crate::pose::PoseGanis,
     /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
     pub npc_ganis: HashMap<String, crate::assets::Gani>,
-    /// Draw the sit pose. Nothing sets it yet: no key is bound.
+    /// The feet are on a chair tile (type 3): the sit pose is drawn while the
+    /// player is not walking. Set by [`Self::refresh_water`].
     pub sitting: bool,
     /// The last step moved the player and no stop has come since: the walk
     /// animation is drawn instead of idle. Cleared by [`Self::stop_walking`].
@@ -642,6 +643,7 @@ impl OfflineSession {
     /// Load the 4096-byte collision table from a text tiledefs file.
     pub fn load_tiletypes<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<(), String> {
         self.tiletypes = Some(TileTypes::load(path)?);
+        self.refresh_water();
         Ok(())
     }
 
@@ -652,6 +654,7 @@ impl OfflineSession {
         self.tiletypes = Some(TileTypes::load_arrays(path)?);
         // The same file holds the cut and lift tables.
         self.object_tables = std::fs::read(path).ok().and_then(|d| ObjectTables::parse(&d));
+        self.refresh_water();
         Ok(())
     }
 
@@ -1026,11 +1029,18 @@ impl OfflineSession {
         self.warp_pending = None;
     }
 
-    /// Recompute `in_water` from the feet.
+    /// Recompute `in_water` and `sitting` from the feet.
     pub fn refresh_water(&mut self) {
         let (fx, fy) = self.foot();
         self.in_water = match (&self.current_level, &self.tiletypes) {
             (Some(level), Some(types)) => self.kind_at_point(level, types, fx, fy) == TileKind::Water,
+            _ => false,
+        };
+        // Feet on a chair tile (a bench): drawn sitting once the player stops.
+        self.sitting = match (&self.current_level, &self.tiletypes) {
+            (Some(level), Some(types)) if (0.0..64.0).contains(&fx) && (0.0..64.0).contains(&fy) => {
+                level.tile_id_at(fx as i32, fy as i32).is_some_and(|id| types.is_chair(id))
+            }
             _ => false,
         };
     }
@@ -1441,6 +1451,7 @@ mod tests {
 
     const OPEN: u16 = 0;
     const WALL: u16 = 1;
+    const CHAIR: u16 = 7;
     const WATER: u16 = 2;
     const LAVA: u16 = 3;
 
@@ -1449,6 +1460,7 @@ mod tests {
         t.types[WALL as usize] = 22;
         t.types[WATER as usize] = 11;
         t.types[LAVA as usize] = 12;
+        t.types[CHAIR as usize] = 3;
         t
     }
 
@@ -1643,6 +1655,45 @@ mod tests {
         s.object_tables = None;
         assert_eq!(s.try_lift(), None);
         assert_eq!(s.try_cut(), None);
+    }
+
+    /// A bench (chair tiles, walkable): standing with the feet on it sits,
+    /// walking off it stands. The flag only says "on a chair"; the pose is
+    /// drawn once the player stops (`pose::current_pose`).
+    #[test]
+    fn feet_on_a_chair_tile_sit() {
+        // Chair tiles in column 20, rows 10..=11 (a 1 x 2 bench).
+        let tiles = |x: i32, y: i32| if x == 20 && (10..=11).contains(&y) { CHAIR } else { OPEN };
+        // feet at (x + 2.0, y + 2.75): put the player so the feet are at (19.75, 10.5) -> tile 19: not a chair
+        let mut s = session_at(level(tiles), 19.5, 10.5);
+        s.refresh_water();
+        assert!(!s.sitting);
+        // one step right: the feet are at 20.0, 10.5: on the bench
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.sitting, "feet at ({}, {})", s.player_x + FOOT_DX, s.player_y + FOOT_DY);
+        // walking on: still on it at 20.5, then off at 21.0
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.sitting);
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(!s.sitting);
+        // the bench is not a wall: it did not block the walk
+    }
+
+    /// A player who spawns on a bench sits as soon as the tile types are loaded.
+    #[test]
+    fn a_player_placed_on_a_chair_sits() {
+        let tiles = |x: i32, y: i32| if (20..=21).contains(&x) && (10..=11).contains(&y) { CHAIR } else { OPEN };
+        let mut s = OfflineSession::new();
+        s.current_level = Some(level(tiles));
+        s.player_x = 20.0 - FOOT_DX + 0.5;
+        s.player_y = 10.0 - FOOT_DY + 0.5;
+        s.tiletypes = Some(types());
+        s.refresh_water();
+        assert!(s.sitting);
+        // off the board is not a chair
+        s.player_x = -10.0;
+        s.refresh_water();
+        assert!(!s.sitting);
     }
 
     #[test]
