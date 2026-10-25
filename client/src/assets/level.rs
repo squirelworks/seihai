@@ -152,6 +152,96 @@ pub struct Chest {
     pub sign_index: i32,
 }
 
+/// A 2 x 2 object as the client's tables hold it, `[column][row]`.
+pub type Object2x2 = [[u16; 2]; 2];
+
+/// The cut and lift tables of `arrays.dat` (the arrays after the walking
+/// ones). Each list is one entry per object type; an entry is the object's
+/// 2 x 2 tiles, and the `_into` list holds the 2 x 2 tiles that replace it.
+///
+/// `arrays.dat` is a run of arrays, each with a big-endian `u32` header whose
+/// low 16 bits are the count and whose high 16 bits are 0 for a flat list of
+/// `u32` ints and non-zero for a list of nested arrays (each with its own
+/// header). In file order, array 9 is the cuttable objects, 10 what they
+/// leave, 11 the liftable objects, 12 what they leave.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ObjectTables {
+    pub cut: Vec<Object2x2>,
+    pub cut_into: Vec<Object2x2>,
+    pub lift: Vec<Object2x2>,
+    pub lift_into: Vec<Object2x2>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ArrNode {
+    Ints(Vec<u32>),
+    List(Vec<ArrNode>),
+}
+
+fn parse_arr_node(data: &[u8], off: &mut usize, depth: u32) -> Option<ArrNode> {
+    if depth > 4 || *off + 4 > data.len() {
+        return None;
+    }
+    let h = u32::from_be_bytes(data[*off..*off + 4].try_into().ok()?);
+    *off += 4;
+    let (kind, n) = (h >> 16, (h & 0xFFFF) as usize);
+    if kind == 0 {
+        let end = off.checked_add(n.checked_mul(4)?)?;
+        let ints = data.get(*off..end)?.chunks_exact(4).map(|c| u32::from_be_bytes(c.try_into().unwrap())).collect();
+        *off = end;
+        Some(ArrNode::Ints(ints))
+    } else {
+        let mut v = Vec::with_capacity(n.min(1024));
+        for _ in 0..n {
+            v.push(parse_arr_node(data, off, depth + 1)?);
+        }
+        Some(ArrNode::List(v))
+    }
+}
+
+fn objects_from(node: Option<&ArrNode>) -> Vec<Object2x2> {
+    let Some(ArrNode::List(items)) = node else { return Vec::new() };
+    items
+        .iter()
+        .filter_map(|it| {
+            let ArrNode::List(cols) = it else { return None };
+            let mut o = [[0u16; 2]; 2];
+            if cols.len() != 2 {
+                return None;
+            }
+            for (c, col) in cols.iter().enumerate() {
+                let ArrNode::Ints(rows) = col else { return None };
+                if rows.len() != 2 {
+                    return None;
+                }
+                for (r, &v) in rows.iter().enumerate() {
+                    o[c][r] = v as u16;
+                }
+            }
+            Some(o)
+        })
+        .collect()
+}
+
+impl ObjectTables {
+    /// Read the tables from an `arrays.dat`. `None` if the file does not
+    /// parse as a run of arrays or has no cut or lift tables.
+    pub fn parse(data: &[u8]) -> Option<Self> {
+        let mut off = 0;
+        let mut nodes = Vec::new();
+        while off < data.len() {
+            nodes.push(parse_arr_node(data, &mut off, 0)?);
+        }
+        let t = ObjectTables {
+            cut: objects_from(nodes.get(9)),
+            cut_into: objects_from(nodes.get(10)),
+            lift: objects_from(nodes.get(11)),
+            lift_into: objects_from(nodes.get(12)),
+        };
+        (!t.cut.is_empty() || !t.lift.is_empty()).then_some(t)
+    }
+}
+
 /// Tile type byte for water (`isOnWater`).
 pub const TYPE_WATER: u8 = 11;
 /// Tile type byte for lava. Walkable, like every type below 20.
@@ -798,6 +888,65 @@ impl Level {
         match self.tile_id_at(x as i32, y as i32) {
             Some(id) => types.kind(id),
             None => TileKind::Open,
+        }
+    }
+
+    /// Put tile `id` at `(x, y)` on layer 0. False if the level has no tile
+    /// there.
+    pub fn set_tile_id(&mut self, x: i32, y: i32, id: u16) -> bool {
+        for run in &mut self.boards {
+            if run.layer == 0 && run.y == y && x >= run.x && x < run.x + run.width {
+                let idx = (x - run.x) as usize;
+                if let Some(t) = run.tiles.get_mut(idx) {
+                    *t = tile_code(id);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Find the 2 x 2 object of one of the first `max_types` entries of
+    /// `table` that has the tile under `(px, py)` as one of its four tiles
+    /// and whose four tiles are all on the board there. Returns the entry
+    /// and the top-left tile of the object.
+    ///
+    /// The client looks for the tile under the point in each entry (entry
+    /// by entry, column by column, row by row), then checks the whole 2 x 2
+    /// around it; the first full match wins.
+    pub fn find_object(&self, table: &[Object2x2], max_types: usize, px: i32, py: i32) -> Option<(usize, i32, i32)> {
+        if !(0..64).contains(&px) || !(0..64).contains(&py) {
+            return None;
+        }
+        let here = self.tile_id_at(px, py)?;
+        for (ty, obj) in table.iter().enumerate().take(max_types) {
+            for c in 0..2 {
+                for r in 0..2 {
+                    if obj[c][r] != here {
+                        continue;
+                    }
+                    let (ax, ay) = (px - c as i32, py - r as i32);
+                    let all = (0..2).all(|i| {
+                        (0..2).all(|j| {
+                            let (x, y) = (ax + i as i32, ay + j as i32);
+                            (0..64).contains(&x) && (0..64).contains(&y) && self.tile_id_at(x, y) == Some(obj[i][j])
+                        })
+                    });
+                    if all {
+                        return Some((ty, ax, ay));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Put a 2 x 2 object's tiles at top-left `(ax, ay)`.
+    pub fn put_object(&mut self, ax: i32, ay: i32, tiles: &Object2x2) {
+        for i in 0..2 {
+            for j in 0..2 {
+                self.set_tile_id(ax + i as i32, ay + j as i32, tiles[i][j]);
+            }
         }
     }
 

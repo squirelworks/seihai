@@ -833,6 +833,9 @@ impl OfflineSession {
         let started = self.combat.start_swing();
         if started {
             self.queue_sword_cues(0);
+            // The client cuts what is in front of the sword as the swing
+            // starts.
+            self.try_cut();
         }
         started
     }
