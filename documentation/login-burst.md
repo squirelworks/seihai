@@ -61,6 +61,10 @@ Seihai does the same for weapon images (it first asked for `-`). What is still
 different: the real clients also ask for `wbowi1.png`, which no weapon of the lab
 server names (the server sends the default-weapon ids 7 and 8 as well); which
 default weapon gives which image is not known, so Seihai does not ask for it.
+Evidence for a later decision, not used: the server source numbers the default
+items bow 7 and bomb 8, the 2.22 item-name table is in the same order, and the
+real 2.22 and 2.31 logins ask `wbomb1.png` before `wbowi1.png`, as a walk over
+default weapons 8 then 7 would. No mapping is wired (`file-cache.md`).
 
 ## Tests
 
