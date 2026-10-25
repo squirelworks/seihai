@@ -84,6 +84,8 @@ pub struct OfflineSession {
     pub swim_gani: Option<GaniPlayer>,
     /// The sword, hurt and sit animations (see [`crate::pose`]).
     pub poses: crate::pose::PoseGanis,
+    /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
+    pub npc_ganis: HashMap<String, crate::assets::Gani>,
     /// Draw the sit pose. Nothing sets it yet: no key is bound.
     pub sitting: bool,
     /// Sounds from GANI frames entered since the last
@@ -237,6 +239,7 @@ impl OfflineSession {
             swim_gani: None,
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
+            npc_ganis: HashMap::new(),
             sound_events: Vec::new(),
             player_health: 100,
             last_message: None,

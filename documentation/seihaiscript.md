@@ -50,7 +50,7 @@ The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode 
 
 **Host.** `scripting::engine::host::SessionScripts` wires an offline session to the engine. Scripts run by default; `--no-scripts` turns them off.
 
-**Not done.** `board[x,y]` and `tiles[x,y]` reads return 0; no string lists or `with`/`join`; online NPC script props are not decoded; no weapon-key input for `weaponfired`; `move` is instant; script warps online use the link request (see `documentation/script-warps.md`); sound, image and network effects are only logged. Assumptions that still need the lab: case-insensitive `==`/`strequals`, quote stripping, the touch geometry, and `playersays` matching rules.
+**Not done.** `board[x,y]` and `tiles[x,y]` reads return 0; no string lists or `with`/`join`; online NPC script props are not decoded; no weapon-key input for `weaponfired`; `move` is instant; script warps online use the link request (see `documentation/script-warps.md`); sound and network effects are only logged; image effects (`setimg`, `setimgpart`, `showimg`, `hideimg`, `changeimgpart`, `setcharani`, `setani`, `showcharacter`) change the NPC and are drawn (`documentation/npc-images.md`). Assumptions that still need the lab: case-insensitive `==`/`strequals`, quote stripping, the touch geometry, and `playersays` matching rules.
 
 ## Architecture
 

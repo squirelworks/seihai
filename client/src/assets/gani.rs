@@ -56,6 +56,8 @@ pub struct Gani {
     /// `SETBACKTO name`: the animation the player returns to when this one
     /// has played once (`idle` for the sword swing).
     pub setback_to: Option<String>,
+    /// `LOOP`: the animation repeats until another one is chosen.
+    pub looped: bool,
     pub raw: String,
 }
 
@@ -107,6 +109,7 @@ impl Gani {
         let mut default_body = None;
         let mut single_direction = false;
         let mut setback_to = None;
+        let mut looped = false;
 
         let mut in_ani = false;
         // The step being filled, and sounds that came before its first row.
@@ -139,6 +142,10 @@ impl Gani {
             if line == "ANIEND" {
                 flush(&mut current, &mut frames);
                 in_ani = false;
+                continue;
+            }
+            if line == "LOOP" {
+                looped = true;
                 continue;
             }
             if line == "SINGLEDIRECTION" {
@@ -222,6 +229,7 @@ impl Gani {
             default_body,
             single_direction,
             setback_to,
+            looped,
             raw: text.to_string(),
         })
     }
