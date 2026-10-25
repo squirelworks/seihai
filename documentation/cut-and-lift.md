@@ -30,7 +30,8 @@ bush `2 3 / 18 19` and `420 421 / 436 437`) and 5 liftable ones (the rock is
   point minus that tile's column and row; all four board tiles must equal
   the entry's four, on the board. The first full match wins.
 * **Cut.** As the sword swing starts, match against the cut table (all
-  entries, no glove) and write the entry's "left" tiles over the four.
+  entries, no glove) and write the entry's "left" tiles over the four, then a
+  spawn routine takes the entry index (debris or items; not read).
 * **Lift.** The A key tries this first (before a sign or a chest). Glove
   power `g` allows the first `g + 2` entries: with no glove the bush and the
   512 block, power 1 adds the 684 block, power 2 the rock and the 990 block (the
@@ -47,7 +48,27 @@ the hands puts it down. Only a client with an `arrays.dat` (the user's own
 folder or a server's cache) has the tables: the built-in default set has none,
 so nothing is cuttable or liftable there.
 
+## The cut effect
+
+A cut plays a break effect (the same rows as a landed throw, `throwing.md`) at
+the object's top-left tile: `try_cut` pushes a `Leap` anchored there, drawn one
+frame per 50 ms tick and gone after the last. Entry 0, the bush, plays row 0 of
+the break table (seven frames of four leaf pieces, sprites 25 and 26, the
+bush's leaves a thrown bush makes); entry 1 (the `420 421 / 436 437` object) plays row 1 (four
+frames of three pieces of sprite 24). The row values are the 2.22 file's;
+**that the cut entry number picks the break row is an inference** (the
+client's spawn routine takes the entry index and was not read; the rows line up:
+two cut entries, and rows 0 and 1 are the two that no throw uses). Where the
+effect is anchored (the object's top-left versus its centre) is also inferred
+from the piece offsets, which stay inside the 32 x 32 object for the bush.
+The built-in default art has no sprite 24, so entry 1's effect is empty without
+a real `sprites.png`.
+
 ## Open (not read, not invented)
+
+* Whether the cut also makes a sound, and the pieces' exact timing against the
+  real client; a lab capture of a cut would settle both. Other cut-table
+  effects (drops) are below.
 
 * **Throwing** is implemented (see `throwing.md`); what a thrown object
   does to NPCs, players and baddies it hits was not read.

@@ -810,6 +810,11 @@ impl OfflineSession {
         let (kind, ax, ay) = self.current_level.as_ref()?.find_object(&tables.cut, tables.cut.len(), px, py)?;
         let left = tables.cut_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
+        // The cut plays the break effect of its table entry (bush: the leaves
+        // of the thrown bush), anchored on the object's top-left tile.
+        // Which effect each cut entry plays is inferred, see
+        // `documentation/cut-and-lift.md`.
+        self.leaps.push(crate::throwing::Leap { kind: crate::throwing::cut_leap_kind(kind), x: ax as f32, y: ay as f32, frame: -1 });
         Some(kind)
     }
 
@@ -1600,6 +1605,41 @@ mod tests {
         // A rock is not in the cut table.
         face_up_at(&mut s, 40, 20);
         assert_eq!(s.try_cut(), None);
+    }
+
+    /// A cut bush plays the bush's leaves (break row 0, seven frames of 50 ms),
+    /// anchored on the object's top-left tile; a swing that cuts nothing plays
+    /// nothing.
+    #[test]
+    fn a_cut_bush_plays_the_leaf_effect_where_it_stood() {
+        let mut s = object_session(0);
+        face_up_at(&mut s, 22, 20);
+        assert_eq!(s.try_cut(), None);
+        assert!(s.leaps.is_empty(), "nothing cut, no effect");
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.try_cut(), Some(0));
+        assert_eq!(s.leaps, vec![crate::throwing::Leap { kind: crate::throwing::LEAP_BUSH, x: 20.0, y: 20.0, frame: -1 }]);
+        // not drawn before its first tick; then one frame per tick
+        assert!(s.tick_throw(50));
+        for f in 0..7 {
+            assert_eq!(s.leaps.len(), 1, "frame {f} is shown");
+            assert_eq!(s.leaps[0].frame, f);
+            s.tick_throw(50);
+        }
+        assert!(s.leaps.is_empty(), "gone after the last frame");
+    }
+
+    #[test]
+    fn a_swing_that_cuts_plays_the_effect_and_a_level_change_drops_it() {
+        let mut s = object_session(0);
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        s.sword_power = 1;
+        face_up_at(&mut s, 20, 20);
+        assert!(s.start_swing());
+        assert_eq!(s.leaps.len(), 1);
+        s.clear_throws();
+        assert!(s.leaps.is_empty());
     }
 
     #[test]

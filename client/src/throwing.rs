@@ -34,9 +34,19 @@ pub const SPRITE_POT: u16 = 267;
 
 /// Break-effect kinds (rows of the break table).
 pub const LEAP_BUSH: usize = 0;
+/// Row 1: three pieces of sprite 24, the effect of the second cuttable object.
+pub const LEAP_CUT_2: usize = 1;
 pub const LEAP_ROCK: usize = 2;
 pub const LEAP_POT: usize = 3;
 pub const LEAP_SPLASH: usize = 5;
+
+/// The break effect a sword cut of cut-table entry `entry` plays: the entry
+/// number is the break-table row (entry 0, the bush, plays the bush's leaves;
+/// entry 1 the next row). The spawn routine of the client takes the entry
+/// index; that it picks the break row by it is an inference, not read.
+pub fn cut_leap_kind(entry: usize) -> usize {
+    entry
+}
 
 /// Per-tick step of a thrown object by facing (north, west, south, east):
 /// `(dx, dy, dz)`. `dy` moves the drawn object, `dz` the ground point under
@@ -152,6 +162,12 @@ pub fn builtin_leap(kind: usize) -> &'static [&'static [Piece]] {
             &[(26, -7, 4), (25, -1, -14), (26, 10, 15), (26, 10, 24)],
             &[(26, -8, 4), (25, -2, -16), (26, 10, 22), (26, 10, 25)],
         ],
+        LEAP_CUT_2 => &[
+            &[(24, 0, 8), (24, 8, 0), (24, 12, 8)],
+            &[(24, -2, 8), (24, 8, -2), (24, 14, 8)],
+            &[(24, -4, 8), (24, 8, -4), (24, 16, 8)],
+            &[(24, -6, 8), (24, 8, -6), (24, 18, 8)],
+        ],
         LEAP_ROCK => &[
             &[(96, -1, 0), (96, 0, 9), (98, 9, -1), (98, 10, 8)],
             &[(99, -3, -2), (99, -2, 11), (97, 11, -3), (97, 12, 10)],
@@ -183,6 +199,7 @@ pub fn builtin_leap(kind: usize) -> &'static [&'static [Piece]] {
 pub fn builtin_sprite_rect(id: u16) -> Option<(i32, i32, i32, i32)> {
     Some(match id {
         0 => (0, 0, 24, 12),
+        24 => (34, 8, 10, 8),
         25 => (44, 0, 16, 16),
         26 => (60, 0, 16, 16),
         96 => (24, 82, 16, 16),
@@ -290,6 +307,18 @@ mod tests {
         assert_eq!(leap_kind(Some(261), true), LEAP_SPLASH);
         assert_eq!([0, 1, 2, 3, 4].map(|k| carry_sprite(k).unwrap()), CARRY_SPRITES);
         assert_eq!(carry_sprite(5), None);
+    }
+
+    /// The effect rows are those of the 2.22 table: the bush cut plays row 0
+    /// (7 frames of 4 pieces), the second cuttable row 1 (4 frames of 3).
+    #[test]
+    fn cut_entries_play_their_own_break_row() {
+        assert_eq!(cut_leap_kind(0), LEAP_BUSH);
+        assert_eq!(cut_leap_kind(1), LEAP_CUT_2);
+        assert_eq!(builtin_leap(cut_leap_kind(0)).len(), 7);
+        assert_eq!(builtin_leap(cut_leap_kind(1)).len(), 4);
+        assert!(builtin_leap(cut_leap_kind(1)).iter().all(|f| f.len() == 3 && f.iter().all(|p| p.0 == 24)));
+        assert_eq!(builtin_sprite_rect(24), Some((34, 8, 10, 8)));
     }
 
     #[test]
