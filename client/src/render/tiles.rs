@@ -235,11 +235,29 @@ impl Framebuffer {
     }
 }
 
+/// Closed chest tile ids of the built-in tile sheet, and the open tile of
+/// each (the open art sits two ids to the right). A level's chest record is a
+/// trigger; the chest itself is drawn from the board, as in the real client.
+/// The built-in sheet has two chests (on grass and on a wood floor), each
+/// 2x2 tiles (`id`, `id + 1`, `id + 16`, `id + 17`).
+pub const BUILTIN_CHEST_CLOSED: [u16; 8] = [64, 65, 80, 81, 68, 69, 84, 85];
+
+/// How to draw a view beyond what the level's board says.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ViewOptions {
+    /// The tile sheet is the built-in one: an opened chest is drawn with
+    /// the open-chest tiles ([`BUILTIN_CHEST_CLOSED`] + 2). With another
+    /// sheet the board is drawn as it is, because a foreign sheet's open
+    /// chest ids are not known.
+    pub builtin_sheet: bool,
+}
+
 /// Render a camera view of the level into a framebuffer.
 ///
 /// `sheet` is the RGB tile sheet (2048×512 for `pics1.png`).
 /// `view_tiles_w` / `view_tiles_h` is the visible window in tiles.
-/// The player is drawn as a 16×16 marker.
+/// The player is drawn as a 16×16 marker. Chests and signs are not drawn
+/// by this function: their art is part of the board.
 pub fn render_view(
     session: &OfflineSession,
     sheet: &[u8],
@@ -247,6 +265,19 @@ pub fn render_view(
     sheet_h: u32,
     view_tiles_w: u32,
     view_tiles_h: u32,
+) -> Framebuffer {
+    render_view_with(session, sheet, sheet_w, sheet_h, view_tiles_w, view_tiles_h, ViewOptions::default())
+}
+
+/// As [`render_view`], with [`ViewOptions`].
+pub fn render_view_with(
+    session: &OfflineSession,
+    sheet: &[u8],
+    sheet_w: u32,
+    sheet_h: u32,
+    view_tiles_w: u32,
+    view_tiles_h: u32,
+    opts: ViewOptions,
 ) -> Framebuffer {
     let mut fb = Framebuffer::new(view_tiles_w * TILE_PX, view_tiles_h * TILE_PX);
     let level = match &session.current_level {
@@ -271,35 +302,23 @@ pub fn render_view(
                 session.gmap.as_ref().and_then(|w| w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky)))
             };
             let Some(at) = at else { continue };
-            if let Some(id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
+            if let Some(mut id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
+                if opts.builtin_sheet && (kx, ky) == (0, 0) && BUILTIN_CHEST_CLOSED.contains(&id) {
+                    // An opened chest shows its open tiles.
+                    let (px, py) = (lx.rem_euclid(64), ly.rem_euclid(64));
+                    let opened = level.chests.iter().any(|c| {
+                        session.opened_chests.contains(&(c.x, c.y)) && (c.x..c.x + 2).contains(&px) && (c.y..c.y + 2).contains(&py)
+                    });
+                    if opened {
+                        id += 2;
+                    }
+                }
                 fb.blit_tile(sheet, sheet_w, sheet_h, id, tx * t - sub_x, ty * t - sub_y);
             }
         }
     }
 
-    // Chests, signs, NPCs.
-    for chest in &level.chests {
-        // Chest: brown box with a gold latch.
-        let (cx, cy) = (chest.x * t - cam_x, chest.y * t - cam_y);
-        fb.fill_rect(cx + 2, cy + 6, 28, 22, [0x80, 0x40, 0x10]);
-        if session.opened_chests.contains(&(chest.x, chest.y)) {
-            // Open: lid up, dark inside.
-            fb.fill_rect(cx + 2, cy, 28, 5, [0xA0, 0x50, 0x18]);
-            fb.fill_rect(cx + 5, cy + 9, 22, 8, [0x20, 0x10, 0x04]);
-        } else {
-            fb.fill_rect(cx + 2, cy + 4, 28, 6, [0xA0, 0x50, 0x18]);
-            fb.fill_rect(cx + 12, cy + 10, 8, 6, [0xF0, 0xD0, 0x40]);
-        }
-    }
-    for sign in &level.signs {
-        // Wooden sign: post and board.
-        let (sx, sy) = (sign.x * t - cam_x, sign.y * t - cam_y);
-        fb.fill_rect(sx + 14, sy + 20, 4, 12, [0x60, 0x40, 0x20]);
-        fb.fill_rect(sx + 6, sy + 6, 20, 16, [0xC0, 0xA0, 0x60]);
-        fb.fill_rect(sx + 8, sy + 8, 16, 2, [0x40, 0x30, 0x20]);
-        fb.fill_rect(sx + 8, sy + 12, 16, 2, [0x40, 0x30, 0x20]);
-        fb.fill_rect(sx + 8, sy + 16, 16, 2, [0x40, 0x30, 0x20]);
-    }
+    // Chests and signs are part of the board (see `ViewOptions`); NPCs next.
     for npc in &level.npcs {
         if npc.visible {
             // Placeholder until the image arrives. Request the file if missing.

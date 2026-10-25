@@ -59,6 +59,28 @@ name to a file. It takes the data folder and a version profile.
 | Tile types | root, `levels/` | `tiledefs.txt`, else `arrays.dat`. |
 | Tiledefs | `levels/tiledefs/`, `tiledefs/` | `image,prefix,type[,x,y]` lines. |
 
+### Layers (item 20)
+
+The table above is the folder order *inside one data folder*. The resolver
+searches up to three folders, one after the other, and the first that has the
+name wins:
+
+1. the **server's cache folder** (`<cache root>/<host>_<port>[~name]/`, what
+   the server sent; the only place a download is written),
+2. the user's **asset folder** (`--assets`, optional),
+3. the **built-in default set** (`assets/default/`, compiled in, read-only).
+
+So `--assets` may be missing, empty or partial: what it lacks comes from the
+built-in set, file by file. Built-in levels (`new1.nw`, `new2.nw`) are found
+offline only, and the built-in tile type table is used only with the built-in
+sheet. Layout, naming, what a download does and how `WANTFILE` / `UPDATEFILE`
+treat built-in files: `documentation/file-cache.md`. The built-in set:
+`documentation/default-assets.md`. `AssetResolver::new(root, profile)` is the
+one-folder resolver as before; `AssetResolver::empty(profile).with_assets(..)
+.with_cache(..).with_builtin(..)` builds the layered one. `seihai
+--check-assets` checks the `--assets` folder alone, or the built-in set when
+there is none.
+
 All names ignore case (the folder has `TORERO-2.MID`; Linux file systems do not
 ignore case). A name with `..`, a leading `/` or a colon is refused: names come
 from the server. A miss is never cached, so a file that arrives from the server

@@ -21,12 +21,16 @@
 //! * **Safe names.** Names come from the server. `..`, absolute paths and
 //!   drive letters never leave the folder.
 //!
+//! * **Layers.** A lookup searches the per-server cache first, then the
+//!   user's asset folder, then the built-in default set
+//!   (`documentation/default-assets.md`, `documentation/file-cache.md`).
+//!   Downloads are written to the cache only; the built-in set is read-only.
+//!
 //! Lookups never cache a miss: a file that arrives from the server a moment
 //! later is found on the next call.
 //!
-//! Not settled (see `documentation/assets.md`): the order in which a real
-//! client prefers a downloaded copy over a shipped one, and the real
-//! client's own list of folders per kind. The orders below are Seihai's.
+//! Not settled (see `documentation/assets.md`): the real client's own list
+//! of folders per kind. The orders below are Seihai's.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,24 +49,153 @@ pub const IMAGE_CATEGORIES: &[&str] = &[
 /// first. This is `levels/`, as `main.rs` writes files there.
 const DOWNLOADS: &str = "levels";
 
-/// Finds files in one data folder for one version.
+/// Which layer of the resolver a path came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layer {
+    /// The per-server cache: what the server sent. Searched first.
+    Cache,
+    /// The user's asset folder (`--assets`).
+    Assets,
+    /// The built-in default set. Read-only; searched last.
+    Builtin,
+}
+
+/// Finds files for one version in up to three folders, in this order:
+///
+/// 1. the **per-server cache** (what the server sent, and the only place a
+///    download is written),
+/// 2. the user's **asset folder** (`--assets`),
+/// 3. the **built-in default set** (read-only, never a download target).
+///
+/// Inside one folder the folder order of each kind is as before (`levels/`,
+/// the root, `maps/` for a level, and so on); the layers are searched one
+/// after the other, so a file in a later layer is found only when no earlier
+/// layer has it. `AssetResolver::new` makes a resolver of one folder (the
+/// user's), which is what every lookup was before the layers existed.
 #[derive(Debug, Clone)]
 pub struct AssetResolver {
-    root: AssetRoot,
+    cache: Option<AssetRoot>,
+    user: Option<AssetRoot>,
+    builtin: Option<AssetRoot>,
+    /// Whether the built-in set's levels (`new1.nw`, `new2.nw`) can be
+    /// found. Off while online: a server's `new1.nw` must come from the
+    /// server, not from the starter level of the same name.
+    builtin_levels: bool,
     profile: &'static VersionProfile,
 }
 
 impl AssetResolver {
+    /// One folder (the user's), no cache and no built-in set.
     pub fn new(root: AssetRoot, profile: &'static VersionProfile) -> Self {
-        Self { root, profile }
+        Self { cache: None, user: Some(root), builtin: None, builtin_levels: true, profile }
     }
 
+    /// A resolver with no folder yet: add layers with the `with_*` methods.
+    pub fn empty(profile: &'static VersionProfile) -> Self {
+        Self { cache: None, user: None, builtin: None, builtin_levels: true, profile }
+    }
+
+    /// Set (or clear) the user's asset folder.
+    pub fn with_assets(mut self, root: Option<AssetRoot>) -> Self {
+        self.user = root;
+        self
+    }
+
+    /// Set the per-server cache folder (searched first, written by downloads).
+    pub fn with_cache(mut self, dir: Option<PathBuf>) -> Self {
+        self.cache = dir.map(AssetRoot::new);
+        self
+    }
+
+    /// Set the folder of the built-in set (searched last, never written).
+    pub fn with_builtin(mut self, dir: Option<PathBuf>) -> Self {
+        self.builtin = dir.map(AssetRoot::new);
+        self
+    }
+
+    /// Whether the built-in levels can be found (on offline, off online).
+    pub fn with_builtin_levels(mut self, on: bool) -> Self {
+        self.builtin_levels = on;
+        self
+    }
+
+    /// Replace the cache folder of a resolver in use (after a server warp).
+    pub fn set_cache(&mut self, dir: Option<PathBuf>) {
+        self.cache = dir.map(AssetRoot::new);
+    }
+
+    pub fn set_builtin_levels(&mut self, on: bool) {
+        self.builtin_levels = on;
+    }
+
+    pub fn builtin_levels(&self) -> bool {
+        self.builtin_levels
+    }
+
+    /// The main data folder: the user's, else the built-in set's. Used for
+    /// what is not looked up by name (a level picker, a sounds folder
+    /// message). It is not where downloads go: see [`download_root`](Self::download_root).
+    ///
+    /// # Panics
+    /// If the resolver has no folder at all (no layer was added).
     pub fn root(&self) -> &AssetRoot {
-        &self.root
+        self.user.as_ref().or(self.builtin.as_ref()).or(self.cache.as_ref()).expect("an AssetResolver has at least one folder")
+    }
+
+    pub fn user_root(&self) -> Option<&AssetRoot> {
+        self.user.as_ref()
+    }
+
+    pub fn cache_root(&self) -> Option<&AssetRoot> {
+        self.cache.as_ref()
+    }
+
+    pub fn builtin_root(&self) -> Option<&AssetRoot> {
+        self.builtin.as_ref()
+    }
+
+    /// Where a download is written: the cache folder when there is one, else
+    /// the user's folder (a resolver made by [`new`](Self::new), as before).
+    /// Never the built-in set; `None` when only the built-in set exists.
+    pub fn download_root(&self) -> Option<&AssetRoot> {
+        self.cache.as_ref().or(self.user.as_ref())
     }
 
     pub fn profile(&self) -> &'static VersionProfile {
         self.profile
+    }
+
+    /// The folders to search for `kind`, in order, each with its layer.
+    fn roots(&self, levels: bool) -> Vec<(Layer, &AssetRoot)> {
+        let mut v = Vec::with_capacity(3);
+        if let Some(r) = &self.cache {
+            v.push((Layer::Cache, r));
+        }
+        if let Some(r) = &self.user {
+            v.push((Layer::Assets, r));
+        }
+        if let Some(r) = &self.builtin {
+            if !levels || self.builtin_levels {
+                v.push((Layer::Builtin, r));
+            }
+        }
+        v
+    }
+
+    /// Which layer a path found by this resolver is in.
+    pub fn layer_of(&self, path: &Path) -> Option<Layer> {
+        let mut best: Option<(Layer, usize)> = None;
+        for (layer, r) in [(Layer::Cache, &self.cache), (Layer::Assets, &self.user), (Layer::Builtin, &self.builtin)] {
+            if let Some(r) = r {
+                if path.starts_with(&r.root) {
+                    let depth = r.root.components().count();
+                    if best.map_or(true, |(_, d)| depth > d) {
+                        best = Some((layer, depth));
+                    }
+                }
+            }
+        }
+        best.map(|(l, _)| l)
     }
 
     // ---- levels ----------------------------------------------------------
@@ -81,12 +214,13 @@ impl AssetResolver {
             }
             None => self.profile.level_extensions().iter().map(|e| format!("{rel}{e}")).collect(),
         };
-        let dirs = [
-            self.root.root.join(DOWNLOADS),
-            self.root.root.clone(),
-            self.root.root.join("maps"),
-        ];
-        first_in(&dirs, &candidates)
+        for (_, r) in self.roots(true) {
+            let dirs = [r.root.join(DOWNLOADS), r.root.clone(), r.root.join("maps")];
+            if let Some(p) = first_in(&dirs, &candidates) {
+                return Some(p);
+            }
+        }
+        None
     }
 
     /// Does this version open files with this level extension (".nw")?
@@ -102,13 +236,17 @@ impl AssetResolver {
     }
 
     /// The path of a level for loading or saving: the file if it exists,
-    /// else where a download of that name would be saved. A name that
+    /// else where a download of that name would be saved (in the cache
+    /// folder, or the user's folder without one). A name that
     /// would leave the folder falls back to the downloads folder joined
     /// with its last component.
     pub fn level_path(&self, name: &str) -> PathBuf {
         self.level(name).unwrap_or_else(|| {
             let last = name.rsplit(['/', '\\']).next().unwrap_or(name);
-            self.root.level(last)
+            match self.download_root().or(self.builtin.as_ref()) {
+                Some(r) => r.level(last),
+                None => PathBuf::from(DOWNLOADS).join(last),
+            }
         })
     }
 
@@ -122,15 +260,20 @@ impl AssetResolver {
         }
         let rel = clean_name(name)?;
         let file = if has_ext(&rel) { rel } else { format!("{rel}.gani") };
-        let dirs = [
-            self.root.gani_dir(),
-            self.root.root.join(DOWNLOADS).join("ganis"),
-            // The bomy (pet) animations sit in their own folder.
-            self.root.root.join(DOWNLOADS).join("bomys"),
-            self.root.root.join(DOWNLOADS),
-            self.root.root.clone(),
-        ];
-        first_in(&dirs, &[file])
+        for (_, r) in self.roots(false) {
+            let dirs = [
+                r.gani_dir(),
+                r.root.join(DOWNLOADS).join("ganis"),
+                // The bomy (pet) animations sit in their own folder.
+                r.root.join(DOWNLOADS).join("bomys"),
+                r.root.join(DOWNLOADS),
+                r.root.clone(),
+            ];
+            if let Some(p) = first_in(&dirs, std::slice::from_ref(&file)) {
+                return Some(p);
+            }
+        }
+        None
     }
 
     // ---- images ----------------------------------------------------------
@@ -151,24 +294,29 @@ impl AssetResolver {
     pub fn image_in(&self, category: &str, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name)?;
         let candidates = self.image_names(&rel);
-        let r = &self.root.root;
-        let mut dirs: Vec<PathBuf> = Vec::new();
-        if !category.is_empty() {
-            let cat = clean_name(category)?;
-            dirs.push(r.join(&cat));
-            dirs.push(r.join(DOWNLOADS).join(&cat));
+        let cat = if category.is_empty() { None } else { Some(clean_name(category)?) };
+        for (_, root) in self.roots(false) {
+            let r = &root.root;
+            let mut dirs: Vec<PathBuf> = Vec::new();
+            if let Some(cat) = &cat {
+                dirs.push(r.join(cat));
+                dirs.push(r.join(DOWNLOADS).join(cat));
+            }
+            dirs.push(r.join(DOWNLOADS));
+            dirs.push(r.clone());
+            for c in IMAGE_CATEGORIES {
+                dirs.push(r.join(DOWNLOADS).join(c));
+            }
+            // Map pictures named by a `.gmap` (`MAPIMG`).
+            dirs.push(r.join("maps"));
+            for c in IMAGE_CATEGORIES {
+                dirs.push(r.join(c));
+            }
+            if let Some(p) = first_in(&dirs, &candidates) {
+                return Some(p);
+            }
         }
-        dirs.push(r.join(DOWNLOADS));
-        dirs.push(r.clone());
-        for c in IMAGE_CATEGORIES {
-            dirs.push(r.join(DOWNLOADS).join(c));
-        }
-        // Map pictures named by a `.gmap` (`MAPIMG`).
-        dirs.push(r.join("maps"));
-        for c in IMAGE_CATEGORIES {
-            dirs.push(r.join(c));
-        }
-        first_in(&dirs, &candidates)
+        None
     }
 
     fn image_names(&self, rel: &str) -> Vec<String> {
@@ -198,67 +346,112 @@ impl AssetResolver {
 
     // ---- sounds and music ------------------------------------------------
 
-    /// The folder holding sound effects (`sounds/`, else `levels/sounds/`).
+    /// The folders sound effects are looked up in, in search order: per layer,
+    /// `sounds/` (else `levels/sounds/`) when it exists. The cache's `sounds/`
+    /// is always listed (it is made by the first download), so a sound that
+    /// arrives later is found.
+    pub fn sound_dirs(&self) -> Vec<PathBuf> {
+        let mut v = Vec::new();
+        for (layer, r) in self.roots(false) {
+            match r.sounds_dir() {
+                Some(d) => v.push(d),
+                None if layer == Layer::Cache => v.push(r.root.join("sounds")),
+                None => {}
+            }
+        }
+        v
+    }
+
+    /// The first folder of [`sound_dirs`](Self::sound_dirs).
     pub fn sounds_dir(&self) -> Option<PathBuf> {
-        self.root.sounds_dir()
+        self.sound_dirs().into_iter().next()
     }
 
     /// Find a sound effect. `.wav` is added to a bare name.
     pub fn sound(&self, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name.trim_start_matches('+'))?;
         let file = if has_ext(&rel) { rel } else { format!("{rel}.wav") };
-        let r = &self.root.root;
-        let dirs = [
-            r.join("sounds"),
-            r.join(DOWNLOADS).join("sounds"),
-            r.join(DOWNLOADS),
-            r.clone(),
-        ];
-        first_in(&dirs, &[file])
+        for (_, root) in self.roots(false) {
+            let r = &root.root;
+            let dirs = [r.join("sounds"), r.join(DOWNLOADS).join("sounds"), r.join(DOWNLOADS), r.clone()];
+            if let Some(p) = first_in(&dirs, std::slice::from_ref(&file)) {
+                return Some(p);
+            }
+        }
+        None
     }
 
     /// Find a music file. `.mid` is added to a bare name (the common case).
     pub fn music(&self, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name)?;
         let file = if has_ext(&rel) { rel } else { format!("{rel}.mid") };
-        let r = &self.root.root;
-        let dirs = [
-            r.join(DOWNLOADS).join("midis"),
-            r.join("midis"),
-            r.join(DOWNLOADS),
-            r.join("sounds"),
-            r.clone(),
-        ];
-        first_in(&dirs, &[file])
+        for (_, root) in self.roots(false) {
+            let r = &root.root;
+            let dirs = [
+                r.join(DOWNLOADS).join("midis"),
+                r.join("midis"),
+                r.join(DOWNLOADS),
+                r.join("sounds"),
+                r.clone(),
+            ];
+            if let Some(p) = first_in(&dirs, std::slice::from_ref(&file)) {
+                return Some(p);
+            }
+        }
+        None
     }
 
     // ---- tile tables -----------------------------------------------------
 
     /// The tile type table: `tiledefs.txt` (text) or `arrays.dat`.
+    ///
+    /// The built-in table describes the built-in sheet, so it is used only
+    /// when `pics1.png` itself comes from the built-in set: a user folder
+    /// with its own sheet and no table gets none, as before, and not ours.
     pub fn tile_types(&self) -> Option<(PathBuf, TileTypesFile)> {
-        let r = &self.root.root;
-        if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["tiledefs.txt".to_string()]) {
-            return Some((p, TileTypesFile::Text));
+        let sheet_is_builtin = self.image("pics1.png").and_then(|p| self.layer_of(&p)).map_or(true, |l| l == Layer::Builtin);
+        for (layer, root) in self.roots(false) {
+            if layer == Layer::Builtin && !sheet_is_builtin {
+                continue;
+            }
+            let r = &root.root;
+            if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["tiledefs.txt".to_string()]) {
+                return Some((p, TileTypesFile::Text));
+            }
+            if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["arrays.dat".to_string()]) {
+                return Some((p, TileTypesFile::ArraysDat));
+            }
         }
-        first_in(&[r.clone(), r.join(DOWNLOADS)], &["arrays.dat".to_string()]).map(|p| (p, TileTypesFile::ArraysDat))
+        None
     }
 
     /// Find one tiledefs file by name in `levels/tiledefs/` (or `tiledefs/`).
     pub fn tiledef(&self, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name)?;
-        let r = &self.root.root;
-        first_in(&[r.join(DOWNLOADS).join("tiledefs"), r.join("tiledefs")], &[rel])
+        for (_, root) in self.roots(false) {
+            let r = &root.root;
+            if let Some(p) = first_in(&[r.join(DOWNLOADS).join("tiledefs"), r.join("tiledefs")], std::slice::from_ref(&rel)) {
+                return Some(p);
+            }
+        }
+        None
     }
 
     /// The `tiledefs*.txt` files in `levels/tiledefs/` (the offline and
-    /// online tile-set lists), sorted by name.
+    /// online tile-set lists), sorted by name. The first layer that has any
+    /// is used, so one set is never a mix of two layers.
     pub fn tiledef_files(&self) -> Vec<PathBuf> {
-        let dir = self.root.root.join(DOWNLOADS).join("tiledefs");
-        let mut v: Vec<PathBuf> = fs::read_dir(&dir)
-            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect())
-            .unwrap_or_default();
-        v.sort();
-        v
+        for (_, root) in self.roots(false) {
+            let dir = root.root.join(DOWNLOADS).join("tiledefs");
+            let mut v: Vec<PathBuf> = fs::read_dir(&dir)
+                .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect())
+                .unwrap_or_default();
+            if !v.is_empty() {
+                v.sort();
+                return v;
+            }
+        }
+        Vec::new()
     }
 }
 

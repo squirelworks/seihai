@@ -71,5 +71,5 @@ the real 2.31 client's. Whether they should become defaults is not decided here.
 ## Maintainer answers (2026-10-25)
 
 - **Tamper check and id 24 as defaults:** undecided. Leave them opt-in (`--send-tampercheck`, `--send-showimg`) for now.
-- **Request `walk.gani` and step sounds:** only if Seihai does not already have them. Do not re-request files that are present.
+- **Request `walk.gani` and step sounds:** only if Seihai does not already have them. Do not re-request files that are present. *(Implemented in item 20: `FileSession::on_step`, `documentation/file-cache.md`. A built-in copy counts as present, so a normal run asks for none of the three.)*
 - **Bomb and bow weapon ids:** not settled by the capture. Leave open; do not invent a mapping.

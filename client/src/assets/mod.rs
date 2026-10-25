@@ -1,5 +1,6 @@
 //! Asset loading and export (levels, GANIs, images).
 
+pub mod builtin;
 mod crc32;
 mod gani;
 mod level;
@@ -13,7 +14,7 @@ mod coverage;
 
 pub use objects::{ObjectSet, Stamp};
 pub use coverage::{check_folder, expected_files, format_report, Finding, Need, NeedKind, Status};
-pub use resolve::{AssetResolver, TileTypesFile, IMAGE_CATEGORIES};
+pub use resolve::{AssetResolver, Layer, TileTypesFile, IMAGE_CATEGORIES};
 pub use root::AssetRoot;
 pub use tiledefs::{load_tiledefs, parse_tiledefs, TileDef};
 

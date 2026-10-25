@@ -37,11 +37,14 @@ cargo run --release -p seihai
 
 ## Assets
 
-The client needs a `pics1.png` tile sheet (2048×512). It is not included. Put it in a folder of your choice, then type that folder path into the Assets box in the launcher. Optional files:
+Seihai ships a small set of its own default art, sounds and two starter levels (`assets/default/`, compiled into the program), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline". To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
 
 - `levels/` — `.nw`, `.graal`, or `.zelda` levels
 - `bodies/body.png` and `heads/head0.png` — player sprites
 - `tiledefs.txt` or `arrays.dat` — collision data
+- `pics1.png` — a 2048×512 tile sheet
+
+Files a server sends are saved in a per-server cache folder (`~/.config/seihai/cache/<host>_<port>~<name>/`), searched before your folder and before the built-in set. They are never written into your folder or the built-in set. See `documentation/file-cache.md`.
 
 ## Run
 
@@ -84,23 +87,24 @@ Host names are resolved with the system resolver, and every address it returns i
 
 | Flag | Meaning |
 |------|---------|
-| `--assets`, `-a` | Folder containing `pics1.png` |
+| `--assets`, `-a` | Your own asset folder (optional). A file it lacks comes from the built-in default set; with no folder the built-in set is all there is |
+| `--cache-dir` | Root of the per-server download caches (default `<settings dir>/cache`; settings file `cache_dir=`). Search order: the server's cache, `--assets`, the built-in set |
 | `--level`, `-l` | Level file to load offline |
 | `--online`, `-o` | `host:port` of a listserver or gserver |
 | `--account` | Account name |
 | `--password` | Password (visible in the process list; prefer `--password-env`) |
 | `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
 | `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
-| `--check-assets` | With `--assets`, resolve and load the files a version uses from the data folder and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
+| `--check-assets` | Resolve and load the files a version uses from the `--assets` folder (or from the built-in set when none is given) and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
 | `--level-info FILE` | Print sizes, section offsets and record counts of a binary `.graal` / `.zelda` level (no content); repeat for more files. Exit code 1 if a file does not parse, or if a `Z3-V1` file does not read to its end with no anomaly |
 | `--version-chain` | Print what each client build changed against the build before it (all builds, or the one given with `--version`). `--chain-format text\|md\|tsv` picks the form (`documentation/version-chain.md`) |
 | `--version` | Client version (`1.39`, `2.05`, `2.17`, `2.22`, `2.31`) |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
-| `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `<assets>/sounds`, if the build has the `audio-rodio` feature and a sound device opens. Otherwise sound is silent and everything else runs the same |
+| `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `sounds/` in the server cache, `<assets>` or the built-in set (first that has the file), if the build has the `audio-rodio` feature and a sound device opens. Otherwise sound is silent and everything else runs the same |
 | `--sound` | Play sound effects even if the settings file turns them off |
-| `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the assets folder, in the place the real client uses (`documentation/file-cache.md`) |
+| `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the server's cache folder, in the place the real client uses (`documentation/file-cache.md`) |
 
 ### Capture viewer
 
@@ -142,7 +146,7 @@ The lists are plain text files in the settings directory (`~/.config/seihai/`, t
 
 ### Settings file
 
-Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
+Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `cache_dir`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
 
 Three options are meant to be edited by hand:
 
