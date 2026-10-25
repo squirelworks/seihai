@@ -475,9 +475,10 @@ fn chests_and_signs_are_drawn_from_the_board_with_no_placeholder_boxes() {
     let got = region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t);
     assert_eq!(got, tiles_image(&sheet, sw, sh, &open, 2));
     assert_ne!(got, tiles_image(&sheet, sw, sh, &closed, 2));
-    // With another sheet the board is drawn as it is.
+    // With another sheet the chest is drawn from its record with the
+    // sheet's own chest ids (open art at 829 and on).
     let fb = render_view_with(&s, &sheet, sw, sh, vw, vh, ViewOptions::default());
-    assert_eq!(region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t), tiles_image(&sheet, sw, sh, &closed, 2));
+    assert_eq!(region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t), tiles_image(&sheet, sw, sh, &[829, 830, 845, 846], 2));
     let _ = fs::remove_dir_all(&base);
 }
 

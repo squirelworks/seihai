@@ -510,7 +510,7 @@ impl OfflineSession {
         let chest = level
             .chests
             .iter()
-            .find(|c| inside(c.x, c.y, 2.0, 2.0) && !self.opened_chests.contains(&(c.x, c.y)))
+            .find(|c| inside(c.x, c.y, 2.0, 2.0) && !c.opened && !self.opened_chests.contains(&(c.x, c.y)))
             .cloned();
         if let Some(c) = chest {
             // A chest's sign index points into the level's signs.
@@ -1615,6 +1615,7 @@ mod tests {
             y: 10,
             item: "greenrupee".into(),
             sign_index: -1,
+            opened: false,
         });
         assert_eq!(walk(&mut s, 0.5, 0.0, 10), 1, "the body's right edge meets the chest at x = 20");
     }

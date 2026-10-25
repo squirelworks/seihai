@@ -22,14 +22,18 @@ object NPCs), then the text and window messages.
   account, at positions whose board tiles are plain grass.
 * The board contains none of the chest tile ids of the 2.22 `arrays.dat`
   (closed `1784 1785 1800 1801`, opened `829 830 845 846`).
-* The real client has no draw code for a chest record. A chest is only ever
-  what its board tiles show; the record adds the "open it" action and the
-  solid 2 x 2 footprint. So the real client draws nothing here either.
+* **Correction.** This note first said the real client has no draw code for a
+  chest record. It does: see `chest-drawing.md`. The record is drawn as a
+  2 x 2 blit of the closed or opened chest tiles, so on the real client
+  these three chests show (as opened chests).
 * One of the object NPCs uses `chest.png`. That file was refused by the
   server (`FILESENDFAILED`) and server NPCs are not drawn by Seihai yet, so
   that image would be missing in either case.
 
-What changed: `Level::add_server_chests` and `add_server_signs` now put the
+Fixed in `chest-drawing.md`: Seihai now draws chest records the way the
+client does.
+
+What changed earlier: `Level::add_server_chests` and `add_server_signs` now put the
 server's records on a level built from the server's board. Before, they were
 stored raw and never used, so walking into an invisible chest was possible
 and the chest could not be opened. Chests stay solid, as in the client.

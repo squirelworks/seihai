@@ -11,7 +11,7 @@ mod tiles;
 
 pub use npcs::{draw_npcs, NpcArt, NPC_DIR};
 pub use tiles::{
-    draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED,
+    draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED, BUILTIN_CHEST_GRASS, CHEST_CLOSED_TILES, CHEST_OPEN_TILES, chest_art,
     Framebuffer, TILE_PX,
 };
 
