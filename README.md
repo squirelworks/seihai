@@ -14,7 +14,9 @@ cd seihai
 
 You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `.git`) before any of the commands below. If you are in a parent folder, `git` and `cargo` will fail with "not a git repository" and "could not find Cargo.toml".
 
-## From a downloaded zip
+## From a downloaded zip (fresh install only)
+
+These steps create a new `~/Seihai/seihai`. They delete any folder already at that path, including an assets folder you put there. Do not use them to update an install you already have.
 
 GitHub's "Download ZIP" of the main branch gives `seihai-main.zip`. It extracts to a folder named `seihai-main`. Put the zip in `~/Seihai` and run:
 
@@ -30,9 +32,11 @@ cargo build --release -p seihai
 ./target/release/seihai
 ```
 
-You end up in `~/Seihai/seihai`, which is the folder that contains `Cargo.toml`. You must be inside that folder before `cargo`. A zip has no `.git`, so `git pull` will not work; download a new zip when you want an update.
+You end up in `~/Seihai/seihai`, which is the folder that contains `Cargo.toml`. You must be inside that folder before `cargo`. A zip has no `.git`.
 
-On Windows (PowerShell), after extracting the zip so that `seihai` is the folder with `Cargo.toml`:
+If `~/Seihai/seihai` already exists and is a git clone, leave it alone and use the update steps below. That keeps your assets and your settings.
+
+On Windows (PowerShell), for a fresh extract only:
 
 ```powershell
 cd seihai
