@@ -48,9 +48,10 @@ every profile that has combat rules.
   body-box probe points are tested; if any is blocked, that tick's step is
   undone (the push continues next tick from the old place). Total reach on open
   ground: 5 tiles in 250 ms.
-- The probes lie on x = X + {0.6, 1.5, 2.4} and y = Y + {1.1, 1.7, 2.3, 2.9}
-  (X, Y are the position props); the box is centred on (X+1.5, Y+2.0), the same
-  centre that id 46 uses.
+- The probes lie on the edges of a box 0.6 to 2.4 tiles across and 1.1 to 2.9
+  tiles down from (X, Y), the position props: three points per edge, the four
+  corners counted twice. The box is centred on (X+1.5, Y+2.0), the same centre
+  that id 46 uses.
 - Sources of the vector: a sword hit pushes from the attacker's position to the
   victim's; `PLO_HURTPLAYER` carries `(dx, dy)` in its bytes; `PLO_HITOBJECTS`
   uses the victim's centre minus the hit point.
