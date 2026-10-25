@@ -143,6 +143,10 @@ fn a_swing_wins_over_hurt_and_sit_shows_only_when_asked() {
     assert_eq!(pose(&t), None);
     t.sitting = true;
     assert_eq!(pose(&t), Some((PoseKind::Sit, 0)));
+    // sitting waits while an arrow key keeps the walk going
+    t.walking = true;
+    assert_ne!(pose(&t).map(|p| p.0), Some(PoseKind::Sit));
+    t.walking = false;
     t.in_water = true;
     assert_eq!(pose(&t), None, "not while swimming");
 }

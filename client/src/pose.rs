@@ -19,9 +19,11 @@
 //! * **Hurt** follows hurt mode: the first [`HURT_POSE_MS`] of the 2 s
 //!   (`hurt_ticks`) in which nothing can hurt the player again. The sprite
 //!   others see (S = 32) lasts the whole of hurt mode and is not changed here.
-//! * **Sit** is shown while [`OfflineSession::sitting`] is set. Nothing sets
-//!   it yet (no key is bound; how the real clients start the sit pose is not
-//!   documented).
+//! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
+//!   is not walking. The session sets it when the feet are on a chair tile
+//!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
+//!   real client starts the sit pose was not read; this trigger is inferred
+//!   (see `documentation/sitting.md`).
 //!
 //! What the real clients do for the hurt pose (a file name, how long it is
 //! shown) is not documented, so `hurt.gani` and the 500 ms are Seihai's own
@@ -136,7 +138,7 @@ impl OfflineSession {
                 return Some(p);
             }
         }
-        if self.sitting {
+        if self.sitting && !self.walking {
             return pick(PoseKind::Sit, &self.poses.sit, 0);
         }
         if self.walking {
