@@ -70,7 +70,7 @@ Types follow the rules in `assets/level.rs`: `>= 20` blocks (`TYPE_WALL_MIN`), `
 
 `tiledefs.txt` is a sparse `index,x,y,type,name` list (`x,y` is the pixel position of the id's cell, derived from the mapping above). `TileTypes::parse` needs the table to reach id 4095, so the last row names 4095 explicitly (type 0). Ids that no row names are type 0.
 
-The foot test the sheet was drawn for: `FOOT_DX = 2.0`, `FOOT_DY = 2.75`, one point per player, tile under `floor(x + 2.0), floor(y + 2.75)`.
+The foot point (links and water; walls are tested on the body box, `walking-collision.md`) the sheet was drawn for: `FOOT_DX = 2.0`, `FOOT_DY = 2.75`, one point per player, tile under `floor(x + 2.0), floor(y + 2.75)`.
 
 ### Player sheets
 

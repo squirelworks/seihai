@@ -58,7 +58,7 @@ From the merged chat/HUD PRs:
 ## Tiles, swimming and links
 
 - Tile types come from `arrays.dat` (the real client's data): array 0 is the no-wall list, array 1 the liquid list, array 3 the lava list. Water and lava are not walls. Anything off the board is a wall.
-- The collision test is the foot point `(x + 2.0, y + 2.75)` truncated to a tile, so rows and columns 0..63 are all reachable.
+- Walls are tested at the four leading-edge points of the 2 x 2 body box (`WALK_PROBES`, see `walking-collision.md`), each truncated to a tile. The foot point `(x + 2.0, y + 2.75)` is still used for links, water and scripts.
 - Swimming steps take twice as long as walking. On 2.1+ the client sends gani `swim`/`idle` (prop 10) when it enters or leaves water. Nothing is sent before 2.1: prop 10 is the bow slot there, and the 2.05 swim sprite number is not verified.
 - After a warp the client does not check links until a warp reply arrives, the player has moved, and the foot has left any link that contains the arrival tile.
 

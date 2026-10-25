@@ -24,6 +24,22 @@ pub const DIR_EAST: u8 = 3;
 pub const FOOT_DX: f32 = 2.0;
 pub const FOOT_DY: f32 = 2.75;
 
+/// Where the 2.05 client tests for walls while walking, from the sprite's
+/// top-left, in tiles, per facing (0 up, 1 left, 2 down, 3 right). The body is
+/// a box 2 tiles wide and 2 tall (x + 0.5 to x + 2.5, y + 1 to y + 3); a step
+/// is refused if any of the four points on its leading edge, taken at the
+/// position the step would reach, is a wall. The points sit 0.025 tile either
+/// side of the middle and of the two corners, so the middle of the edge and
+/// each corner are tested. The client reads six points per facing; the last
+/// two only steer its 0.1-tile corner nudge, which is not implemented (see
+/// `documentation/walking-collision.md`).
+pub const WALK_PROBES: [[(f32, f32); 4]; 4] = [
+    [(0.525, 1.0), (1.475, 1.0), (1.525, 1.0), (2.475, 1.0)],
+    [(0.5, 1.025), (0.5, 1.975), (0.5, 2.025), (0.5, 2.975)],
+    [(0.525, 3.0), (1.475, 3.0), (1.525, 3.0), (2.475, 3.0)],
+    [(2.5, 1.025), (2.5, 1.975), (2.5, 2.025), (2.5, 2.975)],
+];
+
 /// Walking and swimming step times. A step is half a tile; swimming is
 /// half as fast.
 pub const WALK_STEP_MS: u64 = 50;
@@ -424,19 +440,27 @@ impl OfflineSession {
         Some(to)
     }
 
-    /// The feet, in tiles: the collision point used by [`Self::try_move`].
+    /// The feet, in tiles: the point used for links, water and scripts
+    /// (walking tests the body box, see [`WALK_PROBES`]).
     pub fn foot(&self) -> (f32, f32) {
         (self.player_x + FOOT_DX, self.player_y + FOOT_DY)
     }
 
-    /// The point one tile ahead of the player's feet, in tiles.
+    /// The point the A key probes, in tiles: one tile beyond the middle of
+    /// the body box's leading edge (north `(x + 1.5, y)`, west `(x - 0.5,
+    /// y + 2)`, south `(x + 1.5, y + 4)`, east `(x + 3.5, y + 2)`).
+    ///
+    /// The 2.05 client reads this table for lifting and for the sword's cut.
+    /// Chests and signs use it here too; that is the one assumption, since
+    /// the point the client uses for them was not read. It fits the walk: a
+    /// player stopped by a chest or sign has exactly this point inside it.
     pub fn facing_point(&self) -> (f32, f32) {
-        let (fx, fy) = self.foot();
+        let (x, y) = (self.player_x, self.player_y);
         match self.player_dir {
-            DIR_NORTH => (fx, fy - 1.0),
-            DIR_WEST => (fx - 1.0, fy - 0.5),
-            DIR_EAST => (fx + 1.0, fy - 0.5),
-            _ => (fx, fy + 1.0),
+            DIR_NORTH => (x + 1.5, y),
+            DIR_WEST => (x - 0.5, y + 2.0),
+            DIR_EAST => (x + 3.5, y + 2.0),
+            _ => (x + 1.5, y + 4.0),
         }
     }
 
@@ -871,39 +895,26 @@ impl OfflineSession {
         self.pending_link = None;
     }
 
-    /// True if the player may stand with the sprite's top-left at
-    /// `(x, y)`: the feet are not on a wall tile (or off the board) and
-    /// not inside a chest. Water and lava are open. Developer mode skips
-    /// the test.
-    fn can_stand(&self, x: f32, y: f32) -> bool {
-        if self.dev.wallhack() {
-            return true;
-        }
-        let (fx, fy) = (x + FOOT_DX, y + FOOT_DY);
-        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-            if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking {
-                return false;
-            }
-        }
-        // Chests are solid, 2×2 tiles.
-        if let Some(level) = &self.current_level {
-            let blocked = level.chests.iter().any(|c| {
-                fx >= c.x as f32 && fx < c.x as f32 + 2.0 && fy >= c.y as f32 && fy < c.y as f32 + 2.0
-            });
-            if blocked {
-                return false;
-            }
-        }
-        true
+    /// True if a step in facing `dir` may end with the sprite's top-left at
+    /// `(x, y)`: none of the four [`WALK_PROBES`] of that facing is on a
+    /// wall tile (or off the board) or inside a chest. Water and lava are
+    /// open. Developer mode skips the test.
+    fn can_walk(&self, x: f32, y: f32, dir: usize) -> bool {
+        self.dev.wallhack() || !WALK_PROBES[dir].iter().any(|&(px, py)| self.blocked_point(x + px, y + py))
     }
 
-    /// Move the player by (dx, dy) if the feet can stand there.
+    /// True if the whole body box is clear at `(x, y)`: none of the probes of
+    /// any facing is blocked. A player who is not (put in a wall by a warp)
+    /// may walk out.
+    fn body_clear(&self, x: f32, y: f32) -> bool {
+        (0..4).all(|d| self.can_walk(x, y, d))
+    }
+
+    /// Move the player by (dx, dy) if the body box can go there.
     ///
-    /// Uses the single-point foot test of the original client (see
-    /// [`Self::can_stand`]); updates facing from the dominant axis.
-    /// A diagonal step needs both of its axis steps to be open too, so
-    /// the player cannot cut through the corner where two walls touch;
-    /// when it cannot go diagonally it slides along the open axis.
+    /// Uses the body-box wall test of the 2.05 client ([`WALK_PROBES`]);
+    /// updates facing from the dominant axis. A diagonal is two axis steps
+    /// tested one after the other, so it slides along the open axis.
     /// A player already standing in a blocked tile (put there by a
     /// warp, say) may walk out. Nothing moves while a warp is pending.
     /// Returns the emitted `PlayerUpdate` if the move succeeded.
@@ -921,25 +932,35 @@ impl OfflineSession {
             return None;
         }
 
-        let (x, y) = (self.player_x, self.player_y);
-        let stuck = !self.can_stand(x, y);
-        let open = |s: &Self, mx: f32, my: f32| s.gmap_step_ok(x + mx, y + my) && (stuck || s.can_stand(x + mx, y + my));
-        let step = if dx != 0.0 && dy != 0.0 {
-            if open(self, dx, dy) && open(self, dx, 0.0) && open(self, 0.0, dy) {
-                Some((dx, dy))
-            } else if open(self, dx, 0.0) {
-                Some((dx, 0.0))
-            } else if open(self, 0.0, dy) {
-                Some((0.0, dy))
-            } else {
-                None
+        // The client takes the arrow keys one at a time, in the order up,
+        // left, down, right, each with its own wall test at the position the
+        // earlier ones left. A diagonal is two steps, so it slides along a
+        // wall without any extra rule.
+        let (x0, y0) = (self.player_x, self.player_y);
+        let stuck = !self.body_clear(x0, y0);
+        let (mut x, mut y) = (x0, y0);
+        let mut try_step = |s: &Self, mx: f32, my: f32, dir: usize| {
+            if s.gmap_step_ok(x + mx, y + my) && (stuck || s.can_walk(x + mx, y + my, dir)) {
+                x += mx;
+                y += my;
             }
-        } else if open(self, dx, dy) {
-            Some((dx, dy))
-        } else {
-            None
         };
-        let (mx, my) = step?;
+        if dy < 0.0 {
+            try_step(self, 0.0, dy, DIR_NORTH as usize);
+        }
+        if dx < 0.0 {
+            try_step(self, dx, 0.0, DIR_WEST as usize);
+        }
+        if dy > 0.0 {
+            try_step(self, 0.0, dy, DIR_SOUTH as usize);
+        }
+        if dx > 0.0 {
+            try_step(self, dx, 0.0, DIR_EAST as usize);
+        }
+        let (mx, my) = (x - x0, y - y0);
+        if mx == 0.0 && my == 0.0 {
+            return None;
+        }
 
         self.player_x += mx;
         self.player_y += my;
@@ -1104,7 +1125,8 @@ mod tests {
         s.player_x = 18.5;
         s.player_y = 25.0;
         while s.try_move(0.0, -0.5).is_some() {}
-        assert_eq!(s.player_y, 23.5);
+        // The body's top edge (y + 1) stops at the chest's bottom row.
+        assert_eq!(s.player_y, 25.0);
         assert_eq!(s.player_dir, DIR_NORTH);
         let got = s.interact();
         assert_eq!(
@@ -1120,13 +1142,13 @@ mod tests {
 
         // Sign at (30, 10), read from below.
         s.player_x = 28.5;
-        s.player_y = 8.5;
+        s.player_y = 10.0;
         assert_eq!(s.interact(), Interaction::Sign("Welcome".into()));
 
         // A heart container with no note.
         s.reading = None;
         s.player_x = 8.5;
-        s.player_y = 9.0;
+        s.player_y = 11.0;
         assert!(matches!(s.interact(), Interaction::Chest { x: 10, y: 10, .. }));
         assert_eq!(s.max_hearts, 8);
         assert!(s.reading.is_none());
@@ -1164,15 +1186,26 @@ mod tests {
         s
     }
 
+    /// A session whose sprite's top-left is at `(x, y)`.
+    fn body_at(level: Level, x: f32, y: f32) -> OfflineSession {
+        let mut s = OfflineSession::new();
+        s.current_level = Some(level);
+        s.tiletypes = Some(types());
+        s.player_x = x;
+        s.player_y = y;
+        s
+    }
+
     fn walk(s: &mut OfflineSession, dx: f32, dy: f32, steps: usize) -> usize {
         (0..steps).filter(|_| s.try_move(dx, dy).is_some()).count()
     }
 
     #[test]
     fn wall_blocks_a_walk() {
-        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 18.5, 10.5);
-        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2, "feet 18.5 -> 19.0, 19.5, then 20.0 is wall");
-        assert_eq!(s.foot().0, 19.5);
+        let mut s = body_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 16.5, 8.0);
+        // The right edge of the body is x + 2.5: 19.0 -> 19.5 is tile 19, 20.0 is the wall.
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 1);
+        assert_eq!(s.player_x, 17.0);
         assert_eq!(s.player_dir, DIR_EAST);
         // and it is open again going back
         assert_eq!(walk(&mut s, -0.5, 0.0, 2), 2);
@@ -1182,20 +1215,22 @@ mod tests {
     fn last_row_and_column_are_floor_not_wall() {
         // The original client truncates its test point to a tile, so tile
         // 63 runs from 63.0 to 64.0; only 64.0 and beyond is off the board.
-        let mut s = session_at(level(|_, _| OPEN), 62.5, 10.5);
-        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2, "62.5 -> 63.0, 63.5; 64.0 is outside");
-        assert_eq!(s.foot().0, 63.5);
-        let mut s = session_at(level(|_, _| OPEN), 0.5, 0.5);
-        assert_eq!(walk(&mut s, -0.5, 0.0, 4), 1, "0.5 -> 0.0 ok, -0.5 is off the board");
+        // The body's right edge is x + 2.5 and its left edge x + 0.5.
+        let mut s = body_at(level(|_, _| OPEN), 60.5, 10.0);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 1, "edge 63.0 -> 63.5; 64.0 is outside");
+        assert_eq!(s.player_x, 61.0);
+        let mut s = body_at(level(|_, _| OPEN), 0.0, 10.0);
+        assert_eq!(walk(&mut s, -0.5, 0.0, 4), 1, "edge 0.5 -> 0.0 ok, -0.5 is off the board");
+        assert_eq!(s.player_x, -0.5);
     }
 
     #[test]
     fn wall_edge_is_the_tile_edge_not_half_a_tile_earlier() {
-        // Wall column at x = 20: standing at 19.5 must be allowed, since
+        // Wall column at x = 20: a right edge at 19.5 must be allowed, since
         // tile 19 is floor (a rounded test point would call it tile 20).
-        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.0, 10.5);
+        let mut s = body_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 16.5, 8.0);
         assert!(s.try_move(0.5, 0.0).is_some());
-        assert_eq!(s.foot().0, 19.5);
+        assert_eq!(s.player_x + 2.5, 19.5);
         assert!(s.try_move(0.5, 0.0).is_none());
     }
 
@@ -1241,14 +1276,11 @@ mod tests {
     }
 
     #[test]
-    fn diagonal_does_not_cut_through_a_corner() {
-        // Walls at (21,29) and (20,30) touch at a corner; the feet at
-        // (20.75, 29.75) try to go to (21.25, 30.25) between them.
-        let mut s = session_at(
-            level(|x, y| if (x, y) == (21, 29) || (x, y) == (20, 30) { WALL } else { OPEN }),
-            20.75,
-            29.75,
-        );
+    fn diagonal_into_a_corner_goes_nowhere() {
+        // A wall row at y = 30 and a wall column at x = 20: the body below
+        // the row and left of the column cannot go down-right, since both of
+        // its axis steps are blocked.
+        let mut s = body_at(level(|x, y| if y == 30 || x == 20 { WALL } else { OPEN }), 17.0, 26.5);
         let before = (s.player_x, s.player_y);
         assert!(s.try_move(0.5, 0.5).is_none());
         assert_eq!((s.player_x, s.player_y), before);
@@ -1256,41 +1288,89 @@ mod tests {
 
     #[test]
     fn diagonal_slides_along_a_wall() {
-        // Wall row at y = 30: going down-right slides right.
-        let mut s = session_at(level(|_, y| if y == 30 { WALL } else { OPEN }), 10.5, 29.75);
-        let x0 = s.player_x;
+        // Wall row at y = 30: the bottom edge (y + 3) is at 29.5, so going
+        // down-right slides right.
+        let mut s = body_at(level(|_, y| if y == 30 { WALL } else { OPEN }), 10.0, 26.5);
         let r = s.try_move(0.5, 0.5);
         assert!(r.is_some());
-        assert_eq!(s.player_x, x0 + 0.5);
-        assert_eq!(s.foot().1, 29.75);
+        assert_eq!((s.player_x, s.player_y), (10.5, 26.5));
+    }
+
+    #[test]
+    fn the_leading_edge_is_four_points_wide_not_one() {
+        // A single wall tile at (21, 20), two tiles left of where the old
+        // foot point (x + 2.0) would have met it: the left half of the body
+        // walks into it from below. Going up, the edge is y + 1 and spans
+        // x + 0.5 .. x + 2.5.
+        let tiles = |x: i32, y: i32| if (x, y) == (21, 20) { WALL } else { OPEN };
+        let mut s = body_at(level(tiles), 19.0, 20.5);
+        // top edge 21.5, x range 19.5..21.5: the point at 21.475 is in tile 21.
+        assert!(s.try_move(0.0, -0.5).is_some()); // edge 21.0: row 21, open
+        assert!(s.try_move(0.0, -0.5).is_none(), "edge 20.5 is row 20 and 21.475 is the wall");
+        // One tile to the left it is clear.
+        let mut s = body_at(level(tiles), 18.0, 20.5);
+        assert_eq!(walk(&mut s, 0.0, -0.5, 4), 4);
+    }
+
+    #[test]
+    fn rocks_block_with_a_nested_arrays_file() {
+        // The client's arrays.dat: array 0 is the passable list, and the
+        // rock's tiles (34 35 50 51) are not in it.
+        let mut data = Vec::new();
+        for list in [vec![0u32, 2047], vec![], vec![], vec![]] {
+            data.extend_from_slice(&(list.len() as u32).to_be_bytes());
+            for v in list {
+                data.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        let tiles = |x: i32, y: i32| match (x, y) {
+            (40, 10) => 34,
+            (41, 10) => 35,
+            (40, 11) => 50,
+            (41, 11) => 51,
+            _ => 2047,
+        };
+        let mut s = body_at(level(tiles), 36.5, 9.0);
+        s.tiletypes = Some(t.clone());
+        // Right edge 39.0 -> 39.5 free, 40.0 is the rock.
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 1);
+        // From above, the bottom edge y + 3 reaches the rock's top row (10).
+        let mut s = body_at(level(tiles), 39.0, 6.0);
+        s.tiletypes = Some(t);
+        assert_eq!(walk(&mut s, 0.0, 0.5, 10), 1);
+        assert_eq!(s.player_y, 6.5);
     }
 
     #[test]
     fn a_player_inside_a_wall_can_walk_out() {
-        let mut s = session_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 20.5, 10.5);
+        // Walls in columns 20 and 21; the body edges 19.5 and 21.5 put its
+        // right side in the wall.
+        let mut s = body_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 19.0, 10.0);
         assert!(s.try_move(0.5, 0.0).is_some());
         assert!(s.try_move(0.5, 0.0).is_some());
-        assert_eq!(s.foot().0, 21.5);
+        assert_eq!(s.player_x, 20.0);
         // out of the wall, now it blocks again
-        let mut s = session_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 19.5, 10.5);
-        assert!(s.try_move(0.5, 0.0).is_none());
+        let mut s = body_at(level(|x, _| if (20..=21).contains(&x) { WALL } else { OPEN }), 17.0, 10.0);
+        assert!(s.try_move(0.5, 0.0).is_none() || s.player_x == 17.5);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 0);
     }
 
     #[test]
     fn chests_block_the_feet() {
-        let mut s = session_at(level(|_, _| OPEN), 18.5, 10.5);
+        let mut s = body_at(level(|_, _| OPEN), 16.5, 8.0);
         s.current_level.as_mut().unwrap().chests.push(crate::assets::Chest {
             x: 20,
             y: 10,
             item: "greenrupee".into(),
             sign_index: -1,
         });
-        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 2);
+        assert_eq!(walk(&mut s, 0.5, 0.0, 10), 1, "the body's right edge meets the chest at x = 20");
     }
 
     #[test]
     fn dev_mode_is_off_at_start_and_walks_through_walls() {
-        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.5, 10.5);
+        let mut s = body_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 17.0, 10.0);
         assert!(!s.dev.active());
         assert!(s.try_move(0.5, 0.0).is_none());
         if DevMode::AVAILABLE {
@@ -1377,7 +1457,7 @@ mod tests {
             s.try_move(-0.5, 0.0);
             assert!(!s.check_links());
         }
-        assert!(s.foot().0 < 1.0);
+        assert!(s.player_x <= 0.0, "the left edge (x + 0.5) stops at the board edge");
     }
 
     #[test]
@@ -1603,10 +1683,10 @@ mod tests {
         let mut s = gmap_session(61.0, 30.5, &[(1, 0), (0, 1), (1, 1)], None);
         walk(&mut s, 0.5, 0.0, 6);
         s.take_gmap_crossing().unwrap();
-        // Now in the east column: nothing further east. The feet reach 64.0
-        // (sprite 62.0) and stop there.
+        // Now in the east column: nothing further east. The body's right
+        // edge (x + 2.5) reaches 63.5 (sprite 61.0) and stops there.
         walk(&mut s, 0.5, 0.0, 200);
-        assert_eq!(s.player_x, 61.5);
+        assert_eq!(s.player_x, 61.0);
         assert!(s.take_gmap_crossing().is_none());
         // Same at the north edge.
         let mut s = gmap_session(30.5, 1.0, &[(1, 0), (0, 1), (1, 1)], None);
@@ -1620,7 +1700,7 @@ mod tests {
         let mut s = gmap_session(60.0, 30.5, &[], None);
         walk(&mut s, 0.5, 0.0, 20);
         assert!(s.take_gmap_crossing().is_none());
-        assert_eq!(s.player_x, 61.5, "stops with the feet at the seam");
+        assert_eq!(s.player_x, 61.0, "stops with the body edge at the seam");
         assert_eq!(marker(&s), Some(10));
         // Once it is loaded the walk goes on.
         s.gmap.as_mut().unwrap().levels.insert((1, 0), marked(1, None));
@@ -1633,9 +1713,9 @@ mod tests {
     #[test]
     fn a_wall_across_the_seam_blocks() {
         let mut s = gmap_session(60.0, 30.5, &[(1, 0), (0, 1), (1, 1)], Some((0, 33)));
-        // Feet row: 30.5 + 2.75 = 33.25, tile row 33.
+        // The body spans rows 31.5 to 33.5, so row 33 is under its right edge.
         walk(&mut s, 0.5, 0.0, 20);
-        assert_eq!(s.player_x, 61.5);
+        assert_eq!(s.player_x, 61.0);
         assert!(s.take_gmap_crossing().is_none());
         // A row up the same walk is free.
         let mut s = gmap_session(60.0, 29.5, &[(1, 0), (0, 1), (1, 1)], Some((0, 33)));
@@ -1668,7 +1748,7 @@ mod tests {
         assert!(s.gmap.is_none());
         walk(&mut s, 0.5, 0.0, 10);
         assert!(s.take_gmap_crossing().is_none());
-        assert_eq!(s.foot().0, 63.5);
+        assert_eq!(s.player_x, 61.0);
     }
 
     #[test]
@@ -2001,7 +2081,7 @@ mod tests {
 
     #[test]
     fn a_blocked_move_does_not_step_the_gani_or_queue_a_sound() {
-        let mut s = session_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 19.5, 10.5);
+        let mut s = body_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 17.0, 10.0);
         s.set_walk_gani(gani_with(1, &[(0, "steps.wav")]));
         assert!(s.try_move(0.5, 0.0).is_none());
         assert!(s.sound_events.is_empty());

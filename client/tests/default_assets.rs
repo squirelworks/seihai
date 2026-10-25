@@ -457,14 +457,15 @@ fn starter_levels_load_and_obey_the_tile_contract() {
     assert!(s.in_water, "a foot on the pond swims");
     // standing next to a bush, a step into it does not move the player
     s.player_x = bush.0 as f32 + 0.5 - FOOT_DX;
-    s.player_y = bush.1 as f32 + 1.9 - FOOT_DY;
+    s.player_y = bush.1 as f32 + 0.9;
     s.refresh_water();
     for _ in 0..6 {
         s.try_move(0.0, -0.25);
     }
-    // the foot may walk up to the bush's lower edge but not into the bush tile
-    assert!(s.player_y + FOOT_DY >= bush.1 as f32 + 1.0, "bush blocks: foot reached y = {}", s.player_y + FOOT_DY);
-    assert!(s.player_y + FOOT_DY < bush.1 as f32 + 1.9, "the player did walk up to the bush");
+    // the body's top edge (y + 1) may walk up to the bush's lower edge but
+    // not into the bush tile
+    assert!(s.player_y >= bush.1 as f32, "bush blocks: sprite reached y = {}", s.player_y);
+    assert!(s.player_y < bush.1 as f32 + 0.9, "the player did walk up to the bush");
     s.refresh_water();
     assert!(!s.in_water);
 }
