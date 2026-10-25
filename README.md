@@ -16,25 +16,26 @@ You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `
 
 ## From a downloaded zip
 
-GitHub's "Download ZIP" of the main branch gives `seihai-main.zip`. It extracts to a folder named `seihai-main`. Put the zip in `~/FU` (or anywhere else) and run:
+GitHub's "Download ZIP" of the main branch gives `seihai-main.zip`. It extracts to a folder named `seihai-main`. Put the zip in `~/Seihai` and run:
 
 ```bash
-mkdir -p ~/FU
-cd ~/FU
+mkdir -p ~/Seihai
+cd ~/Seihai
 rm -rf seihai-main
-python3 -m zipfile -e seihai-main.zip ~/FU
+python3 -m zipfile -e seihai-main.zip ~/Seihai
 rm -rf seihai
 mv seihai-main seihai
 cd seihai
 cargo build --release -p seihai
+./target/release/seihai
 ```
 
-You must be inside the `seihai` folder (the one that contains `Cargo.toml`) before `cargo`. A zip has no `.git`, so `git pull` will not work; download a new zip when you want an update.
+You end up in `~/Seihai/seihai`, which is the folder that contains `Cargo.toml`. You must be inside that folder before `cargo`. A zip has no `.git`, so `git pull` will not work; download a new zip when you want an update.
 
-On Windows (PowerShell), after extracting the zip:
+On Windows (PowerShell), after extracting the zip so that `seihai` is the folder with `Cargo.toml`:
 
 ```powershell
-cd seihai-main
+cd seihai
 cargo build --release -p seihai
 .\target\release\seihai.exe
 ```
