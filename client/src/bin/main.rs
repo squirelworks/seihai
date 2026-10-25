@@ -1181,6 +1181,16 @@ fn main() {
                             level.links.clear();
                             level.add_server_links(&net_state.links);
                         }
+                        // The board has no chest or sign records of its own:
+                        // take the server's, once each has arrived.
+                        if level.chests.len() != net_state.chests.iter().filter(|r| r.len() >= 3).count() {
+                            level.chests.clear();
+                            level.add_server_chests(&net_state.chests);
+                        }
+                        if level.signs.len() != net_state.signs.len() {
+                            level.signs.clear();
+                            level.add_server_signs(&net_state.signs);
+                        }
                     }
                 }
                 // Take server positions once, so local walking is not

@@ -64,6 +64,9 @@ pub fn read_pcap(data: &[u8]) -> Result<Vec<Packet>, String> {
         let ip = match link {
             1 => ethernet_payload(rec),
             113 => rec.get(16..).filter(|_| rec.len() > 15 && rd16(&rec[14..], false) == 0x0800),
+            // Linux cooked v2 (`tcpdump -i any` on current libpcap): 20-byte
+            // header, protocol type in the first two bytes.
+            276 => rec.get(20..).filter(|_| rec.len() > 19 && rd16(rec, false) == 0x0800),
             101 | 12 => Some(rec),
             0 => rec.get(4..),
             _ => None,
@@ -333,6 +336,49 @@ pub(crate) mod tests {
         let c = &reassemble(&read_pcap(&pcap).unwrap())[0];
         assert_eq!(c.client.1, 40002);
         assert_eq!(c.c2s.bytes, b"x");
+    }
+
+    /// Rewrite an Ethernet pcap from `synth_pcap` as Linux cooked (v1, link
+    /// type 113, 16-byte header) or cooked v2 (276, 20-byte header).
+    fn to_cooked(eth: &[u8], link: u32) -> Vec<u8> {
+        let hdr = if link == 113 { 16 } else { 20 };
+        let mut out = eth[..20].to_vec();
+        out.extend_from_slice(&link.to_le_bytes());
+        let mut i = 24;
+        while i + 16 <= eth.len() {
+            let caplen = u32::from_le_bytes([eth[i + 8], eth[i + 9], eth[i + 10], eth[i + 11]]) as usize;
+            let ip = &eth[i + 16 + 14..i + 16 + caplen];
+            let mut fr = vec![0u8; hdr];
+            if link == 113 {
+                fr[14..16].copy_from_slice(&[0x08, 0x00]);
+            } else {
+                fr[0..2].copy_from_slice(&[0x08, 0x00]);
+            }
+            fr.extend_from_slice(ip);
+            out.extend_from_slice(&eth[i..i + 8]);
+            out.extend_from_slice(&(fr.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(fr.len() as u32).to_le_bytes());
+            out.extend_from_slice(&fr);
+            i += 16 + caplen;
+        }
+        out
+    }
+
+    #[test]
+    fn linux_cooked_v1_and_v2_read_like_ethernet() {
+        let eth = synth_pcap(
+            40003,
+            14801,
+            &[(1.0, true, 0x02, 10, b""), (1.1, false, 0x12, 50, b""), (1.2, true, 0x18, 11, b"abc"), (1.3, false, 0x18, 51, b"xyz")],
+        );
+        let want = reassemble(&read_pcap(&eth).unwrap());
+        for link in [113, 276] {
+            let c = reassemble(&read_pcap(&to_cooked(&eth, link)).unwrap());
+            assert_eq!(c.len(), 1, "link {link}");
+            assert_eq!(c[0].c2s.bytes, want[0].c2s.bytes);
+            assert_eq!(c[0].s2c.bytes, b"xyz");
+            assert_eq!(c[0].server.1, 14801);
+        }
     }
 
     #[test]
