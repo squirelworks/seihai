@@ -533,10 +533,19 @@ impl OfflineSession {
         let inside = |x: i32, y: i32, w: f32, h: f32| {
             px >= x as f32 && px < x as f32 + w && py >= y as f32 && py < y as f32 + h
         };
+        // The real 2.22 client opens a chest only from below, facing up (lab
+        // capture, `documentation/chest-drawing.md`); a player stopped against
+        // a chest from the west, east or north side and pressing A sends
+        // nothing.
         let chest = level
             .chests
             .iter()
-            .find(|c| inside(c.x, c.y, 2.0, 2.0) && !c.opened && !self.opened_chests.contains(&(c.x, c.y)))
+            .find(|c| {
+                self.player_dir == DIR_NORTH
+                    && inside(c.x, c.y, 2.0, 2.0)
+                    && !c.opened
+                    && !self.opened_chests.contains(&(c.x, c.y))
+            })
             .cloned();
         if let Some(c) = chest {
             // A chest's sign index points into the level's signs.
@@ -1370,6 +1379,49 @@ mod tests {
         assert!(matches!(s.interact(), Interaction::Chest { x: 10, y: 10, .. }));
         assert_eq!(s.max_hearts, 8);
         assert!(s.reading.is_none());
+    }
+
+    #[test]
+    fn chest_opens_only_facing_up() {
+        // Lab capture: the real client opens a chest only when the player is
+        // below it facing up; west, east and south sides send nothing.
+        let text = "GLEVNW01\nCHEST 20 24 greenrupee -1\n";
+        let new = || {
+            let mut s = OfflineSession::new();
+            s.current_level = Some(Level::parse(text).unwrap());
+            s
+        };
+        // Facing north under the chest: opens.
+        let mut s = new();
+        s.player_x = 18.5;
+        s.player_y = 25.0;
+        s.player_dir = DIR_NORTH;
+        assert!(matches!(s.interact(), Interaction::Chest { x: 20, y: 24, .. }));
+        // Chest to the east of the player, facing east: probe point is inside, nothing happens.
+        let mut s = new();
+        s.player_x = 16.5;
+        s.player_y = 23.0;
+        s.player_dir = DIR_EAST;
+        let (px, py) = s.facing_point();
+        assert!(px >= 20.0 && px < 22.0 && py >= 24.0 && py < 26.0);
+        assert_eq!(s.interact(), Interaction::Nothing);
+        assert!(s.opened_chests.is_empty());
+        // West side, facing west.
+        let mut s = new();
+        s.player_x = 22.0;
+        s.player_y = 23.0;
+        s.player_dir = DIR_WEST;
+        let (px, py) = s.facing_point();
+        assert!(px >= 20.0 && px < 22.0 && py >= 24.0 && py < 26.0);
+        assert_eq!(s.interact(), Interaction::Nothing);
+        // Above the chest, facing south.
+        let mut s = new();
+        s.player_x = 18.5;
+        s.player_y = 20.0;
+        s.player_dir = DIR_SOUTH;
+        let (_, py) = s.facing_point();
+        assert!(py >= 24.0 && py < 26.0);
+        assert_eq!(s.interact(), Interaction::Nothing);
     }
 
     // ---- tile movement and warp arrival ------------------------------------
