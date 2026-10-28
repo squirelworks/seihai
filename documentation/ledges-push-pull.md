@@ -70,6 +70,10 @@ Seihai does steps 1 to 5 locally, but does not send the board modify or the trig
 
 Seihai draws these only when the gani is loaded; the default asset set has none of the three, so without a data folder that has them the player stands. The sprite numbers come from the 2.05 animation step table (push steps 14 to 18, grab 19, pull 20 to 22).
 
+## 2.22 and 2.31
+
+The same in both, with the same numbers, except: any blocking NPC can be grabbed (2.05 skips some, most likely character NPCs); the two server full-stop flags stop walking, ledges and the A key; and the jump, stone and pull sounds play only while a built-in gani is showing. Seihai follows 2.05, which matches all of this for tiles.
+
 ## Open
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
