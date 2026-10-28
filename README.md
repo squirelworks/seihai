@@ -212,3 +212,5 @@ save_downloads=0
 ## Documentation
 
 See `documentation/` for the implementation notes, roadmap, and version profiles.
+
+Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in `documentation/level-editor-expansion.md`.
