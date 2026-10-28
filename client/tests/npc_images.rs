@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use seihai::assets::{read_png_rgba, Gani, Level};
 use seihai::offline::{OfflineSession, FOOT_DX, FOOT_DY};
 use seihai::protocol::ClientVersion;
-use seihai::render::{draw_npcs, Framebuffer, NpcArt, PoseSheets, Sheet};
+use seihai::render::{draw_npcs, Framebuffer, NpcArt, NpcPass, PoseSheets, Sheet};
 use seihai::scripting::engine::host::SessionScripts;
 
 const RED: [u8; 3] = [200, 30, 30];
@@ -67,8 +67,14 @@ fn draw(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>) -> Framebuff
 
 fn draw_with(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, sheets: PoseSheets) -> Framebuffer {
     let mut fb = Framebuffer::new(320, 320);
-    draw_npcs(&mut fb, s, &NpcArt { images: imgs, sheets }, 0, 0);
+    draw_both(&mut fb, s, &NpcArt { images: imgs, sheets });
     fb
+}
+
+/// Both passes, with no player between them.
+fn draw_both(fb: &mut Framebuffer, s: &OfflineSession, art: &NpcArt) {
+    draw_npcs(fb, s, art, 0, 0, NpcPass::BelowPlayers);
+    draw_npcs(fb, s, art, 0, 0, NpcPass::AbovePlayers);
 }
 
 fn at(fb: &Framebuffer, x: u32, y: u32) -> [u8; 3] {
@@ -160,7 +166,7 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     assert_eq!(level.npcs[0].images.iter().map(|i| (i.index, i.file.as_str())).collect::<Vec<_>>(), [(3, "blue.png"), (4, "red.png")]);
     assert!(sc.images_changed);
     let mut fb = Framebuffer::new(500, 300);
-    draw_npcs(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() }, 0, 0);
+    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() });
     let px = |x: u32, y: u32| {
         let i = ((y * fb.width + x) * 3) as usize;
         [fb.pixels[i], fb.pixels[i + 1], fb.pixels[i + 2]]
@@ -174,7 +180,7 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     let level = s.current_level.as_ref().unwrap();
     assert_eq!(level.npcs[0].images.len(), 1);
     let mut fb = Framebuffer::new(500, 300);
-    draw_npcs(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() }, 0, 0);
+    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() });
     let i = ((12 * 16 + 1) * fb.width + 20 * 16 + 1) as usize * 3;
     assert_eq!(&fb.pixels[i..i + 3], &BLACK);
 }
@@ -419,4 +425,50 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
         counts[5]
     );
     assert!(counts[1] > 0, "some script changed an image");
+}
+
+/// One pass of the level's NPCs on a fresh picture.
+fn draw_pass(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, pass: NpcPass) -> Framebuffer {
+    let mut fb = Framebuffer::new(320, 320);
+    draw_npcs(&mut fb, s, &NpcArt { images: imgs, sheets: PoseSheets::default() }, 0, 0, pass);
+    fb
+}
+
+#[test]
+fn drawoverplayer_npcs_and_showimg_images_draw_after_the_players() {
+    let imgs = images();
+    let (s, _sc) = session(
+        "NPC red.png 2 2\nif (playerenters) { drawoverplayer; }\nNPCEND\n\
+         NPC blue.png 5 2\nif (playerenters) { drawunderplayer; }\nNPCEND\n\
+         NPC blue.png 8 2\nNPCEND\n\
+         NPC red.png 11 2\nif (playerenters) { drawaslight; showimg 1,blue.png,14,2; }\nNPCEND\n",
+    );
+    let below = draw_pass(&s, &imgs, NpcPass::BelowPlayers);
+    let above = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
+    let p = |x: u32| x * 16 + 1;
+    // drawoverplayer: only after the players.
+    assert_eq!((at(&below, p(2), p(2)), at(&above, p(2), p(2))), (BLACK, RED));
+    // drawunderplayer and the default height: before the players.
+    assert_eq!((at(&below, p(5), p(2)), at(&above, p(5), p(2))), (BLUE, BLACK));
+    assert_eq!((at(&below, p(8), p(2)), at(&above, p(8), p(2))), (BLUE, BLACK));
+    // drawaslight and showimg images: after the players.
+    assert_eq!((at(&below, p(11), p(2)), at(&above, p(11), p(2))), (BLACK, RED));
+    assert_eq!((at(&below, p(14), p(2)), at(&above, p(14), p(2))), (BLACK, BLUE));
+}
+
+#[test]
+fn drawunderplayer_npcs_draw_before_the_default_ones() {
+    let imgs = images();
+    // The same place: the default NPC (red) covers the one under the player.
+    let (s, _sc) = session("NPC red.png 2 2\nNPCEND\nNPC blue.png 2 2\nif (playerenters) { drawunderplayer; }\nNPCEND\n");
+    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), RED);
+}
+
+#[test]
+fn blockagain_puts_an_npc_back_with_the_players() {
+    let imgs = images();
+    let (mut s, mut sc) = session("NPC red.png 2 2\nif (playerenters) { drawoverplayer; }\nif (playersays(back)) { blockagain; }\nNPCEND\n");
+    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), BLACK);
+    sc.chat(&mut s, "back");
+    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), RED);
 }
