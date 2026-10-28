@@ -1066,6 +1066,9 @@ fn main() {
     } else {
         None
     };
+    // Each unique script diagnostic is written once. The same unhandled
+    // effect otherwise fills the file every tick.
+    let mut seen_debug: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut show_players = false;
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
@@ -1793,10 +1796,16 @@ fn main() {
             if let Some(f) = debug_file.as_mut() {
                 use std::io::Write;
                 for e in scripts.unhandled.drain(..) {
-                    let _ = writeln!(f, "effect not applied: {e:?}");
+                    let line = format!("effect not applied: {e:?}");
+                    if seen_debug.insert(line.clone()) {
+                        let _ = writeln!(f, "{line}");
+                    }
                 }
                 for l in scripts.world.take_log() {
-                    let _ = writeln!(f, "script: {l}");
+                    let line = format!("script: {l}");
+                    if seen_debug.insert(line.clone()) {
+                        let _ = writeln!(f, "{line}");
+                    }
                 }
                 let _ = f.flush();
             } else {
