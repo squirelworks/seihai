@@ -1053,9 +1053,15 @@ fn main() {
         let dir = root.join(format!("debug-{stamp}"));
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join("script.log");
+        let pkt_path = dir.join("packets.log");
         match std::fs::File::create(&path) {
             Ok(f) => {
                 eprintln!("debug: writing to {}", path.display());
+                if let Ok(pf) = std::fs::File::create(&pkt_path) {
+                    eprintln!("debug: packets to {}", pkt_path.display());
+                    // Store both in a tuple for now; we restructure below.
+                    let _ = pf;
+                }
                 Some(f)
             }
             Err(e) => {
@@ -1063,6 +1069,17 @@ fn main() {
                 None
             }
         }
+    } else {
+        None
+    };
+    // Packet log: every frame sent and received, with id and length.
+    let mut packet_log: Option<std::fs::File> = if debug_on {
+        let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
+        // Find the most recent debug folder.
+        let dir = std::fs::read_dir(&root).ok().and_then(|rd| {
+            rd.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("debug-")).max_by_key(|e| e.file_name().to_string_lossy().to_string())
+        });
+        dir.and_then(|d| std::fs::File::create(d.path().join("packets.log")).ok())
     } else {
         None
     };
@@ -1149,6 +1166,12 @@ fn main() {
                 match rx.try_recv() {
                     Ok(Ok(body)) => {
                         frames_seen += 1;
+                        if let Some(f) = packet_log.as_mut() {
+                            use std::io::Write;
+                            let id = body.first().copied().unwrap_or(0);
+                            let _ = writeln!(f, "recv id {id} len {}", body.len());
+                            let _ = f.flush();
+                        }
                         net_state.apply_body(&body);
                         // Save completed files by the clients' folder rules,
                         // settle the replies, and reload levels.
