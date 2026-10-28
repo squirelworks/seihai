@@ -9,6 +9,7 @@ pub mod font;
 mod npcs;
 mod throw;
 pub mod hud;
+pub mod signs;
 mod tiles;
 
 pub use throw::{draw_sprite, draw_throw_layer};

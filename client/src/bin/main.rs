@@ -811,6 +811,8 @@ fn main() {
     let sword_sheet = load("swords", "sword1.png");
     // The build's own status display; without it, the plain bars.
     let state_sheet = load("", "state.png");
+    // The sign panel's frame and font; without it, the plain text panel.
+    let letters_sheet = load("", "letters.png");
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
@@ -992,6 +994,8 @@ fn main() {
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
     let mut confirm_quit = false;
+    // The first line of the sign page on show.
+    let mut sign_page = 0usize;
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
@@ -1512,7 +1516,14 @@ fn main() {
                 window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No),
             );
         if interact {
-            if session.reading.take().is_none() {
+            // Reading: the next three lines, or the end of the sign.
+            if let Some(text) = &session.reading {
+                match seihai::render::signs::next_page(text, sign_page) {
+                    Some(p) => sign_page = p,
+                    None => session.reading = None,
+                }
+            } else {
+                sign_page = 0;
                 match session.interact() {
                     seihai::offline::Interaction::Chest { x, y, item, got } => {
                         eprintln!("chest {x},{y}: {item}");
@@ -1548,6 +1559,13 @@ fn main() {
             && session.stop_walking()
         {
             dirty = true;
+        }
+        // Up while reading turns back a page.
+        if session.reading.is_some() && !input.is_open() && window.is_key_pressed(minifb::Key::Up, minifb::KeyRepeat::No) {
+            if let Some(p) = seihai::render::signs::previous_page(sign_page) {
+                sign_page = p;
+                dirty = true;
+            }
         }
         if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
@@ -2153,7 +2171,13 @@ fn main() {
             );
         }
         if let Some(text) = &session.reading {
-            ui::draw_panel(&mut frame, "Sign", text);
+            match &letters_sheet {
+                Some(l) => {
+                    let row = player_box_origin(&session, view_w, view_h).1 as f32 / 16.0;
+                    seihai::render::signs::draw_sign(&mut frame, &pose_sheet(l), text, sign_page, row);
+                }
+                None => ui::draw_panel(&mut frame, "Sign", text),
+            }
         }
         if confirm_quit {
             ui::draw_panel(&mut frame, "Quit", "Quit Seihai?  Y / Enter = yes,  N / Esc = no");

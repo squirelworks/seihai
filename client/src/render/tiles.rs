@@ -376,15 +376,9 @@ pub fn render_view_with(
     }
 
     // Chests are drawn from their records, over the board; signs have no
-    // art of their own. NPCs next.
+    // art of their own on the board. An NPC whose image is not there yet
+    // draws nothing, as in the 2.05 client (see npc-images.md).
     draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y, opts);
-    for npc in &level.npcs {
-        // An NPC drawn as an animation has no placeholder under it.
-        if npc.visible && npc.ani.is_none() {
-            // Placeholder until the image arrives. Request the file if missing.
-            draw_marker(&mut fb, npc.x as i32, npc.y as i32, cam_x, cam_y, [0x80, 0x80, 0x80]);
-        }
-    }
 
     fb
 }
@@ -553,11 +547,6 @@ pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8,
             }
         }
     }
-}
-
-fn draw_marker(fb: &mut Framebuffer, x: i32, y: i32, cam_x: i32, cam_y: i32, color: [u8; 3]) {
-    let t = TILE_PX as i32;
-    fb.fill_rect(x * t - cam_x + 2, y * t - cam_y + 2, 12, 12, color);
 }
 
 fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
