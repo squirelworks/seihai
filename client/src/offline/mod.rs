@@ -12,6 +12,10 @@ use crate::life::{respawn_half_hearts, Life, LifeEvent};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
+mod pushpull;
+pub use pushpull::{BlockMoved, Grab, Jump, PushPull, Trigger};
+use pushpull::StepResult;
+
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
 /// 2 down, 3 right.
 pub const DIR_NORTH: u8 = 0;
@@ -187,9 +191,9 @@ pub struct OfflineSession {
     pub shield_power: u8,
     /// Whether the glove is held, and its power.
     pub glove_power: u8,
-    /// Milliseconds left on a futile grab (A on an object the glove cannot
-    /// lift). The object does not move; the pose plays for this long.
-    pub grabbing_ms: u64,
+    /// Ledge jumps, pushing, and the A key's grab and pull (see
+    /// [`pushpull`]).
+    pub pushpull: PushPull,
     /// Heart containers, in half hearts as Graal counts them.
     pub max_hearts: i32,
     /// Chests opened in the current level, by tile position.
@@ -298,8 +302,8 @@ pub enum Interaction {
     /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
     /// lift table.
     Lifted { kind: usize },
-    /// A faced the object but the glove is too weak. The object does not
-    /// move; the player still plays the grab.
+    /// A faced a wall (a rock too heavy for the glove counts): the player
+    /// holds on to it until A is let go, and can pull (see [`pushpull`]).
     Grabbed,
     /// The carried object was thrown; `kind` is its lift-table entry.
     Thrown { kind: usize },
@@ -403,7 +407,7 @@ impl OfflineSession {
             sword_power: 1,
             shield_power: 1,
             glove_power: 0,
-            grabbing_ms: 0,
+            pushpull: PushPull::default(),
             max_hearts: 6,
             opened_chests: HashSet::new(),
             reading: None,
@@ -612,7 +616,7 @@ impl OfflineSession {
     /// Interact with what the player faces: throw, lift, grab, or open a
     /// closed chest (2×2 tiles) from below.
     pub fn interact(&mut self) -> Interaction {
-        if self.life.is_dead() {
+        if self.life.is_dead() || self.jumping() {
             return Interaction::Nothing;
         }
         // The A key tries to lift first, then reads a sign or opens a chest.
@@ -622,10 +626,6 @@ impl OfflineSession {
         }
         if let Some(kind) = self.try_lift() {
             return Interaction::Lifted { kind };
-        }
-        if self.try_grab() {
-            self.grabbing_ms = 400;
-            return Interaction::Grabbed;
         }
         let Some(level) = &self.current_level else {
             return Interaction::Nothing;
@@ -661,6 +661,11 @@ impl OfflineSession {
             return Interaction::Chest { x: c.x, y: c.y, item: c.item, got };
         }
         // Signs are not read with the A key: see `read_sign_ahead`.
+        // Nothing to lift or open: A holds on to a wall (a rock too heavy
+        // for the glove is one). The grab lasts while A is held.
+        if self.try_grab() {
+            return Interaction::Grabbed;
+        }
         Interaction::Nothing
     }
 
@@ -755,6 +760,7 @@ impl OfflineSession {
         self.reading = None;
         self.no_pk = false;
         self.clear_throws();
+        self.reset_pushpull();
         self.level_serial += 1;
         Ok(())
     }
@@ -820,21 +826,6 @@ impl OfflineSession {
         Some(kind)
     }
 
-    /// True when an object of the lift table is in front but the glove
-    /// cannot lift it. The real client still plays the grab; the object
-    /// stays. Not while swimming, carrying, or dead.
-    pub fn try_grab(&self) -> bool {
-        if self.life.is_dead() || self.in_water || self.carried.is_some() {
-            return false;
-        }
-        let Some(tables) = self.object_tables.as_ref() else { return false };
-        let Some(level) = self.current_level.as_ref() else { return false };
-        let (px, py) = self.probe_tile();
-        // Any entry, not just the ones the glove allows.
-        level.find_object(&tables.lift, tables.lift.len(), px, py).is_some()
-            && level.find_object(&tables.lift, usize::from(self.glove_power) + 2, px, py).is_none()
-    }
-
     /// Throw what the player carries: it leaves from above the head and flies
     /// the way the player faces ([`crate::throwing`]). Returns the lift-table
     /// entry thrown, `None` with empty hands or when dead.
@@ -894,7 +885,6 @@ impl OfflineSession {
     /// Advance flights and break effects by `ms` on their 50 ms tick.
     /// Returns true if anything moved (the scene needs a redraw).
     pub fn tick_throw(&mut self, ms: u64) -> bool {
-        self.grabbing_ms = self.grabbing_ms.saturating_sub(ms);
         self.tick_throw_with(ms, &|_, _| None)
     }
 
@@ -1216,6 +1206,7 @@ impl OfflineSession {
         self.warp_pending = None;
         self.pending_link = None;
         self.armed = false;
+        self.reset_pushpull();
         let (fx, fy) = self.foot();
         self.arrival_tile = Some((fx as i32, fy as i32));
         let dev_was_on = self.dev.reset();
@@ -1340,6 +1331,7 @@ impl OfflineSession {
         w.crossing = Some(c);
         // A new cell is a new level to the script engine too.
         self.clear_throws();
+        self.reset_pushpull();
         self.level_serial += 1;
         self.player_x = c.local_x;
         self.player_y = c.local_y;
@@ -1400,10 +1392,10 @@ impl OfflineSession {
     ///
     /// A body already overlapping a wall (put there by a warp) may still take
     /// a step that leaves it less inside.
-    fn walk_step(&self, x: f64, y: f64, dir: usize, mx: f64, my: f64) -> (f64, f64) {
+    fn walk_step(&self, x: f64, y: f64, dir: usize, mx: f64, my: f64) -> (f64, f64, StepResult) {
         let (nx, ny) = (x + mx, y + my);
         if !self.gmap_step_ok(nx as f32, ny as f32) {
-            return (x, y);
+            return (x, y, StepResult::Refused { nudged: false });
         }
         let hit: Vec<bool> = WALK_PROBES[dir].iter().map(|&(px, py)| self.walk_blocked(nx + px, ny + py)).collect();
         let (mut fx, mut fy) = (nx, ny);
@@ -1412,16 +1404,19 @@ impl OfflineSession {
             let here = self.body_overlap(x, y);
             if here > 0 && self.body_overlap(nx, ny) < here {
                 // Walking out of a wall: no nudge, no snap.
-                return (nx, ny);
+                return (nx, ny, StepResult::Free);
             }
         }
+        let mut nudged = false;
         if refused {
             if hit[0] && !hit[2] && !hit[3] && !hit[4] {
                 fx += WALK_NUDGE[dir][0].0;
                 fy += WALK_NUDGE[dir][0].1;
+                nudged = true;
             } else if !hit[0] && !hit[1] && hit[3] && !hit[5] {
                 fx += WALK_NUDGE[dir][1].0;
                 fy += WALK_NUDGE[dir][1].1;
+                nudged = true;
             }
             fx -= mx;
             fy -= my;
@@ -1442,7 +1437,7 @@ impl OfflineSession {
         if !(WALK_SNAP_EDGE..=1.0 - WALK_SNAP_EDGE).contains(&f) {
             fx = walk_floor(t + WALK_SNAP_EDGE) - 0.5;
         }
-        (fx, fy)
+        (fx, fy, if refused { StepResult::Refused { nudged } } else { StepResult::Free })
     }
 
     /// Move the player by (dx, dy) as the real client's walking routine
@@ -1452,9 +1447,17 @@ impl OfflineSession {
     /// still move the player: the 0.1-tile corner nudge round a corner, and
     /// the snap flush to the wall. Facing comes from the dominant axis.
     /// Nothing moves while a warp is pending.
+    ///
+    /// Each step also counts towards a push or a ledge jump, and while A
+    /// holds a wall the arrows only pull (see [`pushpull`]); in the air they
+    /// do nothing.
     /// Returns the emitted `PlayerUpdate` if the position changed.
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
-        if dx == 0.0 && dy == 0.0 || self.life.is_dead() {
+        if dx == 0.0 && dy == 0.0 || self.life.is_dead() || self.jumping() {
+            return None;
+        }
+        if self.pushpull.grab.is_some() {
+            self.grab_arrow(dx, dy);
             return None;
         }
         // Facing from dominant axis.
@@ -1470,17 +1473,20 @@ impl OfflineSession {
         let (x0, y0) = (self.player_x as f64, self.player_y as f64);
         let (mut x, mut y) = (x0, y0);
         let (dx, dy) = (dx as f64, dy as f64);
-        if dy < 0.0 {
-            (x, y) = self.walk_step(x, y, DIR_NORTH as usize, 0.0, dy);
-        }
-        if dx < 0.0 {
-            (x, y) = self.walk_step(x, y, DIR_WEST as usize, dx, 0.0);
-        }
-        if dy > 0.0 {
-            (x, y) = self.walk_step(x, y, DIR_SOUTH as usize, 0.0, dy);
-        }
-        if dx > 0.0 {
-            (x, y) = self.walk_step(x, y, DIR_EAST as usize, dx, 0.0);
+        let steps = [(dy < 0.0, DIR_NORTH, 0.0, dy), (dx < 0.0, DIR_WEST, dx, 0.0), (dy > 0.0, DIR_SOUTH, 0.0, dy), (dx > 0.0, DIR_EAST, dx, 0.0)];
+        for (pressed, dir, mx, my) in steps {
+            if !pressed {
+                continue;
+            }
+            let (sx, sy, res) = self.walk_step(x, y, dir as usize, mx, my);
+            match self.count_step(dir, res, sx, sy) {
+                Some(p) => (x, y) = p,
+                // A ledge jump started: it has placed the player.
+                None => {
+                    self.walking = true;
+                    return Some(self.player_update());
+                }
+            }
         }
         // Positions are kept to a thousandth of a tile, so the 0.1 nudges do
         // not drift (7.5000005) and a half tile stays a half tile on the wire.
@@ -2001,10 +2007,17 @@ mod tests {
         assert_eq!(get(s.current_level.as_ref().unwrap(), 30, 20), BLOCK_LEFT);
         s.carried = None;
 
+        // A rock blocks like a wall. Standing flush against it (the body's
+        // top edge on its bottom edge), A grabs it: the grab point is 0.1
+        // tile above the body.
+        for id in ROCK.iter().flatten() {
+            s.tiletypes.as_mut().unwrap().types[*id as usize] = 22;
+        }
         face_up_at(&mut s, 40, 20);
+        s.player_y = 21.0;
         assert_eq!(s.interact(), Interaction::Grabbed, "the rock is grabbed, not lifted");
         assert!(s.carried.is_none());
-        assert_eq!(s.grabbing_ms, 400);
+        assert_eq!(s.pushpull.grab, Some(Grab { count: 1 }), "held until A is let go");
         assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK, "the rock does not move");
     }
 
