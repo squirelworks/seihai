@@ -3021,6 +3021,19 @@ mod tests {
     }
 
     #[test]
+    fn the_sword_key_throws_what_is_carried_instead_of_swinging() {
+        let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
+        s.sword_power = 1;
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        assert!(!s.start_swing(), "no swing with something in the hands");
+        assert!(!s.combat.is_swinging());
+        assert!(s.carried.is_some(), "the refused swing leaves the object carried");
+        // The same key press then throws (the key goes on to the interact).
+        assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });
+        assert!(s.start_swing(), "empty hands swing again");
+    }
+
+    #[test]
     fn the_interact_key_throws_what_is_carried_and_nothing_else_when_empty() {
         let mut s = carrying_bush(10.0, 30.0, DIR_EAST);
         assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });

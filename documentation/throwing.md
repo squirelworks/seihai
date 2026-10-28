@@ -5,7 +5,7 @@ Derived from the 2.05 client and the 2.22 `arrays.dat` (the 2.05 sprite table wa
 ## What the player sees
 
 1. The player lifts a bush, block or rock (`cut-and-lift.md`). The object is drawn **as its own sprite**, a 32x32 cut-out of `sprites.png` with transparent corners, above the head. The board tiles around the object (the grass behind a bush) are not part of it. The first version of Seihai blitted the four board tiles, which is why the grass showed.
-2. A, Space (Seihai) or D **while carrying** throws it (the 2.05 client's key handler throws on its key indices 5 and 6, A and D). There is no separate "put down".
+2. A, Space (Seihai) or S **while carrying** throws it. In the 2.05 client both the sword key and the action key (A) throw what is carried; the sword key does not swing then. The weapon key (D) does not throw. There is no separate "put down". See `cut-and-lift.md`, "Sword while carrying".
 3. The object flies for up to 9 ticks in the facing direction with a shadow on the ground under it.
 4. It lands when the ticks run out, or earlier on a wall. A bush, block or rock then **breaks into pieces that fly apart and vanish**; over water it makes a splash. A bomb stays on the ground.
 

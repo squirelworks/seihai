@@ -234,11 +234,12 @@ pub fn unpack_piece(v: u32) -> Piece {
     ((v >> 16) as u16, ((v >> 8) & 0xff) as u8 as i8, (v & 0xff) as u8 as i8)
 }
 
-/// Whether the keys held this frame make an interact press: A or Space
-/// always, and D too while something is carried (the 2.05 client throws on
-/// its A and D keys alike; D does nothing else here).
-pub fn interact_pressed(carrying: bool, a: bool, space: bool, d: bool) -> bool {
-    a || space || (carrying && d)
+/// Whether the keys pressed this frame make an interact press: A or Space
+/// always, and S too while something is carried (the 2.05 client's sword
+/// key throws the carried object instead of swinging; its weapon key, D,
+/// does not throw).
+pub fn interact_pressed(carrying: bool, a: bool, space: bool, s: bool) -> bool {
+    a || space || (carrying && s)
 }
 
 /// The source rectangle of sprite `id`: the loaded sprite table, else the
@@ -274,11 +275,11 @@ mod tests {
     }
 
     #[test]
-    fn a_d_and_space_throw_while_carrying_and_d_only_then() {
+    fn a_s_and_space_throw_while_carrying_and_s_only_then() {
         assert!(interact_pressed(true, true, false, false));
         assert!(interact_pressed(true, false, true, false));
-        assert!(interact_pressed(true, false, false, true));
-        assert!(!interact_pressed(false, false, false, true), "D alone does nothing empty-handed");
+        assert!(interact_pressed(true, false, false, true), "the sword key throws what is carried");
+        assert!(!interact_pressed(false, false, false, true), "S empty-handed is a swing, not an interact");
         assert!(interact_pressed(false, true, false, false));
         assert!(!interact_pressed(true, false, false, false));
     }
