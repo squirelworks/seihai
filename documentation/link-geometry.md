@@ -86,3 +86,45 @@ as a missing id, a high divergence, and the `lv_c.nw` warp as a field mismatch a
 `lv_c.nw` warp with the same `x=60`, `y=30`, the `LEVELWARPMOD` back at `x=14`, `y=30`, and the edge warp, and
 the report has no missing level warp. The edge warp's `x` differs (real 17.5, Seihai 20.5) because the two clients
 walk at different speeds (divergence 9).
+
+## Edge links to the level next door (big map)
+
+Read from the 2.05 client (derived; Graal_analysis
+`client-internals/decomp-findings-2026-10-28/03-edge-links.md`). Not run
+against a real client.
+
+* On entering a level the client looks it up in the big map (the map
+  screen's grid of quoted level names, `bigmap.txt`) and keeps the eight
+  levels around it.
+* A link that is one tile wide on the west (x 0) or east (x 63) edge, or
+  one tile high on the north (y 0) or south (y 63) edge, and whose
+  destination is the big-map neighbour on that side, arrives at the
+  player's position moved by 64 tiles across the seam; the other
+  coordinate is kept, and the link's own new-x and new-y are not used.
+  East off x 63.75 lands at x -0.25.
+* Every other link, and every link when there is no big map, arrives at
+  its new-x and new-y (`playerx` / `playery` keep the coordinate). So an
+  east-edge link written `playerx` puts the player on the east edge of the
+  destination, in the real client too, unless the two levels are next to
+  each other on the big map.
+
+Seihai (`offline::edge_link_arrival`, `OfflineSession::big_map`,
+`gmap::Gmap::parse_grid`):
+
+* Online the big map is the file the server names in `PLO_BIGMAP` (171);
+  Seihai asks for it once and reads it when it arrives. Offline,
+  `--bigmap FILE` gives it. Without one, nothing changes.
+* The real client fires a neighbour edge link once the player has crossed
+  the edge (when the neighbour level is loaded); Seihai still fires it on
+  the direction boxes above, a little earlier, so the arrival is held to
+  where the real crossing would land: at least -0.5 going east, at most
+  61.5 going west, at most 61 going north, at least -1 going south (a
+  Seihai choice).
+* Level names are compared without case; the real client's compare of the
+  link destination with the neighbour name is exact (not changed here, open
+  whether it matters).
+* Open: walking past the edge into a loaded neighbour, the probe offsets,
+  and whether 2.22 and 2.31 use the `PLO_BIGMAP` grid the same way.
+* `new3.nw` (the laundry list's fixture) has no links, so it cannot show
+  this on its own; it needs a big map naming it and links to its
+  neighbours.
