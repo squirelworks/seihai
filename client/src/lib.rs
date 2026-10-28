@@ -24,6 +24,7 @@ pub mod sound;
 pub mod throwing;
 pub mod ui;
 pub mod viewer;
+pub mod weaponbar;
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
