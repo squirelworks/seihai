@@ -38,7 +38,7 @@ fn scripts_in(path: &Path) -> Vec<(String, String)> {
 
 #[test]
 fn parse_all_unique_npc_scripts() {
-    let dir = Path::new("client/tests/fixtures/npc-scripts");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/npc-scripts");
     let mut total = 0;
     let mut failed = 0;
     let mut diags: Vec<(String, String)> = Vec::new();
