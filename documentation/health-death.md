@@ -29,7 +29,7 @@ documents, the timings from the decompile.
 | 0 | Hearts reached 0 (or below): the player is dead, faces down, the `playerdies` script event fires. The victim sends `PLI_CLAIMPKER` now, if a hit by another player did it. |
 | 0 to 27 | Controls ignored (movement, interact). The timer counts up and stops at 30 (1.5 s). |
 | 28 | The dead bit (`0x08`) goes out in `PLI_PLAYERPROPS` with `PLPROP_STATUS` (18). Controls work again. |
-| after 27 | An arrow key, A or Space respawns. |
+| after 27 | A direction key, the action key or the sword key (by default arrows, I/J/K/L, A, S or Space) respawns. |
 
 A hit that leaves hearts at 0 starts the death once; a per-frame check keeps
 the player dead while hearts are 0 or below. Hearts going back above 0 does not
