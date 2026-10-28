@@ -1023,14 +1023,33 @@ fn main() {
     let mut chat_scroll = 0usize;
     let debug_on = Settings::load().debug.unwrap_or(false);
     let mut show_debug = debug_on;
-    // Debug diagnostics go to a timestamped folder under _debug/, not
-    // the terminal. One folder per run.
+    // Debug diagnostics go to one folder per run, named for the time
+    // this process started. The file is opened once and appended to;
+    // nothing creates a second folder while the process is alive.
     let mut debug_file: Option<std::fs::File> = if debug_on {
         let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map(|d| {
+                let s = d.as_secs();
+                // YYYYMMDD-HHMMSS in UTC.
+                let days = s / 86400;
+                let tod = s % 86400;
+                let (h, m, sec) = (tod / 3600, (tod % 3600) / 60, tod % 60);
+                // Civil from days since 1970-01-01 (Howard Hinnant).
+                let z = days as i64 + 719468;
+                let era = if z >= 0 { z } else { z - 146096 } / 146097;
+                let doe = (z - era * 146097) as u64;
+                let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+                let y = yoe as i64 + era * 400;
+                let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+                let mp = (5 * doy + 2) / 153;
+                let d = doy - (153 * mp + 2) / 5 + 1;
+                let mth = if mp < 10 { mp + 3 } else { mp - 9 };
+                let y = if mth <= 2 { y + 1 } else { y };
+                format!("{y:04}{mth:02}{d:02}-{h:02}{m:02}{sec:02}")
+            })
+            .unwrap_or_else(|_| "unknown".into());
         let dir = root.join(format!("debug-{stamp}"));
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join("script.log");
