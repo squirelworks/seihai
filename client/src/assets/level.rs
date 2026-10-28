@@ -209,6 +209,13 @@ pub struct ObjectTables {
     /// Array 24: the sprite table, one packed rectangle per sprite id (see
     /// [`crate::throwing::unpack_sprite_rect`]).
     pub sprites: Vec<u32>,
+    /// Array 8: the ledge tiles, one list per facing (up, left, down,
+    /// right). These are the tiles the 2.05 client calls type 21: running
+    /// against one jumps the player off it (see [`crate::ledge`]).
+    pub ledges: [Vec<u16>; 4],
+    /// Array 16: the stone blocks. Entry 0 can be pushed, entry 1 pulled
+    /// (see [`crate::ledge`]).
+    pub blocks: Vec<Object2x2>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,6 +262,18 @@ fn leaps_from(node: Option<&ArrNode>) -> Vec<Vec<Vec<u32>>> {
         .collect()
 }
 
+fn ledges_from(node: Option<&ArrNode>) -> [Vec<u16>; 4] {
+    let mut out: [Vec<u16>; 4] = Default::default();
+    if let Some(ArrNode::List(dirs)) = node {
+        for (d, list) in dirs.iter().take(4).enumerate() {
+            if let ArrNode::Ints(v) = list {
+                out[d] = v.iter().filter(|&&id| id < 4096).map(|&id| id as u16).collect();
+            }
+        }
+    }
+    out
+}
+
 fn objects_from(node: Option<&ArrNode>) -> Vec<Object2x2> {
     let Some(ArrNode::List(items)) = node else { return Vec::new() };
     items
@@ -298,6 +317,8 @@ impl ObjectTables {
                 Some(ArrNode::Ints(v)) => v.clone(),
                 _ => Vec::new(),
             },
+            ledges: ledges_from(nodes.get(8)),
+            blocks: objects_from(nodes.get(16)),
         };
         (!t.cut.is_empty() || !t.lift.is_empty()).then_some(t)
     }

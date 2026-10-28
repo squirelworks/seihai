@@ -26,6 +26,13 @@
 //!   of the death timer, held on its last step. The 2.05 client plays the
 //!   local `dead` gani on death; Seihai's default set has none, so without a
 //!   data folder the idle figure is drawn as before.
+//! * **Push**, **grab** and **pull** follow [`crate::offline::PushPull`]:
+//!   the push pose after 17 blocked steps in a row (one step of `push.gani`
+//!   per blocked step), the grab pose while A holds a wall, and the pull pose
+//!   (one step of `pull.gani` per tick, looping) while the arrow away from
+//!   the wall is held. The 2.05 client plays its `push`, `grab` and `pull`
+//!   ganis then. A ledge jump keeps the walk pose: 2.05 plays no other gani
+//!   in the air.
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
@@ -63,6 +70,10 @@ pub struct PoseGanis {
     pub carry: Option<Gani>,
     /// Shown while the player is dead.
     pub dead: Option<Gani>,
+    /// Running against a wall, grabbing one, and pulling.
+    pub push: Option<Gani>,
+    pub grab: Option<Gani>,
+    pub pull: Option<Gani>,
 }
 
 /// Which pose is on.
@@ -77,6 +88,9 @@ pub enum PoseKind {
     CarryStill,
     Carry,
     Dead,
+    Push,
+    Grab,
+    Pull,
 }
 
 /// A pose step ready to draw.
@@ -101,13 +115,27 @@ impl PoseKind {
             PoseKind::CarryStill => "carrystill.gani",
             PoseKind::Carry => "carry.gani",
             PoseKind::Dead => "dead.gani",
+            PoseKind::Push => "push.gani",
+            PoseKind::Grab => "grab.gani",
+            PoseKind::Pull => "pull.gani",
         }
     }
 
     /// The pose a file name belongs to (case-insensitive). `walk.gani` and
     /// `swim.gani` are not here: they load as the stepped motion ganis.
     pub fn from_file(name: &str) -> Option<PoseKind> {
-        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle, PoseKind::CarryStill, PoseKind::Carry, PoseKind::Dead]
+        [
+            PoseKind::Sword,
+            PoseKind::Hurt,
+            PoseKind::Sit,
+            PoseKind::Idle,
+            PoseKind::CarryStill,
+            PoseKind::Carry,
+            PoseKind::Dead,
+            PoseKind::Push,
+            PoseKind::Grab,
+            PoseKind::Pull,
+        ]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
     }
@@ -115,6 +143,11 @@ impl PoseKind {
 
 fn pick(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> {
     gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i.min(g.frame_count() - 1) })
+}
+
+/// Step `i` of a looping pose, wrapped to its length.
+fn cycle(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> {
+    gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i % g.frame_count() })
 }
 
 /// The step of `hurt.gani` `ms` into hurt mode: one step per
@@ -146,6 +179,9 @@ impl OfflineSession {
             PoseKind::CarryStill => self.poses.carrystill = Some(gani),
             PoseKind::Carry => self.poses.carry = Some(gani),
             PoseKind::Dead => self.poses.dead = Some(gani),
+            PoseKind::Push => self.poses.push = Some(gani),
+            PoseKind::Grab => self.poses.grab = Some(gani),
+            PoseKind::Pull => self.poses.pull = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
@@ -179,11 +215,15 @@ impl OfflineSession {
         if let Some(p) = self.combat.hurt_elapsed_ms().and_then(|ms| hurt_step(&self.poses.hurt, ms)) {
             return Some(p);
         }
-        // A futile grab (object in front, glove too weak): the reach pose.
-        if self.grabbing_ms > 0 {
-            if let Some(p) = pick(PoseKind::Sword, &self.poses.sword, 0) {
-                return Some(p);
-            }
+        // Holding a wall with A: the grab pose, or the pull while the arrow
+        // away from it is held. Without those ganis the player stands.
+        if let Some(g) = self.pushpull.grab {
+            let p = if g.pulling() {
+                cycle(PoseKind::Pull, &self.poses.pull, self.pushpull.pull_ticks as usize)
+            } else {
+                pick(PoseKind::Grab, &self.poses.grab, 0)
+            };
+            return p.or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
         // Holding an object: the carry poses (the 2.05 client plays its
         // carrystill and carry ganis then). The carry walk shows the step the
@@ -201,6 +241,12 @@ impl OfflineSession {
         }
         if self.sitting && !self.walking {
             return pick(PoseKind::Sit, &self.poses.sit, 0);
+        }
+        if self.push_pose() {
+            let step = self.pushpull.blocked_steps as usize;
+            if let Some(p) = cycle(PoseKind::Push, &self.poses.push, step) {
+                return Some(p);
+            }
         }
         if self.walking {
             if let Some(p) = self.walk_gani.as_ref().and_then(|p| pick_player(PoseKind::Walk, p)) {

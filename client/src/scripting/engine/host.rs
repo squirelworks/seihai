@@ -130,6 +130,17 @@ impl SessionScripts {
         self.apply(session);
     }
 
+    /// The player pushed or pulled at a point (2.05's `pushed` / `pulled`
+    /// trigger action): `actionpushed` or `actionpulled` on the NPC there,
+    /// with the direction as the parameter. True if an NPC was there.
+    pub fn trigger(&mut self, session: &mut OfflineSession, t: &crate::offline::Trigger) -> bool {
+        let Some(id) = self.world.npc_at(f64::from(t.x), f64::from(t.y)) else { return false };
+        self.sync_player(session);
+        self.world.fire(id, &format!("action{}", t.action), &[t.dir.to_string()]);
+        self.apply(session);
+        true
+    }
+
     /// Advance script time by `ms` and run what falls due. Also notices
     /// the end of sign reading (`playerendsreading`).
     pub fn tick(&mut self, session: &mut OfflineSession, ms: u64) {

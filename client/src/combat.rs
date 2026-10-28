@@ -878,6 +878,12 @@ impl OfflineSession {
         if self.carried.is_some() && s == self.player_dir % 4 {
             return (self.player_dir % 4) + 4 * CARRY_SPRITE_S;
         }
+        // Pushing, grabbing, pulling: their own sprite numbers.
+        if s == self.player_dir % 4 {
+            if let Some(ps) = self.pushpull_sprite_s() {
+                return (self.player_dir % 4) + 4 * ps;
+            }
+        }
         s
     }
 }

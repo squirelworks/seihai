@@ -1205,6 +1205,8 @@ fn main() {
     let mut status_base = 0u8;
     let mut life_clock = Instant::now();
     let mut combat_clock = Instant::now();
+    // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
+    let mut last_pp_sprite: Option<u8> = None;
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open()
@@ -1711,6 +1713,28 @@ fn main() {
             }
             // A hit pushed the player: the new position goes out like a step.
             sprite_changed |= session.take_knock_moved();
+            // A ledge jump in the air, or a pull that brought a block along:
+            // the position goes out the same way.
+            sprite_changed |= session.tick_pushpull(dt);
+            if session.pushpull.grab.is_some_and(|g| g.pulling()) {
+                dirty = true;
+            }
+            for t in session.take_triggers() {
+                if !no_scripts && scripts.trigger(&mut session, &t) {
+                    eprintln!("{} at {:.1},{:.1} (dir {})", t.action, t.x, t.y, t.dir);
+                }
+            }
+            for b in session.take_moved_blocks() {
+                eprintln!("stone block moved (4x4 at {},{}); the server is not told", b.x, b.y);
+                dirty = true;
+            }
+            // Push, grab and pull have their own sprite numbers.
+            let pp_sprite = session.pushpull_sprite_s();
+            if pp_sprite != last_pp_sprite {
+                last_pp_sprite = pp_sprite;
+                sprite_changed = true;
+                dirty = true;
+            }
             if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
@@ -1764,7 +1788,7 @@ fn main() {
                         }
                     }
                     seihai::offline::Interaction::Grabbed => {
-                        eprintln!("grabbed (glove too weak)");
+                        eprintln!("grabbed the wall in front (held while A is down)");
                     }
                     seihai::offline::Interaction::Lifted { kind } => {
                         eprintln!("lifted object {kind}");
@@ -1804,6 +1828,14 @@ fn main() {
                     seihai::offline::Interaction::Nothing => {}
                 }
             }
+            dirty = true;
+        }
+        // Letting go of A (or Space) ends a grab; letting go of an arrow
+        // ends a push or a pull.
+        if session.pushpull.grab.is_some() && !window.is_key_down(minifb::Key::A) && !window.is_key_down(minifb::Key::Space) && session.release_grab() {
+            dirty = true;
+        }
+        if [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down].into_iter().any(|k| window.is_key_released(k)) && session.arrow_released() {
             dirty = true;
         }
         // No arrow key held: the player stands (idle animation).
