@@ -429,10 +429,20 @@ impl OfflineSession {
     /// in the same message is read against the new maximum.
     pub fn apply_server_power(&mut self, max_power: Option<u8>, cur_power: Option<u8>, alignment: Option<u8>) {
         if let Some(m) = max_power {
-            self.set_max_hearts_half(i32::from(m) * 2);
+            // Zero from the server leaves the default. A real account
+            // has hearts; zero is either a missing prop or a freeze.
+            if m > 0 {
+                self.set_max_hearts_half(i32::from(m) * 2);
+            } else {
+                eprintln!("server sent max power 0; keeping {}", self.max_hearts);
+            }
         }
         if let Some(c) = cur_power {
-            self.set_hearts_half(i32::from(c));
+            if c > 0 || self.hearts_half() == 0 {
+                self.set_hearts_half(i32::from(c));
+            } else {
+                eprintln!("server sent cur power 0; keeping {}", self.hearts_half());
+            }
         }
         if let Some(a) = alignment {
             self.alignment = a.min(100);
