@@ -814,7 +814,12 @@ fn main() {
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
-    let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer], my_chat: &str, npc_imgs: &HashMap<String, (u32, Vec<u8>)>| -> Framebuffer {
+    let draw = |session: &OfflineSession,
+                others: &[seihai::protocol::OtherPlayer],
+                my_chat: &str,
+                npc_imgs: &HashMap<String, (u32, Vec<u8>)>,
+                item: Option<&str>|
+     -> Framebuffer {
         let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
@@ -914,7 +919,7 @@ fn main() {
                     state: pose_sheet(st),
                     sprites: sprites.as_ref().map(pose_sheet),
                     sword: sword_sheet.as_ref().map(pose_sheet),
-                    item: None,
+                    item: item.and_then(|n| npc_imgs.get(n)).map(pose_sheet),
                 },
                 session.object_tables.as_ref(),
                 &seihai::render::hud::HudValues {
@@ -947,7 +952,12 @@ fn main() {
     // How long our own bubble has left, and the clock that runs it.
     let mut my_chat_timer = seihai::chatlists::BubbleTimer::default();
     let mut bubble_clock = Instant::now();
-    let mut scene = draw(&session, &[], &my_chat, &npc_images);
+    // The weapon list and the selected weapon (the HUD's D slot), and whether
+    // a file arrived that may be its image.
+    let mut weapon_bar = seihai::weaponbar::WeaponBar::default();
+    let mut weapon_asked: HashSet<String> = HashSet::new();
+    let mut weapon_recheck = true;
+    let mut scene = draw(&session, &[], &my_chat, &npc_images, None);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
@@ -1057,6 +1067,7 @@ fn main() {
                         // settle the replies, and reload levels.
                         let got = files.process(&mut net_state);
                         send_file_msgs(conn.as_mut(), got.send);
+                        weapon_recheck |= !got.written.is_empty();
                         for name in &got.written {
                             // A neighbour's file (gmap) is not the current level.
                             let is_current = net_state
@@ -2021,8 +2032,38 @@ fn main() {
                 dirty = true;
             }
         }
+        // Weapons that arrived (at login or later) go into the list; the
+        // selected one's image is asked for once and drawn when it is here.
+        {
+            let before = weapon_bar.current_image().map(str::to_string);
+            weapon_bar.sync(
+                &net_state.default_weapons,
+                net_state.weapons.iter().map(|w| (w.name.as_str(), w.image.as_deref())),
+                profile.files.image_ext,
+            );
+            let now = weapon_bar.current_image().map(str::to_string);
+            if now != before {
+                dirty = true;
+                weapon_recheck = true;
+            }
+            if let Some(name) = now.filter(|n| !npc_images.contains_key(n)) {
+                if weapon_asked.insert(name.clone()) {
+                    let m = files.need(&name);
+                    if !m.is_empty() {
+                        eprintln!("requesting {name} (selected weapon)");
+                    }
+                    send_file_msgs(conn.as_mut(), m);
+                }
+                if std::mem::take(&mut weapon_recheck) {
+                    if let Some((w, _, px)) = files.store.read(&name).and_then(|d| read_png_rgba(&d).ok()) {
+                        npc_images.insert(name, (w, px));
+                        dirty = true;
+                    }
+                }
+            }
+        }
         if dirty {
-            scene = draw(&session, &net_state.others, &my_chat, &npc_images);
+            scene = draw(&session, &net_state.others, &my_chat, &npc_images, weapon_bar.current_image());
             dirty = false;
         }
         let mut frame = scene.clone();
