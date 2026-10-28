@@ -234,6 +234,54 @@ pub struct OtherPlayer {
     /// names ([`crate::throwing::carry_sprite_from_wire`]); `None` empty
     /// hands.
     pub carry: Option<u16>,
+    /// The pictures the player is drawn with, once the server has said:
+    /// sword (8), shield (9), head (11) and body (35) images, and the GANI
+    /// (10, when it is a name). See [`OtherLooks`].
+    pub looks: OtherLooks,
+}
+
+/// Image names from another player's props. A power with no image of its
+/// own names the default picture (`sword2.png`, `shield1.png`,
+/// `head3.png`); power 0 is an empty string (nothing drawn).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OtherLooks {
+    pub sword: Option<String>,
+    pub shield: Option<String>,
+    pub head: Option<String>,
+    pub body: Option<String>,
+    pub gani: Option<String>,
+}
+
+impl OtherLooks {
+    fn update(&mut self, u: OtherLooks) {
+        for (old, new) in [(&mut self.sword, u.sword), (&mut self.shield, u.shield), (&mut self.head, u.head), (&mut self.body, u.body), (&mut self.gani, u.gani)] {
+            if new.is_some() {
+                *old = new;
+            }
+        }
+    }
+}
+
+/// The picture a sword (8) or shield (9) prop names. Above `max_plain`
+/// the power is followed by the image name; at or below it the power is
+/// the number of the default picture, 0 for none.
+fn power_image(raw: &[u8], max_plain: u8, stem: &str) -> Option<String> {
+    let v = raw.first()?.wrapping_sub(0x20);
+    if v > max_plain {
+        let n = usize::from(raw.get(1)?.wrapping_sub(0x20));
+        Some(latin1(raw.get(2..2 + n).unwrap_or(&[])))
+    } else if v == 0 {
+        Some(String::new())
+    } else {
+        Some(format!("{stem}{v}.png"))
+    }
+}
+
+/// The picture a head prop (11) names: `c(len + 100)` + name, or the
+/// number of a default head under 100.
+fn head_image(raw: &[u8]) -> Option<String> {
+    let v = usize::from(raw.first()?.wrapping_sub(0x20));
+    Some(if v >= 100 { latin1(raw.get(1..1 + (v - 100)).unwrap_or(&[])) } else { format!("head{v}.png") })
 }
 
 impl OtherPlayer {
@@ -1234,7 +1282,7 @@ impl SessionState {
             .unwrap_or_else(|| format!("#{id}"))
     }
 
-    fn apply_other(&mut self, u: OtherUpdate) {
+    fn apply_other(&mut self, mut u: OtherUpdate) {
         if u.left {
             self.others.retain(|o| o.id != u.id);
             return;
@@ -1257,6 +1305,7 @@ impl SessionState {
                     ap: None,
                     sword_power: None,
                     carry: None,
+                    looks: OtherLooks::default(),
                 });
                 self.others.len() - 1
             }
@@ -1286,6 +1335,7 @@ impl SessionState {
         if let Some(c) = u.carry {
             o.carry = c;
         }
+        o.looks.update(std::mem::take(&mut u.looks));
         let swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
         if swing {
             self.swings.push(u.id);
@@ -1426,6 +1476,7 @@ struct OtherUpdate {
     sword_power: Option<i8>,
     /// CARRYSPRITE (19): the carried sprite, `Some(None)` empty hands.
     carry: Option<Option<u16>>,
+    looks: OtherLooks,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -1446,7 +1497,14 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
                 u.dir = prop.gchar().map(|v| v % 4);
                 u.sprite = prop.gchar();
             }
-            8 => u.sword_power = prop.gchar().map(sword_power_from_wire),
+            8 => {
+                u.sword_power = prop.gchar().map(sword_power_from_wire);
+                u.looks.sword = power_image(&prop.raw, 4, "sword");
+            }
+            9 => u.looks.shield = power_image(&prop.raw, 3, "shield"),
+            10 if !bow_prop10 => u.looks.gani = Some(text(&prop.raw)).filter(|g| !g.is_empty()),
+            11 => u.looks.head = head_image(&prop.raw),
+            35 => u.looks.body = Some(text(&prop.raw)).filter(|b| !b.is_empty()),
             18 => u.status = prop.gchar(),
             19 => u.carry = prop.raw.first().map(|&b| crate::throwing::carry_sprite_from_wire(crate::throwing::carry_code_from_byte(b))),
             32 => u.ap = prop.gchar(),
@@ -1609,6 +1667,35 @@ mod tests {
         assert_eq!(u.carry, Some(Some(239)));
         u = parse_other_player(&[0x20, 0x22, 15 + 0x20, 0x40], false, None).unwrap();
         assert_eq!(u.carry, None, "no prop 19: unchanged");
+    }
+
+    #[test]
+    fn sword_shield_head_body_and_gani_props_name_the_pictures() {
+        let g = |v: u8| v + 0x20;
+        let mut p = vec![0x20, 0x22];
+        p.extend([g(8), g(33), g(9)]);
+        p.extend(b"sabre.png");
+        p.extend([g(9), g(2), g(11), g(107)]);
+        p.extend(b"hat.png");
+        p.extend([g(35), g(7)]);
+        p.extend(b"red.png");
+        p.extend([g(10), g(4)]);
+        p.extend(b"walk");
+        let u = parse_other_player(&p, false, None).unwrap();
+        assert_eq!(u.sword_power, Some(3));
+        let want = |s: &str| Some(s.to_string());
+        assert_eq!(
+            u.looks,
+            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk") }
+        );
+        // Plain powers name the default pictures; 0 is none.
+        let u = parse_other_player(&[0x20, 0x22, g(8), g(2), g(9), g(0), g(11), g(4)], false, None).unwrap();
+        assert_eq!((u.looks.sword, u.looks.shield, u.looks.head), (want("sword2.png"), want(""), want("head4.png")));
+        // A later update without the props keeps them.
+        let mut st = SessionState::default();
+        st.apply_other(parse_other_player(&p, false, None).unwrap());
+        st.apply_other(parse_other_player(&[0x20, 0x22, g(15), g(20)], false, None).unwrap());
+        assert_eq!(st.others[0].looks.shield.as_deref(), Some("shield2.png"));
     }
 
     #[test]
@@ -2452,6 +2539,7 @@ mod tests {
             ap: None,
             sword_power: None,
             carry: None,
+            looks: Default::default(),
         });
         st.apply_body(&relay(2, &[0x29, 0x2a, 0x20, 0x21, b'a']));
         assert_eq!(st.player_images[&2][&0].name, b"a");

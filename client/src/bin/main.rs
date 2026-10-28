@@ -149,6 +149,51 @@ fn npc_image_pass(
     send_file_msgs(conn, msgs);
 }
 
+/// The default picture of a shield power (`shield1.png`), or an empty
+/// name for power 0.
+fn local_shield_image(power: u8) -> String {
+    if power == 0 { String::new() } else { format!("shield{power}.png") }
+}
+
+/// Load the pictures other players are drawn with (their sword, shield,
+/// head and body props) and the local player's shield into `images`: from
+/// the asset folders first, else from the server. `tried` keeps the names
+/// already looked for in the folders, so a missing one is not searched for
+/// every frame.
+fn look_image_pass(
+    wanted: &[(&str, String)],
+    resolver: &AssetResolver,
+    files: &mut FileSession,
+    conn: Option<&mut Connection>,
+    images: &mut HashMap<String, (u32, Vec<u8>)>,
+    tried: &mut std::collections::HashSet<String>,
+) -> bool {
+    let mut msgs = Vec::new();
+    let mut added = false;
+    for (dir, name) in wanted {
+        if images.contains_key(name) {
+            continue;
+        }
+        let read = |data: Vec<u8>| read_png_rgba(&data).ok().map(|(w, _, px)| (w, px));
+        let mut got = None;
+        if tried.insert(name.clone()) {
+            got = resolver.image_in(dir, name).and_then(|p| std::fs::read(p).ok()).and_then(read);
+        }
+        if got.is_none() {
+            got = files.store.read(name).and_then(read);
+        }
+        match got {
+            Some(img) => {
+                images.insert(name.clone(), img);
+                added = true;
+            }
+            None => msgs.extend(files.need(name)),
+        }
+    }
+    send_file_msgs(conn, msgs);
+    added
+}
+
 /// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
 /// one we have), and the `PLI_ADJACENTLEVEL` messages in one frame.
 fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files: &mut FileSession) {
@@ -874,6 +919,7 @@ fn main() {
                 head: head.as_ref().map(pose_sheet),
                 sprites: sprites.as_ref().map(pose_sheet),
                 sword: sword_sheet.as_ref().map(pose_sheet),
+                shield: None,
             },
         };
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
@@ -896,7 +942,29 @@ fn main() {
             }
         }
         if let (Some((bw, b)), Some((hw, h))) = (&body, &head) {
+            let clock_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
             for other in others {
+                // Drawn through its GANI with its own pictures when the pose is
+                // loaded; a picture not here yet falls back to the default one.
+                if let Some((gani, frame)) = seihai::render::other_pose(session, other, clock_ms) {
+                    let own = |n: &Option<String>| n.as_deref().and_then(|n| npc_imgs.get(n)).map(pose_sheet);
+                    let l = &other.looks;
+                    let sheets = seihai::render::PoseSheets {
+                        body: own(&l.body).or(body.as_ref().map(pose_sheet)),
+                        head: own(&l.head).or(head.as_ref().map(pose_sheet)),
+                        sprites: sprites.as_ref().map(pose_sheet),
+                        // No sword prop yet: the default sword; power 0: none.
+                        sword: match l.sword.as_deref() {
+                            None => sword_sheet.as_ref().map(pose_sheet),
+                            Some("") => None,
+                            Some(_) => own(&l.sword).or(sword_sheet.as_ref().map(pose_sheet)),
+                        },
+                        shield: own(&l.shield),
+                    };
+                    let (ox, oy) = ((other.x * 16.0) as i32 - cam_x, (other.y * 16.0) as i32 - cam_y);
+                    seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
+                    continue;
+                }
                 draw_other_player(
                     &mut fb,
                     b,
@@ -934,6 +1002,8 @@ fn main() {
                     head: head.as_ref().map(pose_sheet),
                     sprites: sprites.as_ref().map(pose_sheet),
                     sword: sword_sheet.as_ref().map(pose_sheet),
+                    // The default shield of the player's shield power.
+                    shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
                 };
                 if let Some(p) = pose {
                     seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
@@ -1000,6 +1070,7 @@ fn main() {
         fb
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
+    let mut look_tried = std::collections::HashSet::new();
     let mut my_chat = String::new();
     // How long our own bubble has left, and the clock that runs it.
     let mut my_chat_timer = seihai::chatlists::BubbleTimer::default();
@@ -2336,6 +2407,18 @@ fn main() {
                         dirty = true;
                     }
                 }
+            }
+        }
+        // The pictures other players and our own shield are drawn with.
+        {
+            let mut wanted: Vec<(&str, String)> =
+                net_state.others.iter().flat_map(|o| seihai::render::look_images(o).map(|(d, n)| (d, n.to_string())).collect::<Vec<_>>()).collect();
+            let own_shield = local_shield_image(session.shield_power);
+            if !own_shield.is_empty() {
+                wanted.push(("shields", own_shield));
+            }
+            if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried) {
+                dirty = true;
             }
         }
         if dirty {

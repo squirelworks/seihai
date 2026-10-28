@@ -172,7 +172,7 @@ fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
         Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword) }
+    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword), shield: None }
 }
 
 fn draw(g: &Gani, step: usize, dir: u8, a: &Art) -> Vec<u8> {
