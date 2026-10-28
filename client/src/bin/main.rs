@@ -750,6 +750,17 @@ fn main() {
         eprintln!("no pics1.png in any asset folder");
         return;
     };
+    let sheet_layer = resolver.layer_of(&sheet_path);
+    eprintln!(
+        "tiles: {} ({})",
+        sheet_path.display(),
+        match sheet_layer {
+            Some(Layer::Assets) => "your assets",
+            Some(Layer::Cache) => "server cache",
+            Some(Layer::Builtin) => "built-in sheet (set assets to your Graal folder)",
+            None => "unknown",
+        }
+    );
     // The open-chest art swap is for our own sheet only.
     let view_opts = seihai::render::ViewOptions { builtin_sheet: resolver.layer_of(&sheet_path) == Some(Layer::Builtin) };
     let sheet_data = match std::fs::read(&sheet_path) {
@@ -787,12 +798,14 @@ fn main() {
     }
     match resolver.tile_types() {
         Some((p, TileTypesFile::Text)) => {
+            eprintln!("tile types: {} (text)", p.display());
             let _ = session.load_tiletypes(p);
         }
         Some((p, TileTypesFile::ArraysDat)) => {
+            eprintln!("tile types: {} (arrays.dat)", p.display());
             let _ = session.load_tiletypes_arrays(p);
         }
-        None => {}
+        None => eprintln!("tile types: none (walls will not match the real client)"),
     }
 
     let profile = version.profile();
@@ -805,6 +818,13 @@ fn main() {
         let data = std::fs::read(resolver.image_in(dir, name)?).ok()?;
         read_png_rgba(&data).ok().map(|(w, _, px)| (w, px))
     };
+    let body_path = resolver.image_in("bodies", "body.png");
+    let head_path = resolver.image_in("heads", "head0.png");
+    eprintln!(
+        "player: body {}  head {}",
+        body_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".into()),
+        head_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".into()),
+    );
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");

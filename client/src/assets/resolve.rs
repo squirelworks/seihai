@@ -302,8 +302,11 @@ impl AssetResolver {
                 dirs.push(r.join(cat));
                 dirs.push(r.join(DOWNLOADS).join(cat));
             }
-            dirs.push(r.join(DOWNLOADS));
+            // Root before levels/: the real pics1.png lives at the
+            // install root. A levels/ copy (a download, or the built-in
+            // sheet copied in) must not hide it.
             dirs.push(r.clone());
+            dirs.push(r.join(DOWNLOADS));
             for c in IMAGE_CATEGORIES {
                 dirs.push(r.join(DOWNLOADS).join(c));
             }
