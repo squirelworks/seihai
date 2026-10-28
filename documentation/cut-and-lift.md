@@ -64,6 +64,34 @@ from the piece offsets, which stay inside the 32 x 32 object for the bush.
 The built-in default art has no sprite 24, so entry 1's effect is empty without
 a real `sprites.png`.
 
+## Sword while carrying
+
+Read from the 2.05 client's key handler (derived, no lab capture yet). The
+game keys are handled by index: weapon (D), sword (S) and action (A).
+
+* **Sword key, carrying:** no swing. The carried object is thrown, exactly
+  as the action key throws it (same flight, the carry sprite goes back to
+  none, the idle gani is set). If the player was walking (or in the
+  lay-down mode below), the player's mode goes back to idle. None of the
+  swing's preconditions (sword power and so on) are checked on this path.
+* **Sword key, empty hands:** the normal swing.
+* **Action key, carrying:** throws (unless in the lay-down mode, which has
+  its own action).
+* **Weapon key, carrying:** does not throw. It only acts when the carried
+  sprite is one of three (ids 239, 261, 263) and then starts a separate
+  lay-down mode. Seihai does not implement that mode; D does nothing while
+  carrying.
+
+Seihai: `start_swing` refuses while something is carried, and the same S
+press goes on to the interact, which throws. Online the throw sends
+PLI_THROWCARRIED as for A. Not done: the mode reset to idle while walking
+(Seihai's pose follows the arrow keys each frame, so a held arrow key keeps
+the walk pose after the throw; the real client may show one idle frame
+first).
+
+Checked only in 2.05. 2.22 and 2.31 were not read and not captured; Seihai
+uses the 2.05 rule for every build until they are.
+
 ## Open (not read, not invented)
 
 * Whether the cut also makes a sound, and the pieces' exact timing against the

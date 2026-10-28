@@ -825,9 +825,11 @@ impl OfflineSession {
     }
 
     /// Start a sword swing on the player's own key press. Not while dead,
-    /// swimming, or already swinging, and not with no sword.
+    /// swimming, or already swinging, and not with no sword. Not while
+    /// carrying either: the 2.05 client's sword key throws what is carried
+    /// instead (the caller passes the key on to the interact).
     pub fn start_swing(&mut self) -> bool {
-        if self.life.is_dead() || self.in_water || self.sword_power == 0 || self.warp_pending.is_some() {
+        if self.life.is_dead() || self.in_water || self.sword_power == 0 || self.warp_pending.is_some() || self.carried.is_some() {
             return false;
         }
         let started = self.combat.start_swing();

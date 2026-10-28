@@ -1413,14 +1413,14 @@ fn main() {
         // so the plain walk update is left out.
         let mut script_warp_sent = false;
         // A or Space: close the reading panel, or interact with what the
-        // player faces.
+        // player faces. S while carrying throws (its swing was refused above).
         let interact = !input.is_open()
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
                 window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No),
                 window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No),
-                window.is_key_pressed(minifb::Key::D, minifb::KeyRepeat::No),
+                window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No),
             );
         if interact {
             if session.reading.take().is_none() {
