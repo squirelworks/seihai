@@ -528,6 +528,42 @@ def body_pose_cell(pal, direction, kind):
     return im
 
 
+# Carry poses: arms raised to hold an object over the head. Row 13 is the
+# standing pose (carrystill.gani), rows 14 to 21 the eight carry-walk poses
+# (carry.gani). The real client switches to its carry ganis while an object
+# is held (2.05: lift, carrystill, carry); the art is our own.
+POSE_CARRY_STILL = 13
+POSE_CARRY_WALK = 14
+
+
+def body_carry_cell(pal, direction, phase):
+    """One 32x32 body frame with both arms raised (phase None: standing)."""
+    P = pal
+    mirror = direction == 3
+    d_eff = 1 if mirror else direction
+    im = body_cell(pal, d_eff if mirror else direction, phase)
+    d = ImageDraw.Draw(im)
+    if d_eff in (0, 2):
+        # clear the hanging arms, then raise them beside the head
+        for x0 in (6, 21):
+            d.rectangle([x0, 8, x0 + 4, 19], fill=0)
+        d.rectangle([10, 8, 21, 20], outline=P["outline"])
+        for x0 in (5, 24):
+            d.rectangle([x0, 3, x0 + 2, 9], fill=P["tunic_dk"], outline=P["outline"])
+            d.rectangle([x0, 0, x0 + 2, 2], fill=P["skin"], outline=P["outline"])
+    else:
+        # side view: the near arm goes up in front of the face
+        d.rectangle([11, 9, 19, 17], fill=P["tunic"])
+        d.rectangle([12, 8, 19, 20], outline=P["outline"])
+        d.rectangle([12, 16, 19, 18], fill=P["belt"])
+        d.rectangle([12, 16, 13, 18], fill=P["gold"])
+        d.rectangle([9, 3, 11, 9], fill=P["tunic_dk"], outline=P["outline"])
+        d.rectangle([9, 0, 11, 2], fill=P["skin"], outline=P["outline"])
+    if mirror:
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
+    return im
+
+
 def build_body():
     pal = body_palette()
     sheet = Image.new("P", (128, 720), 0)
@@ -537,6 +573,9 @@ def build_body():
             sheet.paste(body_cell(pal, dr, k), (dr * 32, 32 * (1 + k)))
         for pose, kind in ((POSE_WINDUP, "windup"), (POSE_SWING, "swing"), (POSE_SIT, "sit"), (POSE_HURT, "hurt")):
             sheet.paste(body_pose_cell(pal, dr, kind), (dr * 32, 32 * pose))
+        sheet.paste(body_carry_cell(pal, dr, None), (dr * 32, 32 * POSE_CARRY_STILL))
+        for k in range(8):
+            sheet.paste(body_carry_cell(pal, dr, k), (dr * 32, 32 * (POSE_CARRY_WALK + k)))
     return sheet, pal
 
 
@@ -931,6 +970,33 @@ def sit_gani():
     return "\n".join(L)
 
 
+def carrystill_gani():
+    L = gani_header("carrystill.gani: standing with an object held over the head (1 step)")
+    L += ["DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    L += gani_sprites([POSE_CARRY_STILL]) + ["", "ANI"]
+    for dr in range(DIRS):
+        (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+        L.append(f"0 {sx} {sy}, {200 + 4 * POSE_CARRY_STILL + dr} {bx} {by}, {100 + dr} {hx} {hy}")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
+def carry_gani():
+    L = gani_header("carry.gani: walking with an object held over the head; 8 steps, footsteps after steps 0 and 4")
+    L += ["LOOP", "CONTINUOUS", "DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    L += gani_sprites(range(POSE_CARRY_WALK, POSE_CARRY_WALK + 8)) + ["", "ANI"]
+    for k in range(8):
+        bob = int(round(1 + math.cos(2 * math.pi * 2 * k / 8)))
+        for dr in range(DIRS):
+            (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+            L.append(f"0 {sx} {sy}, {200 + 4 * (POSE_CARRY_WALK + k) + dr} {bx} {by - 1 + bob}, {100 + dr} {hx} {hy - 1 + bob}")
+        if k in (0, 4):
+            L.append("PLAYSOUND steps2.wav 1.5 2")
+        L.append("")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
 # Head shift of the hurt pose, away from the facing side (dx, dy per direction).
 HURT_HEAD = [(1, 2), (2, 2), (-1, 2), (-2, 2)]
 
@@ -1168,7 +1234,8 @@ def write_all(out):
     save_png(im, p, os.path.join(out, "state.png"), 4, 16, True)
 
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
-                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani())):
+                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()),
+                       ("carrystill", carrystill_gani()), ("carry", carry_gani())):
         open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(text)
 
     # the default sheet is the only tile sheet: one line, image,prefix,type,x,y

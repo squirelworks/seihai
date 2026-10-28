@@ -47,6 +47,9 @@ pub struct PoseGanis {
     pub hurt: Option<Gani>,
     pub sit: Option<Gani>,
     pub idle: Option<Gani>,
+    /// Standing and walking with an object held over the head.
+    pub carrystill: Option<Gani>,
+    pub carry: Option<Gani>,
 }
 
 /// Which pose is on.
@@ -58,6 +61,8 @@ pub enum PoseKind {
     Idle,
     Walk,
     Swim,
+    CarryStill,
+    Carry,
 }
 
 /// A pose step ready to draw.
@@ -79,13 +84,17 @@ impl PoseKind {
             PoseKind::Idle => "idle.gani",
             PoseKind::Walk => "walk.gani",
             PoseKind::Swim => "swim.gani",
+            PoseKind::CarryStill => "carrystill.gani",
+            PoseKind::Carry => "carry.gani",
         }
     }
 
     /// The pose a file name belongs to (case-insensitive). `walk.gani` and
     /// `swim.gani` are not here: they load as the stepped motion ganis.
     pub fn from_file(name: &str) -> Option<PoseKind> {
-        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle].into_iter().find(|k| k.file().eq_ignore_ascii_case(name))
+        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle, PoseKind::CarryStill, PoseKind::Carry]
+            .into_iter()
+            .find(|k| k.file().eq_ignore_ascii_case(name))
     }
 }
 
@@ -105,6 +114,8 @@ impl OfflineSession {
             PoseKind::Hurt => self.poses.hurt = Some(gani),
             PoseKind::Sit => self.poses.sit = Some(gani),
             PoseKind::Idle => self.poses.idle = Some(gani),
+            PoseKind::CarryStill => self.poses.carrystill = Some(gani),
+            PoseKind::Carry => self.poses.carry = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
@@ -135,6 +146,20 @@ impl OfflineSession {
         }
         if self.combat.hurt_elapsed_ms().is_some_and(|ms| ms < HURT_POSE_MS) {
             if let Some(p) = pick(PoseKind::Hurt, &self.poses.hurt, 0) {
+                return Some(p);
+            }
+        }
+        // Holding an object: the carry poses (the 2.05 client plays its
+        // carrystill and carry ganis then). The carry walk shows the step the
+        // walk has reached.
+        if self.carried.is_some() {
+            if self.walking {
+                let step = self.walk_gani.as_ref().map_or(0, |p| p.frame);
+                if let Some(p) = pick(PoseKind::Carry, &self.poses.carry, step) {
+                    return Some(p);
+                }
+            }
+            if let Some(p) = pick(PoseKind::CarryStill, &self.poses.carrystill, 0) {
                 return Some(p);
             }
         }

@@ -230,6 +230,10 @@ pub struct OtherPlayer {
     pub status: Option<u8>,
     pub ap: Option<u8>,
     pub sword_power: Option<i8>,
+    /// What the player holds over the head: the sprite CARRYSPRITE (19)
+    /// names ([`crate::throwing::carry_sprite_from_wire`]); `None` empty
+    /// hands.
+    pub carry: Option<u16>,
 }
 
 impl OtherPlayer {
@@ -1237,6 +1241,7 @@ impl SessionState {
                     status: None,
                     ap: None,
                     sword_power: None,
+                    carry: None,
                 });
                 self.others.len() - 1
             }
@@ -1262,6 +1267,9 @@ impl SessionState {
         }
         if u.sword_power.is_some() {
             o.sword_power = u.sword_power;
+        }
+        if let Some(c) = u.carry {
+            o.carry = c;
         }
         let swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
         if swing {
@@ -1401,6 +1409,8 @@ struct OtherUpdate {
     status: Option<u8>,
     ap: Option<u8>,
     sword_power: Option<i8>,
+    /// CARRYSPRITE (19): the carried sprite, `Some(None)` empty hands.
+    carry: Option<Option<u16>>,
     /// PCONNECTED (51) or JOINLEAVELVL (50) = 0: the player left.
     left: bool,
 }
@@ -1423,6 +1433,7 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             }
             8 => u.sword_power = prop.gchar().map(sword_power_from_wire),
             18 => u.status = prop.gchar(),
+            19 => u.carry = prop.raw.first().map(|&b| crate::throwing::carry_sprite_from_wire(crate::throwing::carry_code_from_byte(b))),
             32 => u.ap = prop.gchar(),
             43 => u.cell_x = prop.gchar().map(i32::from),
             44 => u.cell_y = prop.gchar().map(i32::from),
@@ -1572,6 +1583,18 @@ fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn carrysprite_19_names_what_another_player_holds() {
+        let mut u = parse_other_player(&[0x20, 0x22, 19 + 0x20, 1 + 0x20], false, None).unwrap();
+        assert_eq!(u.carry, Some(Some(261)), "1 is the bush");
+        u = parse_other_player(&[0x20, 0x22, 19 + 0x20, 31], false, None).unwrap();
+        assert_eq!(u.carry, Some(None), "-1: empty hands");
+        u = parse_other_player(&[0x20, 0x22, 19 + 0x20, 201 + 0x20], false, None).unwrap();
+        assert_eq!(u.carry, Some(Some(239)));
+        u = parse_other_player(&[0x20, 0x22, 15 + 0x20, 0x40], false, None).unwrap();
+        assert_eq!(u.carry, None, "no prop 19: unchanged");
+    }
 
     #[test]
     fn split_and_route() {
@@ -2397,6 +2420,7 @@ mod tests {
             status: None,
             ap: None,
             sword_power: None,
+            carry: None,
         });
         st.apply_body(&relay(2, &[0x29, 0x2a, 0x20, 0x21, b'a']));
         assert_eq!(st.player_images[&2][&0].name, b"a");

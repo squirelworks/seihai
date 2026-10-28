@@ -46,3 +46,36 @@ The 2.05 client plays a crush sound on a break and a water sound on a splash. Se
 * **Board edit on break.** The real client may write tiles on a break (it does for a lift); none was seen.
 * **The 2.05 sprite table** was not compared with the 2.22 one.
 * The default art is original (`tools/gen_default_assets.py`), at the rectangles above; a user's own `sprites.png` of the real layout works because the same rectangles are used.
+
+## Carry pose and other players
+
+Read from the 2.05 client (derived).
+
+* **Pose.** Lifting plays the `lift` gani; while an object is held the
+  player shows `carrystill` standing and `carry` walking (built-in gani
+  names 10, 11 and 13). On the wire (SPRITE, 17) these are animation steps
+  23 (lift), 24 (carrystill) and 25 + frame (carry), which the 2.05 step
+  table sends as S = 23, 18, and 19, 20, 19, 18, 21, 22, 21, 18. A throw
+  sets the idle gani again.
+* **CARRYSPRITE (19).** Sent as a GCHAR: -1 (byte 31) with empty hands; for
+  a held object, 0 for sprite 65, 200 for 66, 201 for 239, otherwise the
+  sprite id minus 260 (bush 261 is 1, stone 263 is 3, vase 265 is 5, sign
+  267 is 7). The receiver maps it back the same way; a value whose sprite is
+  not in the carry table (261, 267, 265, 263, 239, 65, 66, 321, 347, 348)
+  becomes the bush. When a player's own CARRYSPRITE comes back as -1, the
+  player stops carrying.
+
+Seihai:
+
+* Lift sends CARRYSPRITE with the carried sprite's code, then a walk update
+  with S = 18. A throw sends `PLI_THROWCARRIED`, CARRYSPRITE -1 and a walk
+  update with S = 0. Every walk update while carrying sends S = 18 (Seihai
+  sends S = 0 for a plain walk too; the real client's walk and carry-walk
+  steps are not sent). The lift pose (S = 23) is not shown.
+* Another player's CARRYSPRITE is kept (`OtherPlayer::carry`) and its
+  object drawn above that player at the same place as our own. Other
+  players' bodies are still drawn in the idle pose.
+* Our own player draws `carrystill.gani` standing and `carry.gani` walking
+  (the walk's step) while carrying. The default set's art for them is our
+  own (arms raised; `default-assets.md`).
+
