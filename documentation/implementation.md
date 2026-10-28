@@ -30,7 +30,7 @@ No system SDL2. The `render` module provides:
 - `render_view` — software tile compositor from a 2048×512 sheet
 - `blit_sprite` — RGB/RGBA blit, skips alpha 0 or magenta
 - `draw_player_sprites` — body and head by direction
-- `draw_hud` — health and rupee bars
+- `hud::draw_hud` — the status display from the version's `state.png`, by the 2.05 routine's rules (`hud.md`); `draw_hud` (two plain bars) when there is no `state.png`
 - permanent chat bar at the bottom
 - chest/sign/NPC markers
 - windowed binary via `minifb` (`cargo run -p seihai`)
@@ -88,7 +88,7 @@ From the merged chat/HUD PRs:
 
 ## Open
 
-- Real chest art and full HUD (hearts, rupees, bombs, sword)
+- Real chest art; the HUD's selected-weapon slot and MP bar (see `hud.md`)
 - Other players and minimap
 - Full GANI frame stepping for walk
 - Movement speed and edge clamp
