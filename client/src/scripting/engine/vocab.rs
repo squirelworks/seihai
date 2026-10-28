@@ -108,6 +108,7 @@ pub static COMMANDS: &[Cmd] = &[
     c("set", "S", V200, Engine),
     c("unset", "S", V200, Engine),
     c("setstring", "SS", V200, Engine),
+    c("addstring", "SS", V200, Engine),
     c("setarray", "NR", V200, Engine),
     c("tokenize", "S", V202, Engine),
     c("tokenize2", "SS", V202, Engine),
@@ -238,6 +239,8 @@ pub static COMMANDS: &[Cmd] = &[
     c("changeimgcolors", "RRRRR", V200, Effect),
     c("changeimgzoom", "RR", V200, Effect),
     c("hideimg", "R", V200, Effect),
+    c("hideimgs", "RR", V200, Effect),
+    c("showtext", "RRSSS", V200, Effect),
     // Parsed but ignored by the 2.05 client.
     c("seturllevel", "S", V200, NoExec),
     c("setfocus", "RR", V200, NoExec),
@@ -346,6 +349,7 @@ pub static EVENTS: &[(&str, Era)] = &[
     ("shotbyplayer", V200),
     ("shotbybaddy", V200),
     ("weaponfired", V200),
+    ("weaponselected", V200),
     ("playerdies", V201),
     ("playerhurt", V201),
     ("movementfinished", V203),
@@ -457,6 +461,12 @@ pub static BUILTINS: &[Builtin] = &[
     // Chat tests, true only during `playerchats`. [inferred: whole line / contained text]
     Builtin { name: "playersays", args: &[T], since: V200 },
     Builtin { name: "playersays2", args: &[T], since: V200 },
+    // Stubs: return a value so scripts do not log every call.
+    Builtin { name: "strtofloat", args: &[T], since: V200 },
+    Builtin { name: "hasweapon", args: &[T], since: V200 },
+    Builtin { name: "keydown", args: &[N], since: V200 },
+    Builtin { name: "keydown2", args: &[N], since: V200 },
+    Builtin { name: "sarraylen", args: &[T], since: V200 },
 ];
 
 pub fn builtin_fn(name: &str, era: Era) -> Option<&'static Builtin> {

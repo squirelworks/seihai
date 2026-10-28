@@ -22,3 +22,4 @@ pub use value::Val;
 pub use ast::Script;
 pub use parser::parse;
 pub use vocab::Era;
+pub use world::Effect;

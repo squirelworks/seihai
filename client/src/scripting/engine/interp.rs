@@ -529,6 +529,10 @@ impl<'a> Run<'a> {
                 Val::Num(text.find(&part).map_or(-1.0, |b| text[..b].chars().count() as f64))
             }
             "ascii" => Val::Num(s(0).chars().next().map_or(0.0, |c| c as u32 as f64)),
+            "strtofloat" => Val::Num(s(0).trim().parse().unwrap_or(0.0)),
+            "hasweapon" => Val::Num(0.0),
+            "keydown" | "keydown2" => Val::Num(0.0),
+            "sarraylen" => Val::Num(0.0),
             "onwall" => {
                 let (x, y) = (n(0).floor(), n(1).floor());
                 let blocked = match &self.core.walls {
@@ -715,6 +719,14 @@ impl<'a> Run<'a> {
                 } else {
                     self.write_flag(&k, val);
                 }
+            }
+            "addstring" => {
+                let k = sv(v, 0).trim().to_ascii_lowercase();
+                if k.is_empty() {
+                    return;
+                }
+                let cur = self.core.flags.get(&k).cloned().unwrap_or_default();
+                self.write_flag(&k, format!("{cur}{}", sv(v, 1)));
             }
             "setarray" => {
                 let k = sv(v, 0).trim().to_ascii_lowercase();

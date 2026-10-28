@@ -509,6 +509,10 @@ fn main() {
     let mut scripts = SessionScripts::new(version);
     let mut scripts_serial = u64::MAX;
     let mut scripts_clock = Instant::now();
+    // Each unique script diagnostic is printed once. The same ignored
+    // command otherwise floods the terminal every tick.
+    let mut seen_script_log: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_script_effect: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut net_state = SessionState::default();
     // Buddy, ignore and mute lists from the settings directory.
     let mut lists = seihai::chatlists::ChatLists::load_default();
@@ -1746,10 +1750,18 @@ fn main() {
                 dirty = true;
             }
             for e in scripts.unhandled.drain(..) {
-                eprintln!("script effect not applied: {e:?}");
+                let key = match &e {
+                    seihai::scripting::engine::Effect::Command { name, .. } => format!("cmd:{name}"),
+                    other => format!("{other:?}"),
+                };
+                if seen_script_effect.insert(key) {
+                    eprintln!("script effect not applied: {e:?}");
+                }
             }
             for l in scripts.world.take_log() {
-                eprintln!("script: {l}");
+                if seen_script_log.insert(l.clone()) {
+                    eprintln!("script: {l}");
+                }
             }
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
