@@ -298,7 +298,14 @@ impl SessionScripts {
                         continue;
                     }
                     let per_half = 100.0 / s.max_hearts.max(1) as f64;
+                    let before = s.player_health;
                     s.player_health = (s.player_health as f64 - half_hearts * per_half).round().clamp(0.0, 100.0) as i32;
+                    // A script that would kill: log it, and leave one point
+                    // so movement is not locked while the cause is found.
+                    if s.player_health == 0 && before > 0 {
+                        eprintln!("script hurt: {half_hearts} half hearts, health {before} -> 0 (left at 1)");
+                        s.player_health = 1;
+                    }
                 }
                 Effect::SetPlayerVar { name, value } => match name.as_str() {
                     "playerx" => s.player_x = value as f32,
