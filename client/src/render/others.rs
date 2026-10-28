@@ -11,6 +11,10 @@ use crate::protocol::OtherPlayer;
 /// the clock rather than from the sprite prop.
 pub const OTHER_STEP_MS: u64 = 50;
 
+/// The dead bit of the STATUS prop (18). The 2.05 client sets it once its
+/// death timer reaches 28 ticks and sends no dead sprite.
+pub const STATUS_DEAD: u8 = 0x08;
+
 /// The walk step the 2.05 client sends for walk frames 0 to 7 as the sprite
 /// number S (1 to 5); its inverse picks the frame for an S.
 const WALK_S: [u8; 8] = [4, 5, 4, 3, 2, 1, 2, 3];
@@ -22,6 +26,14 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
     let walk = session.walk_gani.as_ref().map(|w| &w.gani);
     let looped = |g: Option<&'a Gani>| g.filter(|g| g.frame_count() > 0).map(|g| (g, (clock_ms / OTHER_STEP_MS) as usize % g.frame_count()));
     let first = |g: Option<&'a Gani>, i: usize| g.filter(|g| g.frame_count() > 0).map(|g| (g, i.min(g.frame_count() - 1)));
+    // A dead player: the dead bit is all the wire carries. By the time it is
+    // set the player's own death GANI has run 28 of its 30 ticks, so the last
+    // step is shown (inferred).
+    if o.status.is_some_and(|s| s & STATUS_DEAD != 0) {
+        if let Some(dead) = first(p.dead.as_ref(), usize::MAX) {
+            return Some(dead);
+        }
+    }
     if let Some(name) = o.looks.gani.as_deref() {
         let named = match name.to_ascii_lowercase().trim_end_matches(".gani") {
             "idle" => first(p.idle.as_ref(), 0),
@@ -31,6 +43,7 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
             "sit" => first(p.sit.as_ref(), 0),
             "carrystill" => first(p.carrystill.as_ref(), 0),
             "carry" => looped(p.carry.as_ref()),
+            "dead" => first(p.dead.as_ref(), usize::MAX),
             _ => None,
         };
         if named.is_some() {
@@ -134,5 +147,21 @@ mod tests {
         assert!(is(other_pose(&s, &other(2 + 4 * 32, Some("dance")), 0), s.poses.hurt.as_ref().unwrap(), 0));
         // Nothing loaded: none.
         assert!(other_pose(&OfflineSession::default(), &other(2, None), 0).is_none());
+    }
+
+    #[test]
+    fn the_dead_bit_shows_the_last_dead_step() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::Dead, gani(3));
+        let mut o = other(2 + 4 * 5, Some("walk"));
+        o.status = Some(STATUS_DEAD | 0x01);
+        assert!(is(other_pose(&s, &o, 0), s.poses.dead.as_ref().unwrap(), 2), "the dead bit wins over the walk");
+        o.status = Some(0x01);
+        assert!(!is(other_pose(&s, &o, 0), s.poses.dead.as_ref().unwrap(), 2));
+        // No dead GANI loaded: the old pose.
+        let mut o = other(2, None);
+        o.status = Some(STATUS_DEAD);
+        let plain = session();
+        assert!(is(other_pose(&plain, &o, 0), plain.poses.idle.as_ref().unwrap(), 0));
     }
 }
