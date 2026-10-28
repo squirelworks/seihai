@@ -102,9 +102,8 @@ uses the 2.05 rule for every build until they are.
   does to NPCs, players and baddies it hits was not read.
 * **What a cut or a lift drops** (rupees, hearts, bombs): the spawn routine
   takes the entry index and was not read, so nothing drops.
-* **The carrying gani** (the walk-while-carrying pose) was not read. The
-  carried object is drawn as its own sprite (not the board tiles) above the
-  head; see `throwing.md`.
+* **Carrying pose and what others see**: see `throwing.md`, "Carry pose
+  and other players".
 * **Telling the server.** The client writes the changed tiles into the level
   for everyone (a board-modify the client sends). Seihai edits only its own
   copy, so other players do not see the bush vanish and a re-entry restores

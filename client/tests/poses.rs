@@ -300,3 +300,36 @@ fn in_water_the_swim_animation_is_drawn_and_a_swing_or_hurt_is_not() {
     assert_ne!(draw(&gani("swim.gani"), 0, 2, &a), draw(&gani("walk.gani"), 1, 2, &a));
     assert_ne!(draw(&gani("walk.gani"), 1, 2, &a), draw(&gani("idle.gani"), 0, 2, &a));
 }
+
+// ---- carrying -------------------------------------------------------------
+
+#[test]
+fn holding_an_object_shows_the_carry_poses_and_sends_the_carry_sprite() {
+    let mut s = walker();
+    s.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
+    s.set_pose_gani(PoseKind::Carry, gani("carry.gani"));
+    s.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    assert_eq!(pose(&s), Some((PoseKind::CarryStill, 0)));
+    let dir = s.player_dir;
+    assert_eq!(s.sprite_value(), dir + 4 * seihai::combat::CARRY_SPRITE_S, "S = 18 while carrying");
+    // walking steps the carry walk with the walk's step
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        assert!(s.try_move(0.5, 0.0).is_some());
+        seen.push(pose(&s).unwrap());
+    }
+    assert_eq!(seen, vec![(PoseKind::Carry, 1), (PoseKind::Carry, 2), (PoseKind::Carry, 3)]);
+    assert_eq!(s.sprite_value(), s.player_dir + 4 * 18);
+    // empty hands: back to the plain poses and S = 0
+    s.carried = None;
+    assert_eq!(pose(&s).map(|p| p.0), Some(PoseKind::Walk));
+    assert!(s.stop_walking());
+    assert_eq!(pose(&s), Some((PoseKind::Idle, 0)));
+    assert_eq!(s.sprite_value(), s.player_dir);
+    // the carry pictures differ from idle and walk
+    let a = art();
+    for d in 0..4u8 {
+        assert_ne!(draw(&gani("carrystill.gani"), 0, d, &a), draw(&gani("idle.gani"), 0, d, &a));
+        assert_ne!(draw(&gani("carry.gani"), 1, d, &a), draw(&gani("walk.gani"), 1, d, &a));
+    }
+}
