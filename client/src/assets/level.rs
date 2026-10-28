@@ -334,6 +334,51 @@ pub const TYPE_WALL_MIN: u8 = 20;
 const TYPE_HARD_WALL: u8 = 22;
 /// Chair (bench, couch): walkable, and the player sits on it.
 pub const TYPE_CHAIR: u8 = 3;
+/// The top and bottom halves of a bed (`arrays.dat` arrays 5 and 6).
+pub const TYPE_BED_TOP: u8 = 4;
+pub const TYPE_BED_BOTTOM: u8 = 5;
+/// A wall that thrown objects fly over (`arrays.dat` array 2).
+pub const TYPE_THROW_THROUGH: u8 = 20;
+
+/// The tile type of `id` in a tileset of the new kind (`addtiledef` with
+/// type 1 or 2), where the type follows from where the tile sits on the
+/// sheet instead of from `arrays.dat`. This is the 2.05 `tiletype(x, y)`
+/// rule; `row` is `id / 16` and `col` is `id % 16`.
+///
+/// The checks run in this order, so the lava block (192 to 287) sits inside
+/// the water block (64 to 287) and the rule never answers 12.
+pub fn new_world_tile_type(id: u16) -> u8 {
+    let (id, col, row) = (u32::from(id), u32::from(id) % 16, u32::from(id) / 16);
+    let wall = id == 32
+        || (col >= 2 && (26..=27).contains(&row))
+        || (30..=47).contains(&row)
+        || (84..=95).contains(&row)
+        || (116..=127).contains(&row)
+        || (row >= 128 && (row >> 4) & 1 == 1);
+    if wall {
+        return if (0x200..0x300).contains(&id) {
+            TYPE_THROW_THROUGH
+        } else if col >= 8 && (30..=31).contains(&row) {
+            21
+        } else {
+            TYPE_HARD_WALL
+        };
+    }
+    match id {
+        0x120..=0x13f => 2,
+        0x140..=0x17f => TYPE_CHAIR,
+        0x180..=0x18f => TYPE_BED_TOP,
+        0x190..=0x19f => TYPE_BED_BOTTOM,
+        0x40..=0x11f => TYPE_WATER,
+        _ if col < 2 && (26..=27).contains(&row) => 6,
+        0x300..=0x31f => 6,
+        0x320..=0x33f => 7,
+        0x340..=0x38f => 8,
+        0x390..=0x3af => 9,
+        0x3b0..=0x3df => 10,
+        _ => 0,
+    }
+}
 
 /// What a tile does to a walking player.
 ///
@@ -418,11 +463,21 @@ impl TileTypes {
     /// - array 1: the liquid list. Water and lava tiles are in it, and
     ///   many of the water tiles are *not* in `nowall`, so the first
     ///   version of this loader turned water into wall.
+    /// - array 2: the throw-through list. A listed tile that is a wall
+    ///   gets type 20, the wall thrown objects fly over.
     /// - array 3: the lava list. A liquid tile that is also here is lava
     ///   (12, walkable); one that is not is water (11, swimmable).
+    /// - arrays 4, 5 and 6: chairs (3), bed tops (4) and bed bottoms (5).
+    ///   Only a passable tile takes these types.
     ///
-    /// Arrays 2 and 4 to 7 do not change movement and are skipped. Any
-    /// array that is cut short or implausibly long ends the scan, so a
+    /// The 2.05 client keeps these as lists and asks one list per type
+    /// test, so a tile can be in two of them (6 throw-through tiles of the
+    /// 2.22 file are also passable). One type byte per tile holds that as
+    /// long as walking comes first: a passable tile stays walkable, and a
+    /// wall only changes to 20 when it is in the throw-through list. See
+    /// `documentation/tile-types.md`.
+    ///
+    /// Any array that is cut short or implausibly long ends the scan, so a
     /// file with only the first array still loads.
     pub fn parse_arrays(data: &[u8]) -> Result<Self, String> {
         if data.len() < 4 {
@@ -460,14 +515,20 @@ impl TileTypes {
                 types[id] = if lava.contains(&id) { TYPE_LAVA } else { TYPE_WATER };
             }
         }
-        // Array 4: chair tiles (benches, chairs, couches). Every one is also in
-        // the passable list; they keep walking behaviour and only get the
-        // chair type byte (3, as in the tile-type list of the scripting
-        // language). Arrays 5 and 6 (the two halves of a bed) are not read.
-        if let Some(chairs) = arrays.get(4) {
-            for &id in chairs.iter().filter(|&&id| id < 4096) {
+        if let Some(through) = arrays.get(2) {
+            for &id in through.iter().filter(|&&id| id < 4096) {
+                if types[id] == TYPE_HARD_WALL {
+                    types[id] = TYPE_THROW_THROUGH;
+                }
+            }
+        }
+        // Arrays 4 to 6: chairs (benches, chairs, couches) and the two halves
+        // of a bed. They keep walking behaviour and only get the type byte of
+        // the scripting language's tile-type list.
+        for (index, kind) in [(4, TYPE_CHAIR), (5, TYPE_BED_TOP), (6, TYPE_BED_BOTTOM)] {
+            for &id in arrays.get(index).into_iter().flatten().filter(|&&id| id < 4096) {
                 if types[id] == 0 {
-                    types[id] = TYPE_CHAIR;
+                    types[id] = kind;
                 }
             }
         }
@@ -535,16 +596,18 @@ mod tiletypes_tests {
     }
 
     /// Array 4 (chair tiles) marks passable tiles as chairs and never makes a
-    /// wall walkable; bed arrays 5 and 6 are left alone.
+    /// wall walkable; bed arrays 5 and 6 mark the two halves of a bed.
     #[test]
     fn arrays_chair_list_marks_chairs() {
-        // passable: 0, 8, 9; chairs: 8 and 40 (not passable); bed top: 9
-        let data = arrays_blob(&[&[0, 8, 9], &[], &[], &[], &[8, 40], &[9], &[]]);
+        // passable: 0, 8, 9, 10; chairs: 8 and 40 (not passable); bed: 9 / 10, 41
+        let data = arrays_blob(&[&[0, 8, 9, 10], &[], &[], &[], &[8, 40], &[9], &[10, 41]]);
         let t = TileTypes::parse_arrays(&data).unwrap();
         assert!(t.is_chair(8));
         assert_eq!(t.kind(8), TileKind::Open, "a bench is walkable");
         assert!(!t.is_chair(40) && t.is_wall(40), "a wall in the chair list stays a wall");
         assert!(!t.is_chair(0) && !t.is_chair(9));
+        assert_eq!([9, 10, 41].map(|id| t.raw(id)), [Some(TYPE_BED_TOP), Some(TYPE_BED_BOTTOM), Some(TYPE_HARD_WALL)]);
+        assert_eq!(t.kind(9), TileKind::Open, "a bed is walkable");
         // a file with fewer arrays has no chairs
         let t = TileTypes::parse_arrays(&arrays_blob(&[&[0, 8]])).unwrap();
         assert!(!t.is_chair(8));
@@ -564,6 +627,17 @@ mod tiletypes_tests {
         assert!(t.is_water(6) && !t.is_wall(6) && !t.is_wall(7));
     }
 
+    /// Array 2 turns walls into the throw-through type and leaves passable
+    /// tiles walkable.
+    #[test]
+    fn arrays_throw_through_list_marks_walls_type_20() {
+        // passable: 0, 5; throw-through: 5 (passable) and 6, 7 (walls)
+        let data = arrays_blob(&[&[0, 5], &[], &[5, 6, 7]]);
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        assert_eq!([5, 6, 7, 8].map(|id| t.raw(id)), [Some(0), Some(20), Some(20), Some(TYPE_HARD_WALL)]);
+        assert!(t.is_wall(6), "a throw-through tile still blocks walking");
+    }
+
     #[test]
     fn arrays_tolerates_trailing_data_and_one_array() {
         let mut data = arrays_blob(&[&[0], &[4]]);
@@ -575,6 +649,37 @@ mod tiletypes_tests {
         assert!(TileTypes::parse_arrays(&arrays_blob(&[&[0]])).is_ok());
         assert!(TileTypes::parse_arrays(&[0, 0, 1]).is_err());
         assert!(TileTypes::parse_arrays(&[0, 0, 0, 9, 0, 0]).is_err());
+    }
+
+    #[test]
+    fn new_world_rule_follows_the_sheet_position() {
+        let cases: [(u16, u8); 22] = [
+            (0, 0),
+            (32, 22),
+            (64, 11),
+            (200, 11), // the lava block is inside the water block
+            (0x120, 2),
+            (0x150, 3),
+            (0x185, 4),
+            (0x195, 5),
+            (0x1a2, 22), // row 26, col 2
+            (0x1a1, 6),  // row 26, col 1
+            (0x1e8, 21), // row 30, col 8
+            (0x1e7, 22),
+            (0x200, 20),
+            (0x2ff, 20),
+            (0x300, 6),
+            (0x320, 7),
+            (0x340, 8),
+            (0x390, 9),
+            (0x3b0, 10),
+            (0x3e0, 0),
+            (0x800, 0),
+            (0x900, 22),
+        ];
+        for (id, want) in cases {
+            assert_eq!(new_world_tile_type(id), want, "tile {id:#x}");
+        }
     }
 
     #[test]

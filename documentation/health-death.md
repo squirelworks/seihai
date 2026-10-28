@@ -29,7 +29,7 @@ documents, the timings from the decompile.
 | 0 | Hearts reached 0 (or below): the player is dead, faces down, the `playerdies` script event fires. The victim sends `PLI_CLAIMPKER` now, if a hit by another player did it. |
 | 0 to 27 | Controls ignored (movement, interact). The timer counts up and stops at 30 (1.5 s). |
 | 28 | The dead bit (`0x08`) goes out in `PLI_PLAYERPROPS` with `PLPROP_STATUS` (18). Controls work again. |
-| after 27 | An arrow key, A or Space respawns. |
+| after 27 | A direction key, the action key or the sword key (by default arrows, I/J/K/L, A, S or Space) respawns. |
 
 A hit that leaves hearts at 0 starts the death once; a per-frame check keeps
 the player dead while hearts are 0 or below. Hearts going back above 0 does not
@@ -107,9 +107,12 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   position, so it is not used.
 - **Script warps offline** do not update the saved entry point (that code is in
   the script-warp work); online they do, through the normal level arrival.
-- **Dead gani.** The decompile says the local player plays the `dead` gani. The
-  renderer draws no player gani yet, so nothing is drawn. The sprite prop on
-  the wire stays idle plus direction, as the notes say.
+- **Dead gani** is done: while dead the player is drawn with `dead.gani`, one
+  step per 50 ms tick of the death timer, held on its last step (`pose.rs`).
+  Seihai's default set has no `dead.gani`, so it shows with a data folder that
+  has one. The sprite prop on the wire stays idle plus direction, as the notes
+  say. Other players' dead pose (the dead bit in their STATUS) is not drawn
+  yet.
 - **CURPOWER on damage.** Whether the real client sends its own CURPOWER when
   hearts drop is not in the notes, so Seihai sends none. The server learns of
   the death from the dead bit.

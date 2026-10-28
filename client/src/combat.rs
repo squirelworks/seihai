@@ -1427,6 +1427,7 @@ mod tests {
             ap: None,
             sword_power: power,
             carry: None,
+            looks: Default::default(),
         }
     }
 

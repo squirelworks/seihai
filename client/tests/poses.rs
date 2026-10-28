@@ -172,7 +172,7 @@ fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
         Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword) }
+    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword), shield: None }
 }
 
 fn draw(g: &Gani, step: usize, dir: u8, a: &Art) -> Vec<u8> {
@@ -332,4 +332,48 @@ fn holding_an_object_shows_the_carry_poses_and_sends_the_carry_sprite() {
         assert_ne!(draw(&gani("carrystill.gani"), 0, d, &a), draw(&gani("idle.gani"), 0, d, &a));
         assert_ne!(draw(&gani("carry.gani"), 1, d, &a), draw(&gani("walk.gani"), 1, d, &a));
     }
+}
+
+/// A single-direction GANI of `n` steps, looping or not.
+fn steps(n: usize, looped: bool) -> Gani {
+    let mut text = String::from(if looped { "SINGLEDIRECTION\nLOOP\nANI\n" } else { "SINGLEDIRECTION\nANI\n" });
+    for _ in 0..n {
+        text.push_str("1 0 0\n\n");
+    }
+    text.push_str("ANIEND\n");
+    Gani::parse(&text).unwrap()
+}
+
+#[test]
+fn a_dead_player_shows_dead_gani_stepped_by_the_death_timer() {
+    let mut s = session();
+    s.set_pose_gani(PoseKind::Dead, steps(3, false));
+    s.damage_half(100, None);
+    s.tick_life(0);
+    assert!(s.life.is_dead());
+    assert_eq!(pose(&s), Some((PoseKind::Dead, 0)));
+    s.tick_life(50);
+    assert_eq!(pose(&s), Some((PoseKind::Dead, 1)));
+    // Held on the last step.
+    s.tick_life(500);
+    assert_eq!(pose(&s), Some((PoseKind::Dead, 2)));
+}
+
+#[test]
+fn hurt_gani_steps_and_a_looping_one_lasts_the_hurt_mode() {
+    let mut s = session();
+    s.set_pose_gani(PoseKind::Hurt, steps(12, false));
+    s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
+    s.tick_combat(150);
+    assert_eq!(pose(&s), Some((PoseKind::Hurt, 3)));
+    // 12 steps are 600 ms, longer than HURT_POSE_MS: shown to the end.
+    s.tick_combat(400);
+    assert_eq!(pose(&s), Some((PoseKind::Hurt, 11)));
+    s.tick_combat(100);
+    assert_eq!(pose(&s), None);
+    let mut l = session();
+    l.set_pose_gani(PoseKind::Hurt, steps(2, true));
+    l.receive_hurtplayer(&hurt_packet(1), Some((l.player_x + 2.0, l.player_y)));
+    l.tick_combat(1_550);
+    assert_eq!(pose(&l), Some((PoseKind::Hurt, 1)));
 }

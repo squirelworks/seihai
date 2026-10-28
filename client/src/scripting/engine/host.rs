@@ -47,9 +47,12 @@ impl SessionScripts {
                 }
             }
         }
-        self.world.core.walls = session.current_level.as_ref().zip(session.tiletypes.as_ref()).map(|(l, t)| {
-            (0..64 * 64).map(|i| l.kind_at(t, (i % 64) as f32 + 0.5, (i / 64) as f32 + 0.5) == crate::assets::TileKind::Blocking).collect()
+        let kinds: Option<Vec<crate::assets::TileKind>> = session.current_level.as_ref().zip(session.tiletypes.as_ref()).map(|(l, t)| {
+            (0..64 * 64).map(|i| l.kind_at(t, (i % 64) as f32 + 0.5, (i / 64) as f32 + 0.5)).collect()
         });
+        use crate::assets::TileKind::{Blocking, Lava, Water};
+        self.world.core.walls = kinds.as_ref().map(|k| k.iter().map(|&k| k == Blocking).collect());
+        self.world.core.water = kinds.map(|k| k.into_iter().map(|k| k == Water || k == Lava).collect());
         self.sync_player(session);
         self.world.start_all();
         self.world.broadcast("playerenters");

@@ -458,6 +458,10 @@ pub static BUILTINS: &[Builtin] = &[
     Builtin { name: "arraylen", args: &[T], since: V200 },
     // Level collision at a point in tiles; true off the board.
     Builtin { name: "onwall", args: &[N, N], since: V200 },
+    // Liquid (water or lava) at a point in tiles; false off the board.
+    Builtin { name: "onwater", args: &[N, N], since: V200 },
+    // -1 on the default tileset, as in 2.05 (see documentation/tile-types.md).
+    Builtin { name: "tiletype", args: &[N, N], since: V200 },
     // Chat tests, true only during `playerchats`. [inferred: whole line / contained text]
     Builtin { name: "playersays", args: &[T], since: V200 },
     Builtin { name: "playersays2", args: &[T], since: V200 },

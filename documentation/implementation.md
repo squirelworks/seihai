@@ -15,7 +15,7 @@ Date: 2026-10-22
 8. Step an optional walk GANI on every successful move.
 9. Apply `hide`/`show`, `warp`, `hurt`, `say`/`message`, `set`/`unset`, `setstring`/`addstring`, `setplayerprop`, `setimg`/`setshape`, and `move` via `handle_command`.
 10. Use the documented single-point foot test (`+32` / `+44` pixel offsets) in `try_move`.
-11. Load type-0 collision from `arrays.dat` via `load_tiletypes_arrays`.
+11. Load type-0 collision from `arrays.dat` via `load_tiletypes_arrays`. Arrays 2, 4, 5 and 6 give throw-through (20), chair (3) and bed (4, 5) types (`tile-types.md`).
 12. Detect nearby NPCs with `check_touch`.
 13. Place stamps via `Level::place_stamp` or `place_named_stamp`.
 14. Detect `LINK` entry and record the destination in `pending_link`.
@@ -34,6 +34,7 @@ No system SDL2. The `render` module provides:
 - permanent chat bar at the bottom
 - chests from their records; an NPC whose image is not loaded draws nothing (`npc-images.md`)
 - NPC drawing heights: `drawunderplayer` and default NPCs before the players; `drawoverplayer`, `showimg` images and `drawaslight` after (`npc-draw-order.md`)
+- other players drawn through their GANI with their own sword, shield, head and body (`other-players-looks.md`)
 - windowed binary via `minifb` (`cargo run -p seihai`)
 - F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
 - Play offline button in the GUI skips the connection
@@ -48,7 +49,7 @@ From the merged chat/HUD PRs:
 - Permanent chat bar at the bottom. Enter opens it, Enter again sends.
 - F2 opens a PM to the nearest player.
 - F3 toggles the debug overlay (fps, position, level, frames, players).
-- Tab toggles the player list. (F4 is the level editor, not built yet.)
+- F7 toggles the player list; Tab opens the chat bar, as in the readme (`keys.md`). (F4 is the level editor, not built yet.)
 - F1 or ? shows the key help; a hint says so at start. The list is `client/src/help.rs`, and a test keeps it in step with `bin/main.rs`.
 - F12 saves a PNG to `screenshots/`.
 - F9 is developer mode (wallhack). It is off at every start, never saved, shows `DEV MODE` while on, and turns itself off on a level change, warp or disconnect. Build with `--no-default-features` to compile the wallhack out.
