@@ -47,6 +47,12 @@ pub enum ClientVersion {
     V201,
     /// Graal 2.02 (`GNW15041`). Gen 3.
     V202,
+    /// Graal 2.02 rev 2 (`GNW20041`). Gen 3.
+    V202R2,
+    /// Graal 2.03 (`GNW06051`). Gen 3.
+    V203,
+    /// Graal 2.04 (`GNW24061`). Gen 3.
+    V204,
     /// Graal 2.05 rev 2 (`GNW03081`). Gen 3.
     V205,
     /// Graal 2.1 (`GNW31101`). Gen 3. No binary; inferred.
@@ -138,7 +144,8 @@ impl ClientVersion {
     pub fn all_versions() -> &'static [ClientVersion] {
         &[
             Self::V133, Self::V134, Self::V135, Self::V136, Self::V137, Self::V138, Self::V139,
-            Self::V141, Self::V142, Self::V200, Self::V201, Self::V202, Self::V205, Self::V210,
+            Self::V141, Self::V142, Self::V200, Self::V201, Self::V202, Self::V202R2, Self::V203,
+            Self::V204, Self::V205, Self::V210,
             Self::V212, Self::V213, Self::V214, Self::V215, Self::V216, Self::V217, Self::V222,
             Self::V230, Self::V231,
         ]

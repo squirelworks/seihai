@@ -14,10 +14,11 @@ use seihai::net::Connection;
 use seihai::offline::OfflineSession;
 use seihai::protocol::{ChatKind, ClientVersion, SessionState};
 use seihai::settings::Settings;
+use seihai::keys::{Action, KeyMap};
 use seihai::ui;
 use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin, render_view,
-    Framebuffer,
+    hud, Framebuffer,
 };
 use std::env;
 use std::path::PathBuf;
@@ -273,10 +274,22 @@ fn main() {
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");
+    // The version's own status display; without it, the plain bars.
+    let state_sheet = load("", "state.png");
+    let keymap = KeyMap::for_version(profile.ui.key_config, &Settings::load().keysets);
+    let button_keys = [
+        keymap.label(Action::Act),
+        keymap.label(Action::Attack),
+        keymap.label(Action::Item),
+    ];
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
-    let draw = |session: &OfflineSession, others: &[seihai::protocol::OtherPlayer], my_chat: &str| -> Framebuffer {
+    let draw = |session: &OfflineSession,
+                others: &[seihai::protocol::OtherPlayer],
+                my_chat: &str,
+                minimap: bool|
+     -> Framebuffer {
         let mut fb = render_view(session, &sheet, sw, sh, view_w, view_h);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
@@ -328,9 +341,26 @@ fn main() {
         }
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
-        fb.draw_hud(session.player_health, session.rupees);
-        // The minimap is set by the game server from 2.1 on.
-        if profile.ui.minimap {
+        match &state_sheet {
+            Some((w, px)) => hud::draw_hud(
+                &mut fb,
+                &hud::HudSheet { px, w: *w },
+                profile.ui.hud,
+                profile.ui.ap_bar,
+                &hud::HudValues {
+                    half_hearts: session.player_health * session.max_hearts / 100,
+                    max_half_hearts: session.max_hearts,
+                    rupees: session.rupees,
+                    bombs: session.bombs,
+                    arrows: session.darts,
+                    ap: 50,
+                    keys: button_keys,
+                },
+            ),
+            None => fb.draw_hud(session.player_health, session.rupees),
+        }
+        // Every build turns the minimap on and off with Alt+3.
+        if minimap {
             if let Some(level) = &session.current_level {
                 fb.draw_minimap(level, session.player_x, session.player_y);
             }
@@ -338,7 +368,8 @@ fn main() {
         fb
     };
     let mut my_chat = String::new();
-    let mut scene = draw(&session, &[], &my_chat);
+    let mut show_minimap = false;
+    let mut scene = draw(&session, &[], &my_chat, show_minimap);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
@@ -495,11 +526,13 @@ fn main() {
         // Arrow keys move the player half a tile per step, at most one
         // step every 50 ms.
         let mut moved = false;
-        // A or Space: close the reading panel, or interact with what the
-        // player faces.
-        let interact = !input.is_open()
-            && (window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No)
-                || window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No));
+        let alt = window.is_key_down(minifb::Key::LeftAlt) || window.is_key_down(minifb::Key::RightAlt);
+        // Action (A): close the reading panel, or interact with what the
+        // player faces. Map (M) also cancels reading.
+        let interact = !input.is_open() && !alt && keymap.pressed(&window, Action::Act);
+        if !input.is_open() && !alt && keymap.pressed(&window, Action::Map) && session.reading.take().is_some() {
+            dirty = true;
+        }
         if interact {
             if session.reading.take().is_none() {
                 match session.interact() {
@@ -517,16 +550,16 @@ fn main() {
         }
         if !input.is_open() && session.reading.is_none() && last_step.elapsed() >= STEP_EVERY {
             let (mut dx, mut dy) = (0.0, 0.0);
-            if window.is_key_down(minifb::Key::Left) {
+            if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Right) {
+            if keymap.down(&window, Action::Right) {
                 dx += 0.5;
             }
-            if window.is_key_down(minifb::Key::Up) {
+            if keymap.down(&window, Action::Up) {
                 dy -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Down) {
+            if keymap.down(&window, Action::Down) {
                 dy += 0.5;
             }
             if dx != 0.0 || dy != 0.0 {
@@ -546,9 +579,10 @@ fn main() {
             }
         }
 
-        // Enter opens the chat bar, and sends it when it is open. F2 opens
-        // a PM to the nearest player.
-        if window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No) {
+        // Tab (switch to chat) or Enter opens the chat bar; Enter sends it.
+        if !input.is_open() && keymap.pressed(&window, Action::SwitchToChat) {
+            input.open(ui::InputMode::Chat);
+        } else if window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No) {
             if !input.is_open() {
                 input.open(ui::InputMode::Chat);
             } else if let Some((mode, text)) = input.submit() {
@@ -580,8 +614,42 @@ fn main() {
                 chat_scroll = 0;
             }
         }
-        if !input.is_open() {
-            if window.is_key_pressed(minifb::Key::F2, minifb::KeyRepeat::No) {
+        let key = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
+        let note = |state: &mut SessionState, text: String| state.push_chat(ChatKind::Admin, "Seihai".into(), text);
+        if !input.is_open() && alt {
+            // The readme's Alt keys: 2 screenshot, 3 minimap, 4 bytes per
+            // second (the debug overlay here), 8/9 zoom from 1.38.
+            if key(minifb::Key::Key3) {
+                show_minimap = !show_minimap;
+                dirty = true;
+            }
+            if key(minifb::Key::Key4) {
+                show_debug = !show_debug;
+            }
+            if profile.ui.zoom_keys && (key(minifb::Key::Key8) || key(minifb::Key::Key9)) {
+                note(&mut net_state, "zoom is not implemented yet".into());
+            }
+        } else if !input.is_open() {
+            if key(minifb::Key::F7) {
+                show_players = !show_players;
+            }
+            if key(minifb::Key::F8) {
+                let text = if profile.ui.server_list_key {
+                    "the server list is in the launcher".to_string()
+                } else {
+                    format!("{} has no server list key", profile.label)
+                };
+                note(&mut net_state, text);
+            }
+            if keymap.pressed(&window, Action::Pause) {
+                note(&mut net_state, "pause is not implemented yet".into());
+            }
+            // F2 and F3 load and save a game in the single player builds.
+            // Elsewhere F2 opens a PM to the nearest player and F3 shows
+            // the debug overlay.
+            if profile.ui.save_games && (key(minifb::Key::F2) || key(minifb::Key::F3)) {
+                note(&mut net_state, "saved games are not implemented yet".into());
+            } else if key(minifb::Key::F2) {
                 match ui::nearest(&net_state.others, session.player_x, session.player_y) {
                     Some(o) => {
                         let name = o.nick.clone().unwrap_or_else(|| format!("#{}", o.id));
@@ -594,7 +662,7 @@ fn main() {
                     ),
                 }
             }
-            if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
+            if !profile.ui.save_games && key(minifb::Key::F3) {
                 show_debug = !show_debug;
             }
             let f4 = window.is_key_pressed(minifb::Key::F4, minifb::KeyRepeat::No);
@@ -629,7 +697,7 @@ fn main() {
         }
 
         if dirty {
-            scene = draw(&session, &net_state.others, &my_chat);
+            scene = draw(&session, &net_state.others, &my_chat, show_minimap);
             dirty = false;
         }
         let mut frame = scene.clone();
@@ -659,7 +727,9 @@ fn main() {
             ui::draw_panel(&mut frame, "Sign", text);
         }
         ui::draw_chat(&mut frame, &net_state.chat_log, chat_scroll, &input);
-        if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {
+        let shot = window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No)
+            || (alt && window.is_key_pressed(minifb::Key::Key2, minifb::KeyRepeat::No));
+        if !input.is_open() && shot {
             let line = match save_screenshot(&frame) {
                 Ok(path) => format!("saved {}", path.display()),
                 Err(e) => format!("screenshot failed: {e}"),

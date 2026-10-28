@@ -164,9 +164,12 @@ pub struct Protocol {
     pub pli: IdSet,
     /// `PLI_LANGUAGE` (37) right after login.
     pub sends_language: bool,
-    /// `PLI_TAMPERCHECK` (39) after the language. Seihai cannot fill it
-    /// yet, so this is a record only.
+    /// `PLI_TAMPERCHECK` (39) after the language.
     pub tampercheck: bool,
+    /// The tampercheck payload, where it is known. It is constant per
+    /// build (two 2.22 sessions sent the same bytes). Without it Seihai
+    /// sends no tampercheck.
+    pub tampercheck_payload: Option<&'static [u8]>,
     /// Peer-to-peer UDP channel present.
     pub udp: bool,
     /// UDP off by default (`noudp=true` in the shipped config).
@@ -226,9 +229,13 @@ pub enum HudArt {
     Letters,
     /// 1.35–1.37: as `Letters` with a CHAT label.
     LettersChat,
-    /// 1.38+: 224×97, blank item buttons (keys are configurable) and the
-    /// digits moved into `state.png`. [later builds inferred]
+    /// 1.38–1.41: blank item buttons (keys are configurable) with the
+    /// letter drawn on them, and the digits moved into `state.png`. 1.41
+    /// grows the sheet to 224×145 for the AP bar.
     BlankButtons,
+    /// 1.42 and later: one button shape drawn three times with a letter,
+    /// 224×145 with the AP bar, gralat bag and clock. [2.17+ inferred]
+    OneButton,
 }
 
 /// Which parts of the client this version shows.
@@ -239,8 +246,17 @@ pub struct Ui {
     pub chat_recall: bool,
     /// Which HUD art the build ships in `state.png`.
     pub hud: HudArt,
-    /// Minimap set by the game server (2.1+).
-    pub minimap: bool,
+    /// AP (alignment) bar under the item buttons (1.41+).
+    pub ap_bar: bool,
+    /// Minimap image set by the game server (2.1+). Every build toggles
+    /// its minimap with Alt+3.
+    pub server_minimap: bool,
+    /// F8 opens the server list (1.41+).
+    pub server_list_key: bool,
+    /// F2/F3 load and save games (offline saves, gone in 1.42).
+    pub save_games: bool,
+    /// Alt+8/Alt+9 zoom (1.38+).
+    pub zoom_keys: bool,
     /// The level editor (F4) and level loading (F5) are inside the client.
     /// 2.3 moved them to a separate GraalEditor.
     pub editor: bool,
@@ -345,8 +361,9 @@ const PLO_205: IdSet = PLO_204.with(168);
 /// 2.1: the 2.1 test builds add 49 and 169; ghost mode and the gserver
 /// bigmap/minimap (170–174) arrive with 2.1. [inferred]
 const PLO_210: IdSet = PLO_205.with(49).with_range(169, 174);
-/// 2.14: large files, serverwarp and the status list. [inferred]
-const PLO_214: IdSet = PLO_210.with_all(&[68, 69]).with_range(175, 184);
+/// 2.14: large files (68, 69), serverwarp (178) and the status list (180).
+/// [inferred]
+const PLO_214: IdSet = PLO_210.with_all(&[68, 69, 178, 180]);
 /// 79 ids.
 const PLO_217: IdSet = PLO_205.with_all(&[49, 68, 69]).with_range(169, 185);
 /// 80 ids.
@@ -367,10 +384,25 @@ const PLI_205: IdSet = IdSet::range(0, 24)
     .with_range(26, 30)
     .with_range(32, 38)
     .with_all(&[80, 81]);
-/// 1.41–2.04 between the two. [inferred]
-const PLI_141: IdSet = PLI_139.with_range(34, 36);
-/// 2.17+: adds TAMPERCHECK (39). Later additions not traced. [inferred]
-const PLI_217: IdSet = PLI_205.with(39);
+/// 1.41: the 1.39 set.
+const PLI_141: IdSet = PLI_139;
+/// 1.42: adds UPDATEFILE (34).
+const PLI_142: IdSet = PLI_141.with(34);
+/// 2.01: adds ADJACENTLEVEL (35) and HITOBJECTS (36).
+const PLI_201: IdSet = PLI_142.with_all(&[35, 36]);
+/// 2.02 rev 2: adds LANGUAGE (37).
+const PLI_202R2: IdSet = PLI_201.with(37);
+/// 2.03: adds TRIGGERACTION (38). The same as 2.05.
+const PLI_203: IdSet = PLI_202R2.with(38);
+/// 2.14: adds SERVERWARP (41). [inferred]
+const PLI_214: IdSet = PLI_205.with(41);
+/// 2.17: TAMPERCHECK (39), SHOOT (40), SERVERWARP (41), MUTEPLAYER (43),
+/// PROCESSLIST (44, 45).
+const PLI_217: IdSet = PLI_205.with_range(39, 41).with_range(43, 45);
+/// 2.22: the 2.17 set; the 2.22 scan is a floor that adds nothing new.
+const PLI_222: IdSet = PLI_217;
+/// 2.31: drops PUTNPC (21), adds ENTERLEVEL (46).
+const PLI_231: IdSet = PLI_222.without(21).with(46);
 
 // Own-player prop sets (`PLO_PLAYERPROPS`).
 const OWN_133: IdSet = IdSet::range(0, 33);
@@ -379,8 +411,8 @@ const OWN_141: IdSet = IdSet::range(0, 36);
 const OWN_202: IdSet = IdSet::range(0, 41);
 const OWN_204: IdSet = IdSet::range(0, 42);
 const OWN_210: IdSet = IdSet::range(0, 45);
-/// 2.16 adds GATTRIB10–30 (54–74). [inferred for 2.16/2.17]
-const OWN_216: IdSet = IdSet::range(0, 74).without_all(&[50, 51, 53]);
+/// 2.17: 0–49, 52, 54–74.
+const OWN_217: IdSet = IdSet::range(0, 74).without_all(&[50, 51, 53]);
 const OWN_222: IdSet = IdSet::range(0, 74).without_all(&[50, 51, 53]);
 const OWN_231: IdSet = IdSet::range(0, 80).without_all(&[50, 51, 53, 75, 76, 77]);
 
@@ -410,6 +442,10 @@ const fn other_upto(max: u8) -> IdSet {
     OTHER_205.and(IdSet::range(0, max).with_all(&[50, 51]))
 }
 
+/// The `PLI_TAMPERCHECK` payload 2.22 sends, the same in every captured
+/// session.
+const TAMPERCHECK_222: &[u8] = &[0x25, 0x0e, 0x4d, 0x0f, 0x96, 0x2b, 0x03, 0xed, 0xe6, 0x31];
+
 /// The base every row starts from: a 2.05 rev 2 client.
 const BASE: VersionProfile = VersionProfile {
     version: ClientVersion::V205,
@@ -425,6 +461,7 @@ const BASE: VersionProfile = VersionProfile {
         pli: PLI_205,
         sends_language: true,
         tampercheck: false,
+        tampercheck_payload: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -450,8 +487,12 @@ const BASE: VersionProfile = VersionProfile {
     ui: Ui {
         server_list: ServerList::Single,
         chat_recall: true,
-        hud: HudArt::BlankButtons,
-        minimap: false,
+        hud: HudArt::OneButton,
+        ap_bar: true,
+        server_minimap: false,
+        server_list_key: true,
+        save_games: false,
+        zoom_keys: true,
         editor: true,
         ganis: true,
         emoticons: true,
@@ -489,6 +530,10 @@ const CLASSIC: VersionProfile = VersionProfile {
         server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
         chat_recall: false,
         hud: HudArt::Letters,
+        ap_bar: false,
+        server_list_key: false,
+        save_games: true,
+        zoom_keys: false,
         ganis: false,
         emoticons: false,
         key_config: false,
@@ -505,7 +550,7 @@ const NEW_2_1: VersionProfile = VersionProfile {
     protocol: Protocol { plo: PLO_210, ..BASE.protocol },
     props: Props {
         own: OWN_210,
-        other: other_upto(45),
+        other: OTHER_205.with_range(43, 45),
         npc_max: 43,
         bow_prop10: false,
         ..BASE.props
@@ -516,7 +561,7 @@ const NEW_2_1: VersionProfile = VersionProfile {
         ..BASE.files
     },
     ui: Ui {
-        minimap: true,
+        server_minimap: true,
         log_window: true,
         ghost_mode: true,
         ..BASE.ui
@@ -532,7 +577,7 @@ const GEN5: VersionProfile = VersionProfile {
         encryption: EncryptionGen::Gen5,
         listserver: Some(Listserver { port: 14922, token: Some("GNW30123") }),
         plo: PLO_222,
-        pli: PLI_217,
+        pli: PLI_222,
         tampercheck: true,
         udp_off_by_default: true,
         ..NEW_2_1.protocol
@@ -630,6 +675,7 @@ pub static PROFILES: &[VersionProfile] = &[
         props: Props { other: OTHER_134, ..CLASSIC.props },
         ui: Ui {
             hud: HudArt::BlankButtons,
+            zoom_keys: true,
             emoticons: true,
             key_config: true,
             gs1_commands: 109,
@@ -655,6 +701,7 @@ pub static PROFILES: &[VersionProfile] = &[
         ui: Ui {
             chat_recall: true,
             hud: HudArt::BlankButtons,
+            zoom_keys: true,
             emoticons: true,
             key_config: true,
             gs1_commands: 111,
@@ -669,7 +716,6 @@ pub static PROFILES: &[VersionProfile] = &[
         token: "GNW13110",
         date: "",
         protocol: Protocol {
-            encryption: EncryptionGen::Gen3,
             listserver: Some(Listserver { port: 14923, token: None }),
             plo: PLO_139,
             pli: PLI_141,
@@ -682,8 +728,10 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 35,
             ..BASE.props
         },
-        levels: CLASSIC.levels,
+        levels: Levels { gmap: false, ..BASE.levels },
         ui: Ui {
+            hud: HudArt::BlankButtons,
+            save_games: true,
             ganis: false,
             server_in_title: false,
             gs1_commands: 126,
@@ -691,14 +739,14 @@ pub static PROFILES: &[VersionProfile] = &[
         },
         ..BASE
     },
-    // NewMain 1.42: DirectDraw 7, ganis, 51 server ids.
+    // NewMain 1.42: DirectDraw 7, ganis, 51 server ids, UPDATEFILE.
     VersionProfile {
         version: ClientVersion::V142,
         label: "1.42",
         token: "GNW08011",
         protocol: Protocol {
             plo: PLO_142,
-            pli: PLI_141,
+            pli: PLI_142,
             sends_language: false,
             ..BASE.protocol
         },
@@ -708,7 +756,7 @@ pub static PROFILES: &[VersionProfile] = &[
             npc_max: 35,
             ..BASE.props
         },
-        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        levels: Levels { gmap: false, ..BASE.levels },
         ui: Ui {
             server_in_title: false,
             gs1_commands: 134,
@@ -716,13 +764,14 @@ pub static PROFILES: &[VersionProfile] = &[
         },
         ..BASE
     },
+    // 2.00 drops the `.nw` loader until 2.05.
     VersionProfile {
         version: ClientVersion::V200,
         label: "2.00",
         token: "GNW24011",
         protocol: Protocol {
             plo: PLO_200,
-            pli: PLI_141,
+            pli: PLI_142,
             sends_language: false,
             ..BASE.protocol
         },
@@ -746,7 +795,7 @@ pub static PROFILES: &[VersionProfile] = &[
         token: "GNW23021",
         protocol: Protocol {
             plo: PLO_201,
-            pli: PLI_141,
+            pli: PLI_201,
             sends_language: false,
             ..BASE.protocol
         },
@@ -770,7 +819,7 @@ pub static PROFILES: &[VersionProfile] = &[
         token: "GNW15041",
         protocol: Protocol {
             plo: PLO_202,
-            pli: PLI_141,
+            pli: PLI_201,
             sends_language: false,
             ..BASE.protocol
         },
@@ -788,7 +837,67 @@ pub static PROFILES: &[VersionProfile] = &[
         },
         ..BASE
     },
-    VersionProfile { date: "", ..BASE },
+    // 2.02 rev 2 has its own token and is the first to send LANGUAGE.
+    VersionProfile {
+        version: ClientVersion::V202R2,
+        label: "2.02r2",
+        token: "GNW20041",
+        protocol: Protocol {
+            plo: PLO_202,
+            pli: PLI_202R2,
+            ..BASE.protocol
+        },
+        props: Props {
+            own: OWN_202,
+            other: other_upto(41),
+            npc_max: 40,
+            ..BASE.props
+        },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 146,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    VersionProfile {
+        version: ClientVersion::V203,
+        label: "2.03",
+        token: "GNW06051",
+        protocol: Protocol {
+            plo: PLO_203,
+            pli: PLI_203,
+            ..BASE.protocol
+        },
+        props: Props {
+            own: OWN_202,
+            other: other_upto(41),
+            npc_max: 40,
+            ..BASE.props
+        },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 148,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    VersionProfile {
+        version: ClientVersion::V204,
+        label: "2.04",
+        token: "GNW24061",
+        protocol: Protocol { plo: PLO_204, ..BASE.protocol },
+        levels: Levels { nw: false, gmap: false, ..BASE.levels },
+        ui: Ui {
+            server_in_title: false,
+            gs1_commands: 157,
+            ..BASE.ui
+        },
+        ..BASE
+    },
+    VersionProfile { date: "2001-08-03", ..BASE },
     VersionProfile {
         version: ClientVersion::V210,
         label: "2.1",
@@ -811,7 +920,11 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V214,
         label: "2.14",
         token: "GNW30042",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
+        protocol: Protocol {
+            plo: PLO_214,
+            pli: PLI_214,
+            ..NEW_2_1.protocol
+        },
         files: Files { large_files: true, ..NEW_2_1.files },
         ui: Ui { server_list: ServerList::Tabs(2), ..NEW_2_1.ui },
         ..NEW_2_1
@@ -820,7 +933,11 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V215,
         label: "2.15",
         token: "GNW19052",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
+        protocol: Protocol {
+            plo: PLO_214,
+            pli: PLI_214,
+            ..NEW_2_1.protocol
+        },
         files: Files { large_files: true, ..NEW_2_1.files },
         ui: Ui { server_list: ServerList::Tabs(2), ..NEW_2_1.ui },
         ..NEW_2_1
@@ -829,11 +946,10 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V216,
         label: "2.16",
         token: "GNW12102",
-        protocol: Protocol { plo: PLO_214, ..NEW_2_1.protocol },
-        props: Props {
-            own: OWN_216,
-            other: OTHER_222,
-            ..NEW_2_1.props
+        protocol: Protocol {
+            plo: PLO_214,
+            pli: PLI_214,
+            ..NEW_2_1.protocol
         },
         files: Files { large_files: true, ..NEW_2_1.files },
         ui: Ui { server_list: ServerList::Tabs(2), ..NEW_2_1.ui },
@@ -852,7 +968,8 @@ pub static PROFILES: &[VersionProfile] = &[
             ..NEW_2_1.protocol
         },
         props: Props {
-            own: OWN_216,
+            own: OWN_217,
+            // Not found in the 2.17 scan; taken from 2.22. [inferred]
             other: OTHER_222,
             ..NEW_2_1.props
         },
@@ -865,6 +982,10 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V222,
         label: "2.22",
         token: "GNW03014",
+        protocol: Protocol {
+            tampercheck_payload: Some(TAMPERCHECK_222),
+            ..GEN5.protocol
+        },
         ..GEN5
     },
     // 2.3: editor split out, precise positions. No binary; taken as 2.31.
@@ -873,7 +994,11 @@ pub static PROFILES: &[VersionProfile] = &[
         label: "2.3",
         token: "GNW14015",
         basis: Basis::Inferred,
-        protocol: Protocol { plo: PLO_231, ..GEN5.protocol },
+        protocol: Protocol {
+            plo: PLO_231,
+            pli: PLI_231,
+            ..GEN5.protocol
+        },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -889,7 +1014,11 @@ pub static PROFILES: &[VersionProfile] = &[
         version: ClientVersion::V231,
         label: "2.31",
         token: "GNW28015",
-        protocol: Protocol { plo: PLO_231, ..GEN5.protocol },
+        protocol: Protocol {
+            plo: PLO_231,
+            pli: PLI_231,
+            ..GEN5.protocol
+        },
         props: Props {
             own: OWN_231,
             other: OTHER_231,
@@ -1023,8 +1152,8 @@ mod tests {
         assert!(matches!(profile(ClientVersion::V139).ui.server_list, ServerList::Direct { .. }));
         assert!(profile(ClientVersion::V139).ui.chat_recall);
         assert!(!profile(ClientVersion::V138).ui.chat_recall);
-        assert!(!profile(ClientVersion::V205).ui.minimap);
-        assert!(profile(ClientVersion::V217).ui.minimap);
+        assert!(!profile(ClientVersion::V205).ui.server_minimap);
+        assert!(profile(ClientVersion::V217).ui.server_minimap);
         assert!(!profile(ClientVersion::V231).ui.editor);
         assert_eq!(profile(ClientVersion::V139).level_extensions(), vec![".graal"]);
         assert_eq!(

@@ -2,6 +2,7 @@
 
 pub mod assets;
 pub mod gui;
+pub mod keys;
 pub mod net;
 pub mod offline;
 pub mod protocol;

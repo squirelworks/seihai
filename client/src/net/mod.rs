@@ -199,8 +199,8 @@ impl Connection {
     }
 
     /// Send what `version` sends straight after its login line:
-    /// `PLI_LANGUAGE` (37) for 2.05 and later. 2.17+ would follow it with
-    /// `PLI_TAMPERCHECK` (39), which Seihai cannot fill yet.
+    /// `PLI_LANGUAGE` (37) from 2.02 rev 2, then `PLI_TAMPERCHECK` (39)
+    /// where the build's payload is known (2.22).
     pub fn send_post_login(&mut self, version: ClientVersion, language: &str) -> io::Result<()> {
         if !version.profile().protocol.sends_language {
             return Ok(());
@@ -208,7 +208,17 @@ impl Connection {
         let mut msg = vec![37 + 0x20];
         msg.extend_from_slice(&to_latin1(language));
         msg.push(b'\n');
-        self.send_messages(&[msg])
+        let mut msgs = vec![msg];
+        // 2.17+ follow with PLI_TAMPERCHECK; sent only where the build's
+        // constant payload is known.
+        let p = version.profile().protocol;
+        if let (true, Some(payload)) = (p.tampercheck, p.tampercheck_payload) {
+            let mut tc = vec![39 + 0x20];
+            tc.extend_from_slice(payload);
+            tc.push(b'\n');
+            msgs.push(tc);
+        }
+        self.send_messages(&msgs)
     }
 
     /// Send `PLI_PLAYERPROPS` (2) with X (15), Y (16) and SPRITE (17).

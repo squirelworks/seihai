@@ -22,6 +22,9 @@ pub struct Settings {
     /// Asset folders for single versions (`assets.1.39=...`), so a
     /// version can use its own install's images.
     pub version_assets: Vec<(String, PathBuf)>,
+    /// Key bindings (`keyset_<action>=K1,K2,K3`), used by versions with
+    /// configurable keys.
+    pub keysets: Vec<(String, String)>,
 }
 
 impl Settings {
@@ -49,6 +52,8 @@ impl Settings {
                     k => {
                         if let Some(label) = k.strip_prefix("assets.") {
                             s.version_assets.push((label.to_string(), PathBuf::from(v)));
+                        } else if let Some(action) = k.strip_prefix("keyset_") {
+                            s.keysets.push((action.to_string(), v));
                         }
                     }
                 }
@@ -92,6 +97,9 @@ impl Settings {
         }
         for (label, p) in &self.version_assets {
             out.push_str(&format!("assets.{label}={}\n", p.display()));
+        }
+        for (action, keys) in &self.keysets {
+            out.push_str(&format!("keyset_{action}={keys}\n"));
         }
         let _ = fs::write(&path, out);
     }

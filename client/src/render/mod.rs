@@ -6,6 +6,7 @@
 //! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
 pub mod font;
+pub mod hud;
 mod tiles;
 
 pub use tiles::{
