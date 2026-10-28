@@ -149,6 +149,12 @@ impl OfflineSession {
                 return Some(p);
             }
         }
+        // A futile grab (object in front, glove too weak): the reach pose.
+        if self.grabbing_ms > 0 {
+            if let Some(p) = pick(PoseKind::Sword, &self.poses.sword, 0) {
+                return Some(p);
+            }
+        }
         // Holding an object: the carry poses (the 2.05 client plays its
         // carrystill and carry ganis then). The carry walk shows the step the
         // walk has reached.

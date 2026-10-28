@@ -185,6 +185,9 @@ pub struct OfflineSession {
     pub shield_power: u8,
     /// Whether the glove is held, and its power.
     pub glove_power: u8,
+    /// Milliseconds left on a futile grab (A on an object the glove cannot
+    /// lift). The object does not move; the pose plays for this long.
+    pub grabbing_ms: u64,
     /// Heart containers, in half hearts as Graal counts them.
     pub max_hearts: i32,
     /// Chests opened in the current level, by tile position.
@@ -289,6 +292,9 @@ pub enum Interaction {
     /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
     /// lift table.
     Lifted { kind: usize },
+    /// A faced the object but the glove is too weak. The object does not
+    /// move; the player still plays the grab.
+    Grabbed,
     /// The carried object was thrown; `kind` is its lift-table entry.
     Thrown { kind: usize },
     /// A closed chest was opened at `(x, y)`; `got` describes the item.
@@ -362,6 +368,7 @@ impl OfflineSession {
             sword_power: 1,
             shield_power: 1,
             glove_power: 0,
+            grabbing_ms: 0,
             max_hearts: 6,
             opened_chests: HashSet::new(),
             reading: None,
@@ -569,6 +576,10 @@ impl OfflineSession {
         if let Some(kind) = self.try_lift() {
             return Interaction::Lifted { kind };
         }
+        if self.try_grab() {
+            self.grabbing_ms = 400;
+            return Interaction::Grabbed;
+        }
         let Some(level) = &self.current_level else {
             return Interaction::Nothing;
         };
@@ -743,6 +754,20 @@ impl OfflineSession {
         Some(kind)
     }
 
+    /// True when an object of the lift table is in front but the glove
+    /// cannot lift it. The real client still plays the grab; the object
+    /// stays. Not while swimming, carrying, or dead.
+    pub fn try_grab(&self) -> bool {
+        if self.life.is_dead() || self.in_water || self.carried.is_some() {
+            return false;
+        }
+        let tables = self.object_tables.as_ref()?;
+        let (px, py) = self.probe_tile();
+        // Any entry, not just the ones the glove allows.
+        self.current_level.as_ref()?.find_object(&tables.lift, tables.lift.len(), px, py).is_some()
+            && self.current_level.as_ref()?.find_object(&tables.lift, usize::from(self.glove_power) + 2, px, py).is_none()
+    }
+
     /// Throw what the player carries: it leaves from above the head and flies
     /// the way the player faces ([`crate::throwing`]). Returns the lift-table
     /// entry thrown, `None` with empty hands or when dead.
@@ -802,6 +827,7 @@ impl OfflineSession {
     /// Advance flights and break effects by `ms` on their 50 ms tick.
     /// Returns true if anything moved (the scene needs a redraw).
     pub fn tick_throw(&mut self, ms: u64) -> bool {
+        self.grabbing_ms = self.grabbing_ms.saturating_sub(ms);
         self.tick_throw_with(ms, &|_, _| None)
     }
 
@@ -1853,8 +1879,10 @@ mod tests {
         s.carried = None;
 
         face_up_at(&mut s, 40, 20);
-        assert_eq!(s.interact(), Interaction::Nothing, "the rock needs a glove");
-        assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK);
+        assert_eq!(s.interact(), Interaction::Grabbed, "the rock is grabbed, not lifted");
+        assert!(s.carried.is_none());
+        assert_eq!(s.grabbing_ms, 400);
+        assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK, "the rock does not move");
     }
 
     #[test]

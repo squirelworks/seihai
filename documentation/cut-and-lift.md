@@ -110,5 +110,6 @@ uses the 2.05 rule for every build until they are.
   it.
 * The glove power values come from items (`glove1` = 1, `glove2` = 2 in
   Seihai); how the server's player props carry it online is not wired.
-* Pulling and pushing blocks (the grab action, the second thing A does in the
-  client) is not implemented.
+* A futile grab is implemented: A on a lift-table object the glove cannot
+  lift plays the reach pose for 400 ms and the object stays. Pulling and
+  pushing blocks (moving them) is still not implemented.

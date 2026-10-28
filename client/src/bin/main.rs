@@ -1579,6 +1579,9 @@ fn main() {
                             let _ = c.send_open_chest(x, y);
                         }
                     }
+                    seihai::offline::Interaction::Grabbed => {
+                        eprintln!("grabbed (glove too weak)");
+                    }
                     seihai::offline::Interaction::Lifted { kind } => {
                         eprintln!("lifted object {kind}");
                         // Others see the object (CARRYSPRITE) and the carry
