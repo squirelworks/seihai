@@ -19,6 +19,9 @@ use pushpull::StepResult;
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
 /// 2 down, 3 right.
 pub const DIR_NORTH: u8 = 0;
+/// The client's tick for the lava burn, and the count it must pass.
+const LAVA_TICK_MS: u64 = 50;
+const LAVA_BURN_TICKS: u32 = 100;
 pub const DIR_WEST: u8 = 1;
 pub const DIR_SOUTH: u8 = 2;
 pub const DIR_EAST: u8 = 3;
@@ -165,6 +168,9 @@ pub struct OfflineSession {
     /// `seteffect red,green,blue,alpha`: the colour the map is shaded with
     /// (default 0,0,0,0, no shading).
     pub screen_effect: [f32; 4],
+    /// Lava burn ticks so far, and time not yet a whole tick.
+    lava_ticks: u32,
+    lava_ms: u64,
     /// The last step moved the player and no stop has come since: the walk
     /// animation is drawn instead of idle. Cleared by [`Self::stop_walking`].
     pub walking: bool,
@@ -395,6 +401,8 @@ impl OfflineSession {
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
             screen_effect: [0.0; 4],
+            lava_ticks: 0,
+            lava_ms: 0,
             walking: false,
             npc_ganis: HashMap::new(),
             sound_events: Vec::new(),
@@ -508,6 +516,7 @@ impl OfflineSession {
     /// start of a death the player faces down. Controls stay locked until
     /// the timer is past the profile's limit (see [`Self::controls_locked`]).
     pub fn tick_life(&mut self, ms: u64) -> Vec<LifeEvent> {
+        self.tick_lava(ms);
         let zero = self.player_health <= 0 || self.hearts_half() <= 0;
         self.life.tick(ms, zero);
         let events = self.life.take_events();
@@ -516,6 +525,40 @@ impl OfflineSession {
             self.reading = None;
         }
         events
+    }
+
+    /// The lava burn on its 50 ms tick. The 2.05 client tests the point
+    /// `(x + 1.5, y + 2)` against the lava list each tick: on lava a count
+    /// goes up, and past 100 the player loses half a heart and the count
+    /// starts again; off lava the count is 0. Returns the half hearts taken.
+    pub fn tick_lava(&mut self, ms: u64) -> i32 {
+        self.lava_ms += ms;
+        let mut taken = 0;
+        while self.lava_ms >= LAVA_TICK_MS {
+            self.lava_ms -= LAVA_TICK_MS;
+            if self.life.is_dead() || !self.on_lava() {
+                self.lava_ticks = 0;
+                continue;
+            }
+            self.lava_ticks += 1;
+            if self.lava_ticks > LAVA_BURN_TICKS {
+                self.lava_ticks = 0;
+                if self.damage_half(1, None) {
+                    taken += 1;
+                }
+            }
+        }
+        taken
+    }
+
+    /// Whether the burn test point is on a tile of the lava list.
+    pub fn on_lava(&self) -> bool {
+        let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) else { return false };
+        let (px, py) = (self.player_x + 1.5, self.player_y + 2.0);
+        if !(0.0..64.0).contains(&px) || !(0.0..64.0).contains(&py) {
+            return false;
+        }
+        level.tile_id_at(px as i32, py as i32).is_some_and(|id| types.is_lava(id))
     }
 
     /// The player cannot act: dead and the timer not yet past the lock.
@@ -1248,7 +1291,8 @@ impl OfflineSession {
         let (fx, fy) = self.foot();
         let was = self.in_water;
         self.in_water = match (&self.current_level, &self.tiletypes) {
-            (Some(level), Some(types)) => self.kind_at_point(level, types, fx, fy) == TileKind::Water,
+            // The liquid list holds lava too: the 2.05 client swims in both.
+            (Some(level), Some(types)) => matches!(self.kind_at_point(level, types, fx, fy), TileKind::Water | TileKind::Lava),
             _ => false,
         };
         if self.in_water != was {
@@ -2223,10 +2267,11 @@ mod tests {
     }
 
     #[test]
-    fn lava_does_not_block() {
+    fn lava_does_not_block_and_is_swum() {
         let mut s = session_at(level(|x, _| if x >= 12 { LAVA } else { OPEN }), 10.5, 20.5);
         assert_eq!(walk(&mut s, 0.5, 0.0, 6), 6);
-        assert!(!s.in_water, "lava is not water");
+        // 2.05: the liquid list holds lava, so the swim test is true there.
+        assert!(s.in_water, "lava is swum in");
     }
 
     #[test]

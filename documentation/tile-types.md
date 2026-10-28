@@ -54,7 +54,8 @@ Two things follow from the lists:
   One effect that splashes on liquid uses a different sprite on lava.
 - **A tile can be in two lists.** In the 2.22 file, 6 of the 133
   throw-through tiles are also passable, and 9 lava tiles are not in the
-  liquid list, so they are walls.
+  liquid list. All 9 are passable, so they are walked on and still burn.
+  (An earlier version of this page called them walls.)
 
 ## What Seihai does
 
@@ -71,6 +72,34 @@ first, so the byte holds every case above that changes play:
   and bed bottoms (array 6) give 5. These apply only to passable tiles,
   and nothing reads the bed types yet.
 - arrays 7 and 8 are not read here. Ledges belong to the cliff work.
+- **New:** a passable tile in the lava list (array 3) but not in the
+  liquid list gives 13, Seihai's own number for lava floor: walked on, and
+  it burns. `TileTypes::is_lava` is true for 12 and 13.
+
+## Deep water and lava (`new4.nw`)
+
+Squirrel's test level `client/tests/fixtures/levels/new4.nw` has each kind.
+With the lists of the 2.22 `arrays.dat`:
+
+| tile | lists | Seihai type | what happens |
+|---|---|---|---|
+| 398, light blue | passable | 0 | shallow water: walked on |
+| 461, 472, water edge | passable, liquid | 11 | swum in |
+| 3644, dark blue | none | 22 | deep water: a wall |
+| 2882, bright red | liquid, lava | 12 | swum in, burns |
+| 2958, red | passable, lava | 13 | walked on, burns |
+
+So deep water needs no rule of its own: it is a wall because the 2.22 file
+lists it nowhere. With the built-in `tiledefs.txt` (the stand-in sheet) these
+ids are unnamed and open, as every unnamed id is.
+
+- **Swimming:** the swim test is true on water and lava (the liquid list).
+  `refresh_water` now swims on `TileKind::Lava` too.
+- **Burning:** `OfflineSession::tick_lava`, run from `tick_life`, keeps the
+  client's count on 50 ms ticks. Each tick it tests the point (x + 1.5,
+  y + 2) against the lava list. On lava the count goes up, and the 101st
+  tick in a row takes half a heart and sets the count to 0. A tick off lava
+  sets it to 0. That is a little over 5 seconds a half heart.
 
 Script functions:
 
@@ -81,8 +110,10 @@ Script functions:
 
 ## Not done
 
-- Movement still treats lava as walkable floor, not swimmable liquid, and
-  lava does not hurt over time. This belongs to the deep water work.
+- On lava the client shows its `lava` gani rather than `swim`; Seihai
+  draws the swim gani. The burn takes the hearts but plays no hurt effect.
+  The client's 50 ms player tick for the burn is assumed. Online, the burn
+  changes Seihai's hearts as any local hit does.
 - `addtiledef` and the new-kind rule are not wired.
 - The bed and ground-class lists have no consumer.
 - 2.00 to 2.04 were not checked. All of them do have the strings

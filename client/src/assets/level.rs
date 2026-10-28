@@ -353,8 +353,12 @@ impl ObjectTables {
 
 /// Tile type byte for water (`isOnWater`).
 pub const TYPE_WATER: u8 = 11;
-/// Tile type byte for lava. Walkable, like every type below 20.
+/// Tile type byte for lava: liquid, so the player swims, and it burns.
 pub const TYPE_LAVA: u8 = 12;
+/// A passable tile in the lava list but not the liquid list: walked on,
+/// and it burns. Seihai's own number; the client keeps lists, not bytes,
+/// and `tiletype` answers -1 on this tileset anyway.
+pub const TYPE_LAVA_FLOOR: u8 = 13;
 /// Type bytes from here up are walls (`isOnWall`).
 pub const TYPE_WALL_MIN: u8 = 20;
 /// Type given to tiles that `arrays.dat` does not list as passable.
@@ -409,10 +413,10 @@ pub fn new_world_tile_type(id: u16) -> u8 {
 
 /// What a tile does to a walking player.
 ///
-/// The 2.05 client and GServer only ever ask two questions of the type
-/// byte: `>= 20` is a wall and `== 11` is water. Lava (12) is told apart
-/// because the client has its own `lava` animation, but it does not
-/// block. Every other type below 20 is plain floor for movement.
+/// The 2.05 client asks one list per question: wall, liquid (swimming)
+/// and lava (burning). Water (11) and lava (12) are both liquid, so the
+/// player swims in both; lava also burns (see
+/// [`TileTypes::is_lava`]). Every other type below 20 is plain floor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileKind {
     Open,
@@ -493,7 +497,9 @@ impl TileTypes {
     /// - array 2: the throw-through list. A listed tile that is a wall
     ///   gets type 20, the wall thrown objects fly over.
     /// - array 3: the lava list. A liquid tile that is also here is lava
-    ///   (12, walkable); one that is not is water (11, swimmable).
+    ///   (12, swum in and burning); one that is not is water (11). A
+    ///   passable tile that is here but not liquid is lava floor (13,
+    ///   walked on and burning).
     /// - arrays 4, 5 and 6: chairs (3), bed tops (4) and bed bottoms (5).
     ///   Only a passable tile takes these types.
     ///
@@ -559,6 +565,11 @@ impl TileTypes {
                 }
             }
         }
+        for &id in lava.iter().filter(|&&id| id < 4096) {
+            if types[id] == 0 {
+                types[id] = TYPE_LAVA_FLOOR;
+            }
+        }
         Ok(TileTypes { types })
     }
 
@@ -591,6 +602,12 @@ impl TileTypes {
 
     pub fn is_water(&self, id: u16) -> bool {
         self.kind(id) == TileKind::Water
+    }
+
+    /// True if `id` is in the lava list: lava (12) or lava floor (13). The
+    /// client's burn test asks only this list.
+    pub fn is_lava(&self, id: u16) -> bool {
+        matches!(self.raw(id), Some(TYPE_LAVA | TYPE_LAVA_FLOOR))
     }
 }
 
@@ -638,6 +655,22 @@ mod tiletypes_tests {
         // a file with fewer arrays has no chairs
         let t = TileTypes::parse_arrays(&arrays_blob(&[&[0, 8]])).unwrap();
         assert!(!t.is_chair(8));
+    }
+
+    /// The tiles of new4.nw, with their lists in the 2.22 `arrays.dat`:
+    /// 398 shallow (passable), 461 water (passable, liquid), 2882 lava
+    /// (liquid, lava), 2958 lava floor (passable, lava), 3644 deep water (in
+    /// no list).
+    #[test]
+    fn arrays_new4_tiles() {
+        let data = arrays_blob(&[&[398, 461, 2958], &[461, 2882], &[], &[2882, 2958]]);
+        let t = TileTypes::parse_arrays(&data).unwrap();
+        assert_eq!(t.kind(398), TileKind::Open);
+        assert_eq!(t.kind(461), TileKind::Water);
+        assert_eq!(t.kind(2882), TileKind::Lava);
+        assert_eq!((t.kind(2958), t.raw(2958)), (TileKind::Open, Some(TYPE_LAVA_FLOOR)));
+        assert_eq!(t.kind(3644), TileKind::Blocking, "deep water is in no list: a wall");
+        assert_eq!([398, 461, 2882, 2958, 3644].map(|id| t.is_lava(id)), [false, false, true, true, false]);
     }
 
     #[test]
