@@ -301,8 +301,6 @@ pub enum Interaction {
     Thrown { kind: usize },
     /// A closed chest was opened at `(x, y)`; `got` describes the item.
     Chest { x: i32, y: i32, item: String, got: String },
-    /// A sign is being read.
-    Sign(String),
     Nothing,
 }
 
@@ -562,9 +560,10 @@ impl OfflineSession {
     /// y + 2)`, south `(x + 1.5, y + 4)`, east `(x + 3.5, y + 2)`).
     ///
     /// The 2.05 client reads this table for lifting and for the sword's cut.
-    /// Chests and signs use it here too; that is the one assumption, since
-    /// the point the client uses for them was not read. It fits the walk: a
-    /// player stopped by a chest or sign has exactly this point inside it.
+    /// Chests use it here too; that is the one assumption, since the point
+    /// the client uses for them was not read. It fits the walk: a player
+    /// stopped by a chest has exactly this point inside it. Signs are not
+    /// read through it (see [`Self::read_sign_ahead`]).
     pub fn facing_point(&self) -> (f32, f32) {
         let (x, y) = (self.player_x, self.player_y);
         match self.player_dir {
@@ -575,8 +574,8 @@ impl OfflineSession {
         }
     }
 
-    /// Interact with what the player faces: open a closed chest (2×2
-    /// tiles), or read a sign (2×1 tiles). A chest is tried first.
+    /// Interact with what the player faces: throw, lift, grab, or open a
+    /// closed chest (2×2 tiles) from below.
     pub fn interact(&mut self) -> Interaction {
         if self.life.is_dead() {
             return Interaction::Nothing;
@@ -626,12 +625,31 @@ impl OfflineSession {
             self.reading = note;
             return Interaction::Chest { x: c.x, y: c.y, item: c.item, got };
         }
-        if let Some(sign) = level.signs.iter().find(|s| inside(s.x, s.y, 2.0, 1.0)) {
-            let text = sign.text.clone();
-            self.reading = Some(text.clone());
-            return Interaction::Sign(text);
-        }
+        // Signs are not read with the A key: see `read_sign_ahead`.
         Interaction::Nothing
+    }
+
+    /// Start reading the sign the player walks or pushes into. The 2.05
+    /// client does this in its walk step, not on the A key: facing up, the
+    /// point `(x + 1.5, y + 0.5)` must lie in a sign's 2×1 box (edges
+    /// included) and be blocked (a wall or a chest here). Reading starts on
+    /// the first page. Returns the sign's text when one opened.
+    pub fn read_sign_ahead(&mut self) -> Option<String> {
+        if self.reading.is_some() || self.player_dir != DIR_NORTH || self.life.is_dead() {
+            return None;
+        }
+        let (px, py) = (self.player_x + 1.5, self.player_y + 0.5);
+        let level = self.current_level.as_ref()?;
+        let sign = level.signs.iter().find(|s| {
+            let (sx, sy) = (s.x as f32, s.y as f32);
+            px >= sx && px <= sx + 2.0 && py >= sy && py <= sy + 1.0
+        })?;
+        let text = sign.text.clone();
+        if !self.blocked_point(px, py) {
+            return None;
+        }
+        self.reading = Some(text.clone());
+        Some(text)
     }
 
     /// Apply a chest item. Returns a short description.
@@ -1432,6 +1450,8 @@ impl OfflineSession {
         let round = |v: f64| ((v * 1000.0).round() / 1000.0) as f32;
         let (nx, ny) = (round(x), round(y));
         if nx == self.player_x && ny == self.player_y {
+            // Pushing against a sign reads it.
+            self.read_sign_ahead();
             return None;
         }
 
@@ -1445,6 +1465,7 @@ impl OfflineSession {
         self.armed = true;
         self.walking = true;
         self.refresh_water();
+        self.read_sign_ahead();
         // One GANI step per move; each frame entered with a PLAYSOUND cue
         // queues that sound once, at the cue's offset from the player.
         let swimming = self.in_water && self.swim_gani.is_some();
@@ -1615,10 +1636,11 @@ mod tests {
         s.reading = None;
         assert_eq!(s.interact(), Interaction::Nothing);
 
-        // Sign at (30, 10), read from below.
+        // The A key does not read the sign at (30, 10).
         s.player_x = 28.5;
         s.player_y = 10.0;
-        assert_eq!(s.interact(), Interaction::Sign("Welcome".into()));
+        assert_eq!(s.interact(), Interaction::Nothing);
+        assert!(s.reading.is_none());
 
         // A heart container with no note.
         s.reading = None;
@@ -1627,6 +1649,56 @@ mod tests {
         assert!(matches!(s.interact(), Interaction::Chest { x: 10, y: 10, .. }));
         assert_eq!(s.max_hearts, 8);
         assert!(s.reading.is_none());
+    }
+
+    /// A level with a sign at (30, 10) on wall tiles (30..31, 10).
+    fn sign_on_wall() -> OfflineSession {
+        let mut lvl = level(|x, y| if (x == 30 || x == 31) && y == 10 { WALL } else { 0 });
+        lvl.signs.push(crate::assets::Sign { x: 30, y: 10, text: "Hello".into() });
+        let mut s = OfflineSession::new();
+        s.current_level = Some(lvl);
+        s.tiletypes = Some(types());
+        s
+    }
+
+    #[test]
+    fn walking_up_into_a_sign_opens_it() {
+        // 2.05: facing up, (x + 1.5, y + 0.5) in the sign's box and blocked.
+        let mut s = sign_on_wall();
+        s.player_x = 29.0;
+        s.player_y = 13.0;
+        while s.reading.is_none() && s.try_move(0.0, -0.5).is_some() {}
+        assert_eq!(s.reading.as_deref(), Some("Hello"));
+        assert_eq!(s.player_y, 10.0, "stopped with the body under the wall");
+        // Closed, then pushed against again: it opens again.
+        s.reading = None;
+        assert!(s.try_move(0.0, -0.5).is_none());
+        assert_eq!(s.reading.as_deref(), Some("Hello"));
+    }
+
+    #[test]
+    fn a_sign_opens_only_facing_up_and_against_something_solid() {
+        // Beside the sign, walking east into the wall: not read.
+        let mut s = sign_on_wall();
+        s.player_x = 26.0;
+        s.player_y = 9.5;
+        while s.try_move(0.5, 0.0).is_some() {}
+        assert!(s.reading.is_none());
+        // The same sign over open ground: the point is not blocked.
+        let mut s = sign_on_wall();
+        s.tiletypes = Some(TileTypes { types: [0; 4096] });
+        s.player_x = 29.0;
+        s.player_y = 11.0;
+        s.try_move(0.0, -0.5);
+        assert!(s.reading.is_none());
+        // The box edges count: x + 1.5 = 32 (the right edge) still reads.
+        let mut s = sign_on_wall();
+        assert!(s.current_level.as_mut().unwrap().set_tile_id(32, 10, WALL));
+        s.player_x = 30.5;
+        s.player_y = 10.0;
+        s.player_dir = DIR_NORTH;
+        assert!(s.try_move(0.0, -0.5).is_none());
+        assert_eq!(s.reading.as_deref(), Some("Hello"));
     }
 
     #[test]

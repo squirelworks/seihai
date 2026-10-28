@@ -36,6 +36,18 @@ The pixels at (252..255, 223) are colours, not art. The client fills the inside 
 - In a line, `#` and a letter draws button pictures: `#A`, `#B`, `#X`, `#Y`, `#u`, `#d`, `#l`, `#r`, `#h`, `#x`, `#y`, `#z`, `#4`, `#.`. `#` and any other letter draws glyph 86 and moves 16 pixels. `#i` and a character puts up an image from the level's list (not done in Seihai).
 - A character outside the glyph order is drawn by the client in its system font, in the colour at (253, 223). Seihai leaves it out.
 
+## Opening a sign
+
+The 2.05 client opens a sign by walking, not with the A key. In its walk step, and in the per-tick check it runs when the facing changes or the player pushes against something, it tests, while the player faces up:
+
+- the point (x + 1.5, y + 0.5), with (x, y) the player's position in tiles,
+- lies in a sign's box: from (sign x, sign y) to (sign x + 2, sign y + 1), edges included,
+- and is blocked (a wall tile, an object, an NPC or a chest).
+
+Then reading starts on the first page, and the client plays a sound. The A key has no sign case. So a player walking up into a sign, or pushing up against it while standing still, reads it; one walking into it from the side does not.
+
+Seihai does this in `OfflineSession::read_sign_ahead`, called from every walk attempt (`try_move`), whether the player moved or was stopped. "Blocked" there is a wall tile or a chest; NPCs and objects are not tested yet. After Esc, holding Up opens the sign again on the next step, which is what the rule gives; whether the client waits for the key to be released was not read.
+
 ## Keys while reading
 
 - The action key (A or Space in Seihai) turns to the next three lines, unless the page on show is not full (the sign has fewer lines than the page's first line plus three); then reading ends. A sign of exactly three lines therefore shows an empty second page before it closes, as in the client.
@@ -45,6 +57,6 @@ The pixels at (252..255, 223) are colours, not art. The client fills the inside 
 
 ## Confirmed, inferred, not tested
 
-- Confirmed from the program: the glyph grid, glyph order and advances, the frame pieces and fill colours, the panel size, the line layout, the `#` codes, and the paging rule.
-- Inferred: what the panel's height test compares, and that key 0 is Up.
-- Not tested against a real client screenshot. The probe's render on the 2.22 sheet is at `seihai-lab/screens/sign-panel-222.png` in the project files.
+- Confirmed from the program: the glyph grid, glyph order and advances, the frame pieces and fill colours, the panel size, the line layout, the `#` codes, the paging rule, and the walk-on opening rule (point, box, facing and the blocked test).
+- Inferred: what the panel's height test compares, that key 0 is Up, and that facing 0 is up for the opening rule.
+- Not tested against a running client: the opening rule is from the program only. Not tested against a real client screenshot. The probe's render on the 2.22 sheet is at `seihai-lab/screens/sign-panel-222.png` in the project files.
