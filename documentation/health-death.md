@@ -107,9 +107,12 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   position, so it is not used.
 - **Script warps offline** do not update the saved entry point (that code is in
   the script-warp work); online they do, through the normal level arrival.
-- **Dead gani.** The decompile says the local player plays the `dead` gani. The
-  renderer draws no player gani yet, so nothing is drawn. The sprite prop on
-  the wire stays idle plus direction, as the notes say.
+- **Dead gani** is done: while dead the player is drawn with `dead.gani`, one
+  step per 50 ms tick of the death timer, held on its last step (`pose.rs`).
+  Seihai's default set has no `dead.gani`, so it shows with a data folder that
+  has one. The sprite prop on the wire stays idle plus direction, as the notes
+  say. Other players' dead pose (the dead bit in their STATUS) is not drawn
+  yet.
 - **CURPOWER on damage.** Whether the real client sends its own CURPOWER when
   hearts drop is not in the notes, so Seihai sends none. The server learns of
   the death from the dead bit.

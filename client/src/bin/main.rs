@@ -795,7 +795,7 @@ fn main() {
         load_motion_gani(&resolver, &mut session, name);
     }
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
-    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani"] {
+    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani"] {
         load_pose_gani(&resolver, &mut session, name);
     }
     let mut sound_serial = session.level_serial;
