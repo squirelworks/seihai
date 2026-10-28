@@ -78,5 +78,6 @@ OpenGS1 (`../shanalysis/OpenGS1`) is the primary reference implementation for th
 - OpenGS1 source and tests
 - Server-side script handling in GServer-v2
 - Cleaned 2.05 command observations (Graal_analysis notes)
+- Archived Classic scripting corpus (see `documentation/legacy-scripts.md` for patterns useful for host effects and open items)
 
 Detailed language semantics and edge-case notes go in `../shworkingpapers/scripting/`.
