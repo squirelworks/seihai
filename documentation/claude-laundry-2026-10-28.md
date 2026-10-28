@@ -35,6 +35,10 @@ The script log is full of unapplied visual commands: setzoomeffect, setcoloreffe
 
 A on an object the glove cannot lift plays the sword swing and sticks. The real client plays a pull GANI for a futile grab and returns to the walk GANI when the pull ends. Seihai has a `futile` field that is never set. Wire it to a pull animation and clear it when the timer ends.
 
+## Offline .graal tiles
+
+Offline play of real-learn-levels shows black squares. Those are tile ids that do not map onto pics1.png. The .graal reader loads the board, but the tile id to sheet position is wrong for some ids, or the sheet is missing those tiles. The black squares are the gap.
+
 ## From the decompiles
 
 These were in the cleaned notes and are not in Seihai yet:
