@@ -168,7 +168,7 @@ In the chat bar (Enter) these are commands, not chat. A name is an account name 
 | Command | Effect |
 |---------|--------|
 | `/ignore NAME`, `/unignore NAME` | Hide that player's bubbles, chat, toalls and PMs. Local only: nothing is sent |
-| `/buddy NAME`, `/unbuddy NAME` | Mark the player in the player list (Tab). Local only: nothing is sent |
+| `/buddy NAME`, `/unbuddy NAME` | Mark the player in the player list (F7). Local only: nothing is sent |
 | `/mute NAME`, `/unmute NAME` | As ignore, and sends `PLI_MUTEPLAYER` (43) for a player in the level. Only on versions that send it (2.17 and later); at most 5 sends per session |
 | `/lists`, `/lists buddy` | Show the lists |
 
@@ -194,6 +194,8 @@ debug=1
 `follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
 
 `debug` takes the same values and defaults to off. With it on, every script message (an ignored command, an unknown function, an unhandled effect, a parse error) is written to `_debug/debug-<YYYYMMDD-HHMMSS>/script.log` in the directory you run Seihai from. The folder is named for the time that process started, and the file is opened once. The file is recreated each run and holds one session. Each time the player enters a level, a `level: <name>` line is written (the server's name for it online; the file, or the gmap cell's level, offline). Each script line starts with `[<level>]`, and a line repeated on the same level is written once. Without it, those lines are silent. F3 still toggles the on-screen debug overlay for the current run.
+
+For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.txt` form) or `keyset_<action>=S,Space` rebind the game keys. The defaults are the readme's: arrows or I/J/K/L, A action, S or Space sword, D item, M map, Q item list, Tab chat (F7 shows the player list). See `documentation/keys.md`.
 
 `sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai --no-default-features --features dev`.
 

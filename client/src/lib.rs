@@ -8,6 +8,7 @@ pub mod filecache;
 pub mod difftest;
 pub mod gmap;
 pub mod gui;
+pub mod keys;
 pub mod help;
 pub mod inventory;
 pub mod life;

@@ -20,6 +20,7 @@ use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
 use seihai::scripting::engine::host::{SessionScripts, WeaponScript};
 use seihai::settings::Settings;
+use seihai::keys::{Action, KeyMap};
 use seihai::ui;
 use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin,
@@ -872,6 +873,10 @@ fn main() {
     }
 
     let profile = version.profile();
+    // The readme keys; from 1.38 `keyset_<action>` lines in the settings
+    // file replace them.
+    let keymap = KeyMap::for_version(profile.ui.key_config, &Settings::load().keysets);
+    let button_keys = [keymap.label(Action::Act), keymap.label(Action::Attack), keymap.label(Action::Item), keymap.label(Action::ItemList)];
     // The death sequence of this build (none for builds before 2.05).
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
@@ -1056,7 +1061,7 @@ fn main() {
                     sword_power: i32::from(session.sword_power),
                     weapons: true,
                     stats: seihai::render::hud::stats::ALL,
-                    keys: ['A', 'S', 'D', 'Q'],
+                    keys: button_keys,
                 },
             ),
             None => fb.draw_hud(session.player_health, session.rupees),
@@ -1584,7 +1589,7 @@ fn main() {
         if !input.is_open() && !confirm_quit {
             let entries = item_list_entries(&session, &net_state);
             let pressed = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
-            if pressed(minifb::Key::Q) {
+            if keymap.pressed(&window, Action::ItemList) {
                 item_list.toggle(entries.len());
                 eprintln!("item list {} ({} entries)", if item_list.open { "opened" } else { "closed" }, entries.len());
                 dirty = true;
@@ -1594,21 +1599,23 @@ fn main() {
                 let (_, _, cw, _) = seihai::inventory::content_rect(scene.width as i32, scene.height as i32);
                 let cells = seihai::inventory::layout(&entries, cw);
                 let before = item_list.selected;
-                for (k, lk) in [
-                    (minifb::Key::Up, ListKey::Up),
-                    (minifb::Key::Left, ListKey::Left),
-                    (minifb::Key::Down, ListKey::Down),
-                    (minifb::Key::Right, ListKey::Right),
-                    (minifb::Key::D, ListKey::Close),
-                    (minifb::Key::S, ListKey::Close),
-                    (minifb::Key::A, ListKey::Close),
-                    (minifb::Key::Space, ListKey::Close),
-                    (minifb::Key::Enter, ListKey::Close),
+                for (a, lk) in [
+                    (Action::Up, ListKey::Up),
+                    (Action::Left, ListKey::Left),
+                    (Action::Down, ListKey::Down),
+                    (Action::Right, ListKey::Right),
+                    (Action::Item, ListKey::Close),
+                    (Action::Attack, ListKey::Close),
+                    (Action::Act, ListKey::Close),
                 ] {
-                    if item_list.open && pressed(k) {
+                    if item_list.open && keymap.pressed(&window, a) {
                         item_list.key(lk, &cells);
                         dirty = true;
                     }
+                }
+                if item_list.open && pressed(minifb::Key::Enter) {
+                    item_list.key(ListKey::Close, &cells);
+                    dirty = true;
                 }
                 if item_list.selected != before {
                     if let Some(n) = item_list.selected.and_then(|i| entries.get(i)) {
@@ -1627,14 +1634,8 @@ fn main() {
             let dt = life_clock.elapsed().as_millis() as u64;
             life_clock = Instant::now();
             let mut events = session.tick_life(dt);
-            let keys_down = !input.is_open() && !list_was_open
-                && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
-                    .iter()
-                    .any(|k| window.is_key_down(*k))
-                || !input.is_open()
-                    && [minifb::Key::A, minifb::Key::Space]
-                        .iter()
-                        .any(|k| window.is_key_pressed(*k, minifb::KeyRepeat::No));
+            let keys_down = !input.is_open() && !list_was_open && keymap.any_direction_down(&window)
+                || !input.is_open() && (keymap.pressed(&window, Action::Act) || keymap.pressed(&window, Action::Attack));
             if session.life.can_respawn() && keys_down {
                 let online = conn.is_some();
                 if let Some(to) = session.respawn(online) {
@@ -1710,7 +1711,7 @@ fn main() {
             }
             // A hit pushed the player: the new position goes out like a step.
             sprite_changed |= session.take_knock_moved();
-            if !input.is_open() && !list_was_open && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
+            if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
             if sprite_changed {
@@ -1729,17 +1730,22 @@ fn main() {
         // A script warp request went out this pass: it carries the position,
         // so the plain walk update is left out.
         let mut script_warp_sent = false;
-        // A or Space: close the reading panel, or interact with what the
-        // player faces. S while carrying throws (its swing was refused above).
+        // Action (A): close the reading panel, or interact with what the
+        // player faces. Attack (S, Space) while carrying throws (its swing
+        // was refused above).
         let interact = !input.is_open()
             && !list_was_open
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
-                window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No),
-                window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No),
-                window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No),
+                keymap.pressed(&window, Action::Act),
+                false,
+                keymap.pressed(&window, Action::Attack),
             );
+        // The map key (M) closes a sign, as in the readme.
+        if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Map) && session.reading.take().is_some() {
+            dirty = true;
+        }
         if interact {
             // Reading: the next three lines, or the end of the sign.
             if let Some(text) = &session.reading {
@@ -1801,16 +1807,12 @@ fn main() {
             dirty = true;
         }
         // No arrow key held: the player stands (idle animation).
-        if !window.is_key_down(minifb::Key::Left)
-            && !window.is_key_down(minifb::Key::Right)
-            && !window.is_key_down(minifb::Key::Up)
-            && !window.is_key_down(minifb::Key::Down)
-            && session.stop_walking()
+        if !keymap.any_direction_down(&window) && session.stop_walking()
         {
             dirty = true;
         }
         // Up while reading turns back a page.
-        if session.reading.is_some() && !input.is_open() && window.is_key_pressed(minifb::Key::Up, minifb::KeyRepeat::No) {
+        if session.reading.is_some() && !input.is_open() && keymap.pressed(&window, Action::Up) {
             if let Some(p) = seihai::render::signs::previous_page(sign_page) {
                 sign_page = p;
                 dirty = true;
@@ -1818,16 +1820,16 @@ fn main() {
         }
         if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
-            if window.is_key_down(minifb::Key::Left) {
+            if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Right) {
+            if keymap.down(&window, Action::Right) {
                 dx += 0.5;
             }
-            if window.is_key_down(minifb::Key::Up) {
+            if keymap.down(&window, Action::Up) {
                 dy -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Down) {
+            if keymap.down(&window, Action::Down) {
                 dy += 0.5;
             }
             if dx != 0.0 || dy != 0.0 {
@@ -2210,14 +2212,15 @@ fn main() {
             }
         }
 
-        // Enter opens the chat bar, and sends it when it is open. F2 opens
-        // a PM to the nearest player.
+        // Enter, T or the switch-to-chat key (Tab) opens the chat bar, and
+        // Enter sends it when it is open. F2 opens a PM to the nearest player.
         let enter = window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
             || window.is_key_pressed(minifb::Key::NumPadEnter, minifb::KeyRepeat::No);
-        let talk = !confirm_quit && window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No);
+        let talk = !confirm_quit
+            && (window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No) || keymap.pressed(&window, Action::SwitchToChat));
         if !confirm_quit && !list_was_open && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
             if !input.is_open() {
-                eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T" });
+                eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T or switch-to-chat" });
                 input.open(ui::InputMode::Chat);
                 dirty = true;
             } else if let Some((mode, text)) = input.submit() {
@@ -2310,7 +2313,7 @@ fn main() {
             if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
                 show_debug = !show_debug;
             }
-            if window.is_key_pressed(minifb::Key::Tab, minifb::KeyRepeat::No) {
+            if window.is_key_pressed(minifb::Key::F7, minifb::KeyRepeat::No) {
                 show_players = !show_players;
             }
             if window.is_key_pressed(minifb::Key::F9, minifb::KeyRepeat::No) {
@@ -2360,11 +2363,7 @@ fn main() {
 
         // Our own typed line is held over the head until a direction key is
         // pressed, then goes down like the others (as in the 2.05 client).
-        if !input.is_open()
-            && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
-                .iter()
-                .any(|k| window.is_key_down(*k))
-        {
+        if !input.is_open() && keymap.any_direction_down(&window) {
             my_chat_timer.release();
         }
         // Chat bubbles go down after a few seconds.
