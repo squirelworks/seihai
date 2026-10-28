@@ -1024,7 +1024,8 @@ fn main() {
 
     let mut input = ui::Input::default();
     let mut chat_scroll = 0usize;
-    let mut show_debug = false;
+    let debug_on = Settings::load().debug.unwrap_or(false);
+    let mut show_debug = debug_on;
     let mut show_players = false;
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
@@ -1750,6 +1751,7 @@ fn main() {
                 dirty = true;
             }
             for e in scripts.unhandled.drain(..) {
+                if !debug_on { continue; }
                 let key = match &e {
                     seihai::scripting::engine::Effect::Command { name, .. } => format!("cmd:{name}"),
                     other => format!("{other:?}"),
@@ -1759,6 +1761,7 @@ fn main() {
                 }
             }
             for l in scripts.world.take_log() {
+                if !debug_on { continue; }
                 if seen_script_log.insert(l.clone()) {
                     eprintln!("script: {l}");
                 }

@@ -26,6 +26,10 @@ pub struct Settings {
     /// default: on, when the asset folder has sounds. `sound=0` turns it
     /// off.
     pub sound: Option<bool>,
+    /// Verbose diagnostics (script logs, unhandled effects). `None` means
+    /// the key is absent, which is the default: off. `debug=1` turns it on
+    /// and leaves it on across runs.
+    pub debug: Option<bool>,
     /// Save downloaded files to disk (`saveimages` in the real client's
     /// `graalconfig.txt`). `None` means the key is absent: on.
     pub save_downloads: Option<bool>,
@@ -67,6 +71,7 @@ impl Settings {
                     // An unreadable value leaves the default (follow).
                     "follow_serverwarp" => s.follow_serverwarp = parse_bool(&v),
                     "sound" => s.sound = parse_bool(&v),
+                    "debug" => s.debug = parse_bool(&v),
                     "save_downloads" => s.save_downloads = parse_bool(&v),
                     "last_server_name" => s.last_server_name = Some(v),
                     "direct_server" => s.direct_server = Some(v),
@@ -124,6 +129,9 @@ impl Settings {
         }
         if let Some(f) = self.sound {
             out.push_str(&format!("sound={}\n", u8::from(f)));
+        }
+        if let Some(f) = self.debug {
+            out.push_str(&format!("debug={}\n", u8::from(f)));
         }
         if let Some(n) = &self.last_server_name {
             out.push_str(&format!("last_server_name={n}\n"));

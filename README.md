@@ -187,9 +187,13 @@ follow_serverwarp=0
 sound=0
 # Do not write downloaded files to disk (default: 1)
 save_downloads=0
+# Print script diagnostics (default: 0, off)
+debug=1
 ```
 
 `follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
+
+`debug` takes the same values and defaults to off. With it on, each unique script message (an ignored command, an unknown function, an unhandled effect) is printed once. Without it, those lines are silent. F3 still toggles the on-screen debug overlay for the current run.
 
 `sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai --no-default-features --features dev`.
 

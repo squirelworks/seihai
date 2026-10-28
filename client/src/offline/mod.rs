@@ -761,11 +761,12 @@ impl OfflineSession {
         if self.life.is_dead() || self.in_water || self.carried.is_some() {
             return false;
         }
-        let tables = self.object_tables.as_ref()?;
+        let Some(tables) = self.object_tables.as_ref() else { return false };
+        let Some(level) = self.current_level.as_ref() else { return false };
         let (px, py) = self.probe_tile();
         // Any entry, not just the ones the glove allows.
-        self.current_level.as_ref()?.find_object(&tables.lift, tables.lift.len(), px, py).is_some()
-            && self.current_level.as_ref()?.find_object(&tables.lift, usize::from(self.glove_power) + 2, px, py).is_none()
+        level.find_object(&tables.lift, tables.lift.len(), px, py).is_some()
+            && level.find_object(&tables.lift, usize::from(self.glove_power) + 2, px, py).is_none()
     }
 
     /// Throw what the player carries: it leaves from above the head and flies
