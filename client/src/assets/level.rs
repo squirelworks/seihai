@@ -1144,34 +1144,16 @@ pub const CHEST_ITEMS: [&str; 25] = [
     "goldrupee", "fireball", "fireblast", "nukeshot", "joltbomb", "spinattack",
 ];
 
-/// A 64×64 board of tile ids as layer-0 row runs: tile 0 is left out, each
-/// run is a stretch of non-zero tiles on one row.
+/// A 64×64 board of tile ids as layer-0 row runs, one full row each. Tile 0
+/// is a real tile (the top-left cell of `pics1.png`, grass on the usual
+/// sheets), so it is kept: leaving it out made those places draw black.
 pub(crate) fn board_runs(tiles: &[u16]) -> Vec<BoardRun> {
-    let mut boards = Vec::new();
-    for y in 0..64 {
-        let mut run_start = 0;
-        let mut run_tiles = Vec::new();
-        for x in 0..64 {
-            let t = tiles[y * 64 + x];
-            if t != 0 || !run_tiles.is_empty() {
-                if run_tiles.is_empty() {
-                    run_start = x;
-                }
-                run_tiles.push(tile_code(t));
-            }
-            if (t == 0 || x == 63) && !run_tiles.is_empty() {
-                boards.push(BoardRun {
-                    x: run_start as i32,
-                    y: y as i32,
-                    width: run_tiles.len() as i32,
-                    layer: 0,
-                    tiles: run_tiles.clone(),
-                });
-                run_tiles.clear();
-            }
-        }
-    }
-    boards
+    tiles
+        .chunks(64)
+        .take(64)
+        .enumerate()
+        .map(|(y, row)| BoardRun { x: 0, y: y as i32, width: row.len() as i32, layer: 0, tiles: row.iter().map(|&t| tile_code(t)).collect() })
+        .collect()
 }
 
 /// Bits per board code for a binary level magic: 13 for GR-V1.02 to 1.04
@@ -1742,6 +1724,29 @@ CHEST 8 8 greenrupee 0
             let e = Level::parse_binary_with_layout(data.as_bytes()).unwrap_err();
             assert!(e.contains("text file"), "{e}");
         }
+    }
+
+    #[test]
+    fn binary_boards_keep_tile_0() {
+        // GR-V1.01: 12-bit codes, low bits first. Rows alternate 0 and 5,
+        // so every row starts with tile 0 and has 0s after other tiles.
+        let mut data = b"GR-V1.01".to_vec();
+        let (mut buf, mut bits) = (0u32, 0u32);
+        for i in 0..4096u32 {
+            buf |= (if i % 2 == 0 { 0 } else { 5 }) << bits;
+            bits += 12;
+            while bits >= 8 {
+                data.push(buf as u8);
+                buf >>= 8;
+                bits -= 8;
+            }
+        }
+        data.push(buf as u8);
+        let lvl = Level::parse_binary(&data).unwrap();
+        for (x, y) in [(0, 0), (2, 0), (0, 63), (62, 63)] {
+            assert_eq!(lvl.tile_id_at(x, y), Some(0), "({x}, {y})");
+        }
+        assert_eq!(lvl.tile_id_at(63, 63), Some(5));
     }
 
     #[test]

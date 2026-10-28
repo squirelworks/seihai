@@ -5,7 +5,7 @@ Date: 2026-10-22
 ## Offline slice
 
 `OfflineSession` can:
-1. Load a `GLEVNW01` `.nw`, a binary `GR-V1` `.graal`, or a `Z3-V1` `.zelda` via `Level::load`.
+1. Load a `GLEVNW01` `.nw`, a binary `GR-V1` `.graal`, or a `Z3-V1` `.zelda` via `Level::load`. Binary boards keep tile 0 (`binary-level-tiles.md`).
 2. Decode tile ids from the 2-char base64 board encoding (text) or the RLE bitstream (binary).
 3. Apply `BoardModify` updates.
 4. Reject moves that land on wall tiles (`collision >= 20`).
