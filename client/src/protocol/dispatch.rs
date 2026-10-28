@@ -344,6 +344,10 @@ pub struct SessionState {
     /// Decoded `PLO_HURTPLAYER` (40) and `PLO_HITOBJECTS` (46), drained by
     /// the game loop.
     pub hits: Vec<IncomingHit>,
+    /// Players who threw what they carried (`PLO_THROWCARRIED`, 21), as
+    /// they were when the message came (with their carried sprite), drained
+    /// by the game loop. Their carry is cleared on receipt.
+    pub throws: Vec<OtherPlayer>,
     /// Messages dropped because this version has no handler for them.
     pub ignored: HashMap<u8, usize>,
     /// Text of `PLO_DISCMESSAGE` (16). The server closes after it.
@@ -789,6 +793,17 @@ impl SessionState {
                 // PLO_FILEUPTODATE: rest = name (2.1+).
                 let name = String::from_utf8_lossy(&msg.payload);
                 self.file_requests.push(format!("UPTODATE:{name}"));
+            }
+            21 => {
+                // PLO_THROWCARRIED: GSHORT id. The 2.05 client throws that
+                // player's carried object from their position and clears
+                // their carry. A player it does not know throws nothing.
+                if let Some(id) = read_gshort(&msg.payload) {
+                    if let Some(o) = self.others.iter_mut().find(|o| o.id == id) {
+                        self.throws.push(o.clone());
+                        o.carry = None;
+                    }
+                }
             }
             10 => self.is_leader = true,
             40 if self.combat.is_some() => {
@@ -1942,6 +1957,22 @@ mod tests {
     /// `PLO_OTHERPLPROPS` for player `id` with a prop stream.
     fn other(id: u16, props: &[u8]) -> Vec<u8> {
         [&[8 + 0x20][..], &gs(id), props, b"\n"].concat()
+    }
+
+    #[test]
+    fn throwcarried_21_throws_what_that_player_held_and_empties_their_hands() {
+        let mut st = SessionState::default();
+        // Player 200 at (30, 12) facing east, holding the bush.
+        st.apply_body(&other(200, &[15 + 0x20, 60 + 0x20, 16 + 0x20, 24 + 0x20, 17 + 0x20, 3 + 0x20, 19 + 0x20, 1 + 0x20]));
+        assert_eq!(st.others[0].carry, Some(261));
+        st.apply_body(&[&[21 + 0x20][..], &gs(200), b"\n"].concat());
+        assert_eq!(st.throws.len(), 1);
+        let t = &st.throws[0];
+        assert_eq!((t.id, t.carry, t.x, t.y, t.dir), (200, Some(261), 30.0, 12.0, 3));
+        assert_eq!(st.others[0].carry, None, "the thrower's hands are empty");
+        // A player the client does not know throws nothing.
+        st.apply_body(&[&[21 + 0x20][..], &gs(9), b"\n"].concat());
+        assert_eq!(st.throws.len(), 1);
     }
 
     #[test]

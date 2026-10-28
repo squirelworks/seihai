@@ -149,13 +149,37 @@ pub struct Thrown {
     pub ground: f32,
     pub dir: u8,
     pub ticks_left: i32,
+    /// The player id of the thrower, for a throw another player made
+    /// (`PLO_THROWCARRIED`). `None` for the player's own throws.
+    pub thrower: Option<u16>,
+    /// The player's own throw: it never hits the player (the 2.05 client
+    /// marks its own throws and skips the player test for them).
+    pub own: bool,
 }
 
 impl Thrown {
     /// A throw from the player at `(px, py)` facing `dir`.
     pub fn launch(kind: usize, px: f32, py: f32, dir: u8) -> Self {
         let (x, y) = carry_origin(px, py);
-        Thrown { kind, sprite: carry_sprite(kind), x, y, ground: py + 1.0, dir, ticks_left: FLIGHT_TICKS }
+        Thrown { kind, sprite: carry_sprite(kind), x, y, ground: py + 1.0, dir, ticks_left: FLIGHT_TICKS, thrower: None, own: true }
+    }
+
+    /// A throw another player made (`PLO_THROWCARRIED`): it starts at that
+    /// player's position `(px, py)` with what they carried, flies their way
+    /// for the same 9 ticks, and can hit this player. `kind` is the sprite's
+    /// lift-table entry, or `usize::MAX` for a sprite the lift table does
+    /// not have (a bomb).
+    pub fn launch_remote(sprite: u16, px: f32, py: f32, dir: u8, thrower: u16) -> Self {
+        let (x, y) = carry_origin(px, py);
+        let kind = CARRY_SPRITES.iter().position(|&s| s == sprite).unwrap_or(usize::MAX);
+        Thrown { kind, sprite: Some(sprite), x, y, ground: py + 1.0, dir, ticks_left: FLIGHT_TICKS, thrower: Some(thrower), own: false }
+    }
+
+    /// Whether the object, after its step, is on the player whose sprite
+    /// top-left is `(px, py)`: under 2 tiles from `(px + 0.5, py + 1)` on
+    /// each axis, measured from the object's `x` and ground point (2.05).
+    pub fn hits_player(&self, px: f32, py: f32) -> bool {
+        (self.x - (px + 0.5)).abs() < 2.0 && (self.ground - (py + 1.0)).abs() < 2.0
     }
 
     /// One flight tick: move by the facing's step and use up a tick.
@@ -178,6 +202,23 @@ impl Thrown {
     pub fn water_probe(&self) -> (f32, f32) {
         (self.x + 1.0, self.y + 1.0)
     }
+}
+
+/// Half hearts a thrown object takes from the player it hits: one heart, or
+/// half a heart when the player has exactly one heart left (2.05). So a hit
+/// at one heart leaves half a heart, and the next one kills.
+pub fn throw_damage_half(hearts_half: i32) -> i32 {
+    if hearts_half == 2 {
+        1
+    } else {
+        2
+    }
+}
+
+/// The knockback a thrown object gives: one tile along the direction it
+/// flies (north, west, south, east).
+pub fn throw_knock(dir: u8) -> (f32, f32) {
+    [(0.0, -1.0), (-1.0, 0.0), (0.0, 1.0), (1.0, 0.0)][usize::from(dir & 3)]
 }
 
 /// A break effect (the client calls the class "leap") playing out.
@@ -320,6 +361,36 @@ pub fn leap_frames(tables: Option<&crate::assets::ObjectTables>, kind: usize) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_thrown_object_hits_inside_two_tiles_of_the_players_middle_and_feet() {
+        let mut o = Thrown::launch_remote(261, 10.0, 30.0, 3, 7);
+        assert_eq!((o.kind, o.thrower, o.own), (0, Some(7), false));
+        // Player at (14, 30): the test point is (14.5, 31).
+        o.x = 12.6;
+        assert!(o.hits_player(14.0, 30.0));
+        o.x = 12.5;
+        assert!(!o.hits_player(14.0, 30.0), "2 tiles is out");
+        o.x = 14.5;
+        o.ground = 32.9;
+        assert!(o.hits_player(14.0, 30.0));
+        o.ground = 33.0;
+        assert!(!o.hits_player(14.0, 30.0));
+        assert_eq!(Thrown::launch_remote(65, 0.0, 0.0, 0, 1).kind, usize::MAX, "a bomb is no lift entry");
+        assert!(Thrown::launch(0, 0.0, 0.0, 0).own);
+    }
+
+    #[test]
+    fn a_thrown_object_takes_a_heart_or_half_of_the_last_one_and_pushes_its_way() {
+        assert_eq!(throw_damage_half(6), 2);
+        assert_eq!(throw_damage_half(3), 2);
+        assert_eq!(throw_damage_half(2), 1);
+        assert_eq!(throw_damage_half(1), 2);
+        assert_eq!(throw_knock(0), (0.0, -1.0));
+        assert_eq!(throw_knock(1), (-1.0, 0.0));
+        assert_eq!(throw_knock(2), (0.0, 1.0));
+        assert_eq!(throw_knock(3), (1.0, 0.0));
+    }
 
     #[test]
     fn launch_starts_above_the_head_and_ground_under_the_feet() {

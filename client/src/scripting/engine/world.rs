@@ -472,6 +472,17 @@ impl ScriptWorld {
         hits.len()
     }
 
+    /// The first visible NPC, in creation order, whose rectangle holds the
+    /// point `(fx, fy)` in tiles: what a thrown object at that point hits.
+    pub fn npc_at(&self, fx: f64, fy: f64) -> Option<ObjId> {
+        self.ids().into_iter().find(|&id| {
+            self.obj(id).is_some_and(|o| {
+                let (x, y, w, h) = o.rect();
+                o.kind == ObjKind::Npc && o.visible && !o.destroyed && fx >= x && fx < x + w && fy >= y && fy < y + h
+            })
+        })
+    }
+
     /// Advance the clock by `ms`. Timeouts that fall due run in tick
     /// order, and within a tick in creation order, so a given sequence of
     /// `tick` calls always produces the same events.

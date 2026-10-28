@@ -3,7 +3,7 @@
 //! event, and effects are applied back afterwards.
 
 use super::vocab::Era;
-use super::world::{Effect, ObjKind, ObjSpec, ScriptWorld};
+use super::world::{Effect, ObjId, ObjKind, ObjSpec, ScriptWorld};
 use crate::offline::{OfflineSession, FOOT_DX, FOOT_DY};
 use crate::protocol::ClientVersion;
 
@@ -118,6 +118,13 @@ impl SessionScripts {
         let n = self.world.touch((session.player_x + FOOT_DX) as f64, (session.player_y + FOOT_DY) as f64);
         self.apply(session);
         n
+    }
+
+    /// A thrown object hit the NPC `id`: `waspelt` on it.
+    pub fn pelt(&mut self, session: &mut OfflineSession, id: ObjId) {
+        self.sync_player(session);
+        self.world.fire(id, "waspelt", &[]);
+        self.apply(session);
     }
 
     /// Advance script time by `ms` and run what falls due. Also notices

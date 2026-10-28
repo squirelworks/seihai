@@ -1327,6 +1327,15 @@ fn main() {
                         }
                     }
                 }
+                // Another player threw what they carried: the object flies
+                // from where they stand, and can hit us.
+                for o in std::mem::take(&mut net_state.throws) {
+                    if let Some(sprite) = o.carry {
+                        let own_cell = net_state.gmap.as_ref().map(|g| g.cell);
+                        let (x, y) = o.position_from(own_cell);
+                        session.throw_remote(sprite, x, y, o.dir, o.id);
+                    }
+                }
                 if entered || (warped && session.warp_pending.is_some()) {
                     // Arrival: the server's position is final. Links stay
                     // quiet until the player moves off it.
@@ -1481,9 +1490,16 @@ fn main() {
             combat_clock = Instant::now();
             let mut sprite_changed = session.tick_combat(dt);
             // Thrown objects and their break effects run on the same clock.
-            if session.tick_throw(dt) {
+            // A thrown object stops on the first NPC whose box holds its
+            // probe point; the NPC gets `waspelt`.
+            if session.tick_throw_with(dt, &|x, y| scripts.world.npc_at(f64::from(x), f64::from(y))) {
                 dirty = true;
             }
+            for id in session.take_pelts() {
+                scripts.pelt(&mut session, id);
+            }
+            // Another player's throw hurt us: the hurt sprite goes out.
+            sprite_changed |= session.take_throw_hurt();
             for l in session.take_landings() {
                 match l.effect {
                     Some(e) => eprintln!("thrown object {} landed at {:.1},{:.1}: break effect {e}", l.kind, l.x, l.y),

@@ -613,6 +613,17 @@ fn touch_fires_on_entry_and_rearms_after_leaving() {
 }
 
 #[test]
+fn a_thrown_object_finds_the_first_visible_npc_at_its_point_and_pelts_it() {
+    let (mut w, id) = npc("if (waspelt) { message ouch; hide; }");
+    assert_eq!(w.npc_at(9.9, 20.5), None);
+    assert_eq!(w.npc_at(10.0, 20.0), Some(id), "the box includes its top-left edge");
+    assert_eq!(w.npc_at(12.0, 20.5), None, "and not its right edge");
+    w.fire(id, "waspelt", &[]);
+    assert_eq!(messages(&mut w), vec!["ouch"]);
+    assert_eq!(w.npc_at(10.5, 20.5), None, "a hidden NPC is not hit");
+}
+
+#[test]
 fn hidden_npcs_are_not_touched() {
     let (mut w, id) = npc("if (playertouchsme) { hide; message hit; }");
     assert_eq!(w.touch(10.5, 20.5), 1);
