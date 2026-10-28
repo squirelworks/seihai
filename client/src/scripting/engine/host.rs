@@ -240,6 +240,7 @@ impl SessionScripts {
                         x: num(2) as f32,
                         y: num(3) as f32,
                         part: None,
+                        effect: Default::default(),
                     };
                     if let Some(n) = self.level_npc(s, obj) {
                         match n.images.iter_mut().find(|i| i.index == img.index) {
@@ -388,6 +389,35 @@ impl SessionScripts {
                         n.layer = crate::assets::DrawLayer::Player;
                     }
                 }
+                // Colour and zoom effects (see `documentation/visual-effects.md`).
+                Effect::Command { obj, ref name, ref args }
+                    if matches!(name.as_str(), "setcoloreffect" | "setzoomeffect" | "changeimgcolors" | "changeimgzoom") =>
+                {
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num()) as f32;
+                    let set = |e: &mut crate::assets::ImageEffect, from: usize, color: bool| {
+                        if color {
+                            e.color = [num(from), num(from + 1), num(from + 2), num(from + 3)];
+                        } else {
+                            e.zoom = num(from);
+                        }
+                    };
+                    let color = name.ends_with("coloreffect") || name == "changeimgcolors";
+                    if let Some(n) = self.level_npc(s, obj) {
+                        if name.starts_with("set") {
+                            set(&mut n.effect, 0, color);
+                        } else {
+                            let index = num(0) as i64;
+                            if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
+                                set(&mut i.effect, 1, color);
+                            }
+                        }
+                    }
+                }
+                // `seteffect r,g,b,a`: the whole map is shaded with that colour.
+                Effect::Command { ref name, ref args, .. } if name == "seteffect" => {
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num()) as f32;
+                    s.screen_effect = [num(0), num(1), num(2), num(3)];
+                }
                 // Collision shape for an NPC.
                 Effect::SetShape { obj, w, h, .. } => {
                     if let Some(n) = self.level_npc(s, obj) {
@@ -398,8 +428,8 @@ impl SessionScripts {
                 // drawing them is still open.
                 Effect::Command { ref name, .. }
                     if matches!(name.as_str(),
-                        "changeimgvis" | "changeimgcolors" | "changeimgzoom"
-                        | "showtext" | "hideimgs" | "setbackpal" | "seteffect"
+                        "changeimgvis"
+                        | "showtext" | "hideimgs" | "setbackpal"
                         | "replaceani" | "addtiledef" | "addtiledef2"
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
                         | "timereverywhere" | "hideimg"

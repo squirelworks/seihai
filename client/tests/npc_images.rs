@@ -472,3 +472,55 @@ fn blockagain_puts_an_npc_back_with_the_players() {
     sc.chat(&mut s, "back");
     assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), RED);
 }
+
+#[test]
+fn setcoloreffect_tints_and_blends_the_npc_picture() {
+    let imgs = images();
+    // Half the red and alpha 0.5 over black: 200 * 0.5 * 0.5 = 50.
+    let (s, _sc) = session("NPC red.png 2 2\nif (playerenters) { drawoverplayer; setcoloreffect 0.5,1,1,0.5; }\nNPCEND\n");
+    let fb = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
+    assert_eq!(at(&fb, 2 * 16 + 1, 2 * 16 + 1), [50, 15, 15]);
+}
+
+#[test]
+fn setzoomeffect_scales_about_the_centre() {
+    let imgs = images();
+    // red.png is 4x4 at (32, 32); zoom 2 makes it 8x8 from (30, 30).
+    let (s, _sc) = session("NPC red.png 2 2\nif (playerenters) { setzoomeffect 2; }\nNPCEND\n");
+    let fb = draw_pass(&s, &imgs, NpcPass::BelowPlayers);
+    assert_eq!(at(&fb, 30, 30), RED);
+    assert_eq!(at(&fb, 37, 37), RED);
+    assert_eq!(at(&fb, 29, 30), BLACK);
+    assert_eq!(at(&fb, 38, 37), BLACK);
+}
+
+#[test]
+fn changeimgcolors_and_changeimgzoom_change_one_showimg_image() {
+    let imgs = images();
+    let (s, _sc) = session(
+        "NPC - 2 2\nif (playerenters) { showimg 1,blue.png,10,2; showimg 2,blue.png,14,2; changeimgcolors 1,1,1,0,1; changeimgzoom 2,0.5; }\nNPCEND\n",
+    );
+    let fb = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
+    assert_eq!(at(&fb, 10 * 16 + 1, 2 * 16 + 1), [30, 30, 0], "blue taken out");
+    // 4x4 at half size is 2x2 from (14*16 + 1, 33).
+    assert_eq!(at(&fb, 14 * 16 + 1, 2 * 16 + 1), BLUE);
+    assert_eq!(at(&fb, 14 * 16, 2 * 16), BLACK);
+}
+
+#[test]
+fn seteffect_shades_the_map_under_the_lights() {
+    let imgs = images();
+    let (s, _sc) = session(
+        "NPC red.png 2 2\nif (playerenters) { seteffect 0,0,1,0.5; }\nNPCEND\n\
+         NPC red.png 6 2\nif (playerenters) { drawaslight; setcoloreffect 1,1,1,0.5; }\nNPCEND\n",
+    );
+    assert_eq!(s.screen_effect, [0.0, 0.0, 1.0, 0.5]);
+    let mut fb = Framebuffer::new(320, 320);
+    let art = NpcArt { images: &imgs, sheets: PoseSheets::default() };
+    draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::BelowPlayers);
+    draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::AbovePlayers);
+    // The default NPC is under the shading: red halfway to blue.
+    assert_eq!(at(&fb, 2 * 16 + 1, 2 * 16 + 1), [100, 15, 143]);
+    // The light is added on top of the shaded black: 128 blue + half red.
+    assert_eq!(at(&fb, 6 * 16 + 1, 2 * 16 + 1), [100, 15, 143]);
+}

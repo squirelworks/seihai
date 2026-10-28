@@ -21,7 +21,7 @@ pub use tiledefs::{load_tiledefs, parse_tiledefs, TileDef};
 pub use crc32::{crc32, crc32_update};
 pub use gani::{Gani, GaniFrame, GaniPlacement, GaniPlayer, GaniSound, GaniSprite, LISTENER_DX, LISTENER_DY};
 pub use level::{
-    CHEST_ITEMS, decode_sign_record, decode_sign_text, graal_code_bits, GraalLayout, tile_code, tile_id, tile_src_rect, Baddy, BoardRun, Chest, DrawLayer, Level,
+    CHEST_ITEMS, decode_sign_record, decode_sign_text, graal_code_bits, GraalLayout, tile_code, tile_id, tile_src_rect, Baddy, BoardRun, Chest, DrawLayer, ImageEffect, Level,
     Link, Npc, NpcImage, Object2x2, ObjectTables, Sign, Tile, TileKind, TileTypes,
 };
 pub use zelda::{is_zelda, Computer, ZeldaLayout, ZeldaLevel, ZeldaLink, ZeldaMagic, ZeldaSign};

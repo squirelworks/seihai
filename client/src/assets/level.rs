@@ -78,6 +78,8 @@ pub struct Npc {
     /// Where the NPC is drawn against the players: `drawunderplayer`,
     /// `drawoverplayer`, `drawaslight`; `blockagain` puts it back.
     pub layer: DrawLayer,
+    /// `setcoloreffect` and `setzoomeffect`.
+    pub effect: ImageEffect,
 }
 
 /// The drawing height of an NPC. The 2.05 client keeps it as one number
@@ -105,13 +107,38 @@ pub struct NpcImage {
     pub x: f32,
     pub y: f32,
     pub part: Option<(i32, i32, i32, i32)>,
+    /// `changeimgcolors` and `changeimgzoom`.
+    pub effect: ImageEffect,
+}
+
+/// How an NPC's picture, or a `showimg` image, is coloured and scaled:
+/// `setcoloreffect` / `changeimgcolors` (red, green, blue, alpha; default
+/// 1 each) and `setzoomeffect` / `changeimgzoom` (default 1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ImageEffect {
+    pub color: [f32; 4],
+    pub zoom: f32,
+}
+
+impl Default for ImageEffect {
+    fn default() -> Self {
+        ImageEffect { color: [1.0; 4], zoom: 1.0 }
+    }
+}
+
+impl ImageEffect {
+    /// True when drawing needs the effect path: a colour or alpha below 1,
+    /// or a zoom other than 1 (the 2.05 test).
+    pub fn is_on(&self) -> bool {
+        self.color.iter().any(|&c| c < 1.0) || self.zoom != 1.0
+    }
 }
 
 impl Npc {
     /// An NPC with only its image, position and script.
     pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
         Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new(),
-            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None, layer: DrawLayer::Player }
+            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None, layer: DrawLayer::Player, effect: ImageEffect::default() }
     }
 
     /// Every image file the NPC draws now: its own and its `showimg` ones.

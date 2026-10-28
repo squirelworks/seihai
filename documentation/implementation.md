@@ -34,6 +34,7 @@ No system SDL2. The `render` module provides:
 - permanent chat bar at the bottom
 - chests from their records; an NPC whose image is not loaded draws nothing (`npc-images.md`)
 - NPC drawing heights: `drawunderplayer` and default NPCs before the players; `drawoverplayer`, `showimg` images and `drawaslight` after (`npc-draw-order.md`)
+- `seteffect`, `setcoloreffect`, `setzoomeffect`, `changeimgcolors` and `changeimgzoom` (`visual-effects.md`)
 - windowed binary via `minifb` (`cargo run -p seihai`)
 - F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
 - Play offline button in the GUI skips the connection
