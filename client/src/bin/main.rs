@@ -509,10 +509,7 @@ fn main() {
     let mut scripts = SessionScripts::new(version);
     let mut scripts_serial = u64::MAX;
     let mut scripts_clock = Instant::now();
-    // Each unique script diagnostic is printed once. The same ignored
-    // command otherwise floods the terminal every tick.
-    let mut seen_script_log: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut seen_script_effect: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     let mut net_state = SessionState::default();
     // Buddy, ignore and mute lists from the settings directory.
     let mut lists = seihai::chatlists::ChatLists::load_default();
@@ -1026,6 +1023,25 @@ fn main() {
     let mut chat_scroll = 0usize;
     let debug_on = Settings::load().debug.unwrap_or(false);
     let mut show_debug = debug_on;
+    // Debug diagnostics go to a file, not the terminal. The file is
+    // recreated each run so it holds one session.
+    let mut debug_file: Option<std::fs::File> = if debug_on {
+        let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
+        std::fs::create_dir_all(&dir).ok();
+        let path = dir.join("script.log");
+        match std::fs::File::create(&path) {
+            Ok(f) => {
+                eprintln!("debug: writing to {}", path.display());
+                Some(f)
+            }
+            Err(e) => {
+                eprintln!("debug: could not open {}: {e}", path.display());
+                None
+            }
+        }
+    } else {
+        None
+    };
     let mut show_players = false;
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
@@ -1750,21 +1766,19 @@ fn main() {
                 }
                 dirty = true;
             }
-            for e in scripts.unhandled.drain(..) {
-                if !debug_on { continue; }
-                let key = match &e {
-                    seihai::scripting::engine::Effect::Command { name, .. } => format!("cmd:{name}"),
-                    other => format!("{other:?}"),
-                };
-                if seen_script_effect.insert(key) {
-                    eprintln!("script effect not applied: {e:?}");
+            if let Some(f) = debug_file.as_mut() {
+                use std::io::Write;
+                for e in scripts.unhandled.drain(..) {
+                    let _ = writeln!(f, "effect not applied: {e:?}");
                 }
-            }
-            for l in scripts.world.take_log() {
-                if !debug_on { continue; }
-                if seen_script_log.insert(l.clone()) {
-                    eprintln!("script: {l}");
+                for l in scripts.world.take_log() {
+                    let _ = writeln!(f, "script: {l}");
                 }
+                let _ = f.flush();
+            } else {
+                // Drain so the buffers do not grow when debug is off.
+                scripts.unhandled.clear();
+                let _ = scripts.world.take_log();
             }
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
