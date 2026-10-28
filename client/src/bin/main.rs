@@ -809,6 +809,8 @@ fn main() {
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");
     let sword_sheet = load("swords", "sword1.png");
+    // The build's own status display; without it, the plain bars.
+    let state_sheet = load("", "state.png");
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
@@ -904,7 +906,34 @@ fn main() {
         }
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
-        fb.draw_hud(session.player_health, session.rupees);
+        match &state_sheet {
+            Some(st) => seihai::render::hud::draw_hud(
+                &mut fb,
+                profile.ui.hud,
+                &seihai::render::hud::HudSheets {
+                    state: pose_sheet(st),
+                    sprites: sprites.as_ref().map(pose_sheet),
+                    sword: sword_sheet.as_ref().map(pose_sheet),
+                    item: None,
+                },
+                session.object_tables.as_ref(),
+                &seihai::render::hud::HudValues {
+                    half_hearts: session.hearts_half(),
+                    max_half_hearts: session.max_hearts,
+                    rupees: session.rupees,
+                    bombs: session.bombs,
+                    arrows: session.darts,
+                    ap: i32::from(session.alignment),
+                    mp: 0,
+                    glove_power: i32::from(session.glove_power),
+                    sword_power: i32::from(session.sword_power),
+                    weapons: true,
+                    stats: seihai::render::hud::stats::ALL,
+                    keys: ['A', 'S', 'D', 'Q'],
+                },
+            ),
+            None => fb.draw_hud(session.player_health, session.rupees),
+        }
         // The minimap is set by the game server from 2.1 on.
         if profile.ui.minimap {
             if let Some(level) = &session.current_level {
