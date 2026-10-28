@@ -228,9 +228,15 @@ impl<'a> Parser<'a> {
                 let cond = self.expr();
                 self.expect_op(")");
                 let then = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
-                let els = if matches!(&self.peek().tok, Tok::Ident(e) if e == "else") {
+                let els = if matches!(&self.peek().tok, Tok::Ident(e) if e == "else" || e == "elseif") {
+                    let is_elseif = matches!(&self.peek().tok, Tok::Ident(e) if e == "elseif");
                     self.next();
-                    Some(Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new()))))
+                    if is_elseif {
+                        // `elseif` is `else if`.
+                        Some(Box::new(self.stmt_inner().unwrap_or(Stmt::Block(Vec::new()))))
+                    } else {
+                        Some(Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new()))))
+                    }
                 } else {
                     None
                 };
@@ -404,17 +410,29 @@ impl<'a> Parser<'a> {
         self.expr()
     }
 
-    /// Variable name already read; read its optional `[index, ...]`.
-    fn var_tail(&mut self, name: String) -> VarRef {
+    /// Variable name already read; read its optional `[index, ...]`
+    /// and any chained `.field` or `.field[index]`.
+    fn var_tail(&mut self, mut name: String) -> VarRef {
         let mut index = Vec::new();
-        if self.eat_op("[") {
-            loop {
-                index.push(self.expr());
-                if !self.eat_op(",") {
-                    break;
+        loop {
+            if self.eat_op("[") {
+                loop {
+                    index.push(self.expr());
+                    if !self.eat_op(",") {
+                        break;
+                    }
+                }
+                self.expect_op("]");
+            }
+            // `npcs[i].save` or `npcs[i].save[5]`: fold the field into the name.
+            if self.eat_op(".") {
+                if let Tok::Ident(f) = self.peek().tok.clone() {
+                    self.next();
+                    name = format!("{name}.{f}");
+                    continue;
                 }
             }
-            self.expect_op("]");
+            break;
         }
         VarRef { name, index }
     }
@@ -515,14 +533,17 @@ impl<'a> Parser<'a> {
         lhs
     }
 
-    /// After `in`: `|lo,hi|` or `{a,b,c}`.
+    /// After `in`: `|lo,hi|`, `|lo,hi>`, or `{a,b,c}`.
     fn in_tail(&mut self, e: Expr) -> Expr {
         let e = Box::new(e);
         if self.eat_op("|") {
             let lo = Box::new(self.binary(4));
             self.expect_op(",");
             let hi = Box::new(self.binary(4));
-            self.expect_op("|");
+            // `|lo,hi|` or `|lo,hi>`.
+            if !self.eat_op("|") {
+                self.eat_op(">");
+            }
             Expr::InRange { e, lo, hi }
         } else if self.eat_op("{") {
             let mut list = Vec::new();
