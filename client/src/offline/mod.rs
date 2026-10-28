@@ -515,6 +515,15 @@ impl OfflineSession {
         self.life.input_locked()
     }
 
+    /// The name of the player's level: on a gmap the level of the current
+    /// cell, else the file last loaded.
+    pub fn level_name(&self) -> Option<String> {
+        match &self.gmap {
+            Some(w) => w.map.level_at(w.cell.0, w.cell.1).map(str::to_string),
+            None => self.loaded_file.clone(),
+        }
+    }
+
     /// True when the level loaded last is the one named `name` (a file name,
     /// with or without `.nw`, any case).
     pub fn is_loaded(&self, name: &str) -> bool {
@@ -1606,6 +1615,17 @@ impl Default for OfflineSession {
     }
 }
 
+/// The debug log's line for a level change: `level: <name>` when `now`
+/// differs from the level last logged (any case), and remembers it.
+pub fn level_change_line(last: &mut Option<String>, now: Option<&str>) -> Option<String> {
+    let now = now?;
+    if last.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(now)) {
+        return None;
+    }
+    *last = Some(now.to_string());
+    Some(format!("level: {now}"))
+}
+
 #[cfg(test)]
 mod tests {
     /// A 16 ms loop (the frame limit) and a 50 ms step: counting from the due time gives 20 steps
@@ -1647,6 +1667,22 @@ mod tests {
 
     use super::*;
     use crate::assets::ObjectTables;
+
+    #[test]
+    fn the_debug_log_names_each_level_change_once() {
+        let mut last = None;
+        assert_eq!(level_change_line(&mut last, None), None);
+        assert_eq!(level_change_line(&mut last, Some("onlinestartlocal.nw")).as_deref(), Some("level: onlinestartlocal.nw"));
+        assert_eq!(level_change_line(&mut last, Some("onlinestartlocal.nw")), None);
+        assert_eq!(level_change_line(&mut last, Some("OnlineStartLocal.nw")), None);
+        assert_eq!(level_change_line(&mut last, Some("new3.nw")).as_deref(), Some("level: new3.nw"));
+        // Back again is a change too.
+        assert_eq!(level_change_line(&mut last, Some("onlinestartlocal.nw")).as_deref(), Some("level: onlinestartlocal.nw"));
+        let mut s = OfflineSession::new();
+        assert_eq!(s.level_name(), None);
+        s.loaded_file = Some("new3.nw".into());
+        assert_eq!(s.level_name().as_deref(), Some("new3.nw"));
+    }
 
     #[test]
     fn chest_and_sign_interact() {
