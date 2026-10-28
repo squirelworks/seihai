@@ -43,6 +43,10 @@ Offline play of real-learn-levels shows black squares. Those are tile ids that d
 
 Walking off a level edge teleports to the same coordinates on the destination. The link says `playerx`/`playery`, so the arrival is the player position plus the offset. For an edge transition the arrival should be the opposite edge (east off x=63 lands at x=0). The offset is not being applied, or the edge case is not special-cased.
 
+## Test level
+
+`client/tests/fixtures/levels/new3.nw` is a real level with edge links. Claude should run the real 2.22 and 2.31 clients against it, then Seihai, and compare where each lands after walking off an edge. The arrival should be the opposite edge, not the same coordinates.
+
 ## From the decompiles
 
 These were in the cleaned notes and are not in Seihai yet:
