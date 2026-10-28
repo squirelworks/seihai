@@ -50,10 +50,10 @@ fn parse_all_unique_npc_scripts() {
         for (name, body) in scripts_in(&path) {
             total += 1;
             let s = parse(&body, Era::V205);
-            if !s.diags.is_empty() {
+            if !s.diagnostics.is_empty() {
                 failed += 1;
                 if diags.len() < 40 {
-                    let msg = s.diags.iter().map(|d| format!("L{}: {}", d.line, d.msg)).collect::<Vec<_>>().join("; ");
+                    let msg = s.diagnostics.iter().map(|d| format!("L{}: {}", d.line, d.msg)).collect::<Vec<_>>().join("; ");
                     diags.push((name, msg));
                 }
             }
