@@ -207,6 +207,13 @@ pub fn throw_carried_message() -> Vec<u8> {
     vec![11 + 0x20, b'\n']
 }
 
+/// `PLI_PLAYERPROPS` (2) with CARRYSPRITE (19): what the player holds over
+/// the head, in the 2.05 code ([`crate::throwing::carry_wire_code`]; -1
+/// empty hands). Other clients draw the object from it.
+pub fn carry_sprite_message(sprite: Option<u16>) -> Vec<u8> {
+    vec![2 + 0x20, 19 + 0x20, crate::throwing::carry_wire_byte(sprite), b'\n']
+}
+
 /// `PLI_LEVELWARP` (0): `GCHAR x*2`, `GCHAR y*2` (tiles), level name.
 pub fn levelwarp_message(x: f32, y: f32, level: &str) -> Vec<u8> {
     let mut msg = vec![0x20];
@@ -1021,6 +1028,11 @@ impl Connection {
     /// the level as `PLO_THROWCARRIED` with the sender's id).
     pub fn send_throw_carried(&mut self) -> io::Result<()> {
         self.send_messages(&[throw_carried_message()])
+    }
+
+    /// Tell the others what the player now holds ([`carry_sprite_message`]).
+    pub fn send_carry_sprite(&mut self, sprite: Option<u16>) -> io::Result<()> {
+        self.send_messages(&[carry_sprite_message(sprite)])
     }
 
     /// Warp to `level` at `(x, y)` in tiles (`PLI_LEVELWARP`, id 0):

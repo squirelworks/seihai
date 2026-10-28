@@ -18,6 +18,60 @@ pub const FLIGHT_TICKS: i32 = 9;
 /// bush, block, and the three heavier objects.
 pub const CARRY_SPRITES: [u16; 5] = [261, 267, 265, 263, 239];
 
+/// The client's carry table, in the order of the script names (`bush`,
+/// `sign`, `vase`, `stone`, `blackstone`, `bomb`, `hotbomb`, `superbomb`,
+/// `joltbomb`, `hotjoltbomb`, `none`): the carried sprite of each, -1 none
+/// (2.05).
+pub const CARRY_TABLE: [i32; 11] = [261, 267, 265, 263, 239, 65, 66, 321, 347, 348, -1];
+
+/// The CARRYSPRITE (19) value the 2.05 client sends for what it carries:
+/// -1 empty hands, 0 for sprite 65, 200 for 66, 201 for 239, otherwise the
+/// sprite id minus 260 (the bush, 261, is 1).
+pub fn carry_wire_code(sprite: Option<u16>) -> i32 {
+    match sprite {
+        None => -1,
+        Some(65) => 0,
+        Some(66) => 200,
+        Some(239) => 201,
+        Some(s) => i32::from(s) - 260,
+    }
+}
+
+/// The carried sprite a received CARRYSPRITE (19) value names (2.05): the
+/// inverse of [`carry_wire_code`]. Negative is empty hands. A value whose
+/// sprite is not in [`CARRY_TABLE`] becomes the table's first (the bush).
+pub fn carry_sprite_from_wire(code: i32) -> Option<u16> {
+    if code < 0 {
+        return None;
+    }
+    let s = match code {
+        0 => 65,
+        200 => 66,
+        201 => 239,
+        c => c + 260,
+    };
+    let s = if CARRY_TABLE.contains(&s) { s } else { CARRY_TABLE[0] };
+    u16::try_from(s).ok()
+}
+
+/// The CARRYSPRITE byte as a GCHAR on the wire (value + 32).
+pub fn carry_wire_byte(sprite: Option<u16>) -> u8 {
+    (carry_wire_code(sprite) as u8).wrapping_add(0x20)
+}
+
+/// The value a received CARRYSPRITE byte holds: GCHAR minus 32, with the
+/// byte 31 (the client's -1) as -1. Byte 255 is -1 too: GServer-v2 stores
+/// the prop unsigned and clamps it on the way out, so the -1 a client sent
+/// reaches the others as 255 (lab, 2026-10-28). Read as 223 it would be no
+/// sprite of the table, which the 2.05 receiver turns into the bush; Seihai
+/// takes it as empty hands instead (a Seihai choice).
+pub fn carry_code_from_byte(b: u8) -> i32 {
+    if b == 0xFF {
+        return -1;
+    }
+    i32::from(b) - 0x20
+}
+
 /// Carry sprite ids of things that stay on the ground when thrown (bombs).
 pub const STAY_SPRITES: [u16; 5] = [65, 66, 321, 347, 348];
 
@@ -282,6 +336,24 @@ mod tests {
         assert!(!interact_pressed(false, false, false, true), "S empty-handed is a swing, not an interact");
         assert!(interact_pressed(false, true, false, false));
         assert!(!interact_pressed(true, false, false, false));
+    }
+
+    #[test]
+    fn carry_codes_round_trip_the_2_05_table() {
+        assert_eq!(carry_wire_code(None), -1);
+        assert_eq!(carry_wire_byte(None), 31);
+        let codes: Vec<i32> = CARRY_SPRITES.iter().map(|&s| carry_wire_code(Some(s))).collect();
+        assert_eq!(codes, vec![1, 7, 5, 3, 201]);
+        assert_eq!(carry_wire_code(Some(65)), 0);
+        assert_eq!(carry_wire_code(Some(66)), 200);
+        assert_eq!(carry_wire_code(Some(321)), 61);
+        for &s in CARRY_TABLE.iter().filter(|&&s| s >= 0) {
+            let s = s as u16;
+            assert_eq!(carry_sprite_from_wire(carry_code_from_byte(carry_wire_byte(Some(s)))), Some(s), "sprite {s}");
+        }
+        assert_eq!(carry_sprite_from_wire(carry_code_from_byte(31)), None);
+        assert_eq!(carry_sprite_from_wire(carry_code_from_byte(255)), None, "GServer-v2's relayed -1");
+        assert_eq!(carry_sprite_from_wire(2), Some(261), "not in the table: the bush");
     }
 
     #[test]

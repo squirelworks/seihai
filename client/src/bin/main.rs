@@ -741,7 +741,7 @@ fn main() {
         load_motion_gani(&resolver, &mut session, name);
     }
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
-    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani"] {
+    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani"] {
         load_pose_gani(&resolver, &mut session, name);
     }
     let mut sound_serial = session.level_serial;
@@ -872,6 +872,17 @@ fn main() {
                     cam_x,
                     cam_y,
                 );
+            }
+        }
+        // What other players hold over their heads (CARRYSPRITE), at the
+        // same place as our own carried object.
+        if let Some(sp) = &sprites {
+            for other in others {
+                if let Some(id) = other.carry {
+                    let (x, y) = seihai::throwing::carry_origin(other.x, other.y);
+                    let at = |v: f32| (v * 16.0).round() as i32;
+                    seihai::render::draw_sprite(&mut fb, pose_sheet(sp), session.object_tables.as_ref(), id, at(x) - cam_x, at(y) - cam_y);
+                }
             }
         }
         let (dx, dy) = player_box_origin(session, view_w, view_h);
@@ -1521,12 +1532,34 @@ fn main() {
                             let _ = c.send_open_chest(x, y);
                         }
                     }
-                    seihai::offline::Interaction::Lifted { kind } => eprintln!("lifted object {kind}"),
+                    seihai::offline::Interaction::Lifted { kind } => {
+                        eprintln!("lifted object {kind}");
+                        // Others see the object (CARRYSPRITE) and the carry
+                        // pose (the sprite value).
+                        if let Some(c) = conn.as_mut() {
+                            let sent = c
+                                .send_carry_sprite(seihai::throwing::carry_sprite(kind))
+                                .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                            if let Err(e) = sent {
+                                eprintln!("send failed: {e}");
+                                conn = None;
+                            }
+                        }
+                    }
                     seihai::offline::Interaction::Thrown { kind } => {
                         eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
                         if let Some(c) = conn.as_mut() {
                             match c.send_throw_carried() {
-                                Ok(()) => eprintln!("thrown object {kind}: PLI_THROWCARRIED sent"),
+                                Ok(()) => {
+                                    eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
+                                    let sent = c
+                                        .send_carry_sprite(None)
+                                        .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                                    if let Err(e) = sent {
+                                        eprintln!("send failed: {e}");
+                                        conn = None;
+                                    }
+                                }
                                 Err(e) => {
                                     eprintln!("send failed: {e}");
                                     conn = None;
