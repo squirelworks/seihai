@@ -542,6 +542,19 @@ impl<'a> Run<'a> {
                 };
                 blocked.into()
             }
+            "onwater" => {
+                let (x, y) = (n(0).floor(), n(1).floor());
+                let wet = match &self.core.water {
+                    Some(w) if (0.0..64.0).contains(&x) && (0.0..64.0).contains(&y) => {
+                        w.get(y as usize * 64 + x as usize).copied().unwrap_or(false)
+                    }
+                    _ => false,
+                };
+                wet.into()
+            }
+            // 2.05 answers only for the tilesets of the new kind (`addtiledef`
+            // type 1 or 2); the default tileset, typed by `arrays.dat`, gets -1.
+            "tiletype" => Val::Num(-1.0),
             "playersays" | "playersays2" => {
                 if self.event != "playerchats" {
                     return Val::Num(0.0);

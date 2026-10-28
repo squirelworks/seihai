@@ -563,6 +563,7 @@ mod tests {
             ap: None,
             sword_power: None,
             carry: None,
+            looks: Default::default(),
         };
         let others = vec![mk(2, "Pal", Some("pal_acct")), mk(3, "Jerk", Some("jerk_acct")), mk(4, "Loud", None), mk(5, "Plain", None)];
         let mut buddy = NameList::default();

@@ -228,6 +228,9 @@ pub struct Core {
     /// where blocked. `None` until the host provides it (then nothing is
     /// a wall).
     pub walls: Option<Vec<bool>>,
+    /// The same 64 by 64 layout, true on a liquid tile (water or lava: the
+    /// 2.05 water test asks the liquid list, which holds both).
+    pub water: Option<Vec<bool>>,
     rng: u64,
 }
 
@@ -284,6 +287,7 @@ impl ScriptWorld {
                 npc_server: false,
                 pending: VecDeque::new(),
                 walls: None,
+                water: None,
                 rng: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
             },
             objects: Vec::new(),

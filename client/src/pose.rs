@@ -16,18 +16,25 @@
 //!   sound event when that step is entered, so `sword.wav` plays at the start
 //!   of the swing. When the swing ends the pose is gone and the player is
 //!   drawn as idle again, which is what the file's `SETBACKTO idle` says.
-//! * **Hurt** follows hurt mode: the first [`HURT_POSE_MS`] of the 2 s
-//!   (`hurt_ticks`) in which nothing can hurt the player again. The sprite
-//!   others see (S = 32) lasts the whole of hurt mode and is not changed here.
+//! * **Hurt** follows hurt mode. The 2.05 client sets the `hurt` gani when
+//!   hurt mode starts (Graal_analysis 01-death-respawn). Seihai steps it one
+//!   step per [`GANI_STEP_MS`]: a `LOOP` file repeats for the whole hurt mode,
+//!   any other plays once (for at least [`HURT_POSE_MS`]) and gives way. The
+//!   sprite others see (S = 32) lasts the whole of hurt mode and is not
+//!   changed here.
+//! * **Dead** shows `dead.gani` while the player is dead, one step per tick
+//!   of the death timer, held on its last step. The 2.05 client plays the
+//!   local `dead` gani on death; Seihai's default set has none, so without a
+//!   data folder the idle figure is drawn as before.
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
 //!   real client starts the sit pose was not read; this trigger is inferred
 //!   (see `documentation/sitting.md`).
 //!
-//! What the real clients do for the hurt pose (a file name, how long it is
-//! shown) is not documented, so `hurt.gani` and the 500 ms are Seihai's own
-//! convention. `documentation/default-assets.md` says so as well.
+//! How long the real client shows each step of the hurt and dead ganis was
+//! not read (Seihai does not parse per-step waits), so the 50 ms step and the
+//! 500 ms minimum are Seihai's own convention.
 //!
 //! A pose is shown only when its GANI is loaded (`OfflineSession::poses`),
 //! so a build without GANIs, or a data folder without `sword.gani`, draws the
@@ -40,6 +47,10 @@ use crate::sound::SoundEvent;
 /// How long the hurt pose is shown at the start of hurt mode.
 pub const HURT_POSE_MS: u64 = 500;
 
+/// How long one GANI step is shown when the file gives no time of its own
+/// (Seihai does not read per-step waits).
+pub const GANI_STEP_MS: u64 = 50;
+
 /// The loaded pose animations.
 #[derive(Debug, Clone, Default)]
 pub struct PoseGanis {
@@ -50,6 +61,8 @@ pub struct PoseGanis {
     /// Standing and walking with an object held over the head.
     pub carrystill: Option<Gani>,
     pub carry: Option<Gani>,
+    /// Shown while the player is dead.
+    pub dead: Option<Gani>,
 }
 
 /// Which pose is on.
@@ -63,6 +76,7 @@ pub enum PoseKind {
     Swim,
     CarryStill,
     Carry,
+    Dead,
 }
 
 /// A pose step ready to draw.
@@ -86,13 +100,14 @@ impl PoseKind {
             PoseKind::Swim => "swim.gani",
             PoseKind::CarryStill => "carrystill.gani",
             PoseKind::Carry => "carry.gani",
+            PoseKind::Dead => "dead.gani",
         }
     }
 
     /// The pose a file name belongs to (case-insensitive). `walk.gani` and
     /// `swim.gani` are not here: they load as the stepped motion ganis.
     pub fn from_file(name: &str) -> Option<PoseKind> {
-        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle, PoseKind::CarryStill, PoseKind::Carry]
+        [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Idle, PoseKind::CarryStill, PoseKind::Carry, PoseKind::Dead]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
     }
@@ -100,6 +115,20 @@ impl PoseKind {
 
 fn pick(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> {
     gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i.min(g.frame_count() - 1) })
+}
+
+/// The step of `hurt.gani` `ms` into hurt mode: one step per
+/// [`GANI_STEP_MS`]. A `LOOP` GANI repeats for the whole hurt mode; any
+/// other is shown once (at least [`HURT_POSE_MS`]) and then gives way, as
+/// its `SETBACKTO` says.
+fn hurt_step(hurt: &Option<Gani>, ms: u64) -> Option<PoseFrame<'_>> {
+    let g = hurt.as_ref().filter(|g| g.frame_count() > 0)?;
+    let n = g.frame_count() as u64;
+    let step = ms / GANI_STEP_MS;
+    if g.looped {
+        return pick(PoseKind::Hurt, hurt, (step % n) as usize);
+    }
+    (ms < (n * GANI_STEP_MS).max(HURT_POSE_MS)).then(|| PoseFrame { kind: PoseKind::Hurt, gani: g, frame: step.min(n - 1) as usize })
 }
 
 fn pick_player<'a>(kind: PoseKind, p: &'a crate::assets::GaniPlayer) -> Option<PoseFrame<'a>> {
@@ -116,6 +145,7 @@ impl OfflineSession {
             PoseKind::Idle => self.poses.idle = Some(gani),
             PoseKind::CarryStill => self.poses.carrystill = Some(gani),
             PoseKind::Carry => self.poses.carry = Some(gani),
+            PoseKind::Dead => self.poses.dead = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
@@ -133,8 +163,10 @@ impl OfflineSession {
     /// `walk.gani` frame) or idle (`idle.gani`, first step). Swimming has no
     /// sword, hurt or sit pose.
     pub fn current_pose(&self) -> Option<PoseFrame<'_>> {
+        // Dead: `dead.gani`, one step per 50 ms tick of the death timer,
+        // held on its last step.
         if self.life.is_dead() {
-            return None;
+            return pick(PoseKind::Dead, &self.poses.dead, usize::from(self.life.timer()));
         }
         if self.in_water {
             return self.swim_gani.as_ref().and_then(|p| pick_player(PoseKind::Swim, p));
@@ -144,10 +176,8 @@ impl OfflineSession {
                 return Some(p);
             }
         }
-        if self.combat.hurt_elapsed_ms().is_some_and(|ms| ms < HURT_POSE_MS) {
-            if let Some(p) = pick(PoseKind::Hurt, &self.poses.hurt, 0) {
-                return Some(p);
-            }
+        if let Some(p) = self.combat.hurt_elapsed_ms().and_then(|ms| hurt_step(&self.poses.hurt, ms)) {
+            return Some(p);
         }
         // A futile grab (object in front, glove too weak): the reach pose.
         if self.grabbing_ms > 0 {

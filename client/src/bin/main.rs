@@ -20,6 +20,7 @@ use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
 use seihai::scripting::engine::host::{SessionScripts, WeaponScript};
 use seihai::settings::Settings;
+use seihai::keys::{Action, KeyMap};
 use seihai::ui;
 use seihai::render::{
     draw_other_player, draw_player_marker, draw_player_sprites, player_box_origin,
@@ -147,6 +148,51 @@ fn npc_image_pass(
         }
     }
     send_file_msgs(conn, msgs);
+}
+
+/// The default picture of a shield power (`shield1.png`), or an empty
+/// name for power 0.
+fn local_shield_image(power: u8) -> String {
+    if power == 0 { String::new() } else { format!("shield{power}.png") }
+}
+
+/// Load the pictures other players are drawn with (their sword, shield,
+/// head and body props) and the local player's shield into `images`: from
+/// the asset folders first, else from the server. `tried` keeps the names
+/// already looked for in the folders, so a missing one is not searched for
+/// every frame.
+fn look_image_pass(
+    wanted: &[(&str, String)],
+    resolver: &AssetResolver,
+    files: &mut FileSession,
+    conn: Option<&mut Connection>,
+    images: &mut HashMap<String, (u32, Vec<u8>)>,
+    tried: &mut std::collections::HashSet<String>,
+) -> bool {
+    let mut msgs = Vec::new();
+    let mut added = false;
+    for (dir, name) in wanted {
+        if images.contains_key(name) {
+            continue;
+        }
+        let read = |data: Vec<u8>| read_png_rgba(&data).ok().map(|(w, _, px)| (w, px));
+        let mut got = None;
+        if tried.insert(name.clone()) {
+            got = resolver.image_in(dir, name).and_then(|p| std::fs::read(p).ok()).and_then(read);
+        }
+        if got.is_none() {
+            got = files.store.read(name).and_then(read);
+        }
+        match got {
+            Some(img) => {
+                images.insert(name.clone(), img);
+                added = true;
+            }
+            None => msgs.extend(files.need(name)),
+        }
+    }
+    send_file_msgs(conn, msgs);
+    added
 }
 
 /// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
@@ -750,7 +796,7 @@ fn main() {
         load_motion_gani(&resolver, &mut session, name);
     }
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
-    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani"] {
+    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani"] {
         load_pose_gani(&resolver, &mut session, name);
     }
     let mut sound_serial = session.level_serial;
@@ -827,6 +873,10 @@ fn main() {
     }
 
     let profile = version.profile();
+    // The readme keys; from 1.38 `keyset_<action>` lines in the settings
+    // file replace them.
+    let keymap = KeyMap::for_version(profile.ui.key_config, &Settings::load().keysets);
+    let button_keys = [keymap.label(Action::Act), keymap.label(Action::Attack), keymap.label(Action::Item), keymap.label(Action::ItemList)];
     // The death sequence of this build (none for builds before 2.05).
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
@@ -874,6 +924,7 @@ fn main() {
                 head: head.as_ref().map(pose_sheet),
                 sprites: sprites.as_ref().map(pose_sheet),
                 sword: sword_sheet.as_ref().map(pose_sheet),
+                shield: None,
             },
         };
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
@@ -896,7 +947,29 @@ fn main() {
             }
         }
         if let (Some((bw, b)), Some((hw, h))) = (&body, &head) {
+            let clock_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
             for other in others {
+                // Drawn through its GANI with its own pictures when the pose is
+                // loaded; a picture not here yet falls back to the default one.
+                if let Some((gani, frame)) = seihai::render::other_pose(session, other, clock_ms) {
+                    let own = |n: &Option<String>| n.as_deref().and_then(|n| npc_imgs.get(n)).map(pose_sheet);
+                    let l = &other.looks;
+                    let sheets = seihai::render::PoseSheets {
+                        body: own(&l.body).or(body.as_ref().map(pose_sheet)),
+                        head: own(&l.head).or(head.as_ref().map(pose_sheet)),
+                        sprites: sprites.as_ref().map(pose_sheet),
+                        // No sword prop yet: the default sword; power 0: none.
+                        sword: match l.sword.as_deref() {
+                            None => sword_sheet.as_ref().map(pose_sheet),
+                            Some("") => None,
+                            Some(_) => own(&l.sword).or(sword_sheet.as_ref().map(pose_sheet)),
+                        },
+                        shield: own(&l.shield),
+                    };
+                    let (ox, oy) = ((other.x * 16.0) as i32 - cam_x, (other.y * 16.0) as i32 - cam_y);
+                    seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
+                    continue;
+                }
                 draw_other_player(
                     &mut fb,
                     b,
@@ -934,6 +1007,8 @@ fn main() {
                     head: head.as_ref().map(pose_sheet),
                     sprites: sprites.as_ref().map(pose_sheet),
                     sword: sword_sheet.as_ref().map(pose_sheet),
+                    // The default shield of the player's shield power.
+                    shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
                 };
                 if let Some(p) = pose {
                     seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
@@ -986,7 +1061,7 @@ fn main() {
                     sword_power: i32::from(session.sword_power),
                     weapons: true,
                     stats: seihai::render::hud::stats::ALL,
-                    keys: ['A', 'S', 'D', 'Q'],
+                    keys: button_keys,
                 },
             ),
             None => fb.draw_hud(session.player_health, session.rupees),
@@ -1000,6 +1075,7 @@ fn main() {
         fb
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
+    let mut look_tried = std::collections::HashSet::new();
     let mut my_chat = String::new();
     // How long our own bubble has left, and the clock that runs it.
     let mut my_chat_timer = seihai::chatlists::BubbleTimer::default();
@@ -1104,6 +1180,8 @@ fn main() {
     // Each unique script diagnostic is written once. The same unhandled
     // effect otherwise fills the file every tick.
     let mut seen_debug: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // The level the debug log last named.
+    let mut debug_level: Option<String> = None;
     let mut show_players = false;
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
@@ -1511,7 +1589,7 @@ fn main() {
         if !input.is_open() && !confirm_quit {
             let entries = item_list_entries(&session, &net_state);
             let pressed = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
-            if pressed(minifb::Key::Q) {
+            if keymap.pressed(&window, Action::ItemList) {
                 item_list.toggle(entries.len());
                 eprintln!("item list {} ({} entries)", if item_list.open { "opened" } else { "closed" }, entries.len());
                 dirty = true;
@@ -1521,21 +1599,23 @@ fn main() {
                 let (_, _, cw, _) = seihai::inventory::content_rect(scene.width as i32, scene.height as i32);
                 let cells = seihai::inventory::layout(&entries, cw);
                 let before = item_list.selected;
-                for (k, lk) in [
-                    (minifb::Key::Up, ListKey::Up),
-                    (minifb::Key::Left, ListKey::Left),
-                    (minifb::Key::Down, ListKey::Down),
-                    (minifb::Key::Right, ListKey::Right),
-                    (minifb::Key::D, ListKey::Close),
-                    (minifb::Key::S, ListKey::Close),
-                    (minifb::Key::A, ListKey::Close),
-                    (minifb::Key::Space, ListKey::Close),
-                    (minifb::Key::Enter, ListKey::Close),
+                for (a, lk) in [
+                    (Action::Up, ListKey::Up),
+                    (Action::Left, ListKey::Left),
+                    (Action::Down, ListKey::Down),
+                    (Action::Right, ListKey::Right),
+                    (Action::Item, ListKey::Close),
+                    (Action::Attack, ListKey::Close),
+                    (Action::Act, ListKey::Close),
                 ] {
-                    if item_list.open && pressed(k) {
+                    if item_list.open && keymap.pressed(&window, a) {
                         item_list.key(lk, &cells);
                         dirty = true;
                     }
+                }
+                if item_list.open && pressed(minifb::Key::Enter) {
+                    item_list.key(ListKey::Close, &cells);
+                    dirty = true;
                 }
                 if item_list.selected != before {
                     if let Some(n) = item_list.selected.and_then(|i| entries.get(i)) {
@@ -1554,14 +1634,8 @@ fn main() {
             let dt = life_clock.elapsed().as_millis() as u64;
             life_clock = Instant::now();
             let mut events = session.tick_life(dt);
-            let keys_down = !input.is_open() && !list_was_open
-                && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
-                    .iter()
-                    .any(|k| window.is_key_down(*k))
-                || !input.is_open()
-                    && [minifb::Key::A, minifb::Key::Space]
-                        .iter()
-                        .any(|k| window.is_key_pressed(*k, minifb::KeyRepeat::No));
+            let keys_down = !input.is_open() && !list_was_open && keymap.any_direction_down(&window)
+                || !input.is_open() && (keymap.pressed(&window, Action::Act) || keymap.pressed(&window, Action::Attack));
             if session.life.can_respawn() && keys_down {
                 let online = conn.is_some();
                 if let Some(to) = session.respawn(online) {
@@ -1637,7 +1711,7 @@ fn main() {
             }
             // A hit pushed the player: the new position goes out like a step.
             sprite_changed |= session.take_knock_moved();
-            if !input.is_open() && !list_was_open && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
+            if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
             if sprite_changed {
@@ -1656,17 +1730,22 @@ fn main() {
         // A script warp request went out this pass: it carries the position,
         // so the plain walk update is left out.
         let mut script_warp_sent = false;
-        // A or Space: close the reading panel, or interact with what the
-        // player faces. S while carrying throws (its swing was refused above).
+        // Action (A): close the reading panel, or interact with what the
+        // player faces. Attack (S, Space) while carrying throws (its swing
+        // was refused above).
         let interact = !input.is_open()
             && !list_was_open
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
-                window.is_key_pressed(minifb::Key::A, minifb::KeyRepeat::No),
-                window.is_key_pressed(minifb::Key::Space, minifb::KeyRepeat::No),
-                window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No),
+                keymap.pressed(&window, Action::Act),
+                false,
+                keymap.pressed(&window, Action::Attack),
             );
+        // The map key (M) closes a sign, as in the readme.
+        if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Map) && session.reading.take().is_some() {
+            dirty = true;
+        }
         if interact {
             // Reading: the next three lines, or the end of the sign.
             if let Some(text) = &session.reading {
@@ -1728,16 +1807,12 @@ fn main() {
             dirty = true;
         }
         // No arrow key held: the player stands (idle animation).
-        if !window.is_key_down(minifb::Key::Left)
-            && !window.is_key_down(minifb::Key::Right)
-            && !window.is_key_down(minifb::Key::Up)
-            && !window.is_key_down(minifb::Key::Down)
-            && session.stop_walking()
+        if !keymap.any_direction_down(&window) && session.stop_walking()
         {
             dirty = true;
         }
         // Up while reading turns back a page.
-        if session.reading.is_some() && !input.is_open() && window.is_key_pressed(minifb::Key::Up, minifb::KeyRepeat::No) {
+        if session.reading.is_some() && !input.is_open() && keymap.pressed(&window, Action::Up) {
             if let Some(p) = seihai::render::signs::previous_page(sign_page) {
                 sign_page = p;
                 dirty = true;
@@ -1745,16 +1820,16 @@ fn main() {
         }
         if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
-            if window.is_key_down(minifb::Key::Left) {
+            if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Right) {
+            if keymap.down(&window, Action::Right) {
                 dx += 0.5;
             }
-            if window.is_key_down(minifb::Key::Up) {
+            if keymap.down(&window, Action::Up) {
                 dy -= 0.5;
             }
-            if window.is_key_down(minifb::Key::Down) {
+            if keymap.down(&window, Action::Down) {
                 dy += 0.5;
             }
             if dx != 0.0 || dy != 0.0 {
@@ -1790,6 +1865,16 @@ fn main() {
             }
         } else {
             session.sound_events.clear();
+        }
+        // The debug log names each level the player enters, online (the
+        // server's name for it) or offline (the file or gmap cell).
+        if let Some(f) = debug_file.as_mut() {
+            let now = if conn.is_some() { net_state.current_level_name() } else { None }.or_else(|| session.level_name());
+            if let Some(line) = seihai::offline::level_change_line(&mut debug_level, now.as_deref()) {
+                use std::io::Write;
+                let _ = writeln!(f, "{line}");
+                let _ = f.flush();
+            }
         }
         // Client-side scripts: load the level's NPCs when a level arrives,
         // touch events after a step, timeouts on the clock.
@@ -1855,14 +1940,17 @@ fn main() {
             }
             if let Some(f) = debug_file.as_mut() {
                 use std::io::Write;
+                // Script lines are kept once per level, so a message seen
+                // on one level shows again on the next.
+                let level = debug_level.clone().unwrap_or_default();
                 for e in scripts.unhandled.drain(..) {
-                    let line = format!("effect not applied: {e:?}");
+                    let line = format!("[{level}] effect not applied: {e:?}");
                     if seen_debug.insert(line.clone()) {
                         let _ = writeln!(f, "{line}");
                     }
                 }
                 for l in scripts.world.take_log() {
-                    let line = format!("script: {l}");
+                    let line = format!("[{level}] script: {l}");
                     if seen_debug.insert(line.clone()) {
                         let _ = writeln!(f, "{line}");
                     }
@@ -2124,14 +2212,15 @@ fn main() {
             }
         }
 
-        // Enter opens the chat bar, and sends it when it is open. F2 opens
-        // a PM to the nearest player.
+        // Enter, T or the switch-to-chat key (Tab) opens the chat bar, and
+        // Enter sends it when it is open. F2 opens a PM to the nearest player.
         let enter = window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
             || window.is_key_pressed(minifb::Key::NumPadEnter, minifb::KeyRepeat::No);
-        let talk = !confirm_quit && window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No);
+        let talk = !confirm_quit
+            && (window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No) || keymap.pressed(&window, Action::SwitchToChat));
         if !confirm_quit && !list_was_open && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
             if !input.is_open() {
-                eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T" });
+                eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T or switch-to-chat" });
                 input.open(ui::InputMode::Chat);
                 dirty = true;
             } else if let Some((mode, text)) = input.submit() {
@@ -2224,7 +2313,7 @@ fn main() {
             if window.is_key_pressed(minifb::Key::F3, minifb::KeyRepeat::No) {
                 show_debug = !show_debug;
             }
-            if window.is_key_pressed(minifb::Key::Tab, minifb::KeyRepeat::No) {
+            if window.is_key_pressed(minifb::Key::F7, minifb::KeyRepeat::No) {
                 show_players = !show_players;
             }
             if window.is_key_pressed(minifb::Key::F9, minifb::KeyRepeat::No) {
@@ -2274,11 +2363,7 @@ fn main() {
 
         // Our own typed line is held over the head until a direction key is
         // pressed, then goes down like the others (as in the 2.05 client).
-        if !input.is_open()
-            && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
-                .iter()
-                .any(|k| window.is_key_down(*k))
-        {
+        if !input.is_open() && keymap.any_direction_down(&window) {
             my_chat_timer.release();
         }
         // Chat bubbles go down after a few seconds.
@@ -2321,6 +2406,18 @@ fn main() {
                         dirty = true;
                     }
                 }
+            }
+        }
+        // The pictures other players and our own shield are drawn with.
+        {
+            let mut wanted: Vec<(&str, String)> =
+                net_state.others.iter().flat_map(|o| seihai::render::look_images(o).map(|(d, n)| (d, n.to_string())).collect::<Vec<_>>()).collect();
+            let own_shield = local_shield_image(session.shield_power);
+            if !own_shield.is_empty() {
+                wanted.push(("shields", own_shield));
+            }
+            if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried) {
+                dirty = true;
             }
         }
         if dirty {

@@ -1,10 +1,12 @@
 //! The key list shown by F1, and the on-screen hints.
 //!
-//! [`BINDINGS`] lists every key the game loop in `bin/main.rs` reads.
-//! A test reads that file and checks the two agree in both directions:
-//! a key in the table that main.rs never reads, or a `minifb::Key::X`
-//! in main.rs that the table does not list, fails the build. So the help
-//! cannot drift from the real bindings.
+//! [`BINDINGS`] lists every key the game loop in `bin/main.rs` reads:
+//! its `minifb::Key::X` names, and the default keys of each
+//! [`crate::keys::Action`] it uses. A test reads that file and checks the
+//! two agree in both directions: a key in the table that main.rs never
+//! reads, or one it reads that the table does not list, fails the build.
+//! So the help cannot drift from the real bindings. The help shows the
+//! defaults; `keyset_` lines in the settings file can change them.
 
 use crate::dev::DevMode;
 use crate::render::font::{text_width, CELL_H};
@@ -29,10 +31,11 @@ const fn k(label: &'static str, keys: &'static [&'static str], does: &'static st
 /// Every bound key, in the order they are shown.
 pub const BINDINGS: &[KeyHelp] = &[
     k("F1 / ?", &["F1"], "show or hide this help"),
-    k("Arrow keys", &["Left", "Right", "Up", "Down"], "walk; two at once for a diagonal"),
-    k("A / Space", &["A", "Space"], "read a sign, open a chest, close a sign, lift a bush or rock, throw what you carry"),
-    k("S", &["S"], "swing the sword (builds with combat rules; others judge the hit); while carrying, throw it instead"),
-    k("Enter / T", &["Enter", "NumPadEnter", "T"], "open the chat bar (either Enter key, or T); Enter sends what you typed"),
+    k("Arrows / IJKL", &["Left", "Right", "Up", "Down", "I", "J", "K", "L"], "walk; two at once for a diagonal"),
+    k("A", &["A"], "read a sign, open a chest, close a sign, lift a bush or rock, throw what you carry"),
+    k("S / Space", &["S", "Space"], "swing the sword (others judge the hit); while carrying, throw instead"),
+    k("M", &["M"], "close a sign (the map is not done yet)"),
+    k("Enter / T / Tab", &["Enter", "NumPadEnter", "T", "Tab"], "open the chat bar; Enter sends what you typed"),
     k("Backspace", &["Backspace"], "delete a typed letter"),
     k("Up / Down", &[], "in the chat bar: earlier lines (1.39 and later)"),
     k("Esc", &["Escape"], "close the chat bar or a sign; else ask to quit"),
@@ -40,7 +43,8 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("F2", &["F2"], "private message to the nearest player"),
     k("Q", &["Q"], "open or close the item list; arrows pick a weapon, Esc/D/S/A/Enter close it"),
     k("D", &["D"], "weapon key: closes the item list (firing weapons is not done yet)"),
-    k("Tab", &["Tab"], "show or hide the player list"),
+    k("keyset_...", &[], "settings file: rebind the game keys above (1.38 and later)"),
+    k("F7", &["F7"], "show or hide the player list"),
     k("/ignore /buddy /mute", &[], "chat bar: add a name (/unignore ... removes); /lists shows"),
     k("PgUp / PgDn", &["PageUp", "PageDown"], "scroll the chat"),
     k("F3", &["F3"], "debug information"),
@@ -110,7 +114,8 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    /// Every `minifb::Key::Name` read by the game loop.
+    /// Every `minifb::Key::Name` read by the game loop, and the default
+    /// keys of every `Action::Name` it uses.
     fn keys_in_main() -> BTreeSet<String> {
         let src = include_str!("bin/main.rs");
         let mut out = BTreeSet::new();
@@ -119,6 +124,14 @@ mod tests {
             rest = &rest[i + "minifb::Key::".len()..];
             let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
             out.insert(name);
+        }
+        let map = crate::keys::KeyMap::default();
+        let uses_direction = src.contains("any_direction_down");
+        for a in crate::keys::Action::ALL {
+            let direction = matches!(a, crate::keys::Action::Up | crate::keys::Action::Left | crate::keys::Action::Down | crate::keys::Action::Right);
+            if src.contains(&format!("Action::{a:?}")) || (direction && uses_direction) {
+                out.extend(map.keys(a).iter().map(|k| format!("{k:?}")));
+            }
         }
         out
     }
