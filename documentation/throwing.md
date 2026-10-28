@@ -39,10 +39,9 @@ Every break effect plays a sound as it starts, at `(x + 1, y + 1)` from its anch
 ## Open (not read, not invented)
 
 * **Tick length.** The thrown object's own interval was not read. Seihai runs it on the 50 ms game clock, so a full flight is 450 ms.
-* **Hits.** What a thrown object does to NPCs, players and baddies in flight (damage, stopping, the NPC's "touch" events) and the extra object checks in the client's wall test were not read; nothing is hit.
-* **Order inside a tick** (step, then test) is inferred; a throw into a wall one tile away may land a tick earlier or later than the real one.
+* **Hits**: see "What a thrown object hits" below for what was read and what is still open.
 * **Carrying pose.** Whether the player has a different animation while carrying, and whether the carried object bobs with the walk, was not read; the object is drawn at its start position.
-* **Telling other players.** Online, Seihai sends `PLI_THROWCARRIED` (11, empty, as the 2.05 client does). The lift itself (the carried-sprite player prop) is not sent, so other clients may not show the carry; and the server's reply `PLO_THROWCARRIED` for other players' throws is not drawn.
+* **Telling other players.** Online, Seihai sends `PLI_THROWCARRIED` (11, empty, as the 2.05 client does). The lift itself (the carried-sprite player prop) is not sent, so other clients may not show the carry; Other players' throws are now drawn and can hit (below).
 * **Board edit on break.** The real client may write tiles on a break (it does for a lift); none was seen.
 * **The 2.05 sprite table** was not compared with the 2.22 one.
 * The default art is original (`tools/gen_default_assets.py`), at the rectangles above; a user's own `sprites.png` of the real layout works because the same rectangles are used.
@@ -79,3 +78,46 @@ Seihai:
   (the walk's step) while carrying. The default set's art for them is our
   own (arms raised; `default-assets.md`).
 
+
+## What a thrown object hits
+
+Read from the 2.05 client (derived).
+
+**Each flight tick, in order:**
+
+1. The object steps.
+2. The wall test runs at the probe `(x + 1, ground + 1)`.
+3. If nothing blocks, the NPC test runs at the same point. The first NPC in the level's list whose box holds the point is hit. The object stops, the NPC gets `waspelt`, and a pelt-with name is set on it: `bush`, `sign`, `vase`, `stone` or `blackstone` for sprites 261, 267, 265, 263 and 239, or `npc` for a carried NPC.
+4. Baddies are tested next. Each takes damage 3, or 1 when the object is the bush, a carried NPC or one of the bombs. A hit stops the object.
+5. Last comes the player test, which runs only when nothing was hit yet. The player is hit when all of these hold:
+   * the object is on the player's level;
+   * two global switches are on;
+   * the player can be hurt;
+   * the object was not thrown by this player (the client marks its own throws);
+   * `|x - (player x + 0.5)| < 2` and `|ground - (player y + 1)| < 2`.
+6. A hit stops the object like a wall does. The object also comes down when its 9 ticks run out.
+
+**The hurt:**
+
+* The hit takes one heart, or half a heart when the player has exactly one heart.
+* Hurt mode starts, with a push along the direction the object flew.
+* There is no hurt when the thrower is a known player and the level is `noplayerkilling`. The object still stops.
+* When the hurt leaves no hearts and the thrower is a known player, the client sends `PLI_CLAIMPKER` (14) with the thrower's id.
+
+**Another player's throw.** `PLO_THROWCARRIED` (21) carries a GSHORT player id. The client starts a throw from that player's position, with that player's carried sprite and facing, for 9 ticks. It marks the thrower and clears that player's carry.
+
+**What Seihai does:**
+
+* Remote throws. `PLO_THROWCARRIED` from a player Seihai knows, who holds something, starts a flight from that player's position (`OfflineSession::throw_remote`), and the player's carry is cleared. A player who holds nothing throws nothing. That case is a Seihai choice; the 2.05 client indexes its table with -1.
+* NPC test. It uses the script NPC's box (`ScriptWorld::npc_at`): the first visible NPC in creation order with `x <= px < x + w` and `y <= py < y + h`. The hit fires `waspelt` (`SessionScripts::pelt`). It applies to every throw, our own included.
+* Player test. It runs for other players' throws only. "Can be hurt" is read as Seihai's `Vulnerability::Hurtable`: alive, not in hurt mode, not swimming. Damage, push and claim follow the rules above. The claim goes out through the usual death path (`life::messages_for`) for builds that send one.
+* Tests: `another_players_throw_hits_the_player_for_a_heart_and_pushes_along_its_flight` and the tests next to it in `offline/mod.rs`, `throwcarried_21_throws_what_that_player_held_and_empties_their_hands`, and `a_thrown_object_finds_the_first_visible_npc_at_its_point_and_pelts_it`.
+
+**Still open:**
+
+* **Pelt-with flags.** The pelt-with name is not passed to scripts, so `peltwithbush` and the like read false.
+* **NPC box details.** Seihai doesn't model the client's NPC test details: it skips "don't block" NPCs, character NPCs use a box `(x + 0.5 .. x + 2.5, y + 1 .. y + 3)`, and plain image NPCs may have a transparent-pixel test.
+* **Baddies.** Seihai has no baddies, so the baddy test is not run.
+* **The two global switches** in the player test were not named. Seihai treats them as on.
+* **Exact hurtable test.** The client's own "can be hurt" test (mode and state checks) was mapped to `Hurtable` and not compared one to one.
+* **Thrown NPCs and crossing a level edge.** An object that flies off the level into a neighbour is moved there. Seihai doesn't do this.

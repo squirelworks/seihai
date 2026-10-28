@@ -135,6 +135,12 @@ pub struct OfflineSession {
     landings: Vec<Landing>,
     /// Milliseconds carried over between flight ticks.
     throw_ms: u64,
+    /// NPCs a thrown object hit since the last [`Self::take_pelts`]: the
+    /// id the caller's NPC test returned, for the `waspelt` event.
+    pelts: Vec<usize>,
+    /// Another player's thrown object hurt the player since the last
+    /// [`Self::take_throw_hurt`].
+    throw_hurt: bool,
     pub player_x: f32,
     pub player_y: f32,
     pub player_dir: u8,
@@ -331,6 +337,8 @@ impl OfflineSession {
             grounded: Vec::new(),
             landings: Vec::new(),
             throw_ms: 0,
+            pelts: Vec::new(),
+            throw_hurt: false,
             player_x: 30.0,
             player_y: 30.0,
             player_dir: DIR_SOUTH,
@@ -747,6 +755,13 @@ impl OfflineSession {
         Some(c.kind)
     }
 
+    /// Another player threw what they carried (`PLO_THROWCARRIED`): the
+    /// object leaves from their position `(px, py)` (in this player's
+    /// coordinates) facing `dir`, and can hit this player.
+    pub fn throw_remote(&mut self, sprite: u16, px: f32, py: f32, dir: u8, thrower: u16) {
+        self.thrown.push(crate::throwing::Thrown::launch_remote(sprite, px, py, dir, thrower));
+    }
+
     /// Drop every object in flight and every effect (a level change).
     fn clear_throws(&mut self) {
         self.thrown.clear();
@@ -787,6 +802,13 @@ impl OfflineSession {
     /// Advance flights and break effects by `ms` on their 50 ms tick.
     /// Returns true if anything moved (the scene needs a redraw).
     pub fn tick_throw(&mut self, ms: u64) -> bool {
+        self.tick_throw_with(ms, &|_, _| None)
+    }
+
+    /// [`Self::tick_throw`] with an NPC test: `npc_at(x, y)` names the
+    /// first NPC whose box holds the point, if any. An object that hits one
+    /// stops, and the NPC is queued for [`Self::take_pelts`].
+    pub fn tick_throw_with(&mut self, ms: u64, npc_at: &dyn Fn(f32, f32) -> Option<usize>) -> bool {
         if self.thrown.is_empty() && self.leaps.is_empty() {
             self.throw_ms = 0;
             return false;
@@ -795,13 +817,17 @@ impl OfflineSession {
         let mut moved = false;
         while self.throw_ms >= crate::throwing::TICK_MS {
             self.throw_ms -= crate::throwing::TICK_MS;
-            self.throw_tick();
+            self.throw_tick(npc_at);
             moved = true;
         }
         moved
     }
 
-    fn throw_tick(&mut self) {
+    /// One flight tick, in the 2.05 order: each object steps, then the wall
+    /// test at its probe; if the way is clear, the NPC test at the same
+    /// point, then the player test. A hit on either ends the flight like a
+    /// wall does.
+    fn throw_tick(&mut self, npc_at: &dyn Fn(f32, f32) -> Option<usize>) {
         use crate::throwing as t;
         // Effects: one frame per tick, gone after the last.
         let tables = self.object_tables.as_ref();
@@ -812,7 +838,18 @@ impl OfflineSession {
         for mut o in std::mem::take(&mut self.thrown) {
             o.step();
             let (wx, wy) = o.wall_probe();
-            if o.ticks_left > 0 && !self.throw_blocked(wx, wy) {
+            let mut stop = self.throw_blocked(wx, wy);
+            if !stop {
+                if let Some(npc) = npc_at(wx, wy) {
+                    self.pelts.push(npc);
+                    stop = true;
+                }
+            }
+            if !stop && !o.own && self.victim().state == crate::combat::Vulnerability::Hurtable && o.hits_player(self.player_x, self.player_y) {
+                self.thrown_hit(&o);
+                stop = true;
+            }
+            if o.ticks_left > 0 && !stop {
                 self.thrown.push(o);
                 continue;
             }
@@ -828,6 +865,32 @@ impl OfflineSession {
             self.spawn_leap(kind, o.x, o.ground);
             self.landings.push(Landing { kind: o.kind, effect: Some(kind), x: o.x, y: o.ground });
         }
+    }
+
+    /// Another player's object hit this player. On a level that says
+    /// `noplayerkilling` it hurts nobody (it still stops); otherwise it
+    /// takes [`crate::throwing::throw_damage_half`], starts hurt mode with a
+    /// push along its flight, and names the thrower for the claim a death
+    /// sends.
+    fn thrown_hit(&mut self, o: &crate::throwing::Thrown) {
+        if self.no_pk && o.thrower.is_some() {
+            return;
+        }
+        let half = crate::throwing::throw_damage_half(self.hearts_half());
+        self.damage_half(half, o.thrower);
+        self.combat.start_hurt_knock(Some(crate::throwing::throw_knock(o.dir)));
+        self.throw_hurt = true;
+    }
+
+    /// NPCs hit by thrown objects since the last call (for `waspelt`).
+    pub fn take_pelts(&mut self) -> Vec<usize> {
+        std::mem::take(&mut self.pelts)
+    }
+
+    /// True once if another player's thrown object hurt the player since the
+    /// last call: the caller sends the hurt sprite.
+    pub fn take_throw_hurt(&mut self) -> bool {
+        std::mem::take(&mut self.throw_hurt)
     }
 
     /// The landings since the last call.
@@ -3094,6 +3157,100 @@ mod tests {
         assert_eq!(s.interact(), Interaction::Nothing);
         assert!(s.thrown.is_empty());
         assert_eq!(s.throw_carried(), None);
+    }
+
+    /// A player at (14, 30) with three hearts and the 2.05 rules, and
+    /// another player's bush thrown east from (10, 30) by player 7.
+    fn pelted() -> OfflineSession {
+        let mut s = object_session(0);
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        s.set_max_hearts_half(6);
+        s.set_hearts_half(6);
+        s.player_x = 14.0;
+        s.player_y = 30.0;
+        s.throw_remote(261, 10.0, 30.0, DIR_EAST, 7);
+        s
+    }
+
+    #[test]
+    fn another_players_throw_hits_the_player_for_a_heart_and_pushes_along_its_flight() {
+        let mut s = pelted();
+        // x starts at 10.5 and moves a tile a tick: 13.5 is the first step
+        // under 2 tiles from the player's 14.5.
+        s.tick_throw(2 * 50);
+        assert_eq!(s.thrown.len(), 1, "two ticks: still in the air");
+        assert_eq!(s.hearts_half(), 6);
+        s.tick_throw(50);
+        assert!(s.thrown.is_empty(), "the hit ends the flight");
+        assert_eq!(s.hearts_half(), 4, "one heart");
+        assert!(s.combat.is_hurt());
+        assert!(s.take_throw_hurt());
+        assert!(!s.take_throw_hurt(), "reported once");
+        let l = s.take_landings();
+        assert_eq!(l.len(), 1);
+        assert_eq!(l[0].effect, Some(crate::throwing::LEAP_BUSH), "the bush breaks where it hit");
+        // The push runs east, the way the bush flew.
+        s.tick_combat(50);
+        assert!(s.player_x > 14.0);
+    }
+
+    #[test]
+    fn a_thrown_object_takes_half_a_heart_at_one_heart_and_the_kill_claims_the_thrower() {
+        let mut s = pelted();
+        s.set_hearts_half(2);
+        s.tick_throw(3 * 50);
+        assert_eq!(s.hearts_half(), 1, "half a heart at exactly one heart");
+        // Out of hurt mode, the next one kills and names player 7.
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        s.throw_remote(261, 10.0, 30.0, DIR_EAST, 7);
+        s.tick_throw(3 * 50);
+        assert_eq!(s.hearts_half(), 0);
+        let events = s.tick_life(50);
+        assert!(events.contains(&LifeEvent::Died { attacker: Some(7) }), "{events:?}");
+    }
+
+    #[test]
+    fn the_players_own_throw_never_hits_the_player() {
+        let mut s = pelted();
+        s.thrown.clear();
+        s.player_dir = DIR_EAST;
+        s.thrown.push(crate::throwing::Thrown::launch(0, 10.0, 30.0, DIR_EAST));
+        s.tick_throw(3 * 50);
+        assert_eq!(s.thrown.len(), 1, "flies on through the player");
+        assert_eq!(s.hearts_half(), 6);
+    }
+
+    #[test]
+    fn on_a_no_player_killing_level_a_throw_stops_on_the_player_and_hurts_nothing() {
+        let mut s = pelted();
+        s.no_pk = true;
+        s.tick_throw(3 * 50);
+        assert!(s.thrown.is_empty());
+        assert_eq!(s.hearts_half(), 6);
+        assert!(!s.combat.is_hurt());
+    }
+
+    #[test]
+    fn a_hurt_player_is_not_hit_and_the_object_flies_on() {
+        let mut s = pelted();
+        s.combat.start_hurt();
+        s.tick_throw(3 * 50);
+        assert_eq!(s.thrown.len(), 1);
+        assert_eq!(s.hearts_half(), 6);
+    }
+
+    #[test]
+    fn an_npc_in_the_way_is_pelted_first_and_stops_the_object() {
+        let mut s = pelted();
+        // An NPC whose box holds the probe from x = 13 on (the probe is one
+        // tile right of the object: 12.5 + 1 after two ticks).
+        let npc = |x: f32, _y: f32| (x >= 13.0).then_some(4);
+        s.tick_throw_with(2 * 50, &npc);
+        assert!(s.thrown.is_empty());
+        assert_eq!(s.take_pelts(), vec![4]);
+        assert!(s.take_pelts().is_empty());
+        assert_eq!(s.hearts_half(), 6, "the NPC took it, not the player");
     }
 
     #[test]
