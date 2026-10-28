@@ -310,7 +310,18 @@ impl<'a> Parser<'a> {
                 self.end_stmt();
                 Some(Stmt::Continue)
             }
-            "else" | "elseif" => {
+            "elseif" => {
+                // `elseif` at statement start is an `if`.
+                if !self.expect_op("(") {
+                    self.recover();
+                    return Some(Stmt::Block(Vec::new()));
+                }
+                let cond = self.expr();
+                self.expect_op(")");
+                let then = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                Some(Stmt::If { cond, then, els: None })
+            }
+            "else" => {
                 self.diag("`else` without `if`");
                 self.recover();
                 Some(Stmt::Block(Vec::new()))
