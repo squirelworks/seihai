@@ -231,6 +231,11 @@ pub fn in_sword_box(rules: &CombatRules, a: Pose, tx: f32, ty: f32) -> Result<()
     Ok(())
 }
 
+/// The sprite number S of the carrystill pose in 2.05 (animation step 24).
+/// Seihai sends it the whole time an object is held, walking included, as
+/// it sends S = 0 for a plain walk.
+pub const CARRY_SPRITE_S: u8 = 18;
+
 /// The sprite number S (animation) in a SPRITE value, and the direction.
 pub fn sprite_parts(sprite: u8) -> (u8, u8) {
     (sprite / 4, sprite % 4)
@@ -867,7 +872,13 @@ impl OfflineSession {
 
     /// The SPRITE (17) value for the player's own walk and swing messages.
     pub fn sprite_value(&self) -> u8 {
-        self.combat.sprite(self.player_dir)
+        let s = self.combat.sprite(self.player_dir);
+        // Holding an object (no swing can be out then): the carrystill
+        // sprite, S = 18 (2.05 step 24). Hurt mode keeps its own sprite.
+        if self.carried.is_some() && s == self.player_dir % 4 {
+            return (self.player_dir % 4) + 4 * CARRY_SPRITE_S;
+        }
+        s
     }
 }
 
@@ -1395,6 +1406,7 @@ mod tests {
             status: None,
             ap: None,
             sword_power: power,
+            carry: None,
         }
     }
 

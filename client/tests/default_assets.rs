@@ -119,8 +119,9 @@ fn player_sheets_have_art_in_every_cell_the_code_reads() {
     assert_eq!(bh / 32, 22);
     for dir in 0..4 {
         // pose 0 (idle, read by draw_player_sprites), poses 1..=8 (walk) and, from item 22,
-        // 9 sword wind-up, 10 sword swing, 11 sit, 12 hurt
-        for pose in 0..=12 {
+        // 9 sword wind-up, 10 sword swing, 11 sit, 12 hurt; 13 carry standing and
+        // 14..=21 the carry walk (arms raised)
+        for pose in 0..=21 {
             let n = opaque_pixels(&body, bw, dir * 32, pose * 32, 32, 32);
             assert!(n > 150 && n < 700, "body dir {dir} pose {pose}: {n} opaque pixels");
         }
@@ -140,9 +141,10 @@ fn player_sheets_have_art_in_every_cell_the_code_reads() {
         // the four new poses differ from idle and from each other
         let new: HashSet<Vec<u8>> = [0, 9, 10, 11, 12].into_iter().map(cell).collect();
         assert_eq!(new.len(), 5, "dir {dir}: idle, wind-up, swing, sit and hurt look alike");
-        // and rows 13..22 stay empty (reserved)
-        for pose in 13..22 {
-            assert_eq!(opaque_pixels(&body, bw, dir * 32, pose * 32, 32, 32), 0, "dir {dir} pose {pose} is reserved");
+        // the carry poses are not the plain idle or walk ones
+        assert_ne!(cell(13), cell(0), "dir {dir}: carry standing looks like idle");
+        for k in 0..8 {
+            assert_ne!(cell(14 + k), cell(1 + k), "dir {dir}: carry walk {k} looks like walk {k}");
         }
     }
     let (hw, hh, head) = read_png_rgba(&read("heads/head0.png")).unwrap();
