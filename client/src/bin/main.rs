@@ -979,6 +979,8 @@ fn main() {
     let mut chat_scroll = 0usize;
     let mut show_debug = false;
     let mut show_players = false;
+    // The item list (Q): open or not, and the selected weapon.
+    let mut item_list = seihai::inventory::ItemList::default();
     let mut confirm_quit = false;
     let mut show_help = false;
     let started = Instant::now();
@@ -1026,6 +1028,8 @@ fn main() {
         } else if window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No) {
             if show_help {
                 show_help = false;
+            } else if item_list.open {
+                item_list.open = false;
             } else if session.reading.take().is_none() {
                 confirm_quit = true;
                 dirty = true;
@@ -1340,13 +1344,57 @@ fn main() {
             }
         }
 
+        // The item list (Q). While it is open the arrows move its
+        // selection and the game keys close it; none of them reach the
+        // player this frame, so the player does not walk, swing or interact.
+        let list_was_open = item_list.open;
+        if !input.is_open() && !confirm_quit {
+            let entries = item_list_entries(&session, &net_state);
+            let pressed = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
+            if pressed(minifb::Key::Q) {
+                item_list.toggle(entries.len());
+                eprintln!("item list {} ({} entries)", if item_list.open { "opened" } else { "closed" }, entries.len());
+                dirty = true;
+            } else if item_list.open {
+                use seihai::inventory::ListKey;
+                item_list.clamp(entries.len());
+                let (_, _, cw, _) = seihai::inventory::content_rect(scene.width as i32, scene.height as i32);
+                let cells = seihai::inventory::layout(&entries, cw);
+                let before = item_list.selected;
+                for (k, lk) in [
+                    (minifb::Key::Up, ListKey::Up),
+                    (minifb::Key::Left, ListKey::Left),
+                    (minifb::Key::Down, ListKey::Down),
+                    (minifb::Key::Right, ListKey::Right),
+                    (minifb::Key::D, ListKey::Close),
+                    (minifb::Key::S, ListKey::Close),
+                    (minifb::Key::A, ListKey::Close),
+                    (minifb::Key::Space, ListKey::Close),
+                    (minifb::Key::Enter, ListKey::Close),
+                ] {
+                    if item_list.open && pressed(k) {
+                        item_list.key(lk, &cells);
+                        dirty = true;
+                    }
+                }
+                if item_list.selected != before {
+                    if let Some(n) = item_list.selected.and_then(|i| entries.get(i)) {
+                        eprintln!("item list: selected {n}");
+                    }
+                }
+                if !item_list.open {
+                    eprintln!("item list closed");
+                }
+            }
+        }
+
         // Health and death: the 50 ms death timer, the claim and the dead
         // bit on the wire, and the respawn on a movement or action key.
         {
             let dt = life_clock.elapsed().as_millis() as u64;
             life_clock = Instant::now();
             let mut events = session.tick_life(dt);
-            let keys_down = !input.is_open()
+            let keys_down = !input.is_open() && !list_was_open
                 && [minifb::Key::Left, minifb::Key::Right, minifb::Key::Up, minifb::Key::Down]
                     .iter()
                     .any(|k| window.is_key_down(*k))
@@ -1422,7 +1470,7 @@ fn main() {
             }
             // A hit pushed the player: the new position goes out like a step.
             sprite_changed |= session.take_knock_moved();
-            if !input.is_open() && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
+            if !input.is_open() && !list_was_open && window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No) && session.start_swing() {
                 sprite_changed = true;
             }
             if sprite_changed {
@@ -1444,6 +1492,7 @@ fn main() {
         // A or Space: close the reading panel, or interact with what the
         // player faces. S while carrying throws (its swing was refused above).
         let interact = !input.is_open()
+            && !list_was_open
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
@@ -1489,7 +1538,7 @@ fn main() {
         {
             dirty = true;
         }
-        if !input.is_open() && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if window.is_key_down(minifb::Key::Left) {
                 dx -= 0.5;
@@ -1857,7 +1906,7 @@ fn main() {
         let enter = window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
             || window.is_key_pressed(minifb::Key::NumPadEnter, minifb::KeyRepeat::No);
         let talk = !confirm_quit && window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No);
-        if !confirm_quit && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
+        if !confirm_quit && !list_was_open && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
             if !input.is_open() {
                 eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T" });
                 input.open(ui::InputMode::Chat);
@@ -2026,6 +2075,20 @@ fn main() {
             dirty = false;
         }
         let mut frame = scene.clone();
+        if item_list.open {
+            let entries = item_list_entries(&session, &net_state);
+            let counts = seihai::inventory::Counts {
+                rupees: session.rupees,
+                bombs: session.bombs,
+                arrows: session.darts,
+                hearts_half: session.hearts_half(),
+                max_hearts_half: session.max_hearts,
+                sword: session.sword_power,
+                shield: session.shield_power,
+                glove: session.glove_power,
+            };
+            seihai::inventory::draw(&mut frame, &item_list, &entries, &counts);
+        }
         if show_players {
             ui::draw_player_list(&mut frame, &me(&net_state, &account), &net_state.others, &lists.buddy, &net_state.filter);
         }
@@ -2088,6 +2151,14 @@ fn main() {
 }
 
 /// The name others see for us: the server's nickname, else the account.
+/// The item list's entries: the server's built-in and named weapons, and
+/// offline the built-in weapons got from chests.
+fn item_list_entries(session: &seihai::offline::OfflineSession, state: &SessionState) -> Vec<String> {
+    let mut named: Vec<String> = seihai::inventory::chest_weapons(&session.flags);
+    named.extend(state.weapons.iter().map(|w| w.name.clone()));
+    seihai::inventory::entries(&state.default_weapons, &named)
+}
+
 fn me(state: &SessionState, account: &str) -> String {
     state.nickname.clone().unwrap_or_else(|| account.to_string())
 }

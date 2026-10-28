@@ -9,6 +9,7 @@ pub mod difftest;
 pub mod gmap;
 pub mod gui;
 pub mod help;
+pub mod inventory;
 pub mod life;
 pub mod net;
 pub mod npcart;

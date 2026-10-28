@@ -38,6 +38,8 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("Esc", &["Escape"], "close the chat bar or a sign; else ask to quit"),
     k("Y / N", &["Y", "N"], "answer the quit question (Enter = yes, Esc = no)"),
     k("F2", &["F2"], "private message to the nearest player"),
+    k("Q", &["Q"], "open or close the item list; arrows pick a weapon, Esc/D/S/A/Enter close it"),
+    k("D", &["D"], "weapon key: closes the item list (firing weapons is not done yet)"),
     k("Tab", &["Tab"], "show or hide the player list"),
     k("/ignore /buddy /mute", &[], "chat bar: add a name (/unignore ... removes); /lists shows"),
     k("PgUp / PgDn", &["PageUp", "PageDown"], "scroll the chat"),
