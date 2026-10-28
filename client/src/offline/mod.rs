@@ -162,6 +162,9 @@ pub struct OfflineSession {
     /// The feet are on a chair tile (type 3): the sit pose is drawn while the
     /// player is not walking. Set by [`Self::refresh_water`].
     pub sitting: bool,
+    /// `seteffect red,green,blue,alpha`: the colour the map is shaded with
+    /// (default 0,0,0,0, no shading).
+    pub screen_effect: [f32; 4],
     /// The last step moved the player and no stop has come since: the walk
     /// animation is drawn instead of idle. Cleared by [`Self::stop_walking`].
     pub walking: bool,
@@ -391,6 +394,7 @@ impl OfflineSession {
             swim_gani: None,
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
+            screen_effect: [0.0; 4],
             walking: false,
             npc_ganis: HashMap::new(),
             sound_events: Vec::new(),
