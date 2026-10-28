@@ -22,7 +22,7 @@ pub use crc32::{crc32, crc32_update};
 pub use gani::{Gani, GaniFrame, GaniPlacement, GaniPlayer, GaniSound, GaniSprite, LISTENER_DX, LISTENER_DY};
 pub use level::{
     CHEST_ITEMS, decode_sign_record, decode_sign_text, graal_code_bits, GraalLayout, tile_code, tile_id, tile_src_rect, Baddy, BoardRun, Chest, DrawLayer, Level,
-    Link, Npc, NpcImage, Object2x2, ObjectTables, Sign, Tile, TileKind, TileTypes,
+    Link, Npc, NpcImage, Object2x2, ObjectTables, Sign, Tile, TileKind, TileTypes, new_world_tile_type, TYPE_THROW_THROUGH,
 };
 pub use zelda::{is_zelda, Computer, ZeldaLayout, ZeldaLevel, ZeldaLink, ZeldaMagic, ZeldaSign};
 pub use png::{read_png_rgb, read_png_rgba, write_png_indexed, write_png_rgb};

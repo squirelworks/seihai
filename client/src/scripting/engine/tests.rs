@@ -368,6 +368,19 @@ fn onwall_reads_the_level_collision_and_is_true_off_the_board() {
 }
 
 #[test]
+fn onwater_reads_the_liquid_tiles_and_tiletype_is_minus_one() {
+    let (mut w, id) = npc("if (created) { this.a = onwater(3.5, 4.2); this.b = onwater(5, 5); this.c = onwater(-1, 2); this.t = tiletype(3, 4); }");
+    let mut water = vec![false; 64 * 64];
+    water[4 * 64 + 3] = true;
+    w.core.water = Some(water);
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.a"), Val::Num(1.0));
+    assert_eq!(var(&w, id, "this.b"), Val::Num(0.0));
+    assert_eq!(var(&w, id, "this.c"), Val::Num(0.0));
+    assert_eq!(var(&w, id, "this.t"), Val::Num(-1.0));
+}
+
+#[test]
 fn playersays_matches_only_during_a_chat_event() {
     let (mut w, id) = npc("if (playerchats && playersays(Hello)) { message exact; }\nif (playerchats && playersays2(open)) { message has; }\nif (created) { if (playersays(Hello)) message early; }");
     w.core.player.chat = "hello".into();
