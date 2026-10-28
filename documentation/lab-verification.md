@@ -110,7 +110,7 @@ Layouts are from GServer-v2 and the 2.05 notes (`chat-pm-rc.md`); they still nee
 Loopback check (2.22 framing, a scripted second player): the server got the CURCHAT, toall and PM with the right layouts. The bubble, nickname, toall, PM, history, list and debug overlay all showed.
 
 ## 10. Chests and signs
-- **Interact (A or Space):** checks the point one tile ahead of the player's feet, which is the same point the collision uses. It opens a closed chest there (2×2 tiles); otherwise it reads a sign there (2×1 tiles). Chests are now solid.
+- **Interact (A or Space):** checks the point one tile ahead of the player's feet, which is the same point the collision uses. It opens a closed chest there (2×2 tiles, from below only). Signs are not read with this key: walking or pushing up into one opens it (`signs.md`). Chests are now solid.
 - **Chest:** the item is applied locally (rupees, bombs, arrows, hearts, heart container, sword, shield, glove, spin attack), and "You got …" goes into the chat history. A chest whose sign index is 0 or more shows that sign as its note. Online, the client also sends `PLI_OPENCHEST` (`c x, c y`), and `PLO_LEVELCHEST` with opened = 1 marks the chest open. The amounts (5 bombs, 5 arrows, and so on) are placeholders until a capture or the 2.05 item table confirms them.
 - **Reading panel:** sign text appears in a panel and walking stops until A, Space or Esc closes it.
 - **HUD:** the rupee bar now shows the rupee count, and the debug overlay lists rupees, bombs and arrows.

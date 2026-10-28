@@ -1688,8 +1688,7 @@ fn main() {
                             }
                         }
                     }
-                    seihai::offline::Interaction::Sign(_)
-                    | seihai::offline::Interaction::Nothing => {}
+                    seihai::offline::Interaction::Nothing => {}
                 }
             }
             dirty = true;
@@ -1727,6 +1726,10 @@ fn main() {
             if dx != 0.0 || dy != 0.0 {
                 let before = (session.player_x, session.player_y);
                 session.try_move(dx, dy);
+                // Walking or pushing up into a sign opens it on its first page.
+                if session.reading.is_some() {
+                    sign_page = 0;
+                }
                 moved = true;
                 // The first steps of a connection: the files the real client
                 // asks for then, if Seihai has no copy of them.

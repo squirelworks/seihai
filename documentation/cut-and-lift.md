@@ -32,7 +32,7 @@ bush `2 3 / 18 19` and `420 421 / 436 437`) and 5 liftable ones (the rock is
 * **Cut.** As the sword swing starts, match against the cut table (all
   entries, no glove) and write the entry's "left" tiles over the four, then a
   spawn routine takes the entry index (debris or items; not read).
-* **Lift.** The A key tries this first (before a sign or a chest). Glove
+* **Lift.** The A key tries this first (before a chest). Glove
   power `g` allows the first `g + 2` entries: with no glove the bush and the
   512 block, power 1 adds the 684 block, power 2 the rock and the 990 block (the
   table order is the client's). The four tiles

@@ -4,7 +4,7 @@
 //! Usage: cargo run -p seihai --example sign_probe -- <assets> <level.nw> <out_dir>
 
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
-use seihai::offline::{Interaction, OfflineSession, DIR_NORTH};
+use seihai::offline::{OfflineSession, DIR_NORTH};
 use seihai::render::{player_box_origin, render_view, signs, Sheet};
 use std::path::Path;
 
@@ -26,7 +26,7 @@ fn main() {
     session.player_x = sign.x as f32 - 0.5;
     session.player_y = sign.y as f32 + 0.5;
     session.player_dir = DIR_NORTH;
-    let Interaction::Sign(text) = session.interact() else { panic!("the sign was not read") };
+    let text = sign.text.clone();
     let mut page = Some(0);
     while let Some(first) = page {
         let mut fb = render_view(&session, &sheet, sw, sh, VIEW_W, VIEW_H);
