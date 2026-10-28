@@ -31,6 +31,10 @@ These are in client/tests/fixtures/npc-scripts/. The test is client/tests/script
 
 The script log is full of unapplied visual commands: setzoomeffect, setcoloreffect, drawaslight, drawoverplayer, drawunderplayer. These are the light and colour effects on the map. They are recognized and ignored. Drawing them is a later item.
 
+## Grab and sword
+
+A on an object the glove cannot lift plays the sword swing and sticks. The real client plays a pull GANI for a futile grab and returns to the walk GANI when the pull ends. Seihai has a `futile` field that is never set. Wire it to a pull animation and clear it when the timer ends.
+
 ## From the decompiles
 
 These were in the cleaned notes and are not in Seihai yet:
