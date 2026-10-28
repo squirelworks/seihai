@@ -205,6 +205,10 @@ pub struct OfflineSession {
     /// `player_x`/`player_y` stay local to that cell. Walking past an edge
     /// moves the player into the next cell (see [`Self::take_gmap_crossing`]).
     pub gmap: Option<GmapWorld>,
+    /// The big map (the map screen's grid of level names), when one is
+    /// known. Edge links to the level next door on it keep the player's
+    /// offset across the seam (see [`edge_link_arrival`]).
+    pub big_map: Option<crate::gmap::Gmap>,
     /// False from an arrival until the player has moved: a link cannot
     /// fire on the spot the player was put on.
     armed: bool,
@@ -331,6 +335,36 @@ pub fn name_group(level: &str) -> String {
     }
 }
 
+/// Where an edge link to the big-map neighbour on that side puts the
+/// player, or `None` for any other link. The 2.05 client: a link one tile
+/// wide on the west edge (x 0), east edge (x 63), north edge (y 0) or south
+/// edge (y 63), whose destination is the level next to `here` on that side
+/// of the big map, arrives at the player's position moved by 64 tiles
+/// across the seam, the other coordinate kept; the link's own new-x and
+/// new-y are not used. (Graal_analysis `03-edge-links.md`.)
+///
+/// The real client fires such a link once the player has crossed the edge
+/// (x past 63.5 east, below -2.5 west, y below -3 north, past 63 south)
+/// when the neighbour level is loaded; Seihai fires on the link rectangle,
+/// before the player gets that far, so the arrival is held to where the
+/// real crossing would put it (a Seihai choice): at least -0.5 going east,
+/// at most 61.5 going west, at most 61 going north, at least -1 going
+/// south.
+pub fn edge_link_arrival(map: &crate::gmap::Gmap, here: &str, link: &Link, x: f32, y: f32) -> Option<(f32, f32)> {
+    let next = |dx, dy| map.neighbour_of(here, dx, dy).is_some_and(|n| n.eq_ignore_ascii_case(&link.dest));
+    if link.x == 0 && link.width == 1 && next(-1, 0) {
+        Some(((x + 64.0).min(61.5), y))
+    } else if link.x == 63 && link.width == 1 && next(1, 0) {
+        Some(((x - 64.0).max(-0.5), y))
+    } else if link.y == 0 && link.height == 1 && next(0, -1) {
+        Some((x, (y + 64.0).min(61.0)))
+    } else if link.y == 63 && link.height == 1 && next(0, 1) {
+        Some((x, (y - 64.0).max(-1.0)))
+    } else {
+        None
+    }
+}
+
 impl OfflineSession {
     pub fn new() -> Self {
         Self {
@@ -376,6 +410,7 @@ impl OfflineSession {
             dev: DevMode::default(),
             warp_pending: None,
             gmap: None,
+            big_map: None,
             armed: true,
             link_boxes: false,
             arrival_tile: None,
@@ -1159,12 +1194,14 @@ impl OfflineSession {
             }
             self.arrival_tile = None;
         }
+        let here = self.loaded_file.as_deref().unwrap_or("");
+        let big_map = self.big_map.as_ref();
+        let (x, y) = (self.player_x, self.player_y);
         self.pending_link = level.links.iter().find(|l| hit(l)).map(|link| {
-            (
-                link.dest.clone(),
-                link.new_x.unwrap_or(self.player_x + link.x_offset),
-                link.new_y.unwrap_or(self.player_y + link.y_offset),
-            )
+            let (nx, ny) = big_map
+                .and_then(|m| edge_link_arrival(m, here, link, x, y))
+                .unwrap_or((link.new_x.unwrap_or(x + link.x_offset), link.new_y.unwrap_or(y + link.y_offset)));
+            (link.dest.clone(), nx, ny)
         });
         self.pending_link.is_some()
     }
@@ -2519,6 +2556,58 @@ mod tests {
         let mut s2 = session_at(s.current_level.clone().unwrap(), 12.0, 50.5);
         assert!(s2.check_links());
         assert_eq!(s2.pending_link, Some(("c.nw".into(), s2.player_x, 2.5)));
+    }
+
+    /// A 3 x 3 big map with `mid.nw` in the middle.
+    fn big3() -> crate::gmap::Gmap {
+        crate::gmap::Gmap::parse_grid("\"nw.nw\",\"n.nw\",\"ne.nw\"\r\n\"w.nw\",\"mid.nw\",\"e.nw\"\r\n\"sw.nw\",\"s.nw\",\"se.nw\"\r\n").unwrap()
+    }
+
+    #[test]
+    fn an_edge_link_to_the_big_map_neighbour_keeps_the_offset_across_the_seam() {
+        let m = big3();
+        // East edge, the link says x = 0 and y = playery: the 2.05 client
+        // uses x - 64 instead (held at -0.5, where its own crossing lands).
+        let east = link("e.nw", 63, 0, 1, 64, Some(0.0), None);
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &east, 63.75, 20.0), Some((-0.25, 20.0)));
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &east, 61.5, 20.0), Some((-0.5, 20.0)));
+        // A playerx link on the east edge does not land on the far edge.
+        let east_px = link("E.NW", 63, 10, 1, 20, None, None);
+        assert_eq!(edge_link_arrival(&m, "MID.nw", &east_px, 63.75, 12.0), Some((-0.25, 12.0)));
+        let west = link("w.nw", 0, 0, 1, 64, Some(61.0), None);
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &west, -2.75, 7.0), Some((61.25, 7.0)));
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &west, 0.5, 7.0), Some((61.5, 7.0)));
+        let north = link("n.nw", 0, 0, 64, 1, None, Some(61.0));
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &north, 9.0, -3.5), Some((9.0, 60.5)));
+        let south = link("s.nw", 0, 63, 64, 1, None, Some(0.0));
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &south, 9.0, 63.5), Some((9.0, -0.5)));
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &south, 9.0, 61.0), Some((9.0, -1.0)));
+    }
+
+    #[test]
+    fn other_links_keep_their_own_arrival() {
+        let m = big3();
+        // Not the neighbour on that side, not one tile wide, or no big-map
+        // cell for the level: the link's own coordinates.
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &link("w.nw", 63, 0, 1, 64, Some(0.0), None), 63.5, 5.0), None);
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &link("e.nw", 62, 0, 2, 64, Some(0.0), None), 63.5, 5.0), None);
+        assert_eq!(edge_link_arrival(&m, "house.nw", &link("e.nw", 63, 0, 1, 64, Some(0.0), None), 63.5, 5.0), None);
+        // The corner level is not a side neighbour.
+        assert_eq!(edge_link_arrival(&m, "mid.nw", &link("ne.nw", 63, 0, 1, 64, Some(0.0), None), 63.5, 5.0), None);
+    }
+
+    #[test]
+    fn check_links_uses_the_big_map_rule_and_falls_back_without_one() {
+        let mut lvl = level(|_, _| OPEN);
+        lvl.links.push(link("e.nw", 63, 0, 1, 64, None, None));
+        // Feet on tile 63: the player's own x is 61.5.
+        let mut s = session_at(lvl, 63.5, 20.0);
+        s.loaded_file = Some("mid.nw".into());
+        assert!(s.check_links());
+        assert_eq!(s.pending_link, Some(("e.nw".into(), 61.5, 17.25)), "without a big map: playerx");
+        s.big_map = Some(big3());
+        assert!(s.check_links());
+        assert_eq!(s.pending_link, Some(("e.nw".into(), -0.5, 17.25)));
     }
 
     /// A Z3-V1 level read from disk drives the same link rules: a negative

@@ -197,6 +197,7 @@ fn main() {
     let mut send_tampercheck = false;
     let mut send_showimg = false;
     let mut no_scripts = false;
+    let mut bigmap_file: Option<PathBuf> = None;
     // None: not given on the command line, so the settings file decides.
     let mut cli_serverwarp: Option<bool> = None;
     // None: not given on the command line, so the settings file decides.
@@ -272,6 +273,10 @@ fn main() {
             "--no-serverwarp" => cli_serverwarp = Some(false),
             "--serverwarp" => cli_serverwarp = Some(true),
             "--no-scripts" => no_scripts = true,
+            "--bigmap" => {
+                i += 1;
+                bigmap_file = args.get(i).map(PathBuf::from);
+            }
             "--no-sound" => cli_sound = Some(false),
             "--sound" => cli_sound = Some(true),
             "--no-save-downloads" => cli_save_downloads = Some(false),
@@ -326,6 +331,9 @@ fn main() {
                 println!("                   /mute NAME, /unmute NAME, /lists (lists are files in the");
                 println!("                   settings directory; /mute sends PLI_MUTEPLAYER where the");
                 println!("                   version has it)");
+                println!("         --bigmap FILE       the big map (a bigmap.txt grid of level names): edge links");
+                println!("                             to the level next door on it keep the offset across the");
+                println!("                             seam (online, the server's PLO_BIGMAP file is used)");
                 println!("         --no-scripts        do not run the client-side GS1 scripts of level NPCs");
                 println!("                             and weapons (default: they run)");
                 println!("         --no-sound          do not play sound effects (GANI PLAYSOUND cues);");
@@ -795,6 +803,15 @@ fn main() {
         } else {
             // The level the session starts in is the first entry point.
             session.note_entry(&name);
+        }
+    }
+    if let Some(p) = &bigmap_file {
+        match std::fs::read(p) {
+            Ok(d) => {
+                session.big_map = seihai::gmap::Gmap::parse_grid(&String::from_utf8_lossy(&d));
+                eprintln!("big map: {} ({})", p.display(), if session.big_map.is_some() { "read" } else { "no levels" });
+            }
+            Err(e) => eprintln!("big map: cannot read {}: {e}", p.display()),
         }
     }
     match resolver.tile_types() {
@@ -1467,6 +1484,22 @@ fn main() {
                 // a request for whatever the server still has to send.
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req, &mut files);
+                // The big map the server named (PLO_BIGMAP): its grid
+                // decides which levels are next door for edge links.
+                if let (None, Some(spec)) = (session.big_map.as_ref(), net_state.bigmap.as_ref()) {
+                    if let Some(data) = files.store.read(&spec.txt) {
+                        session.big_map = seihai::gmap::Gmap::parse_grid(&String::from_utf8_lossy(&data));
+                        eprintln!("big map: {} ({})", spec.txt, if session.big_map.is_some() { "read" } else { "no levels" });
+                    } else if gmap_asked.insert(format!("file:{}", spec.txt.to_ascii_lowercase())) {
+                        let msgs = files.need(&spec.txt);
+                        if let (false, Some(c)) = (msgs.is_empty(), conn.as_mut()) {
+                            eprintln!("requesting {}", spec.txt);
+                            if let Err(e) = c.send_messages(&msgs) {
+                                eprintln!("file request send failed: {e}");
+                            }
+                        }
+                    }
+                }
                 dirty = true;
             }
         }

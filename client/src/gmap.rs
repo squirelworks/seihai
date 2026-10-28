@@ -238,6 +238,31 @@ impl Gmap {
         Some(g)
     }
 
+    /// A big map's text (the map screen's `bigmap.txt`): rows of level
+    /// names, comma-separated and quoted, with no header. The grid is as
+    /// wide as the longest row. `None` when no row names a level.
+    pub fn parse_grid(text: &str) -> Option<Self> {
+        let rows: Vec<Vec<String>> = text.lines().map(|l| l.trim_end_matches('\r')).filter(|l| !l.trim().is_empty()).map(split_row).collect();
+        let mut g = Gmap { width: rows.iter().map(Vec::len).max().unwrap_or(0), height: rows.len(), ..Gmap::default() };
+        if g.width == 0 || g.width > 255 || g.height > 255 {
+            return None;
+        }
+        g.names = vec![String::new(); g.width * g.height];
+        for (y, row) in rows.iter().enumerate() {
+            for (x, name) in row.iter().enumerate() {
+                g.names[y * g.width + x] = name.clone();
+            }
+        }
+        g.names.iter().any(|n| !n.is_empty()).then_some(g)
+    }
+
+    /// The level next to `level` on the grid, `(dx, dy)` cells away, if the
+    /// grid names one there.
+    pub fn neighbour_of(&self, level: &str, dx: i32, dy: i32) -> Option<&str> {
+        let (cx, cy) = self.cell_of(level)?;
+        self.level_at(cx + dx, cy + dy)
+    }
+
     /// The level at cell `(cx, cy)`, or `None` outside the grid or on a hole.
     pub fn level_at(&self, cx: i32, cy: i32) -> Option<&str> {
         if cx < 0 || cy < 0 || cx as usize >= self.width || cy as usize >= self.height {
@@ -583,6 +608,18 @@ pub fn sync_world(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_big_map_text_is_a_grid_of_quoted_names() {
+        let g = Gmap::parse_grid("\"a.nw\",\"b.nw\"\r\n\"c.nw\",\"\",\"e.nw\"\r\n\r\n").unwrap();
+        assert_eq!((g.width, g.height), (3, 2));
+        assert_eq!(g.neighbour_of("A.NW", 1, 0), Some("b.nw"));
+        assert_eq!(g.neighbour_of("a.nw", 0, 1), Some("c.nw"));
+        assert_eq!(g.neighbour_of("c.nw", 1, 0), None, "a hole");
+        assert_eq!(g.neighbour_of("a.nw", -1, 0), None, "off the grid");
+        assert_eq!(g.neighbour_of("x.nw", 1, 0), None);
+        assert!(Gmap::parse_grid("\r\n\"\"\r\n").is_none());
+    }
 
     const TWO_BY_TWO: &str = "GRMAP001\nWIDTH 2\nHEIGHT 2\nLEVELNAMES\n\"gm_nw.nw\",\"gm_ne.nw\",\n\"gm_sw.nw\",\"gm_se.nw\",\nLEVELNAMESEND\nMAPIMG over.png\n";
 
