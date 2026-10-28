@@ -232,8 +232,10 @@ impl<'a> Parser<'a> {
                     let is_elseif = matches!(&self.peek().tok, Tok::Ident(e) if e == "elseif");
                     self.next();
                     if is_elseif {
-                        // `elseif` is `else if`.
-                        Some(Box::new(self.stmt_inner().unwrap_or(Stmt::Block(Vec::new()))))
+                        // `elseif` is `else if`: the client matches command
+                        // names by prefix, as with `hurt1`.
+                        let t = self.peek().clone();
+                        Some(Box::new(self.ident_stmt("if".into(), t.line, t.start).unwrap_or(Stmt::Block(Vec::new()))))
                     } else {
                         Some(Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new()))))
                     }
@@ -521,11 +523,11 @@ impl<'a> Parser<'a> {
                 Tok::Ident(w) if w == "nl" => (BinOp::CatNl, 3, false),
                 Tok::Ident(w) if w == "tab" => (BinOp::CatTab, 3, false),
                 Tok::Op("==") | Tok::Op("=") => (BinOp::Eq, 4, false),
-                Tok::Op("!=") => (BinOp::Ne, 4, false),
+                Tok::Op("!=") | Tok::Op("<>") => (BinOp::Ne, 4, false),
                 Tok::Op("<") => (BinOp::Lt, 5, false),
                 Tok::Op(">") => (BinOp::Gt, 5, false),
-                Tok::Op("<=") => (BinOp::Le, 5, false),
-                Tok::Op(">=") => (BinOp::Ge, 5, false),
+                Tok::Op("<=") | Tok::Op("=<") => (BinOp::Le, 5, false),
+                Tok::Op(">=") | Tok::Op("=>") => (BinOp::Ge, 5, false),
                 Tok::Op("+") => (BinOp::Add, 6, false),
                 Tok::Op("-") => (BinOp::Sub, 6, false),
                 Tok::Op("*") => (BinOp::Mul, 7, false),
@@ -550,7 +552,8 @@ impl<'a> Parser<'a> {
         if self.eat_op("|") {
             let lo = Box::new(self.binary(4));
             self.expect_op(",");
-            let hi = Box::new(self.binary(4));
+            // Above the comparisons, so the `>` of `|lo,hi>` closes the range.
+            let hi = Box::new(self.binary(6));
             // `|lo,hi|`, `|lo,hi>`, or `|lo,hi`.
             if !self.eat_op("|") && !self.eat_op(">") {
                 // Unclosed range: stop at the next token that is not part of it.
@@ -753,6 +756,27 @@ mod tests {
     fn in_ranges_and_lists() {
         assert_eq!(g("if (x in |0,64|) hide;"), "(if (in x range 0 64) (cmd hide))\n");
         assert_eq!(g("if (2 in {1,2,3}) hide;"), "(if (in 2 list 1 2 3) (cmd hide))\n");
+        // Closed with `>`.
+        assert_eq!(g("if (x in |1,5>) hide;"), "(if (in x range 1 5) (cmd hide))\n");
+        assert_eq!(g("if (x in |a,b+1> && y) hide;"), "(if (&& (in x range a (+ b 1)) y) (cmd hide))\n");
+        // A list inside a larger condition.
+        assert_eq!(g("if (a==1 && x in {1,2}) hide;"), "(if (&& (== a 1) (in x list 1 2)) (cmd hide))\n");
+    }
+
+    #[test]
+    fn laundry_forms_from_the_npc_corpus() {
+        // No space after `if`, no spaces round `&&`.
+        assert_eq!(g("if(a&&b) hide;"), "(if (&& a b) (cmd hide))\n");
+        // `elseif` as one word, after a block with or without a space.
+        let want = "(if a (block (= x 1)) (if b (block (= x 2)) (block (= x 3))))\n";
+        assert_eq!(g("if (a) {x=1;} elseif (b) {x=2;} else {x=3;}"), want);
+        assert_eq!(g("if (a) {x=1;}elseif(b){x=2;}else{x=3;}"), want);
+        // A field after an index, in a statement and in an expression.
+        assert_eq!(g("d = npcs[i].x - x;"), "(= d (- (idx npcs.x i) x))\n");
+        assert_eq!(g("players[i].x = 3;"), "(= (idx players.x i) 3)\n");
+        // The 2.05 comparison table's other spellings.
+        assert_eq!(g("if (a <> b) hide;"), "(if (!= a b) (cmd hide))\n");
+        assert_eq!(g("if (a => b && c =< d) hide;"), "(if (&& (>= a b) (<= c d)) (cmd hide))\n");
     }
 
     #[test]
