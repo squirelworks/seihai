@@ -1023,10 +1023,15 @@ fn main() {
     let mut chat_scroll = 0usize;
     let debug_on = Settings::load().debug.unwrap_or(false);
     let mut show_debug = debug_on;
-    // Debug diagnostics go to a file, not the terminal. The file is
-    // recreated each run so it holds one session.
+    // Debug diagnostics go to a timestamped folder under _debug/, not
+    // the terminal. One folder per run.
     let mut debug_file: Option<std::fs::File> = if debug_on {
-        let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
+        let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let dir = root.join(format!("debug-{stamp}"));
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join("script.log");
         match std::fs::File::create(&path) {
