@@ -32,7 +32,7 @@ No system SDL2. The `render` module provides:
 - `draw_player_sprites` — body and head by direction
 - `hud::draw_hud` — the status display from the version's `state.png`, by the 2.05 routine's rules (`hud.md`); `draw_hud` (two plain bars) when there is no `state.png`
 - permanent chat bar at the bottom
-- chest/sign/NPC markers
+- chests from their records; an NPC whose image is not loaded draws nothing (`npc-images.md`)
 - windowed binary via `minifb` (`cargo run -p seihai`)
 - F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
 - Play offline button in the GUI skips the connection
@@ -52,7 +52,7 @@ From the merged chat/HUD PRs:
 - F12 saves a PNG to `screenshots/`.
 - F9 is developer mode (wallhack). It is off at every start, never saved, shows `DEV MODE` while on, and turns itself off on a level change, warp or disconnect. Build with `--no-default-features` to compile the wallhack out.
 - Chests open with A or Space when facing them. The terminal prints the item.
-- Signs open a reading panel.
+- Signs open the sign panel: the scroll frame and font from the version's `letters.png`, three lines a page, A or Space for the next page, Up for the one before (`signs.md`). Without `letters.png`, the plain text panel.
 - Nickname tags and chat bubbles draw over other players.
 
 ## Tiles, swimming and links

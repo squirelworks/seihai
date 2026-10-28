@@ -28,6 +28,16 @@ The base of this branch is item 22 (`chiaki/gani-expansion`, PR #54), because an
 - **Layer:** all shown images draw after every NPC. The reference gives layers 0 to 4 (`changeimgvis`); only "over" is drawn.
 - **Missing picture:** a name that is not loaded draws nothing, and the NPC's image falls back from an animation whose GANI or sheets are not loaded.
 
+## An NPC with no picture draws nothing
+
+The board view used to put a 12×12 gray square under every NPC that had no animation, so an NPC whose image had not arrived (or never would) showed as a box. The 2.05 client's in-game NPC draw has no such placeholder:
+
+- an NPC with no image loaded draws nothing of its own (only its text, if it has any);
+- an NPC with a GANI draws the GANI, and a character NPC uses the player's draw;
+- the placeholder picture the client has for an NPC with no image is used only in the level editor's view.
+
+So the square is gone: `render_view` draws chests and then nothing for NPCs, and `draw_npcs` draws the image once it is loaded. Requests are unchanged: the NPC image pass asks the server for each missing image when a level arrives, when a script changes a picture, and again after each file arrives. Confirmed from the 2.05 draw path; how the real client batches its own image requests was not checked.
+
 ## What the host does
 
 - `SessionScripts::images_changed` is set when a script changed an NPC picture (`setimg`, `showimg`, `hideimg`). `seihai` then runs its NPC image pass (the same one a level arrival uses: ask the server for a missing file, or read the file it has) so the new picture is loaded and drawn on the next frame. A level now runs that pass for the NPCs' images offline as well.
