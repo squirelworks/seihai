@@ -77,7 +77,7 @@ pub const STAY_SPRITES: [u16; 5] = [65, 66, 321, 347, 348];
 
 /// The tile type objects fly through (a wall type that does not stop a
 /// thrown object).
-pub const TYPE_THROW_THROUGH: u8 = 20;
+pub const TYPE_THROW_THROUGH: u8 = crate::assets::TYPE_THROW_THROUGH;
 
 /// The shadow under a thrown object: sprite 0.
 pub const SHADOW_SPRITE: u16 = 0;

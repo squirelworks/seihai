@@ -15,7 +15,7 @@ Date: 2026-10-22
 8. Step an optional walk GANI on every successful move.
 9. Apply `hide`/`show`, `warp`, `hurt`, `say`/`message`, `set`/`unset`, `setstring`/`addstring`, `setplayerprop`, `setimg`/`setshape`, and `move` via `handle_command`.
 10. Use the documented single-point foot test (`+32` / `+44` pixel offsets) in `try_move`.
-11. Load type-0 collision from `arrays.dat` via `load_tiletypes_arrays`.
+11. Load type-0 collision from `arrays.dat` via `load_tiletypes_arrays`. Arrays 2, 4, 5 and 6 give throw-through (20), chair (3) and bed (4, 5) types (`tile-types.md`).
 12. Detect nearby NPCs with `check_touch`.
 13. Place stamps via `Level::place_stamp` or `place_named_stamp`.
 14. Detect `LINK` entry and record the destination in `pending_link`.
