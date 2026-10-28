@@ -65,6 +65,16 @@ pub struct Npc {
     pub ani_ms: u64,
     /// Images the NPC's script put up with `showimg`, by index.
     pub images: Vec<NpcImage>,
+    /// Character parts set by `setcharprop`.
+    pub head: Option<String>,
+    pub body: Option<String>,
+    pub shield: Option<String>,
+    /// Other character props, by code.
+    pub props: std::collections::HashMap<String, String>,
+    /// Whether the NPC stops movement. `dontblock` sets this false.
+    pub blocks: bool,
+    /// Collision size in pixels, from `setshape`.
+    pub shape: Option<(f32, f32)>,
 }
 
 /// An image a script put up with `showimg index,file,x,y` (index 0 to 199).
@@ -82,7 +92,8 @@ pub struct NpcImage {
 impl Npc {
     /// An NPC with only its image, position and script.
     pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
-        Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new() }
+        Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new(),
+            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None }
     }
 
     /// Every image file the NPC draws now: its own and its `showimg` ones.

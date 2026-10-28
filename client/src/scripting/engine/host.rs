@@ -329,6 +329,54 @@ impl SessionScripts {
                 }
                 // `noplayerkilling`: other players' hits do nothing in this level.
                 Effect::Command { ref name, .. } if name == "noplayerkilling" => s.no_pk = true,
+                // `setsword power`: the player's sword strength.
+                Effect::Command { ref name, ref args, .. } if name == "setsword" => {
+                    if let Some(p) = args.get(1).map(|v| v.num()) {
+                        s.sword_power = p.clamp(0.0, 255.0) as u8;
+                    }
+                }
+                // `toweapons name`: the player gains that weapon.
+                Effect::Command { ref name, ref args, .. } if name == "toweapons" => {
+                    if let Some(n) = args.first().map(|v| v.text()) {
+                        if !n.is_empty() && !s.weapons.iter().any(|w| w.eq_ignore_ascii_case(&n)) {
+                            s.weapons.push(n);
+                        }
+                    }
+                }
+                // Character props on an NPC: head, body, colors, shield.
+                Effect::SetCharProp { obj, code, value } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        match code.as_str() {
+                            "#3" => n.head = Some(value),
+                            "#8" => n.body = Some(value),
+                            "#2" => n.shield = Some(value),
+                            _ => { n.props.insert(code, value); }
+                        }
+                    }
+                }
+                // `dontblock`: the NPC does not stop movement.
+                Effect::Command { obj, ref name, .. } if name == "dontblock" => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.blocks = false;
+                    }
+                }
+                // Collision shape for an NPC.
+                Effect::SetShape { obj, w, h, .. } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.shape = Some((w as f32, h as f32));
+                    }
+                }
+                // Visual commands. Recognized so they do not fill the log;
+                // drawing them is still open.
+                Effect::Command { ref name, .. }
+                    if matches!(name.as_str(),
+                        "changeimgvis" | "changeimgcolors" | "changeimgzoom"
+                        | "showtext" | "hideimgs" | "setbackpal" | "seteffect"
+                        | "replaceani" | "addtiledef" | "addtiledef2"
+                        | "removetiledefs" | "setchargender" | "enabledefmovement"
+                        | "timereverywhere" | "blockagainlocal" | "hideimg"
+                    ) => {}
+                Effect::StopMidi => {}
                 other => self.unhandled.push(other),
             }
         }

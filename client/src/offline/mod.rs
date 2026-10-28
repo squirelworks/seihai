@@ -174,6 +174,8 @@ pub struct OfflineSession {
     pub strings: HashMap<String, String>,
     /// Player properties (`setplayerprop`).
     pub props: HashMap<String, String>,
+    /// Weapons the player holds (`toweapons`).
+    pub weapons: Vec<String>,
     /// Pending link destination if the player walked into a LINK area.
     pub pending_link: Option<(String, f32, f32)>,
     /// Rupees (gralats).
@@ -361,6 +363,7 @@ impl OfflineSession {
             flags: HashMap::new(),
             strings: HashMap::new(),
             props: HashMap::new(),
+            weapons: Vec::new(),
             pending_link: None,
             rupees: 0,
             bombs: 10,
