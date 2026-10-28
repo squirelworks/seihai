@@ -1123,6 +1123,20 @@ mod tests {
         assert_eq!(judge_hurtplayer(&R, &from_npc, Some((20.0, 20.0)), &victim(20.0, 20.0)), Err(Reject::NpcSource));
     }
 
+    #[test]
+    fn the_lab_servers_relayed_hit_carries_ff_ff_ff_and_is_read_as_an_npc_hit() {
+        // GServer-v2 relays PLI_HURTPLAYER as id, dx, dy, power and then
+        // `ff ff ff` (lab, 2026-10-28). The 2.05 handler reads 6 or more
+        // bytes as an NPC hit and drops it when no NPC has that id; Seihai
+        // keeps that rule rather than treating the bytes as "no NPC".
+        let h = parse_hurtplayer(&[0x20, 0x23, 0x70, 0x60, 0x21, 0xff, 0xff, 0xff]).unwrap();
+        assert_eq!((h.attacker, h.dx, h.dy, h.half), (3, 1.0, 0.0, 1));
+        assert!(h.npc.is_some());
+        assert_eq!(judge_hurtplayer(&R, &h, Some((27.0, 30.0)), &victim(30.0, 30.0)), Err(Reject::NpcSource));
+        let clean = parse_hurtplayer(&[0x20, 0x23, 0x70, 0x60, 0x21]).unwrap();
+        assert_eq!(judge_hurtplayer(&R, &clean, Some((27.0, 30.0)), &victim(30.0, 30.0)), Ok(1));
+    }
+
     // ---- the attacker's side ----
 
     fn target(x: f32, y: f32) -> Target {

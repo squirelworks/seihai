@@ -69,6 +69,20 @@ centre is (X+1.5, Y+2.0); strictly under 2 tiles on each axis). There is
 **no** attacker STATUS test on the packet path. The power is capped at one
 heart; a power of 0 is accepted (hurt mode and knockback, no hearts).
 
+## Packet 40 through the lab server (2026-10-28)
+
+Lab run of `client/examples/knock_probe.rs`. Players A and B log in as 2.05 or 2.22, in all four pairs. A sends `PLI_HURTPLAYER` (26) at B with a push of (+1, 0) and one half heart. GServer-v2 relays it as `PLO_HURTPLAYER` (40), **with three trailing bytes `ff ff ff`**: id, dx, dy and power, then `ff ff ff`.
+
+The 2.05 handler reads a payload of 6 or more bytes after the id as an NPC hit. It decodes those three bytes as an NPC id and looks for an NPC in the level with that id. If none matches, the hit is dropped: no hearts, no push.
+
+The earlier lab capture showed the same refusal on the real 2.22 client for injected trailing bytes (`documentation/combat.md`). So with this server, a player's hit packet does nothing to a real client, and Seihai refuses it the same way (`Reject::NpcSource`; B stayed at 6 half hearts at x 30 in all four pairs). The server most likely writes a -1 NPC id that it clamps to 255 per byte, as it does for CARRYSPRITE (`throwing.md`). That cause is inferred.
+
+Seihai keeps the real client's rule and does not treat `ff ff ff` as "no NPC". Taking `ff ff ff` as a player hit would be a Seihai choice, and a hit the real client never takes.
+
+Knockback itself is settled. The real 2.22 client was pushed 5 tiles in the 2026-10-25 capture, and it matches the rule above. Not re-run here: the server drops nothing, but the relayed packet carries the NPC bytes, so no packet-40 hit reaches either client.
+
+The per-player field the packet path compares between attacker and victim is still not named. In the 2.05 handler it is the same field the thrown-object routine compares between the player and the object. That object test reads as "on the player's level", so the field is likely a level or area marker rather than an owner link. This is inferred, and Seihai still does not check it.
+
 ## Implemented
 
 Profile-gated through `CombatRules` and `DeathRules` (`entry_name_group`), with
@@ -86,7 +100,7 @@ the same in every build read; this keeps `profiles_golden.txt` unchanged.
 | Item | Verdict |
 |---|---|
 | Knockback of a hit | implemented (above) |
-| Per-player field compared in packet 40 | documented and skipped: it is a parent/owner link, zero for ordinary players, so the compare is always true for them. Inferred, not seen on a wire. Capture that would settle it: a real 2.22 client hit by a 40 whose attacker id is a player that owns something (a horse or similar); none is available offline |
+| Per-player field compared in packet 40 | documented and skipped: most likely a level or area marker (see "Packet 40 through the lab server"), earlier read as an owner link. Inferred, not seen on a wire. Capture that would settle it: a real 2.22 client hit by a 40 whose attacker id is a player that owns something (a horse or similar); none is available offline |
 | Guild test in the packet path | settled: it applies (implemented) |
 | Id 46 | settled and implemented |
 | Bomb, arrow, baddy powers | documented and skipped: the hurt routine's callers use 0.5 hearts by default and 1 for certain object types, but which object kind maps to bomb, arrow or baddy was not resolved, and Seihai has no bomb, arrow or baddy objects to send them. Capture: a real client hit by a server-side bomb and by an arrow, read the power byte |
