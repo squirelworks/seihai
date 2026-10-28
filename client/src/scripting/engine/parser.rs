@@ -310,7 +310,7 @@ impl<'a> Parser<'a> {
                 self.end_stmt();
                 Some(Stmt::Continue)
             }
-            "else" => {
+            "else" | "elseif" => {
                 self.diag("`else` without `if`");
                 self.recover();
                 Some(Stmt::Block(Vec::new()))
@@ -540,9 +540,9 @@ impl<'a> Parser<'a> {
             let lo = Box::new(self.binary(4));
             self.expect_op(",");
             let hi = Box::new(self.binary(4));
-            // `|lo,hi|` or `|lo,hi>`.
-            if !self.eat_op("|") {
-                self.eat_op(">");
+            // `|lo,hi|`, `|lo,hi>`, or `|lo,hi`.
+            if !self.eat_op("|") && !self.eat_op(">") {
+                // Unclosed range: stop at the next token that is not part of it.
             }
             Expr::InRange { e, lo, hi }
         } else if self.eat_op("{") {
@@ -696,6 +696,9 @@ mod tests {
     #[test]
     fn precedence_and_associativity() {
         assert_eq!(g("x = 1 + 2 * 3;"), "(= x (+ 1 (* 2 3)))\n");
+        // Chained index and no-space if.
+        assert_eq!(g("if(npcs[this.i].save[5]==38) x=1;"), "(if (== (idx npcs.save this.i 5) 38) (= x 1))\n");
+        assert_eq!(g("if (this.i>0&&players[this.i].hearts>0) x=1;"), "(if (&& (> this.i 0) (> (idx players.hearts this.i) 0)) (= x 1))\n");
         assert_eq!(g("x = (1 + 2) * 3;"), "(= x (* (+ 1 2) 3))\n");
         assert_eq!(g("x = 2 ^ 3 ^ 2;"), "(= x (^ 2 (^ 3 2)))\n");
         assert_eq!(g("x = a < b && c || d;"), "(= x (|| (&& (< a b) c) d))\n");
