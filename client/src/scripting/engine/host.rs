@@ -367,6 +367,27 @@ impl SessionScripts {
                         n.blocks = false;
                     }
                 }
+                // The drawing height (see `documentation/npc-draw-order.md`).
+                Effect::Command { obj, ref name, .. }
+                    if matches!(name.as_str(), "drawunderplayer" | "drawoverplayer" | "drawaslight") =>
+                {
+                    let layer = match name.as_str() {
+                        "drawunderplayer" => crate::assets::DrawLayer::Under,
+                        "drawoverplayer" => crate::assets::DrawLayer::Over,
+                        _ => crate::assets::DrawLayer::Light,
+                    };
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.layer = layer;
+                    }
+                }
+                // `blockagain` and `blockagainlocal` undo `dontblock` and put the
+                // NPC back with the players, whatever its drawing height was.
+                Effect::Command { obj, ref name, .. } if name == "blockagain" || name == "blockagainlocal" => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.blocks = true;
+                        n.layer = crate::assets::DrawLayer::Player;
+                    }
+                }
                 // Collision shape for an NPC.
                 Effect::SetShape { obj, w, h, .. } => {
                     if let Some(n) = self.level_npc(s, obj) {
@@ -381,7 +402,7 @@ impl SessionScripts {
                         | "showtext" | "hideimgs" | "setbackpal" | "seteffect"
                         | "replaceani" | "addtiledef" | "addtiledef2"
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
-                        | "timereverywhere" | "blockagainlocal" | "hideimg"
+                        | "timereverywhere" | "hideimg"
                     ) => {}
                 Effect::StopMidi => {}
                 other => self.unhandled.push(other),

@@ -848,8 +848,8 @@ fn main() {
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
         );
-        // NPC images and animations on top of the gray placeholder, then the
-        // images their scripts put up with showimg.
+        // NPCs under and with the players now; `drawoverplayer` NPCs, the
+        // showimg images and `drawaslight` NPCs after the player.
         let npc_art = seihai::render::NpcArt {
             images: npc_imgs,
             sheets: seihai::render::PoseSheets {
@@ -859,7 +859,7 @@ fn main() {
                 sword: sword_sheet.as_ref().map(pose_sheet),
             },
         };
-        seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y);
+        seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
         // On a gmap another player's position is local to its own cell.
         let own_cell = session.gmap.as_ref().map(|w| w.cell);
         let others: Vec<seihai::protocol::OtherPlayer> = others
@@ -943,6 +943,7 @@ fn main() {
         if let Some(sp) = &sprites {
             seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
+        seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
         ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, my_chat, dx, dy);
         match &state_sheet {

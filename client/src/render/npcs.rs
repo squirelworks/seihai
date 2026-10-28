@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use super::tiles::{draw_gani_frame, Framebuffer, PoseSheets, TILE_PX};
-use crate::assets::Npc;
+use crate::assets::{DrawLayer, Npc};
 use crate::offline::OfflineSession;
 
 /// The facing an animated NPC is drawn with (down; NPCs have no direction
@@ -38,27 +38,51 @@ fn blit_image(fb: &mut Framebuffer, img: &(u32, Vec<u8>), part: Option<(i32, i32
     fb.blit_sprite(px, img.0, 4, sx, sy, sw, sh, dx, dy);
 }
 
-/// Draw every NPC of the session's level, then their `showimg` images.
+/// Which part of the level's NPCs a [`draw_npcs`] call draws. The frame
+/// draws [`NpcPass::BelowPlayers`] before the players and
+/// [`NpcPass::AbovePlayers`] after them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NpcPass {
+    /// The `drawunderplayer` NPCs, then the ones with the default height.
+    BelowPlayers,
+    /// The `drawoverplayer` NPCs, the `showimg` images (whose default
+    /// height is over the player), then the `drawaslight` NPCs.
+    AbovePlayers,
+}
+
+/// Draw the NPCs of the session's level that belong to `pass`.
 /// `(cam_x, cam_y)` is the camera origin in level pixels. A hidden NPC
 /// (`hide`) draws nothing of its own; the images it put up with `showimg`
 /// stay until `hideimg` removes them.
-pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, cam_x: i32, cam_y: i32) {
+pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, cam_x: i32, cam_y: i32, pass: NpcPass) {
     let Some(level) = &session.current_level else { return };
     let at = |x: f32, y: f32| ((x * TILE_PX as f32) as i32 - cam_x, (y * TILE_PX as f32) as i32 - cam_y);
-    for npc in level.npcs.iter().filter(|n| n.visible) {
-        let (dx, dy) = at(npc.x, npc.y);
-        if !draw_animation(fb, session, npc, art, dx, dy) {
-            if let Some(img) = art.images.get(&npc.image) {
-                blit_image(fb, img, npc.image_part, dx, dy);
+    let draw_layer = |fb: &mut Framebuffer, layer: DrawLayer| {
+        for npc in level.npcs.iter().filter(|n| n.visible && n.layer == layer) {
+            let (dx, dy) = at(npc.x, npc.y);
+            if !draw_animation(fb, session, npc, art, dx, dy) {
+                if let Some(img) = art.images.get(&npc.image) {
+                    blit_image(fb, img, npc.image_part, dx, dy);
+                }
             }
         }
-    }
-    for npc in &level.npcs {
-        for im in &npc.images {
-            if let Some(img) = art.images.get(&im.file) {
-                let (dx, dy) = at(im.x, im.y);
-                blit_image(fb, img, im.part, dx, dy);
+    };
+    match pass {
+        NpcPass::BelowPlayers => {
+            draw_layer(fb, DrawLayer::Under);
+            draw_layer(fb, DrawLayer::Player);
+        }
+        NpcPass::AbovePlayers => {
+            draw_layer(fb, DrawLayer::Over);
+            for npc in &level.npcs {
+                for im in &npc.images {
+                    if let Some(img) = art.images.get(&im.file) {
+                        let (dx, dy) = at(im.x, im.y);
+                        blit_image(fb, img, im.part, dx, dy);
+                    }
+                }
             }
+            draw_layer(fb, DrawLayer::Light);
         }
     }
 }

@@ -75,6 +75,24 @@ pub struct Npc {
     pub blocks: bool,
     /// Collision size in pixels, from `setshape`.
     pub shape: Option<(f32, f32)>,
+    /// Where the NPC is drawn against the players: `drawunderplayer`,
+    /// `drawoverplayer`, `drawaslight`; `blockagain` puts it back.
+    pub layer: DrawLayer,
+}
+
+/// The drawing height of an NPC. The 2.05 client keeps it as one number
+/// per NPC: -1 under, 0 with the players, 1 over, 9 as a light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DrawLayer {
+    /// `drawunderplayer`: before everything else that moves.
+    Under,
+    /// The default: before the players.
+    #[default]
+    Player,
+    /// `drawoverplayer`: after the players.
+    Over,
+    /// `drawaslight`: after the `drawoverplayer` NPCs, under the status bar.
+    Light,
 }
 
 /// An image a script put up with `showimg index,file,x,y` (index 0 to 199).
@@ -93,7 +111,7 @@ impl Npc {
     /// An NPC with only its image, position and script.
     pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
         Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new(),
-            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None }
+            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None, layer: DrawLayer::Player }
     }
 
     /// Every image file the NPC draws now: its own and its `showimg` ones.
