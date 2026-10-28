@@ -825,7 +825,7 @@ impl OfflineSession {
             }
             let (ox, oy) = o.water_probe();
             let kind = t::leap_kind(o.sprite, self.throw_in_water(ox, oy));
-            self.leaps.push(t::Leap { kind, x: o.x, y: o.ground, frame: -1 });
+            self.spawn_leap(kind, o.x, o.ground);
             self.landings.push(Landing { kind: o.kind, effect: Some(kind), x: o.x, y: o.ground });
         }
     }
@@ -848,8 +848,17 @@ impl OfflineSession {
         // of the thrown bush), anchored on the object's top-left tile.
         // Which effect each cut entry plays is inferred, see
         // `documentation/cut-and-lift.md`.
-        self.leaps.push(crate::throwing::Leap { kind: crate::throwing::cut_leap_kind(kind), x: ax as f32, y: ay as f32, frame: -1 });
+        self.spawn_leap(crate::throwing::cut_leap_kind(kind), ax as f32, ay as f32);
         Some(kind)
+    }
+
+    /// Start a break effect at `(x, y)` and its sound, as the 2.05 client
+    /// does for every leap: `water.wav` for the splash, `crush.wav` for the
+    /// others, played at `(x + 1, y + 1)`.
+    pub fn spawn_leap(&mut self, kind: usize, x: f32, y: f32) {
+        self.leaps.push(crate::throwing::Leap { kind, x, y, frame: -1 });
+        let file = if kind == crate::throwing::LEAP_SPLASH { "water.wav" } else { "crush.wav" };
+        self.sound_events.push(SoundEvent { file: file.into(), x: x + 1.0, y: y + 1.0 });
     }
 
     /// Current player state as a protocol update.
@@ -1069,12 +1078,23 @@ impl OfflineSession {
     }
 
     /// Recompute `in_water` and `sitting` from the feet.
+    ///
+    /// Going into the water or out of it splashes, as in the 2.05 client:
+    /// one splash where the player stands, three when the player did not
+    /// walk in (a warp, a knock), and one on the way out.
     pub fn refresh_water(&mut self) {
         let (fx, fy) = self.foot();
+        let was = self.in_water;
         self.in_water = match (&self.current_level, &self.tiletypes) {
             (Some(level), Some(types)) => self.kind_at_point(level, types, fx, fy) == TileKind::Water,
             _ => false,
         };
+        if self.in_water != was {
+            let n = if self.in_water && !self.walking { 3 } else { 1 };
+            for _ in 0..n {
+                self.spawn_leap(crate::throwing::LEAP_SPLASH, self.player_x, self.player_y);
+            }
+        }
         // Feet on a chair tile (a bench): drawn sitting once the player stops.
         self.sitting = match (&self.current_level, &self.tiletypes) {
             (Some(level), Some(types)) if (0.0..64.0).contains(&fx) && (0.0..64.0).contains(&fy) => {
@@ -1793,6 +1813,32 @@ mod tests {
         s.object_tables = None;
         assert_eq!(s.try_lift(), None);
         assert_eq!(s.try_cut(), None);
+    }
+
+    /// Walking into the water splashes once where the player stands, with
+    /// `water.wav`; walking out splashes once more. Being put into the water
+    /// (not walking) splashes three times.
+    #[test]
+    fn entering_and_leaving_water_splashes() {
+        let tiles = |x: i32, _y: i32| if x >= 20 { WATER } else { OPEN };
+        let mut s = session_at(level(tiles), 19.75, 30.0);
+        s.refresh_water();
+        assert!(s.leaps.is_empty());
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.in_water);
+        assert_eq!(s.leaps.len(), 1);
+        assert_eq!(s.leaps[0].kind, crate::throwing::LEAP_SPLASH);
+        assert_eq!((s.leaps[0].x, s.leaps[0].y), (s.player_x, s.player_y));
+        assert!(s.sound_events.iter().any(|e| e.file == "water.wav"));
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert_eq!(s.leaps.len(), 1, "no splash while swimming on");
+        assert!(s.try_move(-1.0, 0.0).is_some());
+        assert!(!s.in_water);
+        assert_eq!(s.leaps.len(), 2);
+
+        let mut put = session_at(level(tiles), 30.0, 30.0);
+        put.refresh_water();
+        assert_eq!(put.leaps.len(), 3);
     }
 
     /// A bench (chair tiles, walkable): standing with the feet on it sits,

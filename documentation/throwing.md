@@ -34,7 +34,7 @@ stderr prints `thrown object N (facing D, flies up to 9 ticks)` when the key is 
 
 ## Sound
 
-The 2.05 client plays a crush sound on a break and a water sound on a splash. Seihai's default sounds have a `water.wav` but no crush sound, and no cue is wired for either; this is open.
+Every break effect plays a sound as it starts, at `(x + 1, y + 1)` from its anchor: `sounds/water.wav` for the splash (kind 5), `sounds/crush.wav` for the others (2.05 rev 2). Seihai queues both (`OfflineSession::spawn_leap`). The default sound set has `water.wav` but no `crush.wav`, so without the build's own sounds a break is silent.
 
 ## Open (not read, not invented)
 
