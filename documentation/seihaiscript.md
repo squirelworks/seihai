@@ -40,6 +40,17 @@ The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode 
 
 **Language.** `if`/`else`, `while`, `for`, `break`/`continue`/`return`, assignment and `++`/`--`, the usual numeric, comparison and logical operators (a single `=` in a condition compares), numeric and string variables, arrays (`setarray`), message codes (`#c #n #a #L #F #v #s`, and from 2.02 `#t #e #T`, from 2.03 `#p`), and the built-in functions `abs int sin cos arctan random strequals strlen startswith indexof ascii arraylen onwall playersays playersays2`. Scopes: `this.` is per object, `level.` clears on a level change, `server.` is global, `client.`/`local.`/plain names are flags.
 
+**Spellings the NPC corpus uses (2026-10-28).** The stress test (`client/tests/script_stress.rs`) parses every unique NPC script in `client/tests/fixtures/npc-scripts/`. These forms parse:
+
+- `if(` with no space, and `a&&b` with no spaces.
+- `elseif` as one word, also glued to the `}` before it. The client matches command names by prefix (as with `hurt1`), so `elseif` reads as `else` then `if`.
+- `in |lo,hi>`: the high bound is read above the comparisons, so the `>` closes the range.
+- A field after an index: `players[i].x`, `npcs[i].save[n]`, in conditions, expressions and assignments. The 2.05 client's tables list these with signatures `[R]N` and `[R]N[R]`.
+- `in {list}` inside a larger condition.
+- `<>`, `=<` and `=>`: the 2.05 client's comparison table holds them beside `!=`, `<=` and `>=`.
+
+With these, 444 of the corpus's 3,038 scripts still have diagnostics (498 before). Most of the rest use forms not found in the 2.05 client: `this.a = {1,2,3}` array literals (133 scripts), `with (...)` (64; the word first appears in the 2.17 client), the `?:` choice (33), empty arguments such as `seteffect ,,,;` (23), and `#P1(-1)`-style codes with a digit (10). Whether 2.1 and later clients accept the literals and `?:` was not read.
+
 **Text join and the chat attribute (2.1 and later).** `a @ b` joins two texts; `SPC`, `NL` and `TAB` join with a space, a line break or a tab between (the four operators of the GS2 grammar of the public GServer, where `@` binds looser than the comparisons and tighter than `&&`). `chat` (an object's bubble text, the same as the `message` command) and `player.chat` (the player's chat text, like `setplayerprop #c`) can be read and written; `player.account` and `player.nick` can be read. A level NPC script of a server that runs NPCs (`chat = player.account SPC "touched me";`) parsed with `expected ;` before. Open: scripts that are really GS2 (`temp.` variables, `this.x` methods, `{}` object literals) are still not run; and when the server runs the NPCs (`PLO_HASNPCSERVER`) a level file's NPC script is still run locally.
 
 **Commands.** About 150 are recognised, each with a signature and the version that introduced it. Commands that change the world are returned as `Effect` values for the host to apply (messages, warps, sounds, images, weapon grants, player movement, flags, `sendtoserver`); the offline client applies the ones it can and prints the rest to stderr. The visual-effect commands do nothing when online without an NPC server, as the original does.
