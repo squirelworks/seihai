@@ -47,6 +47,14 @@ Walking off a level edge teleports to the same coordinates on the destination. T
 
 `client/tests/fixtures/levels/new3.nw` is a real level with edge links. Claude should run the real 2.22 and 2.31 clients against it, then Seihai, and compare where each lands after walking off an edge. The arrival should be the opposite edge, not the same coordinates.
 
+## Draw order
+
+Trees and large objects are NPCs with `drawoverplayer`. Seihai draws the player on top of everything, so the player appears inside them. The draw order is a property of the NPC. Apply it so objects with `drawoverplayer` render after the player.
+
+## Debug
+
+The debug log should include the current level name on each line that changes it. The terminal already prints the level, but the log does not.
+
 ## From the decompiles
 
 These were in the cleaned notes and are not in Seihai yet:
