@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use super::tiles::{draw_gani_frame, Framebuffer, PoseSheets, TILE_PX};
+use super::tiles::{compose_gani_frame, draw_gani_frame, Framebuffer, PoseSheets, TILE_PX};
 use crate::assets::{DrawLayer, ImageEffect, Npc};
 use crate::offline::OfflineSession;
 
@@ -159,6 +159,15 @@ fn draw_animation(fb: &mut Framebuffer, session: &OfflineSession, npc: &Npc, art
     let Some(gani) = session.npc_ganis.get(name) else { return false };
     if gani.frame_count() == 0 || art.sheets.body.is_none() || art.sheets.head.is_none() {
         return false;
+    }
+    // A character with `setcoloreffect` or `setzoomeffect`: the whole figure
+    // is coloured and zoomed about its centre, as an image is.
+    if npc.effect.is_on() {
+        if let Some((ox, oy, w, px)) = compose_gani_frame(gani, npc.ani_frame, NPC_DIR, &art.sheets) {
+            let h = (px.len() / (w as usize * 4)) as i32;
+            blit_effect(fb, &px, w as i32, (0, 0, w as i32, h), dx + ox, dy + oy, npc.effect, npc.layer == DrawLayer::Light);
+        }
+        return true;
     }
     draw_gani_frame(fb, gani, npc.ani_frame, NPC_DIR, &art.sheets, dx, dy);
     true

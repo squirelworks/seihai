@@ -524,3 +524,33 @@ fn seteffect_shades_the_map_under_the_lights() {
     // The light is added on top of the shaded black: 128 blue + half red.
     assert_eq!(at(&fb, 6 * 16 + 1, 2 * 16 + 1), [100, 15, 143]);
 }
+
+// ---- effects on character NPCs ---------------------------------------------------
+
+#[test]
+fn a_character_npc_takes_its_colour_and_zoom_effect() {
+    let a = art();
+    let imgs = HashMap::new();
+    let script = |fx: &str| format!("NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {fx} }}\nNPCEND\n");
+    let pic = |fx: &str| {
+        let (mut s, _sc) = session(&script(fx));
+        with_default_ganis(&mut s);
+        draw_with(&s, &imgs, sheets(&a))
+    };
+    let plain = pic("");
+    // The same figure with no change to its colour: the same picture.
+    assert_eq!(pic("setcoloreffect 1,1,1,1;").pixels, plain.pixels);
+    // Red only: every drawn pixel keeps its red and loses green and blue.
+    let red = pic("setcoloreffect 1,0,0,1;");
+    let mut drawn = 0;
+    for (p, q) in plain.pixels.chunks(3).zip(red.pixels.chunks(3)) {
+        if p != [0, 0, 0] {
+            drawn += 1;
+            assert_eq!(q, [p[0], 0, 0]);
+        }
+    }
+    assert!(drawn > 100, "the figure is drawn");
+    // Zoom 2: the figure covers more of the picture.
+    let count = |fb: &Framebuffer| fb.pixels.chunks(3).filter(|p| *p != [0, 0, 0]).count();
+    assert!(count(&pic("setzoomeffect 2;")) > 3 * count(&plain));
+}
