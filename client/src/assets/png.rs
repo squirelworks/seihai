@@ -116,6 +116,14 @@ fn zlib_rows(data: &[u8], stride: usize) -> io::Result<Vec<u8>> {
 /// five row filters. Returns `(width, height, pixels)` where `pixels`
 /// is row-major RGBA.
 pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
+    read_png_rgba_recolored(data, &[])
+}
+
+/// Like [`read_png_rgba`], with some palette entries of a palette PNG
+/// replaced first: `(index, rgb)`. Alpha still comes from the image. Other
+/// colour types ignore `recolor`. This is how a body picture is drawn in
+/// the player's colours (see `looks.rs`).
+pub fn read_png_rgba_recolored(data: &[u8], recolor: &[(usize, [u8; 3])]) -> io::Result<(u32, u32, Vec<u8>)> {
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, m.to_string());
     if data.len() < 8 || &data[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         return Err(bad("not a PNG"));
@@ -167,6 +175,11 @@ pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
     }
     if color_type == 3 && palette.is_empty() {
         return Err(bad("palette PNG without PLTE"));
+    }
+    for &(idx, rgb) in recolor {
+        if let Some(entry) = palette.get_mut(idx * 3..idx * 3 + 3) {
+            entry.copy_from_slice(&rgb);
+        }
     }
     let mut dec = ZlibDecoder::new(&idat[..]);
     let mut raw = Vec::new();

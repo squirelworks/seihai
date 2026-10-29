@@ -990,6 +990,24 @@ impl Connection {
         self.send_messages(&[msg])
     }
 
+    /// Tell the server the player's looks changed: `PLI_PLAYERPROPS` (2)
+    /// with HEADGIF (11, length + 100 then the name), BODYIMG (35, a
+    /// GSTRING) and COLORS (13, five GCHARs). The defaults go as their
+    /// names (`head0.png`, `body.png`).
+    pub fn send_looks(&mut self, looks: &crate::looks::Looks) -> io::Result<()> {
+        let mut msg = vec![2 + 0x20, 11 + 0x20];
+        let head = looks.head_name().as_bytes();
+        let head = &head[..head.len().min(123)];
+        msg.push((head.len() + 100) as u8 + 0x20);
+        msg.extend_from_slice(head);
+        msg.push(35 + 0x20);
+        push_gstring_latin1(&mut msg, looks.body_name());
+        msg.push(13 + 0x20);
+        msg.extend(looks.colors.map(|c| c + 0x20));
+        msg.push(b'\n');
+        self.send_messages(&[msg])
+    }
+
     /// Send a toall: `PLI_TOALL` (6) with a GSTRING message.
     pub fn send_toall(&mut self, text: &str) -> io::Result<()> {
         let mut msg = vec![6 + 0x20];

@@ -62,12 +62,12 @@ class Pal:
         return out
 
 
-def save_png(im, pal, path, bits, size, transparent):
+def save_png(im, pal, path, bits, size, transparent, clear=0):
     assert len(pal.names) <= size, (path, len(pal.names), size)
     im.putpalette(pal.flat(size))
     kw = dict(optimize=True, bits=bits, compress_level=9)
     if transparent:
-        kw["transparency"] = 0
+        kw["transparency"] = clear
     im.save(path, "PNG", **kw)
 
 
@@ -576,7 +576,27 @@ def build_body():
         sheet.paste(body_carry_cell(pal, dr, None), (dr * 32, 32 * POSE_CARRY_STILL))
         for k in range(8):
             sheet.paste(body_carry_cell(pal, dr, k), (dr * 32, 32 * (POSE_CARRY_WALK + k)))
-    return sheet, pal
+    return body_colour_layout(sheet, pal)
+
+
+# The 2.05 client draws a body in the player's colours by replacing palette
+# entries: 0 outline, 1 belt, 3 shoes, 4 sleeves, 5 skin, 6 coat (entry 2 is
+# the clear colour in the stock bodies). See documentation/appearance.md.
+# The shades of those parts are folded into them so a recoloured body has
+# no stray tunic or skin tones left.
+BODY_LAYOUT = ["outline", "belt", "clear", "boot", "tunic_dk", "skin", "tunic"]
+BODY_FOLD = {"tunic_lt": "tunic", "skin_dk": "skin", "boot_dk": "boot"}
+BODY_CLEAR = 2
+
+
+def body_colour_layout(sheet, pal):
+    order = BODY_LAYOUT + [n for n in pal.names if n not in BODY_LAYOUT and n not in BODY_FOLD]
+    new = Pal()
+    for n in order:
+        new.add(n, pal.rgb[pal[n]])
+    lut = [new[BODY_FOLD.get(n, n)] for n in pal.names]
+    data = bytes(lut[b] for b in sheet.tobytes())
+    return Image.frombytes("P", sheet.size, data), new
 
 
 def head_palette():
@@ -1221,7 +1241,7 @@ def write_all(out):
     open(os.path.join(out, "tiledefs.txt"), "w", newline="\n").write(tiledefs_text())
 
     im, p = build_body()
-    save_png(im, p, os.path.join(out, "bodies", "body.png"), 4, 16, True)
+    save_png(im, p, os.path.join(out, "bodies", "body.png"), 4, 16, True, BODY_CLEAR)
     im, p = build_head()
     save_png(im, p, os.path.join(out, "heads", "head0.png"), 8, 16, True)
     im, p = build_sword()

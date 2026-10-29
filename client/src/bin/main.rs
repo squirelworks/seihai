@@ -195,6 +195,43 @@ fn look_image_pass(
     added
 }
 
+/// Draw body pictures in the colours they are worn in (see `looks.rs`) and
+/// keep each under [`seihai::looks::colored_body_key`] in `images`. The
+/// picture's bytes come from the asset folders (looked for once a name, kept
+/// in `raw`) or from the files the server sent. A body not here yet is
+/// asked for by [`look_image_pass`] under its plain name.
+fn colored_body_pass(
+    wanted: &[(String, [u8; 5])],
+    resolver: &AssetResolver,
+    files: &mut FileSession,
+    raw: &mut HashMap<String, Vec<u8>>,
+    tried: &mut HashSet<String>,
+    images: &mut HashMap<String, (u32, Vec<u8>)>,
+) -> bool {
+    let mut added = false;
+    for (name, colors) in wanted {
+        let key = seihai::looks::colored_body_key(name, colors);
+        if images.contains_key(&key) {
+            continue;
+        }
+        if !raw.contains_key(name) {
+            let mut got = None;
+            if tried.insert(format!("colored body {name}")) {
+                got = resolver.image_in("bodies", name).and_then(|p| std::fs::read(p).ok());
+            }
+            if let Some(data) = got.or_else(|| files.store.read(name)) {
+                raw.insert(name.clone(), data);
+            }
+        }
+        let Some(data) = raw.get(name) else { continue };
+        if let Ok((w, _, px)) = seihai::assets::read_png_rgba_recolored(data, &seihai::looks::body_recolor(colors)) {
+            images.insert(key, (w, px));
+            added = true;
+        }
+    }
+    added
+}
+
 /// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
 /// one we have), and the `PLI_ADJACENTLEVEL` messages in one frame.
 fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files: &mut FileSession) {
@@ -954,8 +991,9 @@ fn main() {
                 if let Some((gani, frame)) = seihai::render::other_pose(session, other, clock_ms) {
                     let own = |n: &Option<String>| n.as_deref().and_then(|n| npc_imgs.get(n)).map(pose_sheet);
                     let l = &other.looks;
+                    let colored = npc_imgs.get(&other_body_key(other)).map(pose_sheet);
                     let sheets = seihai::render::PoseSheets {
-                        body: own(&l.body).or(body.as_ref().map(pose_sheet)),
+                        body: colored.or(own(&l.body)).or(body.as_ref().map(pose_sheet)),
                         head: own(&l.head).or(head.as_ref().map(pose_sheet)),
                         sprites: sprites.as_ref().map(pose_sheet),
                         // No sword prop yet: the default sword; power 0: none.
@@ -1002,9 +1040,14 @@ fn main() {
         let pose = session.current_pose();
         match (&body, &head) {
             (Some(_), Some(_)) if pose.is_some() => {
+                // Our own head and body, the body in our colours; until
+                // they are here, the default pictures.
+                let looks = &session.looks;
+                let own_body = npc_imgs.get(&seihai::looks::colored_body_key(looks.body_name(), &looks.colors));
+                let own_head = npc_imgs.get(looks.head_name());
                 let sheets = seihai::render::PoseSheets {
-                    body: body.as_ref().map(pose_sheet),
-                    head: head.as_ref().map(pose_sheet),
+                    body: own_body.or(body.as_ref()).map(pose_sheet),
+                    head: own_head.or(head.as_ref()).map(pose_sheet),
                     sprites: sprites.as_ref().map(pose_sheet),
                     sword: sword_sheet.as_ref().map(pose_sheet),
                     // The default shield of the player's shield power.
@@ -1076,6 +1119,8 @@ fn main() {
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
     let mut look_tried = std::collections::HashSet::new();
+    // Body pictures as read, for drawing them in other colours.
+    let mut body_raw: HashMap<String, Vec<u8>> = HashMap::new();
     let mut my_chat = String::new();
     // How long our own bubble has left, and the clock that runs it.
     let mut my_chat_timer = seihai::chatlists::BubbleTimer::default();
@@ -1466,6 +1511,20 @@ fn main() {
                     session.player_dir = d;
                 }
                 session.opened_chests.extend(net_state.opened_chests.drain(..));
+                // Our head, body and colours as the server has them (after a
+                // `sethead` chat command, for one).
+                if let Some(h) = net_state.own_head.take() {
+                    session.looks.head = Some(h);
+                    dirty = true;
+                }
+                if let Some(b) = net_state.own_body.take() {
+                    session.looks.body = Some(b);
+                    dirty = true;
+                }
+                if let Some(c) = net_state.own_colors.take() {
+                    session.looks.colors = c;
+                    dirty = true;
+                }
                 // Hearts, AP and STATUS the server gave.
                 if let Some(st) = net_state.own_status.take() {
                     status_base = st;
@@ -2280,6 +2339,18 @@ fn main() {
                             // line (a jail NPC turns "unstick me" into something
                             // else); the real client sends only what is left.
                             let t = if no_scripts { t } else { scripts.chat(&mut session, &t) };
+                            // Looks commands (`sethead head927`, `set body body13`,
+                            // `setcoat red`). A server runs them itself and sends
+                            // the props back, so online the line goes out in the
+                            // server's form; offline Seihai applies it.
+                            let t = match seihai::looks::parse_chat_look(&t) {
+                                Some(cmd) if conn.is_some() => cmd.server_line(),
+                                Some(cmd) => {
+                                    apply_chat_look(&mut session, &cmd);
+                                    t
+                                }
+                                None => t,
+                            };
                             // History + bubble + held bubble clock (ui::own_say).
                             let who = me(&net_state, &account);
                             ui::own_say(&mut net_state, &who, &t, &mut my_chat, &mut my_chat_timer);
@@ -2440,6 +2511,14 @@ fn main() {
                 }
             }
         }
+        // A script changed our looks (`sethead`, `setcoatcolor` …): the
+        // server and the other players see it from our props.
+        if std::mem::take(&mut session.looks_changed) {
+            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks)) {
+                eprintln!("looks send failed: {e}");
+            }
+            dirty = true;
+        }
         // The pictures other players and our own shield are drawn with.
         {
             let mut wanted: Vec<(&str, String)> =
@@ -2448,7 +2527,18 @@ fn main() {
             if !own_shield.is_empty() {
                 wanted.push(("shields", own_shield));
             }
+            wanted.push(("heads", session.looks.head_name().to_string()));
+            wanted.push(("bodies", session.looks.body_name().to_string()));
             if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried) {
+                dirty = true;
+            }
+            let mut bodies: Vec<(String, [u8; 5])> = net_state
+                .others
+                .iter()
+                .map(|o| (o.looks.body.clone().unwrap_or_else(|| seihai::looks::DEFAULT_BODY.into()), o.looks.colors.unwrap_or(seihai::looks::DEFAULT_COLORS)))
+                .collect();
+            bodies.push((session.looks.body_name().to_string(), session.looks.colors));
+            if colored_body_pass(&bodies, &resolver, &mut files, &mut body_raw, &mut look_tried, &mut npc_images) {
                 dirty = true;
             }
         }
@@ -2575,4 +2665,21 @@ fn save_screenshot(fb: &Framebuffer) -> std::io::Result<PathBuf> {
     let mut out = std::fs::File::create(&path)?;
     write_png_rgb(&mut out, fb.width, fb.height, &fb.pixels)?;
     Ok(path)
+}
+
+/// The key another player's body is drawn under: their body (or the
+/// default) in their colours (or the defaults).
+fn other_body_key(o: &seihai::protocol::OtherPlayer) -> String {
+    let body = o.looks.body.as_deref().filter(|b| !b.is_empty()).unwrap_or(seihai::looks::DEFAULT_BODY);
+    seihai::looks::colored_body_key(body, &o.looks.colors.unwrap_or(seihai::looks::DEFAULT_COLORS))
+}
+
+/// Apply a looks command typed in chat, offline.
+fn apply_chat_look(session: &mut OfflineSession, cmd: &seihai::looks::ChatLook) {
+    use seihai::looks::{with_image_ext, ChatLook};
+    match cmd {
+        ChatLook::Head(h) => session.looks.head = Some(with_image_ext(h)),
+        ChatLook::Body(b) => session.looks.body = Some(with_image_ext(b)),
+        ChatLook::Color { slot, color } => session.looks.colors[*slot] = *color,
+    }
 }

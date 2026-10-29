@@ -365,6 +365,26 @@ impl SessionScripts {
                         }
                     }
                 }
+                // The player's looks (`documentation/appearance.md`). In 2.05
+                // these change the player whichever object runs them.
+                Effect::Command { ref name, ref args, .. } if name == "sethead" || name == "setbody" => {
+                    let pic = args.first().map(|v| v.text()).unwrap_or_default();
+                    let pic = pic.trim();
+                    if !pic.is_empty() {
+                        let slot = if name == "sethead" { &mut s.looks.head } else { &mut s.looks.body };
+                        *slot = Some(pic.to_string());
+                        s.looks_changed = true;
+                    }
+                }
+                Effect::Command { ref name, ref args, .. } if crate::looks::color_slot(name).is_some() => {
+                    if let (Some(slot), Some(c)) = (crate::looks::color_slot(name), args.first().map(|v| v.num())) {
+                        let c = c.round();
+                        if (0.0..20.0).contains(&c) {
+                            s.looks.colors[slot] = c as u8;
+                            s.looks_changed = true;
+                        }
+                    }
+                }
                 // Character props on an NPC: head, body, colors, shield.
                 Effect::SetCharProp { obj, code, value } => {
                     if let Some(n) = self.level_npc(s, obj) {
@@ -759,5 +779,24 @@ mod tests {
         let mut sc = SessionScripts::new(ClientVersion::V205);
         sc.load_level(&mut s, "town.nw");
         assert_eq!(sc.chat(&mut s, "unstick me"), "unstick me");
+    }
+
+    const CLOTHES: &str = "GLEVNW01\n\
+        NPC - 20 20\n\
+        //#CLIENTSIDE\n\
+        if (created) { setbody body13.png; sethead head927.png; setskincolor 18; setcoatcolor red; setbeltcolor 25; }\n\
+        NPCEND\n";
+
+    #[test]
+    fn looks_commands_change_the_player() {
+        let mut s = session(CLOTHES);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "shop.nw");
+        assert_eq!(s.looks.body.as_deref(), Some("body13.png"));
+        assert_eq!(s.looks.head.as_deref(), Some("head927.png"));
+        // Skin 18, coat red (4); a belt past the list is left alone.
+        assert_eq!(s.looks.colors, [18, 4, 18, 5, 18]);
+        assert!(s.looks_changed);
+        assert!(sc.unhandled.iter().all(|e| !format!("{e:?}").contains("set")), "{:?}", sc.unhandled);
     }
 }

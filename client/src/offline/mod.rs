@@ -198,6 +198,12 @@ pub struct OfflineSession {
     /// Sword power 1–4 and shield power 1–3.
     pub sword_power: u8,
     pub shield_power: u8,
+    /// Head, body and body colours (`sethead`, `setbody`, `set*color`,
+    /// the chat commands, or prop 13 from the server).
+    pub looks: crate::looks::Looks,
+    /// Set when a script or chat line changed `looks`, so the game loop
+    /// can tell the server; cleared by the loop.
+    pub looks_changed: bool,
     /// Whether the glove is held, and its power.
     pub glove_power: u8,
     /// Ledge jumps, pushing, and the A key's grab and pull (see
@@ -418,6 +424,8 @@ impl OfflineSession {
             darts: 10,
             sword_power: 1,
             shield_power: 1,
+            looks: crate::looks::Looks::default(),
+            looks_changed: false,
             glove_power: 0,
             pushpull: PushPull::default(),
             max_hearts: 6,

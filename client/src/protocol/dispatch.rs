@@ -250,6 +250,8 @@ pub struct OtherLooks {
     pub head: Option<String>,
     pub body: Option<String>,
     pub gani: Option<String>,
+    /// Body colours (prop 13: skin, coat, sleeves, shoes, belt).
+    pub colors: Option<[u8; 5]>,
 }
 
 impl OtherLooks {
@@ -258,6 +260,9 @@ impl OtherLooks {
             if new.is_some() {
                 *old = new;
             }
+        }
+        if u.colors.is_some() {
+            self.colors = u.colors;
         }
     }
 }
@@ -372,6 +377,12 @@ pub struct SessionState {
     pub own_cur_power: Option<u8>,
     pub own_status: Option<u8>,
     pub own_alignment: Option<u8>,
+    /// Own head (11), body (35) and colours (13) from `PLO_PLAYERPROPS`,
+    /// taken by the game loop. A server sends these after a `sethead`,
+    /// `setbody` or `setcoat` … chat command, for one.
+    pub own_head: Option<String>,
+    pub own_body: Option<String>,
+    pub own_colors: Option<[u8; 5]>,
     /// Read prop 10 as the pre-2.1 bow slot.
     pub bow_prop10: bool,
     /// Server→client ids this client version handles. Others are counted
@@ -1402,6 +1413,9 @@ impl SessionState {
                 (18, Some(v)) => self.own_status = Some(v),
                 (32, Some(v)) => self.own_alignment = Some(v),
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
+                (11, _) => self.own_head = head_image(&prop.raw),
+                (35, _) => self.own_body = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))).filter(|b| !b.is_empty()),
+                (13, _) => self.own_colors = crate::looks::colors_from_prop(&prop.raw),
                 _ => {}
             }
         }
@@ -1505,6 +1519,7 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             10 if !bow_prop10 => u.looks.gani = Some(text(&prop.raw)).filter(|g| !g.is_empty()),
             11 => u.looks.head = head_image(&prop.raw),
             35 => u.looks.body = Some(text(&prop.raw)).filter(|b| !b.is_empty()),
+            13 => u.looks.colors = crate::looks::colors_from_prop(&prop.raw),
             18 => u.status = prop.gchar(),
             19 => u.carry = prop.raw.first().map(|&b| crate::throwing::carry_sprite_from_wire(crate::throwing::carry_code_from_byte(b))),
             32 => u.ap = prop.gchar(),
@@ -1686,7 +1701,7 @@ mod tests {
         let want = |s: &str| Some(s.to_string());
         assert_eq!(
             u.looks,
-            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk") }
+            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk"), colors: None }
         );
         // Plain powers name the default pictures; 0 is none.
         let u = parse_other_player(&[0x20, 0x22, g(8), g(2), g(9), g(0), g(11), g(4)], false, None).unwrap();
@@ -2098,6 +2113,26 @@ mod tests {
             (st.own_max_power, st.own_cur_power, st.own_status, st.own_alignment),
             (Some(3), Some(5), Some(0x14), Some(50))
         );
+    }
+
+    #[test]
+    fn own_and_others_looks_from_props() {
+        let mut st = SessionState::default();
+        // HEADGIF "head927.png" (length + 100), BODYIMG "body13.png", COLORS.
+        let mut props = vec![11 + 0x20, 11 + 100 + 0x20];
+        props.extend(b"head927.png");
+        props.extend([35 + 0x20, 10 + 0x20]);
+        props.extend(b"body13.png");
+        props.extend([13 + 0x20, 0x32, 0x2f, 0x2b, 0x2b, 0x32]);
+        st.apply_body(&[&[9 + 0x20][..], &props, b"\n"].concat());
+        assert_eq!(st.own_head.as_deref(), Some("head927.png"));
+        assert_eq!(st.own_body.as_deref(), Some("body13.png"));
+        assert_eq!(st.own_colors, Some([18, 15, 11, 11, 18]));
+        st.apply_body(&other(7, &[13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32]));
+        assert_eq!(st.others[0].looks.colors, Some([2, 0, 10, 4, 18]));
+        // A later update without prop 13 keeps the colours.
+        st.apply_body(&other(7, &[15 + 0x20, 0x30]));
+        assert_eq!(st.others[0].looks.colors, Some([2, 0, 10, 4, 18]));
     }
 
     #[test]
