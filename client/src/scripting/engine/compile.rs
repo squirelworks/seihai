@@ -197,6 +197,9 @@ impl Compiler {
             Stmt::Unknown { name, raw, reason, line } => {
                 self.emit(Node::Unknown { name: name.clone(), raw: raw.clone(), reason, line: *line });
             }
+            Stmt::With { line, .. } => {
+                self.emit(Node::Unknown { name: "with".into(), raw: String::new(), reason: "body skipped: objects are not switched", line: *line });
+            }
         }
     }
 

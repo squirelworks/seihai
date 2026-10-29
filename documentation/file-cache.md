@@ -71,12 +71,28 @@ written into the user's asset folder and never into the built-in set.
   layer, the download store and the sound folders all change; the in-memory
   copies of the old server are dropped).
 
+### The cache in the Seihai folder (laundry list P2, 2026-10-29)
+
+A second cache sits next to the program: `<Seihai folder>/_cache/<host>_<port>/`,
+where the Seihai folder is the folder the program file is in. It is named by
+the key only (no `~name`) and has the same inside layout as the settings'
+cache. It is searched **before** the settings' cache, and every download is
+written to **both**, so a fresh run from the same folder finds what the last
+one received. The settings' cache stays as the second copy. When one of the two
+cannot be written (a Seihai folder without write access), the other copy is
+kept and the download does not fail. A server warp switches both.
+
+Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): the first run saved
+`onlinestartlocal.nw` and `server.txt` in both caches. With the settings' cache
+deleted, the second run loaded the level from `_cache/` without asking for it.
+
 ### Search order
 
 A name is looked up in three layers, one after the other. Inside a layer the
 folder order of its kind is the one in `documentation/assets.md`.
 
-1. the **server's cache folder** (what this server sent),
+1. the **server's cache folders** (what this server sent): the Seihai
+   folder's `_cache/<host>_<port>/`, then the settings' one,
 2. the user's **asset folder** (`--assets` / `assets=`), if there is one,
 3. the **built-in default set** (read-only).
 
