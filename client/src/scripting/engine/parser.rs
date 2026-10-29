@@ -264,6 +264,8 @@ impl<'a> Parser<'a> {
                 let cond = if self.is_op(";") { None } else { Some(self.expr()) };
                 self.expect_op(";");
                 let step = self.simple_stmt().map(Box::new);
+                // `for (i=0;i<3;i++;)`: a `;` after the step is let through.
+                self.eat_op(";");
                 self.expect_op(")");
                 let body = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
                 Some(Stmt::For { init, cond, step, body })
@@ -323,6 +325,15 @@ impl<'a> Parser<'a> {
                 let then = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
                 Some(Stmt::If { cond, then, els: None })
             }
+            // `with (target) body`: from the 2.1 clients (the word first
+            // appears in 2.17) and the NPC server.
+            "with" if self.era >= Era::V21 && self.is_op("(") => {
+                self.next();
+                let target = self.expr();
+                self.expect_op(")");
+                let body = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                Some(Stmt::With { target, body, line })
+            }
             "else" => {
                 self.diag("`else` without `if`");
                 self.recover();
@@ -365,7 +376,7 @@ impl<'a> Parser<'a> {
         }
         // Not a command here. Keep its text and move on.
         self.unpeek();
-        let raw = self.lx.raw_arg(b";}");
+        let raw = self.lx.raw_arg_braced(b";}");
         self.end_stmt();
         let reason = if vocab::command(&w).is_some() { "not available in this version" } else { "unknown command" };
         Some(Stmt::Unknown { name: w, raw, reason, line })
@@ -398,7 +409,10 @@ impl<'a> Parser<'a> {
                 // The last argument takes the rest of the statement, commas included.
                 let last = i + 1 >= sig.len();
                 let stops: &[u8] = if last { b";}" } else { b",;}" };
-                args.push(Arg::Text(self.lx.raw_arg(stops)));
+                args.push(Arg::Text(self.lx.raw_arg_braced(stops)));
+            } else if self.is_op(",") {
+                // An empty number argument (`seteffect ,,,;`) is 0.
+                args.push(Arg::Num(Expr::Num(0.0)));
             } else {
                 args.push(Arg::Num(self.arg_expr(letter)));
             }
@@ -495,7 +509,14 @@ impl<'a> Parser<'a> {
             self.leave();
             return Expr::Num(0.0);
         }
-        let e = self.binary(1);
+        let mut e = self.binary(1);
+        // `cond ? a : b` (2.1 and later), the loosest operator.
+        if self.era >= Era::V21 && self.eat_op("?") {
+            let then = self.expr();
+            self.expect_op(":");
+            let els = self.expr();
+            e = Expr::Cond { cond: Box::new(e), then: Box::new(then), els: Box::new(els) };
+        }
         self.leave();
         e
     }
@@ -569,6 +590,10 @@ impl<'a> Parser<'a> {
             }
             self.expect_op("}");
             Expr::InList { e, list }
+        } else if let (true, Tok::Ident(name)) = (self.era >= Era::V21, self.peek().tok.clone()) {
+            // `x in this.list`: the values of an array (2.1 and later).
+            self.next();
+            Expr::InArray { e, name }
         } else {
             self.diag("`in` needs |lo,hi| or {list}");
             Expr::InList { e, list: Vec::new() }
@@ -612,6 +637,20 @@ impl<'a> Parser<'a> {
                 let e = self.expr();
                 self.expect_op(")");
                 e
+            }
+            // `{1,2,3}`: an array value (2.1 and later), as in
+            // `this.a = {1,2,3}` and `showpoly 300,{0,0,32,0,...}`.
+            Tok::Op("{") if self.era >= Era::V21 => {
+                self.next();
+                let mut list = Vec::new();
+                while !self.is_op("}") && !matches!(self.peek().tok, Tok::Eof) {
+                    list.push(self.expr());
+                    if !self.eat_op(",") {
+                        break;
+                    }
+                }
+                self.expect_op("}");
+                Expr::List(list)
             }
             Tok::Ident(w) => {
                 self.next();
@@ -761,6 +800,19 @@ mod tests {
         assert_eq!(g("if (x in |a,b+1> && y) hide;"), "(if (&& (in x range a (+ b 1)) y) (cmd hide))\n");
         // A list inside a larger condition.
         assert_eq!(g("if (a==1 && x in {1,2}) hide;"), "(if (&& (== a 1) (in x list 1 2)) (cmd hide))\n");
+    }
+
+    #[test]
+    fn forms_from_2_1() {
+        assert_eq!(g("this.a = {1, x+1};"), "(= this.a (list 1 (+ x 1)))\n");
+        assert_eq!(g("x = (a>1)?2:3;"), "(= x (? (> a 1) 2 3))\n");
+        assert_eq!(g("changeimgvis 300+i,(i==0)?4:5;"), "(cmd changeimgvis (+ 300 i) (? (== i 0) 4 5))\n");
+        assert_eq!(g("with (getnpc(db)) { x = 1; }"), "(with (call getnpc db) (block (= x 1)))\n");
+        // An empty number argument is 0, in every version.
+        assert_eq!(g("seteffect ,,,;"), "(cmd seteffect 0 0 0)\n");
+        assert!(parse("seteffect ,,,;", Era::V205).diagnostics.is_empty());
+        // A code with digits keeps its argument whole inside a call.
+        assert_eq!(g("x = strtofloat(#P1(-1));"), "(= x (call strtofloat \"#P1(-1)\"))\n");
     }
 
     #[test]

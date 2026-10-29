@@ -13,7 +13,7 @@ use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
 mod pushpull;
-pub use pushpull::{BlockMoved, Grab, Jump, PushPull, Trigger};
+pub use pushpull::{Grab, Jump, PushPull, Trigger};
 use pushpull::StepResult;
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
@@ -145,6 +145,9 @@ pub struct OfflineSession {
     /// NPCs a thrown object hit since the last [`Self::take_pelts`]: the
     /// id the caller's NPC test returned, for the `waspelt` event.
     pelts: Vec<usize>,
+    /// Board areas the player changed since the last
+    /// [`Self::take_board_changes`].
+    board_changes: Vec<BoardChange>,
     /// Another player's thrown object hurt the player since the last
     /// [`Self::take_throw_hurt`].
     throw_hurt: bool,
@@ -306,6 +309,17 @@ pub struct Landing {
 }
 
 /// What an interact press did.
+/// A rectangle of the player's level the client changed, with its new tiles
+/// row by row (see [`OfflineSession::take_board_changes`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoardChange {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub tiles: Vec<u16>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Interaction {
     /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
@@ -391,6 +405,7 @@ impl OfflineSession {
             landings: Vec::new(),
             throw_ms: 0,
             pelts: Vec::new(),
+            board_changes: Vec::new(),
             throw_hurt: false,
             player_x: 30.0,
             player_y: 30.0,
@@ -882,6 +897,7 @@ impl OfflineSession {
         let tiles = tables.lift[kind];
         let left = tables.lift_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
+        self.note_board_change(ax, ay, 2, 2);
         self.carried = Some(Carried { kind, tiles });
         Some(kind)
     }
@@ -1025,6 +1041,27 @@ impl OfflineSession {
         self.throw_hurt = true;
     }
 
+    /// Note that the player changed the `w` x `h` tiles at `(x, y)` of the
+    /// current level (a lift, a cut, a moved stone block), clipped to the
+    /// board, with the tiles as they are now.
+    pub(crate) fn note_board_change(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        let Some(level) = self.current_level.as_ref() else { return };
+        let (x0, y0) = (x.max(0), y.max(0));
+        let (x1, y1) = ((x + w).min(64), (y + h).min(64));
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let tiles = (y0..y1).flat_map(|ty| (x0..x1).map(move |tx| (tx, ty))).map(|(tx, ty)| level.tile_id_at(tx, ty).unwrap_or(0)).collect();
+        self.board_changes.push(BoardChange { x: x0, y: y0, width: x1 - x0, height: y1 - y0, tiles });
+    }
+
+    /// The board areas the player changed since the last call. Online each
+    /// goes to the server as a `PLI_BOARDMODIFY`, which shows the change to
+    /// the other players in the level.
+    pub fn take_board_changes(&mut self) -> Vec<BoardChange> {
+        std::mem::take(&mut self.board_changes)
+    }
+
     /// NPCs hit by thrown objects since the last call (for `waspelt`).
     pub fn take_pelts(&mut self) -> Vec<usize> {
         std::mem::take(&mut self.pelts)
@@ -1050,6 +1087,7 @@ impl OfflineSession {
         let (kind, ax, ay) = self.current_level.as_ref()?.find_object(&tables.cut, tables.cut.len(), px, py)?;
         let left = tables.cut_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
+        self.note_board_change(ax, ay, 2, 2);
         // The cut plays the break effect of its table entry (bush: the leaves
         // of the thrown bush), anchored on the object's top-left tile.
         // Which effect each cut entry plays is inferred, see
@@ -2075,6 +2113,10 @@ mod tests {
         face_up_at(&mut s, 20, 20);
         assert!(s.start_swing());
         assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT);
+        let c = s.take_board_changes();
+        assert_eq!(c.len(), 1, "the cut goes to the server as one board modify");
+        assert_eq!((c[0].x, c[0].y, c[0].width, c[0].height), (20, 20, 2, 2));
+        assert_eq!(c[0].tiles, [BUSH_CUT[0][0], BUSH_CUT[1][0], BUSH_CUT[0][1], BUSH_CUT[1][1]].map(|t| t as u16), "row by row");
     }
 
     #[test]
@@ -2083,6 +2125,9 @@ mod tests {
         face_up_at(&mut s, 20, 20);
         assert_eq!(s.interact(), Interaction::Lifted { kind: 0 });
         assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT, "the bush leaves its stump");
+        let c = s.take_board_changes();
+        assert_eq!((c.len(), c[0].x, c[0].y, c[0].width, c[0].height), (1, 20, 20, 2, 2), "the lift is a 2 x 2 board modify");
+        assert_eq!(c[0].tiles, [BUSH_CUT[0][0], BUSH_CUT[1][0], BUSH_CUT[0][1], BUSH_CUT[1][1]].map(|t| t as u16), "row by row");
         assert_eq!(s.carried.as_ref().unwrap().tiles, [[2u16, 18], [3, 19]]);
         // Hands full: A throws it.
         assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });

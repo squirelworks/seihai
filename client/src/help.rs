@@ -115,9 +115,13 @@ mod tests {
     use std::collections::BTreeSet;
 
     /// Every `minifb::Key::Name` read by the game loop, and the default
-    /// keys of every `Action::Name` it uses.
+    /// keys of every `Action::Name` it uses (the sign keys are decided in
+    /// `render/signs.rs` for it).
     fn keys_in_main() -> BTreeSet<String> {
-        let src = include_str!("bin/main.rs");
+        let signs = include_str!("render/signs.rs");
+        let signs = signs.split("#[cfg(test)]").next().unwrap_or(signs);
+        let src = [include_str!("bin/main.rs"), signs].concat();
+        let src = src.as_str();
         let mut out = BTreeSet::new();
         let mut rest = src;
         while let Some(i) = rest.find("minifb::Key::") {

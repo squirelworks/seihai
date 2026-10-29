@@ -24,8 +24,8 @@
 //!   changed here.
 //! * **Dead** shows `dead.gani` while the player is dead, one step per tick
 //!   of the death timer, held on its last step. The 2.05 client plays the
-//!   local `dead` gani on death; Seihai's default set has none, so without a
-//!   data folder the idle figure is drawn as before.
+//!   local `dead` gani on death. Seihai's default set has its own: the hurt
+//!   pose, kneeling, then lying on the back.
 //! * **Push**, **grab** and **pull** follow [`crate::offline::PushPull`]:
 //!   the push pose after 17 blocked steps in a row (one step of `push.gani`
 //!   per blocked step), the grab pose while A holds a wall, and the pull pose

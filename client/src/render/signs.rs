@@ -3,6 +3,7 @@
 //! the 2.05 client draws a sign it is reading. See `documentation/signs.md`.
 
 use super::tiles::{Framebuffer, Sheet};
+use crate::keys::Action;
 
 /// The glyph order of `letters.png`: a character's index in this string is
 /// its glyph. The `#` places hold glyphs that have no plain character of
@@ -154,9 +155,56 @@ pub fn previous_page(first: usize) -> Option<usize> {
     (first >= LINES_PER_PAGE).then(|| first - LINES_PER_PAGE)
 }
 
+/// What a key does to a sign being read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignKey {
+    /// Up: the page before.
+    Back,
+    /// The map key: stop reading at once.
+    Close,
+    /// Any other game key (the arrows but Up, D, S, A, the item list and
+    /// pause): the next page, or stop on the last.
+    Next,
+}
+
+/// The 2.05 sign keys. While a sign is open the game keys work it and
+/// nothing else: the player does not walk, swing, lift or use an item.
+/// `pressed` says whether an action's key went down this frame; `held` that
+/// some game key (switch-to-chat aside) was down the frame before, in which
+/// case nothing counts, so a key held from before the sign (the arrow that
+/// walked into it) or a second key pressed while one is held does nothing.
+pub fn sign_key(pressed: impl Fn(Action) -> bool, held: bool) -> Option<SignKey> {
+    if held {
+        return None;
+    }
+    if pressed(Action::Map) {
+        return Some(SignKey::Close);
+    }
+    if pressed(Action::Up) {
+        return Some(SignKey::Back);
+    }
+    Action::ALL
+        .iter()
+        .any(|&a| !matches!(a, Action::Up | Action::Map | Action::SwitchToChat) && pressed(a))
+        .then_some(SignKey::Next)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sign_keys_follow_2_05() {
+        let only = |k: Action| move |a: Action| a == k;
+        assert_eq!(sign_key(only(Action::Map), false), Some(SignKey::Close));
+        assert_eq!(sign_key(only(Action::Up), false), Some(SignKey::Back));
+        for k in [Action::Left, Action::Down, Action::Right, Action::Item, Action::Attack, Action::Act, Action::ItemList, Action::Pause] {
+            assert_eq!(sign_key(only(k), false), Some(SignKey::Next), "{k:?}");
+        }
+        assert_eq!(sign_key(only(Action::SwitchToChat), false), None);
+        assert_eq!(sign_key(|_| false, false), None);
+        assert_eq!(sign_key(only(Action::Attack), true), None, "a key was still down");
+    }
 
     /// A 256×224 RGBA sheet where every glyph is opaque in its own colour.
     fn sheet() -> Vec<u8> {
