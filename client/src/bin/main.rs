@@ -232,6 +232,10 @@ fn colored_body_pass(
     added
 }
 
+/// Heart containers `--dev-repair-hearts` asks for: GServer-v2's default
+/// `heartlimit`.
+const DEV_REPAIR_HEARTS: u8 = 3;
+
 /// Tell the server what changed in the player's hearts and pose
 /// ([`OfflineSession::take_power_report`]): the real client reports its own
 /// CURPOWER, and GServer keeps whatever it last heard. Only for builds with
@@ -301,6 +305,8 @@ fn main() {
     let mut send_tampercheck = false;
     let mut send_showimg = false;
     let mut no_scripts = false;
+    // Developer option: answer a server MAXPOWER of 0 with our own maximum.
+    let mut dev_repair_hearts = false;
     let mut bigmap_file: Option<PathBuf> = None;
     // None: not given on the command line, so the settings file decides.
     let mut cli_serverwarp: Option<bool> = None;
@@ -377,6 +383,13 @@ fn main() {
             "--no-serverwarp" => cli_serverwarp = Some(false),
             "--serverwarp" => cli_serverwarp = Some(true),
             "--no-scripts" => no_scripts = true,
+            "--dev-repair-hearts" => {
+                if seihai::dev::DevMode::AVAILABLE {
+                    dev_repair_hearts = true;
+                } else {
+                    eprintln!("--dev-repair-hearts needs a build with the dev feature; ignored");
+                }
+            }
             "--bigmap" => {
                 i += 1;
                 bigmap_file = args.get(i).map(PathBuf::from);
@@ -439,6 +452,8 @@ fn main() {
                 println!("                             to the level next door on it keep the offset across the");
                 println!("                             seam (online, the server's PLO_BIGMAP file is used)");
                 println!("         --no-scripts        do not run the client-side GS1 scripts of level NPCs");
+                println!("         --dev-repair-hearts (developer) when the server says max hearts 0, send max 3 once;");
+                println!("                             not what a real client does, and a server with an NPC server ignores it");
                 println!("                             and weapons (default: they run)");
                 println!("         --no-sound          do not play sound effects (GANI PLAYSOUND cues);");
                 println!("                             by default they play from <assets>/sounds when");
@@ -1270,6 +1285,7 @@ fn main() {
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
+    let mut hearts_repair_sent = false;
     // Where a cached level link (PLI 30) lands the player; see the link send.
     let mut link_arrival: Option<(f32, f32)> = None;
     let mut was_online = false;
@@ -1590,6 +1606,18 @@ fn main() {
                 }
                 if let Some(g) = net_state.own_glove_power.take() {
                     session.glove_power = g;
+                }
+                // Developer option: the account's maximum is 0, so the server
+                // holds 0 hearts and every respawn gets 0. Send our own
+                // maximum once per connection; the server answers with CURPOWER.
+                if dev_repair_hearts && !hearts_repair_sent && net_state.own_max_power == Some(0) {
+                    if let Some(c) = conn.as_mut() {
+                        eprintln!("dev: server max power 0; sending max power {DEV_REPAIR_HEARTS}");
+                        hearts_repair_sent = true;
+                        if let Err(e) = c.send_messages(&[seihai::net::max_power_message(DEV_REPAIR_HEARTS)]) {
+                            eprintln!("send failed: {e}");
+                        }
+                    }
                 }
                 session.apply_server_power(
                     net_state.own_max_power.take(),

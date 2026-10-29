@@ -77,6 +77,17 @@ Hearts from the server (MAXPOWER, CURPOWER) count as known and are not sent
 back. Builds without death rules send nothing; builds without GANIs leave
 GANI out. Not yet captured for 2.05: lava, heart pickup, death and respawn.
 
+### Developer option: an account with 0 heart containers
+
+When the server's MAXPOWER is 0 (for example an account file with `MAXHP 0`),
+GServer-v2 caps every hearts value at 0, including the hearts it gives on
+revive, so the player dies again after each respawn. A real client loops the
+same way. `--dev-repair-hearts` (only in builds with the `dev` feature) sends
+MAXPOWER 3 (GServer's default `heartlimit`) once, when the server's login
+props say 0. A server built without its NPC server takes it, fills the hearts
+and answers with CURPOWER; one built with it ignores the client's MAXPOWER.
+No real client sends this.
+
 ## Respawn hearts
 
 | AP | Hearts |

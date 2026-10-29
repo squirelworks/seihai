@@ -244,6 +244,14 @@ pub fn carry_sprite_message(sprite: Option<u16>) -> Vec<u8> {
     vec![2 + 0x20, 19 + 0x20, crate::throwing::carry_wire_byte(sprite), b'\n']
 }
 
+/// `PLI_PLAYERPROPS` (2) with MAXPOWER (1): heart containers. A real client
+/// does not send it. GServer-v2 built without its NPC server takes it, limits
+/// it to the `heartlimit` option (3 by default), fills the hearts to it and
+/// sends CURPOWER back. Only for the `--dev-repair-hearts` developer option.
+pub fn max_power_message(hearts: u8) -> Vec<u8> {
+    vec![2 + 0x20, 1 + 0x20, hearts.min(20) + 0x20, b'\n']
+}
+
 /// `PLI_PLAYERPROPS` (2) with the player's own hearts report, in the
 /// order the real client writes it: CURPOWER (2, half hearts), GANI (10, a
 /// GSTRING) and SPRITE (17), each only when given. The real 2.05 client's
@@ -1261,6 +1269,12 @@ mod tests {
 
     /// The gr flags ride ahead of the walk props in the same frame, only
     /// for the axes that changed, and not before the post-login frame set them.
+    #[test]
+    fn max_power_message_is_prop_1() {
+        assert_eq!(max_power_message(3), vec![0x22, 0x21, 0x23, b'\n']);
+        assert_eq!(max_power_message(99), vec![0x22, 0x21, 0x34, b'\n'], "20 at most");
+    }
+
     #[test]
     fn gr_flags_go_ahead_of_the_walk_props() {
         use crate::protocol::grflags::{GrFlags, GrFlagsMode};
