@@ -360,6 +360,12 @@ impl DownloadStore {
     /// warp). The in-memory copies of the old server are dropped: they are
     /// that server's files.
     pub fn set_cache(&mut self, dir: Option<PathBuf>, meta: Option<String>) {
+        self.set_caches(None, dir, meta);
+    }
+
+    /// As [`set_cache`](Self::set_cache), with the Seihai folder's cache too.
+    pub fn set_caches(&mut self, game_dir: Option<PathBuf>, dir: Option<PathBuf>, meta: Option<String>) {
+        self.resolver.set_game_cache(game_dir);
         self.resolver.set_cache(dir);
         self.cache_meta = meta;
         self.memory.clear();
@@ -377,7 +383,12 @@ impl DownloadStore {
     pub fn local_copy(&self, name: &str) -> Option<(PathBuf, Layer)> {
         let rel = clean_name(name)?;
         let r = &self.resolver;
-        for (layer, root) in [(Layer::Cache, r.cache_root()), (Layer::Assets, r.user_root()), (Layer::Builtin, r.builtin_root())] {
+        for (layer, root) in [
+            (Layer::Cache, r.game_cache_root()),
+            (Layer::Cache, r.cache_root()),
+            (Layer::Assets, r.user_root()),
+            (Layer::Builtin, r.builtin_root()),
+        ] {
             let Some(root) = root else { continue };
             if let Some(p) = find_in_root(root, r, &rel, name).filter(|p| layer != Layer::Builtin || r.builtin_levels() || !is_level_name(p)) {
                 return Some((p, layer));
@@ -445,15 +456,38 @@ impl DownloadStore {
         let Some(dl) = self.resolver.download_root().cloned() else {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, "no download folder (only the read-only built-in set)"));
         };
-        let in_place = find_in_root(&dl, &self.resolver, &rel, name);
+        // With both caches, the settings' cache keeps a copy too. Either one
+        // failing (a Seihai folder that cannot be written) leaves the other.
+        let second = self.resolver.cache_root().filter(|c| c.root != dl.root).cloned();
+        let first = self.write_into(&dl, &rel, name, data, mod_time);
+        let Some(second) = second else { return first.map(Stored::Disk) };
+        let other = self.write_into(&second, &rel, name, data, mod_time);
+        match (first, other) {
+            (Ok(t), Err(e)) => {
+                eprintln!("settings cache copy of {name} not written: {e}");
+                Ok(Stored::Disk(t))
+            }
+            (Ok(t), Ok(_)) => Ok(Stored::Disk(t)),
+            (Err(e), Ok(t)) => {
+                eprintln!("Seihai folder cache copy of {name} not written: {e}");
+                Ok(Stored::Disk(t))
+            }
+            (Err(e), Err(_)) => Err(e),
+        }
+    }
+
+    /// Write one download into the cache (or download) folder `dl`: in place
+    /// if that folder already has the file, else by [`download_dir`].
+    fn write_into(&self, dl: &AssetRoot, rel: &str, name: &str, data: &[u8], mod_time: Option<u32>) -> io::Result<PathBuf> {
+        let in_place = find_in_root(dl, &self.resolver, rel, name);
         let target = match in_place {
             Some(p) => p,
             None => {
                 let mut p = dl.root.clone();
-                for c in download_dir(self.resolver.profile(), &rel) {
+                for c in download_dir(self.resolver.profile(), rel) {
                     p.push(c);
                 }
-                p.push(&rel);
+                p.push(rel);
                 p
             }
         };
@@ -466,7 +500,7 @@ impl DownloadStore {
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
-        if let (Some(meta), true) = (&self.cache_meta, self.resolver.cache_root().is_some_and(|c| c.root == dl.root)) {
+        if let (Some(meta), true) = (&self.cache_meta, self.resolver.cache_roots().any(|c| c.root == dl.root)) {
             let m = dl.root.join("server.txt");
             if !m.exists() {
                 let _ = fs::write(m, meta);
@@ -479,7 +513,7 @@ impl DownloadStore {
         if let Some(t) = mod_time.filter(|&t| t != 0) {
             set_mod_time(&target, t)?;
         }
-        Ok(Stored::Disk(target))
+        Ok(target)
     }
 }
 
