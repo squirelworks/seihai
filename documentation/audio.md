@@ -1,7 +1,8 @@
 # Audio playback
 
 Sound is client-side only: no packet says "play this". Seihai plays the
-`PLAYSOUND` cues of the walk and swim animations. Everything is optional.
+`PLAYSOUND` cues of the walk and swim animations and the scripts' `play`,
+`playlooped`, `play2` and `stopsound`. Everything is optional.
 With `--no-sound`, `sound=0`, no `sounds` folder, no audio device or a build
 without the device backend, the client runs the same and plays nothing.
 
@@ -39,6 +40,19 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
   Each frame entered with a cue plays it once. Frame 0 is the pose before the
   first step and does not play until the loop wraps back to it.
 - **In water** the swim GANI is stepped instead of the walk one.
+- **Scripts.** `play file` plays at the NPC's centre (its x/y plus half its
+  size), `playlooped file` the same with the `+` loop prefix, `stopsound file`
+  stops it. `play2 file,x,y,volume` (2.1 and later) plays at `x,y`; the volume
+  is ignored. A weapon's script has no place of its own, so its sound is at the
+  player. `SessionScripts::apply` queues these with the GANI cues
+  (`sound_events`, `sound_stops`), and `bin/main.rs` plays them. The NPC's size
+  is its `setimgpart` part or its `setshape` shape; the image's own size is not
+  known to the script host, so with neither a 32-pixel image is assumed. Only x
+  sets the pan, so a wrong guess moves it a little.
+- **Missing files online.** A sound that is in no folder is asked for with
+  `PLI_WANTFILE` by its raw name (as written, without `+`), once per name
+  (`FileSession::need`). It is saved to the cache's `sounds` folder, which is
+  one of the engine's folders, and plays on the next trigger, as in 2.05.
 - **Folder.** `<assets>/sounds`, else `<assets>/levels/sounds`. File names
   match without regard to case or path, as on Windows.
 
@@ -90,14 +104,14 @@ falls back to the null backend and logs one line.
   effect plays at full volume. Pan is implemented.
 - **Frame timing.** GANI `WAIT` is not modelled; a frame lasts one move. The real
   client advances GANIs by time, so footstep spacing is approximate.
-- **GS1 `play`, `playlooped`, `stopsound`.** The script engine already emits them
-  as unhandled effects (`Effect::Play`, `Effect::StopSound`). Nothing connects them
-  to the engine yet. The NPC position (NPC x/y plus half its image size) is
-  documented, so this is a small next step.
+- **NPC image size.** Script sounds use the image part or shape for the NPC's
+  centre, else a 32-pixel image (see above).
+- **Gmap neighbours.** 2.05 shifts a sound from a neighbouring gmap level by 64
+  tiles. Only the current level's NPCs run scripts here, so nothing is shifted.
 - **Built-in effects** (sword, bomb, item pickup, chest, jump: the 24 names the
   2.05 client plays without any NPC) are not triggered.
-- **Missing files.** The real client sends `PLI_WANTFILE` for a missing sound and
-  plays it later. Seihai only logs it. Three sounds named by 2.22 GANIs are not
+- **Missing files offline.** Offline there is no server to ask; the name is
+  logged once. Three sounds named by 2.22 GANIs are not
   in the 2.22 folder: `freeze.wav`, `hammer3.wav`, `water2.wav`.
 - **Other players' ganis** are not stepped, so their footsteps are silent.
 - **Music** (MIDI, MP3, BASS streams on 2.17+), `setmusicvolume`, and the 2.22

@@ -99,8 +99,8 @@ fn character_and_sound_commands() {
     assert!(fx.contains(&Effect::Command { obj: id, name: "showcharacter".into(), args: vec![] }));
     assert!(fx.contains(&Effect::SetCharAni { obj: id, ani: "idle".into(), params: "".into() }));
     assert!(fx.contains(&Effect::SetCharProp { obj: id, code: "#3".into(), value: "head1.png".into() }));
-    assert!(fx.contains(&Effect::Play { file: "jump.wav".into(), looped: false }));
-    assert!(fx.contains(&Effect::Play { file: "loop.mid".into(), looped: true }));
+    assert!(fx.contains(&Effect::Play { obj: id, file: "jump.wav".into(), looped: false, at: None }));
+    assert!(fx.contains(&Effect::Play { obj: id, file: "loop.mid".into(), looped: true, at: None }));
     assert!(fx.contains(&Effect::Say2 { text: "Hello there".into() }));
     assert!(fx.contains(&Effect::SaySign { index: 2 }));
 }
@@ -1060,7 +1060,7 @@ fn play2_and_sendrpgmessage_are_effects() {
     let (mut w, _) = npc("if (created) { play2 bell.wav,30,30,1; sendrpgmessage Hi there; }");
     w.start_all();
     let e = w.take_effects();
-    assert!(e.contains(&Effect::Play { file: "bell.wav".into(), looped: false }), "{e:?}");
+    assert!(e.iter().any(|x| matches!(x, Effect::Play { file, looped: false, at: Some((30.0, 30.0)), .. } if file == "bell.wav")), "{e:?}");
     assert!(e.contains(&Effect::RpgMessage { text: "Hi there".into() }), "{e:?}");
 }
 

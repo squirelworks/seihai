@@ -57,6 +57,14 @@ pub enum Outcome {
     VoiceCap,
 }
 
+/// The name to ask the server for when a sound is missing: the file as the
+/// script or GANI wrote it, without the `+` loop prefix. 2.05 asks by this
+/// raw name, the path included.
+pub fn wanted_name(file: &str) -> String {
+    let file = file.trim();
+    file.strip_prefix('+').unwrap_or(file).trim().to_string()
+}
+
 /// Pan for a sound at `sound_x` heard from `listener_x`.
 pub fn pan_for(sound_x: f32, listener_x: f32, reverse_stereo: bool) -> i32 {
     let pan = ((sound_x - listener_x) * PAN_PER_TILE).round().clamp(-10000.0, 10000.0) as i32;
@@ -452,5 +460,12 @@ mod tests {
         e.stop("a.wav");
         e.stop_all_loops();
         assert_eq!(e.backend(), "null");
+    }
+
+    #[test]
+    fn wanted_name_drops_only_the_loop_prefix() {
+        assert_eq!(wanted_name("+thunder.wav"), "thunder.wav");
+        assert_eq!(wanted_name(" Sounds/Wolf.WAV "), "Sounds/Wolf.WAV");
+        assert_eq!(wanted_name("+"), "");
     }
 }

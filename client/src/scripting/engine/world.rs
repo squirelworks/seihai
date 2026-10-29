@@ -170,7 +170,9 @@ pub enum Effect {
     SetCharAni { obj: ObjId, ani: String, params: String },
     SetCharProp { obj: ObjId, code: String, value: String },
     SetPlayerProp { code: String, value: String },
-    Play { file: String, looped: bool },
+    /// `play`, `playlooped`: an effect at the object's position. `play2`
+    /// (2.1 and later) names the position itself, in `at`.
+    Play { obj: ObjId, file: String, looped: bool, at: Option<(f64, f64)> },
     StopSound { file: String },
     StopMidi,
     /// `setlevel` (no position) and `setlevel2`.

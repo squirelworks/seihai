@@ -15,7 +15,7 @@ mod engine;
 mod rodio_out;
 mod wav;
 
-pub use engine::{pan_for, Outcome, SoundEngine, SoundEvent, MAX_VOICES, PAN_PER_TILE};
+pub use engine::{pan_for, wanted_name, Outcome, SoundEngine, SoundEvent, MAX_VOICES, PAN_PER_TILE};
 #[cfg(feature = "audio-rodio")]
 pub use rodio_out::RodioSound;
 pub use wav::{decode_wav, Pcm};
