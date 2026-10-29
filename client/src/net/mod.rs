@@ -326,10 +326,12 @@ pub fn link_request_frame(
 pub struct LinkStart {
     /// The frame that went out.
     pub frame: LinkFrame,
-    /// The request was `PLI_LEVELWARPMOD`, which gets no `PLO_PLAYERWARP`:
-    /// the player lands here (the server's own position, if it sends one,
-    /// wins).
-    pub cached_arrival: Option<(f32, f32)>,
+    /// Where the player lands: the link's arrival, as requested. A
+    /// `PLI_LEVELWARPMOD` gets no `PLO_PLAYERWARP`, and neither does a
+    /// `PLI_LEVELWARP` to a plain level on GServer-v2 (it sends the level
+    /// alone), so the client puts the player here when the level is named.
+    /// The server's own position, if it sends one, wins.
+    pub arrival: Option<(f32, f32)>,
     /// The mod time of the copy a cached request named.
     pub cached_mod_time: Option<u32>,
 }
@@ -373,15 +375,13 @@ pub fn start_online_link(
         session.cancel_warp();
         return Err(e);
     }
-    let mut cached_arrival = None;
     if cached.is_some() {
         net_state.expect_cached_level(dest);
-        cached_arrival = Some((x, y));
         if let Some(el) = enter_level {
             el.cached_link(dest, frame.with_enter_level);
         }
     }
-    Ok(Some(LinkStart { frame, cached_arrival, cached_mod_time: cached }))
+    Ok(Some(LinkStart { frame, arrival: Some((x, y)), cached_mod_time: cached }))
 }
 
 /// A game-server session as [`login_gserver`] sets it up.

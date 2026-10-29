@@ -2953,7 +2953,7 @@ mod tests {
             let (r, sent) = run(v, &mut sess, &mut st, Some(&mut el), None);
             let r = r.expect("sent");
             assert_eq!(sent, vec![vec![warp_to_c(0)]]);
-            assert_eq!(r.cached_arrival, None);
+            assert_eq!(r.arrival, Some((12.0, 3.0)), "GServer-v2 sends no PLO_PLAYERWARP for a plain level");
             assert_eq!(sess.warp_pending.as_deref(), Some("c.nw"));
             // The server's answer loads the new level; 46 is owed once.
             st.apply_body(&full_answer("c.nw", 2_000, 5, "", ""));
@@ -2982,7 +2982,7 @@ mod tests {
             assert_eq!(sent.len(), 1, "one frame");
             let ids: Vec<u8> = sent[0].iter().map(|m| m[0] - 0x20).collect();
             assert_eq!(ids, vec![30, 46, 2]);
-            assert_eq!(r.cached_arrival, Some((12.0, 3.0)));
+            assert_eq!(r.arrival, Some((12.0, 3.0)));
             assert_eq!(r.cached_mod_time, Some(T));
             // The 46 went along: none owed after the answer.
             st.expect_cached_level("c.nw");
@@ -3013,7 +3013,7 @@ mod tests {
             let mut sess = OfflineSession::new();
             let (r, sent) = run(v, &mut sess, &mut st, None, None);
             assert_eq!(sent, vec![vec![warp_to_c(0)]]);
-            assert_eq!(r.unwrap().cached_arrival, None);
+            assert_eq!(r.unwrap().arrival, Some((12.0, 3.0)));
         }
 
         /// A warp already waiting for the server: a second script warp
