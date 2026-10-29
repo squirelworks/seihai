@@ -1824,9 +1824,18 @@ fn main() {
                         seihai::offline::RespawnTo::InPlace => None,
                     };
                     if let (Some(dest), Some(c)) = (dest.as_deref(), conn.as_mut()) {
-                        session.begin_warp(dest);
-                        warp_since = Some(Instant::now());
+                        // On the same level GServer only moves the player
+                        // (X and Y props, no level), and the real client does
+                        // not wait: it walks at once (2.05 live, 2026-10-29).
+                        // A level change waits for the level as any warp does.
+                        let same_level = net_state.current_level_name().is_some_and(|n| n.eq_ignore_ascii_case(dest));
                         let (x, y, dir) = (session.player_x, session.player_y, session.player_dir);
+                        if same_level {
+                            session.arrive(x, y);
+                        } else {
+                            session.begin_warp(dest);
+                            warp_since = Some(Instant::now());
+                        }
                         if let Err(e) = c.send_link(version, None, x, y, dir, dest, tamper.as_mut()) {
                             eprintln!("send failed: {e}");
                             session.cancel_warp();

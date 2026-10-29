@@ -70,12 +70,12 @@ in that order, each only when it changed (`life::PowerReporter`,
 | Hurt mode ends | GANI `idle` | 2.05 lab run 1 (`2A 24 idle`, 1.5 s after the hit) |
 | A killing hit | CURPOWER 0, GANI `dead` | 2.22 lab |
 | The server set hearts to 0 | GANI `dead` | 2.22 lab |
-| Respawn | CURPOWER by the AP table (no GANI) | 2.22 lab |
+| Respawn | CURPOWER by the AP table, GANI `idle` | 2.22 lab; 2.05 live run 2026-10-29 (CURPOWER, `idle`, X, Y and STATUS in one props message after the level warp) |
 | Lava burn, heart pickup, script `hurt` | CURPOWER | inferred, not captured |
 
 Hearts from the server (MAXPOWER, CURPOWER) count as known and are not sent
 back. Builds without death rules send nothing; builds without GANIs leave
-GANI out. Not yet captured for 2.05: lava, heart pickup, death and respawn.
+GANI out. Not yet captured for 2.05: lava and heart pickup. The 2.05 live run also showed that a server CURPOWER 0 with MAXPOWER 0 loops the real client exactly as it loops Seihai.
 
 ### Developer option: an account with 0 heart containers
 
