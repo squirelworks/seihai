@@ -1192,7 +1192,7 @@ fn main() {
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
     // Where a cached level link (PLI 30) lands the player; see the link send.
-    let mut cached_arrival: Option<(f32, f32)> = None;
+    let mut link_arrival: Option<(f32, f32)> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -1448,10 +1448,11 @@ fn main() {
                 }
                 // Take server positions once, so local walking is not
                 // snapped back by later frames.
-                // A cached link got no PLO_PLAYERWARP: the position is the
-                // one the link request carried (the server's, if it did send
-                // one, wins).
-                if let Some((x, y)) = cached_arrival.take_if(|_| entered) {
+                // Our own link: the position is the one the request carried.
+                // A cached link gets no PLO_PLAYERWARP, and GServer-v2 sends
+                // none for a plain level either (only the level). The
+                // server's, if it did send one, wins.
+                if let Some((x, y)) = link_arrival.take_if(|_| entered) {
                     net_state.player_x.get_or_insert(x);
                     net_state.player_y.get_or_insert(y);
                 }
@@ -1952,7 +1953,7 @@ fn main() {
                     ) {
                         Ok(Some(started)) => {
                             warp_since = Some(Instant::now());
-                            cached_arrival = started.cached_arrival;
+                            link_arrival = started.arrival;
                             script_warp_sent = true;
                         }
                         // Another warp is pending: nothing more to do.
@@ -2078,7 +2079,7 @@ fn main() {
                         ) {
                             Ok(Some(started)) => {
                                 warp_since = Some(Instant::now());
-                                cached_arrival = started.cached_arrival;
+                                link_arrival = started.arrival;
                             }
                             Ok(None) => {}
                             Err(_) => conn = None,
@@ -2125,7 +2126,7 @@ fn main() {
         if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
             warp_since = None;
             session.cancel_warp();
-            cached_arrival = None;
+            link_arrival = None;
             net_state.cancel_cached_request();
             eprintln!("warp not answered");
         }
@@ -2172,7 +2173,7 @@ fn main() {
                 frames = None;
                 session.cancel_warp();
                 warp_since = None;
-                cached_arrival = None;
+                link_arrival = None;
                 let target = w.address();
                 eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {
