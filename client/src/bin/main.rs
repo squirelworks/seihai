@@ -1188,6 +1188,8 @@ fn main() {
     let mut confirm_quit = false;
     // The first line of the sign page on show.
     let mut sign_page = 0usize;
+    // Some game key was down last frame (the 2.05 sign debounce).
+    let mut game_keys_held = false;
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
@@ -1584,11 +1586,31 @@ fn main() {
             }
         }
 
+        // A sign being read takes the game keys this frame (2.05): Up turns
+        // back a page, the map key closes it, any other game key turns to
+        // the next page or closes it on the last. The player does not walk,
+        // swing, lift or open the item list meanwhile.
+        let sign_was_open = session.reading.is_some();
+        if sign_was_open && !input.is_open() && !confirm_quit {
+            use seihai::render::signs::{next_page, previous_page, sign_key, SignKey};
+            match sign_key(|a| keymap.pressed(&window, a), game_keys_held) {
+                Some(SignKey::Close) => session.reading = None,
+                Some(SignKey::Back) => sign_page = previous_page(sign_page).unwrap_or(sign_page),
+                Some(SignKey::Next) => match session.reading.as_deref().and_then(|t| next_page(t, sign_page)) {
+                    Some(p) => sign_page = p,
+                    None => session.reading = None,
+                },
+                None => {}
+            }
+            dirty = true;
+        }
+        game_keys_held = Action::ALL.iter().any(|&a| a != Action::SwitchToChat && keymap.down(&window, a));
+
         // The item list (Q). While it is open the arrows move its
         // selection and the game keys close it; none of them reach the
         // player this frame, so the player does not walk, swing or interact.
         let list_was_open = item_list.open;
-        if !input.is_open() && !confirm_quit {
+        if !input.is_open() && !confirm_quit && !sign_was_open {
             let entries = item_list_entries(&session, &net_state);
             let pressed = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
             if keymap.pressed(&window, Action::ItemList) {
@@ -1735,7 +1757,7 @@ fn main() {
                 sprite_changed = true;
                 dirty = true;
             }
-            if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
+            if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
             if sprite_changed {
@@ -1759,6 +1781,7 @@ fn main() {
         // was refused above).
         let interact = !input.is_open()
             && !list_was_open
+            && !sign_was_open
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
@@ -1766,67 +1789,55 @@ fn main() {
                 false,
                 keymap.pressed(&window, Action::Attack),
             );
-        // The map key (M) closes a sign, as in the readme.
-        if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Map) && session.reading.take().is_some() {
-            dirty = true;
-        }
         if interact {
-            // Reading: the next three lines, or the end of the sign.
-            if let Some(text) = &session.reading {
-                match seihai::render::signs::next_page(text, sign_page) {
-                    Some(p) => sign_page = p,
-                    None => session.reading = None,
+            sign_page = 0;
+            match session.interact() {
+                seihai::offline::Interaction::Chest { x, y, item, got } => {
+                    eprintln!("chest {x},{y}: {item}");
+                    net_state.push_chat(ChatKind::Admin, "Chest".into(), format!("You got {got}."));
+                    if let Some(c) = conn.as_mut() {
+                        let _ = c.send_open_chest(x, y);
+                    }
                 }
-            } else {
-                sign_page = 0;
-                match session.interact() {
-                    seihai::offline::Interaction::Chest { x, y, item, got } => {
-                        eprintln!("chest {x},{y}: {item}");
-                        net_state.push_chat(ChatKind::Admin, "Chest".into(), format!("You got {got}."));
-                        if let Some(c) = conn.as_mut() {
-                            let _ = c.send_open_chest(x, y);
+                seihai::offline::Interaction::Grabbed => {
+                    eprintln!("grabbed the wall in front (held while A is down)");
+                }
+                seihai::offline::Interaction::Lifted { kind } => {
+                    eprintln!("lifted object {kind}");
+                    // Others see the object (CARRYSPRITE) and the carry
+                    // pose (the sprite value).
+                    if let Some(c) = conn.as_mut() {
+                        let sent = c
+                            .send_carry_sprite(seihai::throwing::carry_sprite(kind))
+                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                        if let Err(e) = sent {
+                            eprintln!("send failed: {e}");
+                            conn = None;
                         }
                     }
-                    seihai::offline::Interaction::Grabbed => {
-                        eprintln!("grabbed the wall in front (held while A is down)");
-                    }
-                    seihai::offline::Interaction::Lifted { kind } => {
-                        eprintln!("lifted object {kind}");
-                        // Others see the object (CARRYSPRITE) and the carry
-                        // pose (the sprite value).
-                        if let Some(c) = conn.as_mut() {
-                            let sent = c
-                                .send_carry_sprite(seihai::throwing::carry_sprite(kind))
-                                .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
-                            if let Err(e) = sent {
+                }
+                seihai::offline::Interaction::Thrown { kind } => {
+                    eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
+                    if let Some(c) = conn.as_mut() {
+                        match c.send_throw_carried() {
+                            Ok(()) => {
+                                eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
+                                let sent = c
+                                    .send_carry_sprite(None)
+                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                                if let Err(e) = sent {
+                                    eprintln!("send failed: {e}");
+                                    conn = None;
+                                }
+                            }
+                            Err(e) => {
                                 eprintln!("send failed: {e}");
                                 conn = None;
                             }
                         }
                     }
-                    seihai::offline::Interaction::Thrown { kind } => {
-                        eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
-                        if let Some(c) = conn.as_mut() {
-                            match c.send_throw_carried() {
-                                Ok(()) => {
-                                    eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
-                                    let sent = c
-                                        .send_carry_sprite(None)
-                                        .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
-                                    if let Err(e) = sent {
-                                        eprintln!("send failed: {e}");
-                                        conn = None;
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("send failed: {e}");
-                                    conn = None;
-                                }
-                            }
-                        }
-                    }
-                    seihai::offline::Interaction::Nothing => {}
                 }
+                seihai::offline::Interaction::Nothing => {}
             }
             dirty = true;
         }
@@ -1843,14 +1854,7 @@ fn main() {
         {
             dirty = true;
         }
-        // Up while reading turns back a page.
-        if session.reading.is_some() && !input.is_open() && keymap.pressed(&window, Action::Up) {
-            if let Some(p) = seihai::render::signs::previous_page(sign_page) {
-                sign_page = p;
-                dirty = true;
-            }
-        }
-        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && !sign_was_open && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
