@@ -495,6 +495,29 @@ fn the_starter_level_chest_and_sign_tiles_have_open_art_two_ids_on() {
     }
 }
 
+// ---- downloads land where the resolver looks (laundry list P6, 2026-10-29) ----
+
+/// Every image a server sends is found again by the resolver, at the path
+/// the store wrote, for each save layout.
+#[test]
+fn a_downloaded_image_is_found_where_it_was_saved() {
+    for v in [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222, ClientVersion::V231] {
+        let cache = tmp(&format!("agree-{}", v.label()));
+        let r = AssetResolver::empty(v.profile()).with_cache(Some(cache.clone()));
+        let mut store = DownloadStore::new(r.clone(), true);
+        for name in [
+            "Block.PNG", "door.gif", "hat3.png", "bomy1.png", "b_fire.png", "emoticon_a.png", "minimap.png", "worldmap.gif",
+            "head927.png", "body13.png", "sword2.png", "shield3.png", "letters.mng", "npcs/sign.png",
+        ] {
+            let Stored::Disk(at) = store.store(name, b"x", Some(1_700_000_000)).unwrap() else { panic!("{name}: not on disk") };
+            assert_eq!(r.image(name).as_ref(), Some(&at), "{} {name}", v.label());
+            assert_eq!(r.image(&name.to_ascii_lowercase()).as_ref(), Some(&at), "{} {name} in lower case", v.label());
+            assert_eq!(store.local_path(name).as_ref(), Some(&at), "{} {name}: the store's own lookup", v.label());
+        }
+        let _ = fs::remove_dir_all(&cache);
+    }
+}
+
 // ---- the Seihai folder's cache (laundry list P2, 2026-10-29) ---------------------
 
 /// `_cache/<host>_<port>/` in the Seihai folder is searched before the
@@ -536,27 +559,4 @@ fn the_seihai_folder_cache_is_searched_first_and_downloads_go_to_both() {
     assert_eq!(got, Stored::Disk(cache.join("levels/hats/hat0.png")));
     let _ = fs::remove_dir_all(&game);
     let _ = fs::remove_dir_all(&cache);
-}
-
-// ---- downloads land where the resolver looks (laundry list P6, 2026-10-29) ----
-
-/// Every image a server sends is found again by the resolver, at the path
-/// the store wrote, for each save layout.
-#[test]
-fn a_downloaded_image_is_found_where_it_was_saved() {
-    for v in [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222, ClientVersion::V231] {
-        let cache = tmp(&format!("agree-{}", v.label()));
-        let r = AssetResolver::empty(v.profile()).with_cache(Some(cache.clone()));
-        let mut store = DownloadStore::new(r.clone(), true);
-        for name in [
-            "Block.PNG", "door.gif", "hat3.png", "bomy1.png", "b_fire.png", "emoticon_a.png", "minimap.png", "worldmap.gif",
-            "head927.png", "body13.png", "sword2.png", "shield3.png", "letters.mng", "npcs/sign.png",
-        ] {
-            let Stored::Disk(at) = store.store(name, b"x", Some(1_700_000_000)).unwrap() else { panic!("{name}: not on disk") };
-            assert_eq!(r.image(name).as_ref(), Some(&at), "{} {name}", v.label());
-            assert_eq!(r.image(&name.to_ascii_lowercase()).as_ref(), Some(&at), "{} {name} in lower case", v.label());
-            assert_eq!(store.local_path(name).as_ref(), Some(&at), "{} {name}: the store's own lookup", v.label());
-        }
-        let _ = fs::remove_dir_all(&cache);
-    }
 }

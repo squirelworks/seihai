@@ -48,7 +48,7 @@ At count 28 (checked before the step is counted, so on the 29th blocked step), a
 4. The block moves one tile. Each of its old cells first takes the tile two cells ahead, then the block is written one cell ahead. So the row the block leaves gets the floor that was in front of it.
 5. The 2.05 client sends the 4 x 4 area around the old spot as a board modify, moves the player one tile in the facing, and plays `sounds/stonemove.wav`.
 
-Seihai does steps 1 to 5. Online it sends the 4 x 4 area as `PLI_BOARDMODIFY` (1) and each push or pull try as `PLI_TRIGGERACTION` (38): no NPC (GINT 0), the point in half tiles, then `pushed,<dir>` or `pulled,<dir>`, the message the 2.05 client builds. 2.05 also sends the trigger to UDP peers (id 26); Seihai does not. NPCs with `canbepushed` are moved by the same routine (next section).
+Seihai does steps 1 to 5. Online it sends the 4 x 4 area as `PLI_BOARDMODIFY` (1) and each push or pull try as `PLI_TRIGGERACTION` (38): no NPC (GINT 0), the point in half tiles, then `pushed,<dir>` or `pulled,<dir>`, the message the 2.05 client builds. 2.05 also sends the trigger to UDP peers (id 26); Seihai does not.
 
 ## Pushed and pulled NPCs
 
@@ -74,12 +74,15 @@ When no block is there, the push routine looks for an NPC with `canbepushed` at 
 
 | state | gani | sprite number S on the wire |
 |---|---|---|
+| blocked, fewer than 18 steps | walk (keeps stepping, no footsteps) | as walking |
 | pushing (18+ blocked steps) | `push` (one step per blocked step) | 11, 12, 13, 11, 12 by frame |
 | grabbing | `grab` | 14 |
 | pulling | `pull` (one step per tick, looping) | 15, 16, 17 by frame |
 | jumping | walk (unchanged) | as walking |
 
-Seihai draws these only when the gani is loaded; the default asset set has none of the three, so without a data folder that has them the player stands. The sprite numbers come from the 2.05 animation step table (push steps 14 to 18, grab 19, pull 20 to 22).
+**Running in place.** For the first 17 blocked steps against a wall, a block or a ledge the player is not drawn standing. 2.05 sets the walk gani on every walk tick whether the step moved or not, so the legs keep running until the push pose (or the jump) takes over. Footsteps do not play then: 2.05 plays them only in the normal and swimming modes, and a refused step puts the player in the pushing mode. Seihai steps the walk gani once per refused step and drops its sound cues.
+
+Seihai draws the push, grab and pull poses only when the gani is loaded; the default asset set has none of the three, so without a data folder that has them the player stands. The sprite numbers come from the 2.05 animation step table (push steps 14 to 18, grab 19, pull 20 to 22).
 
 ## 2.22 and 2.31
 
@@ -88,5 +91,7 @@ The same in both, with the same numbers, except: any blocking NPC can be grabbed
 ## Open
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
+* Online sends: the board modify for a moved block and the `pushed` / `pulled` trigger action.
 * Blocking on every NPC that blocks, which needs the NPC image sizes in the session.
+* Moving `canbepushed` / `canbepulled` NPCs.
 * A jump across a gmap edge: 2.05 shifts the jump's start point when the level changes in the air; Seihai moves into the next cell when it lands.

@@ -264,18 +264,24 @@ fn standing_is_idle_walking_steps_the_walk_frames_and_stopping_is_idle_again() {
 }
 
 #[test]
-fn a_blocked_step_does_not_start_the_walk_animation() {
+fn a_blocked_step_runs_in_place() {
     let mut s = walker();
     // walk into the board's east edge until a step is refused
     s.player_x = 58.0;
     while s.try_move(0.5, 0.0).is_some() {}
-    let (at, frame) = (s.player_x, s.walk_frame());
+    let at = s.player_x;
     assert!(at > 58.0 && at < 64.0);
     assert!(s.stop_walking());
+    let frame = s.walk_frame().unwrap();
+    s.take_sound_events();
     assert!(s.try_move(0.5, 0.0).is_none());
     assert_eq!(s.player_x, at);
-    assert_eq!(s.walk_frame(), frame, "a refused step does not step the animation");
-    assert_eq!(pose(&s), Some((PoseKind::Idle, 0)), "a refused step is not walking");
+    // 2.05 sets the walk gani on every walk tick, moved or not: the legs
+    // keep running against the edge until the push pose takes over.
+    let next = (frame + 1) % s.walk_gani.as_ref().unwrap().gani.frames.len();
+    assert_eq!(s.walk_frame(), Some(next), "a refused step steps the animation");
+    assert_eq!(pose(&s), Some((PoseKind::Walk, next)), "a refused step is drawn walking");
+    assert!(s.take_sound_events().is_empty(), "no footsteps in place");
 }
 
 #[test]

@@ -2072,6 +2072,11 @@ fn main() {
                 }
                 dirty = true;
             }
+            // `sendrpgmessage`: the player's message window is the chat log here.
+            for text in std::mem::take(&mut scripts.rpg_messages) {
+                net_state.push_chat(ChatKind::Admin, String::new(), text);
+                dirty = true;
+            }
             if let Some(f) = debug_file.as_mut() {
                 use std::io::Write;
                 // Script lines are kept once per level, so a message seen
@@ -2583,6 +2588,14 @@ fn main() {
                 }
             }
         }
+        // A script changed our looks (`sethead`, `setcoatcolor` …): the
+        // server and the other players see it from our props.
+        if std::mem::take(&mut session.looks_changed) {
+            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks)) {
+                eprintln!("looks send failed: {e}");
+            }
+            dirty = true;
+        }
         // Tiles the player changed this frame (a lift, a cut, a moved stone
         // block): the server writes them into the level for the others.
         for b in session.take_board_changes() {
@@ -2593,14 +2606,6 @@ fn main() {
                     conn = None;
                 }
             }
-        }
-        // A script changed our looks (`sethead`, `setcoatcolor` …): the
-        // server and the other players see it from our props.
-        if std::mem::take(&mut session.looks_changed) {
-            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks)) {
-                eprintln!("looks send failed: {e}");
-            }
-            dirty = true;
         }
         // The pictures other players and our own shield are drawn with.
         {
