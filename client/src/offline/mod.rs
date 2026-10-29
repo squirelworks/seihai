@@ -441,7 +441,6 @@ impl OfflineSession {
             shield_power: 1,
             looks: crate::looks::Looks::default(),
             looks_changed: false,
-            glove_power: 0,
             // 2.05 starts every player at glove 1 (enough for a pot), as
             // GServer's default account does (`GLOVEP 1`).
             glove_power: 1,
