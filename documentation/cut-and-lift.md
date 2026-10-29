@@ -104,10 +104,14 @@ uses the 2.05 rule for every build until they are.
   takes the entry index and was not read, so nothing drops.
 * **Carrying pose and what others see**: see `throwing.md`, "Carry pose
   and other players".
-* **Telling the server.** The client writes the changed tiles into the level
-  for everyone (a board-modify the client sends). Seihai edits only its own
-  copy, so other players do not see the bush vanish and a re-entry restores
-  it.
+* **Telling the server.** A lift or a cut sends the object's 2 x 2 tiles,
+  as they are after the change, as `PLI_BOARDMODIFY` (1): `GCHAR x, y, w,
+  h`, then the tiles as GSHORTs row by row (the shape in the lab capture of
+  a cut bush). The server writes them into the level, sends them to the
+  others as `PLO_BOARDMODIFY` (7) and puts the object back after its
+  respawn time. Seihai applies an incoming 7 to the player's level, which
+  is how it sees other players' lifts, cuts and stone blocks and the
+  server's respawns.
 * The glove power values come from items (`glove1` = 1, `glove2` = 2 in
   Seihai); how the server's player props carry it online is not wired.
 * Grabbing, pulling and pushing follow the 2.05 client: A on any wall

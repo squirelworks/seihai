@@ -202,6 +202,36 @@ impl EnterLevelSender {
     }
 }
 
+/// `PLI_BOARDMODIFY` (1): `GCHAR x, y, w, h` in whole tiles, then the
+/// `w*h` tiles row by row as GSHORTs. The 2.05 client sends one for each
+/// change it makes to the level (a lift, a cut, a pushed or pulled stone
+/// block); the server writes it into the level and sends it to the others
+/// as `PLO_BOARDMODIFY`.
+pub fn board_modify_message(x: u8, y: u8, w: u8, h: u8, tiles: &[u16]) -> Vec<u8> {
+    let mut m = vec![1 + 0x20, x + 0x20, y + 0x20, w + 0x20, h + 0x20];
+    for &t in tiles {
+        m.extend_from_slice(&gshort(t));
+    }
+    m.push(b'\n');
+    m
+}
+
+/// `PLI_TRIGGERACTION` (38) with no NPC: GINT 0 (three spaces), `GCHAR x*2,
+/// y*2`, then `action` and, when there is one, `,` and `param`. This is
+/// what the 2.05 client sends for its `pushed` / `pulled` tries, with the
+/// direction as the parameter.
+pub fn trigger_action_message(x: f32, y: f32, action: &str, param: &str) -> Vec<u8> {
+    let half = |v: f32| ((v * 2.0) as i32).clamp(0, 223) as u8 + 0x20;
+    let mut m = vec![38 + 0x20, 0x20, 0x20, 0x20, half(x), half(y)];
+    m.extend_from_slice(&to_latin1(action));
+    if !param.is_empty() {
+        m.push(b',');
+        m.extend_from_slice(&to_latin1(param));
+    }
+    m.push(b'\n');
+    m
+}
+
 /// The `PLI_THROWCARRIED` (11) message: the id and the newline.
 pub fn throw_carried_message() -> Vec<u8> {
     vec![11 + 0x20, b'\n']
@@ -1021,6 +1051,17 @@ impl Connection {
     pub fn send_open_chest(&mut self, x: i32, y: i32) -> io::Result<()> {
         let msg = vec![20 + 0x20, (x as u8) + 0x20, (y as u8) + 0x20, b'\n'];
         self.send_messages(&[msg])
+    }
+
+    /// Tell the server about a change to the level's tiles
+    /// ([`board_modify_message`]).
+    pub fn send_board_modify(&mut self, x: u8, y: u8, w: u8, h: u8, tiles: &[u16]) -> io::Result<()> {
+        self.send_messages(&[board_modify_message(x, y, w, h, tiles)])
+    }
+
+    /// Fire a trigger action at `(x, y)` ([`trigger_action_message`]).
+    pub fn send_trigger_action(&mut self, x: f32, y: f32, action: &str, param: &str) -> io::Result<()> {
+        self.send_messages(&[trigger_action_message(x, y, action, param)])
     }
 
     /// Throw the carried object: `PLI_THROWCARRIED` (11), no payload (the
@@ -2169,6 +2210,24 @@ mod tests {
     /// 10 tiles is 20 half-tiles, 20 tiles is 40, then the level name.
     fn warp_msg() -> Vec<u8> {
         [&[0x20, 20 + 0x20, 40 + 0x20][..], b"lv_c.nw\n"].concat()
+    }
+
+    #[test]
+    fn board_modify_is_pli_1_with_gchar_header_and_gshort_tiles() {
+        // The lab capture's cut bush: x 39, y 14, 2 x 2, tiles 1834 1835 1850 1851.
+        let m = board_modify_message(39, 14, 2, 2, &[1834, 1835, 1850, 1851]);
+        let mut want = vec![1 + 0x20, 39 + 0x20, 14 + 0x20, 2 + 0x20, 2 + 0x20];
+        for t in [1834u16, 1835, 1850, 1851] {
+            want.extend_from_slice(&gshort(t));
+        }
+        want.push(b'\n');
+        assert_eq!(m, want);
+    }
+
+    #[test]
+    fn trigger_action_is_pli_38_with_no_npc_and_half_tiles() {
+        assert_eq!(trigger_action_message(21.5, 9.0, "pushed", "0"), [&[38 + 0x20, 0x20, 0x20, 0x20, 43 + 0x20, 18 + 0x20][..], b"pushed,0\n"].concat());
+        assert_eq!(trigger_action_message(1.0, 1.0, "x", ""), [&[38 + 0x20, 0x20, 0x20, 0x20, 2 + 0x20, 2 + 0x20][..], b"x\n"].concat());
     }
 
     #[test]

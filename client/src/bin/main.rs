@@ -1723,10 +1723,14 @@ fn main() {
                 if !no_scripts && scripts.trigger(&mut session, &t) {
                     eprintln!("{} at {:.1},{:.1} (dir {})", t.action, t.x, t.y, t.dir);
                 }
-            }
-            for b in session.take_moved_blocks() {
-                eprintln!("stone block moved (4x4 at {},{}); the server is not told", b.x, b.y);
-                dirty = true;
+                // Online the 2.05 client sends every push and pull try to
+                // the server too.
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_trigger_action(t.x, t.y, t.action, &t.dir.to_string()) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
             }
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
@@ -2444,6 +2448,17 @@ fn main() {
                         npc_images.insert(name, (w, px));
                         dirty = true;
                     }
+                }
+            }
+        }
+        // Tiles the player changed this frame (a lift, a cut, a moved stone
+        // block): the server writes them into the level for the others.
+        for b in session.take_board_changes() {
+            dirty = true;
+            if let Some(c) = conn.as_mut() {
+                if let Err(e) = c.send_board_modify(b.x as u8, b.y as u8, b.width as u8, b.height as u8, &b.tiles) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
                 }
             }
         }

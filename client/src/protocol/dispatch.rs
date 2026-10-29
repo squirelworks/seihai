@@ -11,7 +11,7 @@ use super::extras::{
 };
 use super::levelcache::{same_level, CachedLevel, LevelCache};
 use super::layouts::{
-    parse_board_heights, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
+    parse_board_heights, parse_board_modify, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
     parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
     parse_shoot, parse_showimg_relay, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
 };
@@ -643,6 +643,9 @@ impl SessionState {
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.board_modifies.push(s);
                 }
+                if let Some(m) = parse_board_modify(&msg.payload) {
+                    self.apply_board_modify(&m);
+                }
             }
             8 => {
                 // PLO_OTHERPLPROPS — parse position and store.
@@ -1182,6 +1185,29 @@ impl SessionState {
             self.board_mods_dropped += 1;
             return;
         };
+        self.apply_board_block(&level, m);
+    }
+
+    /// Apply a `PLO_BOARDMODIFY` (7) to the player's level: the server
+    /// sends it for a change another player made (a bush lifted or cut, a
+    /// stone block pushed), and GServer echoes some back to the sender. The
+    /// block has no cell of its own; it goes where 186 goes for the
+    /// player's cell.
+    fn apply_board_modify(&mut self, m: &BoardModify2) {
+        let level = match &self.gmap {
+            Some(g) => g.current_level(),
+            None => self.level_name.clone(),
+        };
+        let Some(level) = level else {
+            self.board_mods_dropped += 1;
+            return;
+        };
+        self.apply_board_block(&level, m);
+    }
+
+    /// Write a board block into `level`'s board (and the live board when it
+    /// is the player's level), and queue it for whoever draws the levels.
+    fn apply_board_block(&mut self, level: &str, m: &BoardModify2) {
         let key = level.to_ascii_lowercase();
         let is_live = self.level_name.as_deref().map(str::to_ascii_lowercase).as_deref() == Some(key.as_str());
         if let Some(g) = self.gmap.as_mut() {
@@ -2878,6 +2904,23 @@ mod tests {
         assert_eq!(st.board_mods_dropped, 1);
         assert!(st.take_board_mods().is_empty());
         assert_eq!(st.board_modify2.as_ref().map(|m| m.map_x), Some(5), "still recorded");
+    }
+
+    /// `PLO_BOARDMODIFY` (7) has no cell: it goes to the player's level.
+    #[test]
+    fn board_modify_goes_to_the_live_level() {
+        let mut st = SessionState::for_version(ClientVersion::V205);
+        st.apply_body(&[msg(6, b"a.nw"), raw_board(3)].concat());
+        let mut p = vec![gc(2), gc(2), gc(2), gc(1)];
+        p.extend(gsh(7));
+        p.extend(gsh(8));
+        st.apply_body(&msg(7, &p));
+        assert_eq!(&st.board.as_ref().unwrap()[2 * 64 + 2..2 * 64 + 4], &[7, 8]);
+        let mods = st.take_board_mods();
+        assert_eq!((mods.len(), mods[0].0.as_str()), (1, "a.nw"));
+        // Cut short: dropped.
+        st.apply_body(&msg(7, &p[..5]));
+        assert!(st.take_board_mods().is_empty());
     }
 
     /// Off a gmap there is one level, cell (0, 0).
