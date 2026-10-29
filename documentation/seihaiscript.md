@@ -49,7 +49,23 @@ The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode 
 - `in {list}` inside a larger condition.
 - `<>`, `=<` and `=>`: the 2.05 client's comparison table holds them beside `!=`, `<=` and `>=`.
 
-With these, 444 of the corpus's 3,038 scripts still have diagnostics (498 before). Most of the rest use forms not found in the 2.05 client: `this.a = {1,2,3}` array literals (133 scripts), `with (...)` (64; the word first appears in the 2.17 client), the `?:` choice (33), empty arguments such as `seteffect ,,,;` (23), and `#P1(-1)`-style codes with a digit (10). Whether 2.1 and later clients accept the literals and `?:` was not read.
+With these, 444 of the corpus's 3,038 scripts still had diagnostics (498 before).
+
+**2.1 forms (2026-10-29).** Read on the 2.1 era (2.1 test builds and later) only; a 2.05 client reads none of them:
+
+- `{a,b,c}` as a value: `this.a = {1,2,3}` fills `this.a` as an array (length and items, as `setarray` makes), and a command's number argument can be one (`showpoly 300,{0,0,32,0}`).
+- `x in this.list`: true when `x` equals one of the array's values.
+- `cond ? a : b`, the loosest operator.
+- `with (target) body`. The NPC server notes of 2001 describe it (the body runs as `players[i]`, `getplayer(acct)`, `npcs[i]` or `getnpc(name)`), and the word is in the 2.17 client and later. Seihai does not switch objects, so the body is skipped and the skip logged; it is never run as the wrong object.
+- `#P1` to `#P30` read a gani attribute (the 2.2 command list). With no index or with -1 it is the NPC's own, as set by `setcharprop #P1,value`; a player's is not known and reads empty. `#C0` to `#C4` keep their digits too, but are not answered yet.
+
+In every era:
+
+- An empty number argument is 0 (`seteffect ,,,;`, `callnpc,this.i,call3,;`). Inferred: that the client reads an empty field as 0 was not read from the program.
+- `for (i=0;i<3;i++;)`: a `;` after the step is let through.
+- `{...}` inside the raw text of a command (`setshape2 4,5,{...}`) or of an unknown command is kept whole, so its `}` no longer closes the block around it.
+
+The corpus now has 365 scripts with diagnostics read as 2.05, and 160 read as 2.1 and later. Of the rest, many are broken scripts (`if(strequals(#g,Red Team)||)`, a sign's text run into the script), and many call functions Seihai does not have yet (`strcontains`, `lindexof`).
 
 **Text join and the chat attribute (2.1 and later).** `a @ b` joins two texts; `SPC`, `NL` and `TAB` join with a space, a line break or a tab between (the four operators of the GS2 grammar of the public GServer, where `@` binds looser than the comparisons and tighter than `&&`). `chat` (an object's bubble text, the same as the `message` command) and `player.chat` (the player's chat text, like `setplayerprop #c`) can be read and written; `player.account` and `player.nick` can be read. A level NPC script of a server that runs NPCs (`chat = player.account SPC "touched me";`) parsed with `expected ;` before. Open: scripts that are really GS2 (`temp.` variables, `this.x` methods, `{}` object literals) are still not run; and when the server runs the NPCs (`PLO_HASNPCSERVER`) a level file's NPC script is still run locally.
 
