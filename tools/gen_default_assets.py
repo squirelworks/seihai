@@ -62,12 +62,12 @@ class Pal:
         return out
 
 
-def save_png(im, pal, path, bits, size, transparent):
+def save_png(im, pal, path, bits, size, transparent, clear=0):
     assert len(pal.names) <= size, (path, len(pal.names), size)
     im.putpalette(pal.flat(size))
     kw = dict(optimize=True, bits=bits, compress_level=9)
     if transparent:
-        kw["transparency"] = 0
+        kw["transparency"] = clear
     im.save(path, "PNG", **kw)
 
 
@@ -564,10 +564,36 @@ def body_carry_cell(pal, direction, phase):
     return im
 
 
+# The lying body of dead.gani: 32x16 cells in the 16 spare rows at the foot
+# of the sheet (y = 704), the same for each direction. Seen from above,
+# shoulders to the left, feet to the right; the head goes left of it.
+POSE_LYING = 22
+
+
+def body_lying_cell(pal):
+    P = pal
+    im = Image.new("P", (32, 16), 0)
+    d = ImageDraw.Draw(im)
+    # legs and boots
+    for y0, dark in ((3, True), (9, False)):
+        d.rectangle([15, y0, 25, y0 + 3], fill=P["pants_dk"] if dark else P["pants"], outline=P["outline"])
+        d.rectangle([25, y0 - 1, 29, y0 + 4], fill=P["boot"], outline=P["outline"])
+    # arms along the sides: sleeves, then hands
+    for y0 in (0, 12):
+        d.rectangle([2, y0, 9, y0 + 3], fill=P["tunic_dk"], outline=P["outline"])
+        d.rectangle([9, y0, 12, y0 + 3], fill=P["skin"], outline=P["outline"])
+    # torso and belt
+    d.rectangle([1, 3, 16, 12], fill=P["tunic"], outline=P["outline"])
+    d.rectangle([13, 4, 15, 11], fill=P["belt"])
+    d.rectangle([13, 7, 15, 8], fill=P["gold"])
+    return im
+
+
 def build_body():
     pal = body_palette()
     sheet = Image.new("P", (128, 720), 0)
     for dr in range(DIRS):
+        sheet.paste(body_lying_cell(pal), (dr * 32, 32 * POSE_LYING))
         sheet.paste(body_cell(pal, dr, None), (dr * 32, 0))
         for k in range(8):
             sheet.paste(body_cell(pal, dr, k), (dr * 32, 32 * (1 + k)))
@@ -576,7 +602,27 @@ def build_body():
         sheet.paste(body_carry_cell(pal, dr, None), (dr * 32, 32 * POSE_CARRY_STILL))
         for k in range(8):
             sheet.paste(body_carry_cell(pal, dr, k), (dr * 32, 32 * (POSE_CARRY_WALK + k)))
-    return sheet, pal
+    return body_colour_layout(sheet, pal)
+
+
+# The 2.05 client draws a body in the player's colours by replacing palette
+# entries: 0 outline, 1 belt, 3 shoes, 4 sleeves, 5 skin, 6 coat (entry 2 is
+# the clear colour in the stock bodies). See documentation/appearance.md.
+# The shades of those parts are folded into them so a recoloured body has
+# no stray tunic or skin tones left.
+BODY_LAYOUT = ["outline", "belt", "clear", "boot", "tunic_dk", "skin", "tunic"]
+BODY_FOLD = {"tunic_lt": "tunic", "skin_dk": "skin", "boot_dk": "boot"}
+BODY_CLEAR = 2
+
+
+def body_colour_layout(sheet, pal):
+    order = BODY_LAYOUT + [n for n in pal.names if n not in BODY_LAYOUT and n not in BODY_FOLD]
+    new = Pal()
+    for n in order:
+        new.add(n, pal.rgb[pal[n]])
+    lut = [new[BODY_FOLD.get(n, n)] for n in pal.names]
+    data = bytes(lut[b] for b in sheet.tobytes())
+    return Image.frombytes("P", sheet.size, data), new
 
 
 def head_palette():
@@ -997,6 +1043,32 @@ def carry_gani():
     return "\n".join(L)
 
 
+def dead_gani():
+    """Our own falling sequence, one step per 50 ms tick of the death timer
+    (pose.rs) and held on the last step: hurt for 6 ticks, kneeling for 8,
+    then lying on the back. The same rows for each direction."""
+    L = gani_header("dead.gani: falling down when the hearts run out; held on the last step")
+    L += ["// The steps and their timing are Seihai's own; see documentation/health-death.md.",
+          "DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
+    lying = [f"SPRITE {200 + 4 * POSE_LYING + dr} BODY {32 * dr} {32 * POSE_LYING} 32 16 body lying" for dr in range(DIRS)]
+    L += gani_sprites([POSE_HURT, POSE_SIT], lying) + ["", "ANI"]
+    for _ in range(6):
+        for dr in range(DIRS):
+            (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+            hdx, hdy = HURT_HEAD[dr]
+            L.append(f"0 {sx} {sy}, {200 + 4 * POSE_HURT + dr} {bx} {by}, {100 + dr} {hx + hdx} {hy + hdy}")
+        L.append("")
+    for _ in range(8):
+        for dr in range(DIRS):
+            (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
+            L.append(f"0 {sx} {sy}, {200 + 4 * POSE_SIT + dr} {bx} {by + 2}, {100 + dr} {hx} {hy + 10}")
+        L.append("")
+    for dr in range(DIRS):
+        L.append(f"0 14 34, {200 + 4 * POSE_LYING + dr} 18 28, 102 -6 17")
+    L += ["", "ANIEND", ""]
+    return "\n".join(L)
+
+
 # Head shift of the hurt pose, away from the facing side (dx, dy per direction).
 HURT_HEAD = [(1, 2), (2, 2), (-1, 2), (-2, 2)]
 
@@ -1221,7 +1293,7 @@ def write_all(out):
     open(os.path.join(out, "tiledefs.txt"), "w", newline="\n").write(tiledefs_text())
 
     im, p = build_body()
-    save_png(im, p, os.path.join(out, "bodies", "body.png"), 4, 16, True)
+    save_png(im, p, os.path.join(out, "bodies", "body.png"), 4, 16, True, BODY_CLEAR)
     im, p = build_head()
     save_png(im, p, os.path.join(out, "heads", "head0.png"), 8, 16, True)
     im, p = build_sword()
@@ -1234,7 +1306,7 @@ def write_all(out):
     save_png(im, p, os.path.join(out, "state.png"), 4, 16, True)
 
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
-                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()),
+                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
                        ("carrystill", carrystill_gani()), ("carry", carry_gani())):
         open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(text)
 

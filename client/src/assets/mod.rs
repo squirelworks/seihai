@@ -26,4 +26,4 @@ pub use level::{
     Link, Npc, NpcImage, Object2x2, ObjectTables, Sign, Tile, TileKind, TileTypes, new_world_tile_type, TYPE_THROW_THROUGH,
 };
 pub use zelda::{is_zelda, Computer, ZeldaLayout, ZeldaLevel, ZeldaLink, ZeldaMagic, ZeldaSign};
-pub use png::{read_png_rgb, read_png_rgba, write_png_indexed, write_png_rgb};
+pub use png::{read_png_rgb, read_png_rgba, read_png_rgba_recolored, write_png_indexed, write_png_rgb};

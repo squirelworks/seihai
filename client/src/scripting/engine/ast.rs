@@ -80,6 +80,13 @@ pub enum Expr {
     InRange { e: Box<Expr>, lo: Box<Expr>, hi: Box<Expr> },
     /// `x in {a,b,c}`
     InList { e: Box<Expr>, list: Vec<Expr> },
+    /// `x in this.list`: one of the values of an array (2.1 and later).
+    InArray { e: Box<Expr>, name: String },
+    /// `cond ? a : b` (2.1 and later).
+    Cond { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
+    /// `{a,b,c}`, the right side of an assignment (2.1 and later): fills
+    /// the variable as an array.
+    List(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +133,10 @@ pub enum Stmt {
     /// A function call used as a statement.
     Call { name: String, args: Vec<Expr> },
     Command { name: String, args: Vec<Arg>, line: u32 },
+    /// `with (target) body` (2.1 and later): the body runs as the player or
+    /// NPC `target` names. Seihai does not switch objects, so the body is
+    /// skipped and the skip logged.
+    With { target: Expr, body: Box<Stmt>, line: u32 },
     /// A name that is not a command in this era, with its raw arguments.
     /// Logged and ignored when run.
     Unknown { name: String, raw: String, reason: &'static str, line: u32 },
@@ -198,6 +209,15 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
+            Expr::Cond { cond, then, els } => write!(f, "(? {cond} {then} {els})"),
+            Expr::InArray { e, name } => write!(f, "(in {e} array {name})"),
+            Expr::List(list) => {
+                write!(f, "(list")?;
+                for a in list {
+                    write!(f, " {a}")?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -258,6 +278,7 @@ impl fmt::Display for Stmt {
                 }
                 write!(f, ")")
             }
+            Stmt::With { target, body, .. } => write!(f, "(with {target} {body})"),
             Stmt::Unknown { name, raw, reason, .. } => write!(f, "(unknown {name} {raw:?} {reason})"),
         }
     }

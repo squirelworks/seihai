@@ -85,6 +85,8 @@ pub struct ScriptObject {
     pub resume: Option<usize>,
     pub touching: bool,
     pub params: Vec<String>,
+    /// `setcharprop` values by code (`#P1`), read back by `#P1(-1)`.
+    pub char_props: HashMap<String, String>,
     pub destroyed: bool,
     /// Events run so far.
     pub runs: u64,
@@ -343,6 +345,7 @@ impl ScriptWorld {
             resume: None,
             touching: false,
             params: Vec::new(),
+            char_props: HashMap::new(),
             destroyed: false,
             runs: 0,
         }));

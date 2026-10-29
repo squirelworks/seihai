@@ -48,7 +48,20 @@ At count 28 (checked before the step is counted, so on the 29th blocked step), a
 4. The block moves one tile. Each of its old cells first takes the tile two cells ahead, then the block is written one cell ahead. So the row the block leaves gets the floor that was in front of it.
 5. The 2.05 client sends the 4 x 4 area around the old spot as a board modify, moves the player one tile in the facing, and plays `sounds/stonemove.wav`.
 
-Seihai does steps 1 to 5 locally, but does not send the board modify or the trigger action online yet (as with lifting, see `cut-and-lift.md`). NPCs with `canbepushed` are moved by the same routine in 2.05 and get `waspushed`; Seihai's scripts do not move NPCs, so only `actionpushed` reaches them.
+<<<<<<< HEAD
+Seihai does steps 1 to 5 locally, but does not send the board modify or the trigger action online yet (as with lifting, see `cut-and-lift.md`). ## Pushed and pulled NPCs
+
+When no block is there, the push routine looks for an NPC with `canbepushed` at the same probe point, and the pull routine for one with `canbepulled` at the grab point. Seihai does the same:
+
+* `actionpushed` / `actionpulled` always fires first.
+* **Edge.** Every point along the edge the NPC moves into, one per tile from its left or top, must be free of walls, chests and other NPCs (water does not stop it). Pushing up that is `(t, y - 1)` for `t` from `x` while `t < x + w`; left `(x - 1, t)`, down `(t, y + h)`, right `(x + w, t)`. A pull checks the side facing the player, and first the two cells behind the player: from the grab cell, up `(0,3) (1,3)`, left `(3,0) (3,1)`, down `(0,-3) (1,-3)`, right `(-3,0) (-3,1)`.
+* **Size.** A character NPC counts as 3 x 3 tiles for the edge and is hit in `x + 0.5 .. x + 2.5`, `y + 1 .. y + 3`; otherwise its `setshape` size, else the image part it shows. Seihai counts an NPC whose image size it does not know as 2 x 2.
+* **Move.** The NPC moves one tile (towards the player for a pull), the player one tile the same way, the block's sound plays, and the NPC's script gets `waspushed` / `waspulled`. 2.05 sends nothing to the server for the NPC.
+* **Blocking.** 2.05 stops the player at every NPC that blocks. Seihai stops the player only at pushable and pullable NPCs (they are what a push needs), and lets A grab them. Other NPCs are still walked through.
+* 2.22 is the same, except that the NPC lookup also searches the neighbouring map parts on a gmap.
+=======
+Seihai does steps 1 to 5. Online it sends the 4 x 4 area as `PLI_BOARDMODIFY` (1) and each push or pull try as `PLI_TRIGGERACTION` (38): no NPC (GINT 0), the point in half tiles, then `pushed,<dir>` or `pulled,<dir>`, the message the 2.05 client builds. 2.05 also sends the trigger to UDP peers (id 26); Seihai does not. NPCs with `canbepushed` are moved by the same routine in 2.05 and get `waspushed`; Seihai's scripts do not move NPCs, so only `actionpushed` reaches them.
+>>>>>>> origin/main
 
 ## Grabbing and pulling
 
@@ -78,5 +91,6 @@ The same in both, with the same numbers, except: any blocking NPC can be grabbed
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
 * Online sends: the board modify for a moved block and the `pushed` / `pulled` trigger action.
+* Blocking on every NPC that blocks, which needs the NPC image sizes in the session.
 * Moving `canbepushed` / `canbepulled` NPCs.
 * A jump across a gmap edge: 2.05 shifts the jump's start point when the level changes in the air; Seihai moves into the next cell when it lands.

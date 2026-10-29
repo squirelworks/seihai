@@ -343,6 +343,9 @@ pub static EVENTS: &[(&str, Era)] = &[
     ("washit", V200),
     ("wasthrown", V200),
     ("waspelt", V200),
+    // Moved by a push or a pull (`canbepushed`, `canbepulled`).
+    ("waspushed", V200),
+    ("waspulled", V200),
     ("exploded", V200),
     ("compusdied", V200),
     ("compsdead", V200),

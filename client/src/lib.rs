@@ -12,6 +12,7 @@ pub mod keys;
 pub mod help;
 pub mod inventory;
 pub mod life;
+pub mod looks;
 pub mod net;
 pub mod npcart;
 pub mod offline;

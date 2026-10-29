@@ -13,7 +13,7 @@ use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
 mod pushpull;
-pub use pushpull::{BlockMoved, Grab, Jump, PushPull, Trigger};
+pub use pushpull::{NpcMoved, BlockMoved, Grab, Jump, PushPull, Trigger};
 use pushpull::StepResult;
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
@@ -145,6 +145,9 @@ pub struct OfflineSession {
     /// NPCs a thrown object hit since the last [`Self::take_pelts`]: the
     /// id the caller's NPC test returned, for the `waspelt` event.
     pelts: Vec<usize>,
+    /// Board areas the player changed since the last
+    /// [`Self::take_board_changes`].
+    board_changes: Vec<BoardChange>,
     /// Another player's thrown object hurt the player since the last
     /// [`Self::take_throw_hurt`].
     throw_hurt: bool,
@@ -198,6 +201,12 @@ pub struct OfflineSession {
     /// Sword power 1–4 and shield power 1–3.
     pub sword_power: u8,
     pub shield_power: u8,
+    /// Head, body and body colours (`sethead`, `setbody`, `set*color`,
+    /// the chat commands, or prop 13 from the server).
+    pub looks: crate::looks::Looks,
+    /// Set when a script or chat line changed `looks`, so the game loop
+    /// can tell the server; cleared by the loop.
+    pub looks_changed: bool,
     /// Whether the glove is held, and its power.
     pub glove_power: u8,
     /// Ledge jumps, pushing, and the A key's grab and pull (see
@@ -306,6 +315,17 @@ pub struct Landing {
 }
 
 /// What an interact press did.
+/// A rectangle of the player's level the client changed, with its new tiles
+/// row by row (see [`OfflineSession::take_board_changes`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoardChange {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub tiles: Vec<u16>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Interaction {
     /// An object (bush, rock, ...) was lifted; `kind` is its entry in the
@@ -391,6 +411,7 @@ impl OfflineSession {
             landings: Vec::new(),
             throw_ms: 0,
             pelts: Vec::new(),
+            board_changes: Vec::new(),
             throw_hurt: false,
             player_x: 30.0,
             player_y: 30.0,
@@ -418,7 +439,13 @@ impl OfflineSession {
             darts: 10,
             sword_power: 1,
             shield_power: 1,
+            looks: crate::looks::Looks::default(),
+            looks_changed: false,
             glove_power: 0,
+            // 2.05 starts every player at glove 1 (enough for a pot), as
+            // GServer's default account does (`GLOVEP 1`).
+            glove_power: 1,
+
             pushpull: PushPull::default(),
             max_hearts: 6,
             opened_chests: HashSet::new(),
@@ -778,7 +805,8 @@ impl OfflineSession {
                 "the spin attack".into()
             }
             "glove1" | "glove2" => {
-                self.glove_power = self.glove_power.max(if item == "glove1" { 1 } else { 2 });
+                // 2.05 and GServer: glove1 raises the power to 2, glove2 to 3.
+                self.glove_power = self.glove_power.max(if item == "glove1" { 2 } else { 3 });
                 "a glove".into()
             }
             "sword" | "battleaxe" | "lizardsword" | "goldensword" => {
@@ -863,8 +891,9 @@ impl OfflineSession {
     /// Lift the object in front of the player, if the glove allows it.
     ///
     /// The glove power `g` allows the first `g + 2` entries of the lift
-    /// table (a bare hand lifts the first two: the bush and the pot-like
-    /// block; a glove the heavier ones). The object's four tiles on the board
+    /// table (arrays.dat array 11: bush, sign, pot, light stone, black
+    /// stone). Players start at 1, which lifts up to the pot; glove1 (2)
+    /// adds the light stone and glove2 (3) the black stone. The object's four tiles on the board
     /// are replaced by the table's "left behind" tiles and the player carries
     /// it. Not while swimming, carrying, or dead.
     pub fn try_lift(&mut self) -> Option<usize> {
@@ -878,6 +907,7 @@ impl OfflineSession {
         let tiles = tables.lift[kind];
         let left = tables.lift_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
+        self.note_board_change(ax, ay, 2, 2);
         self.carried = Some(Carried { kind, tiles });
         Some(kind)
     }
@@ -1021,6 +1051,27 @@ impl OfflineSession {
         self.throw_hurt = true;
     }
 
+    /// Note that the player changed the `w` x `h` tiles at `(x, y)` of the
+    /// current level (a lift, a cut, a moved stone block), clipped to the
+    /// board, with the tiles as they are now.
+    pub(crate) fn note_board_change(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        let Some(level) = self.current_level.as_ref() else { return };
+        let (x0, y0) = (x.max(0), y.max(0));
+        let (x1, y1) = ((x + w).min(64), (y + h).min(64));
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let tiles = (y0..y1).flat_map(|ty| (x0..x1).map(move |tx| (tx, ty))).map(|(tx, ty)| level.tile_id_at(tx, ty).unwrap_or(0)).collect();
+        self.board_changes.push(BoardChange { x: x0, y: y0, width: x1 - x0, height: y1 - y0, tiles });
+    }
+
+    /// The board areas the player changed since the last call. Online each
+    /// goes to the server as a `PLI_BOARDMODIFY`, which shows the change to
+    /// the other players in the level.
+    pub fn take_board_changes(&mut self) -> Vec<BoardChange> {
+        std::mem::take(&mut self.board_changes)
+    }
+
     /// NPCs hit by thrown objects since the last call (for `waspelt`).
     pub fn take_pelts(&mut self) -> Vec<usize> {
         std::mem::take(&mut self.pelts)
@@ -1046,6 +1097,7 @@ impl OfflineSession {
         let (kind, ax, ay) = self.current_level.as_ref()?.find_object(&tables.cut, tables.cut.len(), px, py)?;
         let left = tables.cut_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
+        self.note_board_change(ax, ay, 2, 2);
         // The cut plays the break effect of its table entry (bush: the leaves
         // of the thrown bush), anchored on the object's top-left tile.
         // Which effect each cut entry plays is inferred, see
@@ -1402,8 +1454,17 @@ impl OfflineSession {
     /// not). The tile is `floor(coordinate + 0.0001)`, as in the real client.
     /// Water and lava are open. Developer mode skips the test.
     fn walk_blocked(&self, px: f64, py: f64) -> bool {
+        self.walk_blocked_except(px, py, None)
+    }
+
+    /// [`Self::walk_blocked`], with NPC `except` left out (an NPC that is
+    /// being moved does not stop itself).
+    fn walk_blocked_except(&self, px: f64, py: f64, except: Option<usize>) -> bool {
         if self.dev.wallhack() {
             return false;
+        }
+        if self.npc_blocks_at(px as f32, py as f32, except) {
+            return true;
         }
         if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
             if self.kind_at_point(level, types, (px + WALK_FLOOR_EPS) as f32, (py + WALK_FLOOR_EPS) as f32) == TileKind::Blocking {
@@ -2071,6 +2132,10 @@ mod tests {
         face_up_at(&mut s, 20, 20);
         assert!(s.start_swing());
         assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT);
+        let c = s.take_board_changes();
+        assert_eq!(c.len(), 1, "the cut goes to the server as one board modify");
+        assert_eq!((c[0].x, c[0].y, c[0].width, c[0].height), (20, 20, 2, 2));
+        assert_eq!(c[0].tiles, [BUSH_CUT[0][0], BUSH_CUT[1][0], BUSH_CUT[0][1], BUSH_CUT[1][1]].map(|t| t as u16), "row by row");
     }
 
     #[test]
@@ -2079,6 +2144,9 @@ mod tests {
         face_up_at(&mut s, 20, 20);
         assert_eq!(s.interact(), Interaction::Lifted { kind: 0 });
         assert_eq!(get(s.current_level.as_ref().unwrap(), 20, 20), BUSH_CUT, "the bush leaves its stump");
+        let c = s.take_board_changes();
+        assert_eq!((c.len(), c[0].x, c[0].y, c[0].width, c[0].height), (1, 20, 20, 2, 2), "the lift is a 2 x 2 board modify");
+        assert_eq!(c[0].tiles, [BUSH_CUT[0][0], BUSH_CUT[1][0], BUSH_CUT[0][1], BUSH_CUT[1][1]].map(|t| t as u16), "row by row");
         assert_eq!(s.carried.as_ref().unwrap().tiles, [[2u16, 18], [3, 19]]);
         // Hands full: A throws it.
         assert_eq!(s.interact(), Interaction::Thrown { kind: 0 });
@@ -2103,6 +2171,24 @@ mod tests {
         assert!(s.carried.is_none());
         assert_eq!(s.pushpull.grab, Some(Grab { count: 1 }), "held until A is let go");
         assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK, "the rock does not move");
+    }
+
+    /// arrays.dat array 11's third entry is the pot: 2.05 players start at
+    /// glove 1, which reaches it, and the glove items raise it to 2 and 3.
+    #[test]
+    fn players_start_at_glove_1_and_the_gloves_raise_it() {
+        assert_eq!(OfflineSession::new().glove_power, 1);
+        let mut s = object_session(OfflineSession::new().glove_power);
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 2 }, "the third entry without a glove item");
+        let mut s = OfflineSession::new();
+        s.glove_power = 1;
+        s.give_item("glove1");
+        assert_eq!(s.glove_power, 2);
+        s.give_item("glove2");
+        assert_eq!(s.glove_power, 3);
+        s.give_item("glove1");
+        assert_eq!(s.glove_power, 3, "never lowered");
     }
 
     #[test]

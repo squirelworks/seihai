@@ -495,6 +495,7 @@ fn the_starter_level_chest_and_sign_tiles_have_open_art_two_ids_on() {
     }
 }
 
+<<<<<<< HEAD
 // ---- downloads land where the resolver looks (laundry list P6, 2026-10-29) ----
 
 /// Every image a server sends is found again by the resolver, at the path
@@ -516,4 +517,47 @@ fn a_downloaded_image_is_found_where_it_was_saved() {
         }
         let _ = fs::remove_dir_all(&cache);
     }
+=======
+// ---- the Seihai folder's cache (laundry list P2, 2026-10-29) ---------------------
+
+/// `_cache/<host>_<port>/` in the Seihai folder is searched before the
+/// settings' cache, and a download goes to both. A Seihai folder that cannot
+/// be written leaves the settings' copy.
+#[test]
+fn the_seihai_folder_cache_is_searched_first_and_downloads_go_to_both() {
+    let game = tmp("game-cache");
+    let cache = tmp("game-cache-settings");
+    let r = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_game_cache(Some(game.clone()))
+        .with_cache(Some(cache.clone()));
+    // An older copy in the settings' cache only: found, and offered with its time.
+    let old = touch(&cache, "levels/heads/head927.png", b"old");
+    assert_eq!(r.image("head927.png"), Some(old));
+    // A copy in the Seihai folder wins.
+    let new = touch(&game, "levels/heads/head927.png", b"new");
+    assert_eq!(r.image("head927.png"), Some(new.clone()));
+    assert_eq!(r.layer_of(&new), Some(Layer::Cache));
+    assert_eq!(r.download_root().map(|d| d.root.clone()), Some(game.clone()));
+
+    let mut store = DownloadStore::new(r.clone(), true);
+    store.set_cache_meta(Some("host=h\nport=1\n".into()));
+    let got = store.store("body13.png", b"server", Some(1_700_000_000)).unwrap();
+    assert_eq!(got, Stored::Disk(game.join("levels/bodies/body13.png")));
+    assert_eq!(fs::read(cache.join("levels/bodies/body13.png")).unwrap(), b"server");
+    assert!(game.join("server.txt").exists() && cache.join("server.txt").exists());
+    assert_eq!(r.image("body13.png"), Some(game.join("levels/bodies/body13.png")));
+    assert_eq!(store.local_path("BODY13.PNG"), Some(game.join("levels/bodies/body13.png")));
+
+    // The Seihai folder's cache cannot be made (a file is in the way).
+    let blocked = tmp("game-cache-blocked").join("file");
+    fs::write(&blocked, b"").unwrap();
+    let r2 = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_game_cache(Some(blocked.join("_cache")))
+        .with_cache(Some(cache.clone()));
+    let mut store2 = DownloadStore::new(r2, true);
+    let got = store2.store("hat0.png", b"x", None).unwrap();
+    assert_eq!(got, Stored::Disk(cache.join("levels/hats/hat0.png")));
+    let _ = fs::remove_dir_all(&game);
+    let _ = fs::remove_dir_all(&cache);
+>>>>>>> origin/main
 }

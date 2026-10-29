@@ -141,6 +141,20 @@ impl SessionScripts {
         true
     }
 
+    /// A push or a pull moved a level NPC: its script object follows, and
+    /// gets `waspushed` / `waspulled`.
+    pub fn npc_moved(&mut self, session: &mut OfflineSession, m: &crate::offline::NpcMoved) {
+        let id = self.world.ids().into_iter().find(|&id| self.world.obj(id).is_some_and(|o| o.kind == ObjKind::Npc && o.tag == m.index));
+        let Some(id) = id else { return };
+        if let Some(o) = self.world.obj_mut(id) {
+            o.x = f64::from(m.x);
+            o.y = f64::from(m.y);
+        }
+        self.sync_player(session);
+        self.world.fire(id, m.event, &[]);
+        self.apply(session);
+    }
+
     /// Advance script time by `ms` and run what falls due. Also notices
     /// the end of sign reading (`playerendsreading`).
     pub fn tick(&mut self, session: &mut OfflineSession, ms: u64) {
@@ -365,6 +379,26 @@ impl SessionScripts {
                         }
                     }
                 }
+                // The player's looks (`documentation/appearance.md`). In 2.05
+                // these change the player whichever object runs them.
+                Effect::Command { ref name, ref args, .. } if name == "sethead" || name == "setbody" => {
+                    let pic = args.first().map(|v| v.text()).unwrap_or_default();
+                    let pic = pic.trim();
+                    if !pic.is_empty() {
+                        let slot = if name == "sethead" { &mut s.looks.head } else { &mut s.looks.body };
+                        *slot = Some(pic.to_string());
+                        s.looks_changed = true;
+                    }
+                }
+                Effect::Command { ref name, ref args, .. } if crate::looks::color_slot(name).is_some() => {
+                    if let (Some(slot), Some(c)) = (crate::looks::color_slot(name), args.first().map(|v| v.num())) {
+                        let c = c.round();
+                        if (0.0..20.0).contains(&c) {
+                            s.looks.colors[slot] = c as u8;
+                            s.looks_changed = true;
+                        }
+                    }
+                }
                 // Character props on an NPC: head, body, colors, shield.
                 Effect::SetCharProp { obj, code, value } => {
                     if let Some(n) = self.level_npc(s, obj) {
@@ -373,6 +407,20 @@ impl SessionScripts {
                             "#8" => n.body = Some(value),
                             "#2" => n.shield = Some(value),
                             _ => { n.props.insert(code, value); }
+                        }
+                    }
+                }
+                // `canbepushed` and `canbepulled` (and their `cannot` forms):
+                // whether a push or a pull moves the NPC.
+                Effect::Command { obj, ref name, .. }
+                    if matches!(name.as_str(), "canbepushed" | "cannotbepushed" | "canbepulled" | "cannotbepulled") =>
+                {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        match name.as_str() {
+                            "canbepushed" => n.pushable = true,
+                            "cannotbepushed" => n.pushable = false,
+                            "canbepulled" => n.pullable = true,
+                            _ => n.pullable = false,
                         }
                     }
                 }
@@ -511,6 +559,22 @@ mod tests {
         s.load_level(dir.join("next.nw")).unwrap();
         assert!(!s.no_pk, "a new level starts without the flag");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `canbepushed` marks the level NPC; a push that moves it gives the
+    /// script `waspushed` at its new place.
+    #[test]
+    fn canbepushed_npcs_move_and_hear_waspushed() {
+        let mut s = session("GLEVNW01\nNPC - 20 10\nif (created) { canbepushed; canbepulled; cannotbepulled; }\nif (waspushed) { message moved; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "push.nw");
+        let n = &s.current_level.as_ref().unwrap().npcs[0];
+        assert!(n.pushable && !n.pullable);
+        let m = crate::offline::NpcMoved { index: 0, x: 20.0, y: 9.0, event: "waspushed" };
+        sc.npc_moved(&mut s, &m);
+        assert_eq!(s.last_message.as_deref(), Some("moved"));
+        let id = sc.world.npc_at(21.0, 9.5).expect("the script object moved with it");
+        assert_eq!(sc.world.obj(id).map(|o| o.y), Some(9.0));
     }
 
     #[test]
@@ -759,5 +823,24 @@ mod tests {
         let mut sc = SessionScripts::new(ClientVersion::V205);
         sc.load_level(&mut s, "town.nw");
         assert_eq!(sc.chat(&mut s, "unstick me"), "unstick me");
+    }
+
+    const CLOTHES: &str = "GLEVNW01\n\
+        NPC - 20 20\n\
+        //#CLIENTSIDE\n\
+        if (created) { setbody body13.png; sethead head927.png; setskincolor 18; setcoatcolor red; setbeltcolor 25; }\n\
+        NPCEND\n";
+
+    #[test]
+    fn looks_commands_change_the_player() {
+        let mut s = session(CLOTHES);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "shop.nw");
+        assert_eq!(s.looks.body.as_deref(), Some("body13.png"));
+        assert_eq!(s.looks.head.as_deref(), Some("head927.png"));
+        // Skin 18, coat red (4); a belt past the list is left alone.
+        assert_eq!(s.looks.colors, [18, 4, 18, 5, 18]);
+        assert!(s.looks_changed);
+        assert!(sc.unhandled.iter().all(|e| !format!("{e:?}").contains("set")), "{:?}", sc.unhandled);
     }
 }

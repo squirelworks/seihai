@@ -73,6 +73,9 @@ pub struct Npc {
     pub props: std::collections::HashMap<String, String>,
     /// Whether the NPC stops movement. `dontblock` sets this false.
     pub blocks: bool,
+    /// `canbepushed` / `canbepulled`: a push or a pull moves the NPC.
+    pub pushable: bool,
+    pub pullable: bool,
     /// Collision size in pixels, from `setshape`.
     pub shape: Option<(f32, f32)>,
     /// Where the NPC is drawn against the players: `drawunderplayer`,
@@ -138,7 +141,7 @@ impl Npc {
     /// An NPC with only its image, position and script.
     pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
         Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new(),
-            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, shape: None, layer: DrawLayer::Player, effect: ImageEffect::default() }
+            head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, pushable: false, pullable: false, shape: None, layer: DrawLayer::Player, effect: ImageEffect::default() }
     }
 
     /// Every image file the NPC draws now: its own and its `showimg` ones.

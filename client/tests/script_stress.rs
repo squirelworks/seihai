@@ -41,6 +41,8 @@ fn parse_all_unique_npc_scripts() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/npc-scripts");
     let mut total = 0;
     let mut failed = 0;
+    // The same scripts read as a 2.1 or later client reads them.
+    let mut failed_21 = 0;
     let mut diags: Vec<(String, String)> = Vec::new();
     for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
@@ -49,6 +51,9 @@ fn parse_all_unique_npc_scripts() {
         }
         for (name, body) in scripts_in(&path) {
             total += 1;
+            if !parse(&body, Era::V21).diagnostics.is_empty() {
+                failed_21 += 1;
+            }
             let s = parse(&body, Era::V205);
             if !s.diagnostics.is_empty() {
                 failed += 1;
@@ -59,7 +64,7 @@ fn parse_all_unique_npc_scripts() {
             }
         }
     }
-    eprintln!("parsed {total} scripts, {failed} with diagnostics");
+    eprintln!("parsed {total} scripts, {failed} with diagnostics as 2.05, {failed_21} as 2.1 and later");
     for (n, m) in &diags {
         eprintln!("  {n}: {m}");
     }

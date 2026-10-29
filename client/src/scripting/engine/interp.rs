@@ -110,6 +110,10 @@ impl<'a> Run<'a> {
                     self.note(format!("line {line}: `{name} {raw}` ignored ({reason})"));
                     pc += 1;
                 }
+                Node::Assign { target, op: AssignOp::Set, value: Expr::List(items) } if target.index.is_empty() => {
+                    self.set_list(&target.name, items);
+                    pc += 1;
+                }
                 Node::Assign { target, op, value } => {
                     let place = self.place(target);
                     let rhs = self.eval(value);
@@ -434,6 +438,39 @@ impl<'a> Run<'a> {
                 Val::Num(0.0)
             }
             Expr::Call { name, args } => self.call(name, args),
+            Expr::Cond { cond, then, els } => {
+                if self.eval(cond).truthy() {
+                    self.eval(then)
+                } else {
+                    self.eval(els)
+                }
+            }
+            // A list outside an assignment has no value of its own.
+            Expr::List(_) => Val::default(),
+            Expr::InArray { e, name } => {
+                let x = self.eval(e);
+                let len = self.store_get(&format!("{name}#len")).map_or(0.0, |v| v.num()).max(0.0) as i64;
+                for i in 0..len {
+                    let y = self.store_get(&format!("{name}[{i}]")).unwrap_or_default();
+                    if self.equals(&x, &y) {
+                        return Val::Num(1.0);
+                    }
+                }
+                Val::Num(0.0)
+            }
+        }
+    }
+
+    /// `name = {a,b,c}`: an array of that length, as `setarray` makes,
+    /// holding the values. Only a plain or `this.` variable can be an array.
+    fn set_list(&mut self, name: &str, items: &[Expr]) {
+        if !(name.starts_with("this.") || !name.contains('.')) {
+            return;
+        }
+        let vals: Vec<Val> = items.iter().map(|e| self.eval(e)).collect();
+        self.obj.vars.insert(format!("{name}#len"), Val::Num(vals.len() as f64));
+        for (i, v) in vals.into_iter().enumerate() {
+            self.obj.vars.insert(format!("{name}[{i}]"), v);
         }
     }
 
@@ -587,10 +624,14 @@ impl<'a> Run<'a> {
                 continue;
             }
             let code = b[i + 1] as char;
+            // `#P1` to `#P30`, `#C0` to `#C4`: the digits are part of the code.
+            let digits = super::lexer::code_digits(&b[i + 1..]);
+            let num: Option<usize> = (digits > 0).then(|| s[i + 2..i + 2 + digits].parse().unwrap_or(0));
+            let open = i + 2 + digits;
             // Argument in parentheses, if there is one.
-            let (inner, end) = if b.get(i + 2) == Some(&b'(') {
+            let (inner, end) = if b.get(open) == Some(&b'(') {
                 let mut d = 0;
-                let mut j = i + 2;
+                let mut j = open;
                 let mut close = None;
                 while j < b.len() {
                     match b[j] {
@@ -607,14 +648,22 @@ impl<'a> Run<'a> {
                     j += 1;
                 }
                 match close {
-                    Some(c) => (Some(&s[i + 3..c]), c + 1),
-                    None => (None, i + 2),
+                    Some(c) => (Some(&s[open + 1..c]), c + 1),
+                    None => (None, open),
                 }
             } else {
-                (None, i + 2)
+                (None, open)
             };
             let era = self.era();
             let rep: Option<String> = match (code, inner) {
+                // `#P1` to `#P30`: a gani attribute, of the NPC itself with
+                // no index or -1 (2.1 and later). Seihai keeps the ones a
+                // script set with `setcharprop`; a player's are not known.
+                ('P', x) if num.is_some() && era >= Era::V21 => {
+                    let own = x.map_or(true, |x| self.expand(x, depth + 1).trim().parse::<f64>().unwrap_or(0.0) < 0.0);
+                    let key = format!("#P{}", num.unwrap_or(0));
+                    Some(if own { self.obj.char_props.get(&key).cloned().unwrap_or_default() } else { String::new() })
+                }
                 ('c', None) => Some(self.core.player.chat.clone()),
                 ('n', None) => Some(self.core.player.nick.clone()),
                 ('a', None) => Some(self.core.player.account.clone()),
@@ -676,7 +725,7 @@ impl<'a> Run<'a> {
                 // (`#c` is the chat text, `#n` the nickname, ...). It is a
                 // code, not a message to expand: `setplayerprop #c,hi` must
                 // not turn into `setplayerprop <what was said>,hi`.
-                Arg::Text(t) if i == 0 && cmd.name == "setplayerprop" => Val::Str(t.clone()),
+                Arg::Text(t) if i == 0 && matches!(cmd.name, "setplayerprop" | "setcharprop") => Val::Str(t.clone()),
                 Arg::Text(t) => Val::Str(self.expand(t, 0)),
             })
             .collect();
@@ -824,7 +873,10 @@ impl<'a> Run<'a> {
                 self.core.effects.push(Effect::Hurt { half_hearts: half });
             }
             "setcharani" => self.core.effects.push(Effect::SetCharAni { obj: id, ani: sv(&v, 0), params: sv(&v, 1) }),
-            "setcharprop" => self.core.effects.push(Effect::SetCharProp { obj: id, code: sv(&v, 0), value: sv(&v, 1) }),
+            "setcharprop" => {
+                self.obj.char_props.insert(sv(&v, 0).trim().to_string(), sv(&v, 1));
+                self.core.effects.push(Effect::SetCharProp { obj: id, code: sv(&v, 0), value: sv(&v, 1) });
+            }
             "setplayerprop" => {
                 if sv(&v, 0).trim() == "#c" {
                     self.core.player.chat = sv(&v, 1);
