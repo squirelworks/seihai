@@ -60,10 +60,12 @@ pub enum Layer {
     Builtin,
 }
 
-/// Finds files for one version in up to three folders, in this order:
+/// Finds files for one version in up to four folders, in this order:
 ///
-/// 1. the **per-server cache** (what the server sent, and the only place a
-///    download is written),
+/// 1. the **per-server cache**, what the server sent: first the one in the
+///    Seihai folder (`_cache/<host>_<port>/`), then the one with the
+///    settings (`<settings dir>/cache/<host>_<port>~<name>/`). Downloads are
+///    written to both and nowhere else,
 /// 2. the user's **asset folder** (`--assets`),
 /// 3. the **built-in default set** (read-only, never a download target).
 ///
@@ -74,6 +76,8 @@ pub enum Layer {
 /// user's), which is what every lookup was before the layers existed.
 #[derive(Debug, Clone)]
 pub struct AssetResolver {
+    /// The cache in the Seihai folder, searched before [`Self::cache`].
+    game_cache: Option<AssetRoot>,
     cache: Option<AssetRoot>,
     user: Option<AssetRoot>,
     builtin: Option<AssetRoot>,
@@ -87,12 +91,12 @@ pub struct AssetResolver {
 impl AssetResolver {
     /// One folder (the user's), no cache and no built-in set.
     pub fn new(root: AssetRoot, profile: &'static VersionProfile) -> Self {
-        Self { cache: None, user: Some(root), builtin: None, builtin_levels: true, profile }
+        Self { game_cache: None, cache: None, user: Some(root), builtin: None, builtin_levels: true, profile }
     }
 
     /// A resolver with no folder yet: add layers with the `with_*` methods.
     pub fn empty(profile: &'static VersionProfile) -> Self {
-        Self { cache: None, user: None, builtin: None, builtin_levels: true, profile }
+        Self { game_cache: None, cache: None, user: None, builtin: None, builtin_levels: true, profile }
     }
 
     /// Set (or clear) the user's asset folder.
@@ -104,6 +108,13 @@ impl AssetResolver {
     /// Set the per-server cache folder (searched first, written by downloads).
     pub fn with_cache(mut self, dir: Option<PathBuf>) -> Self {
         self.cache = dir.map(AssetRoot::new);
+        self
+    }
+
+    /// Set the cache folder in the Seihai folder (searched before the
+    /// settings' cache, and the first download target).
+    pub fn with_game_cache(mut self, dir: Option<PathBuf>) -> Self {
+        self.game_cache = dir.map(AssetRoot::new);
         self
     }
 
@@ -124,6 +135,11 @@ impl AssetResolver {
         self.cache = dir.map(AssetRoot::new);
     }
 
+    /// Replace the Seihai folder's cache of a resolver in use.
+    pub fn set_game_cache(&mut self, dir: Option<PathBuf>) {
+        self.game_cache = dir.map(AssetRoot::new);
+    }
+
     pub fn set_builtin_levels(&mut self, on: bool) {
         self.builtin_levels = on;
     }
@@ -139,26 +155,39 @@ impl AssetResolver {
     /// # Panics
     /// If the resolver has no folder at all (no layer was added).
     pub fn root(&self) -> &AssetRoot {
-        self.user.as_ref().or(self.builtin.as_ref()).or(self.cache.as_ref()).expect("an AssetResolver has at least one folder")
+        self.user.as_ref().or(self.builtin.as_ref()).or(self.game_cache.as_ref()).or(self.cache.as_ref()).expect("an AssetResolver has at least one folder")
     }
 
     pub fn user_root(&self) -> Option<&AssetRoot> {
         self.user.as_ref()
     }
 
+    /// The settings' cache folder.
     pub fn cache_root(&self) -> Option<&AssetRoot> {
         self.cache.as_ref()
+    }
+
+    /// The cache folder in the Seihai folder.
+    pub fn game_cache_root(&self) -> Option<&AssetRoot> {
+        self.game_cache.as_ref()
+    }
+
+    /// Both cache folders, in search order.
+    pub fn cache_roots(&self) -> impl Iterator<Item = &AssetRoot> {
+        self.game_cache.iter().chain(self.cache.iter())
     }
 
     pub fn builtin_root(&self) -> Option<&AssetRoot> {
         self.builtin.as_ref()
     }
 
-    /// Where a download is written: the cache folder when there is one, else
-    /// the user's folder (a resolver made by [`new`](Self::new), as before).
-    /// Never the built-in set; `None` when only the built-in set exists.
+    /// Where a download is written first: the Seihai folder's cache, else
+    /// the settings' cache, else the user's folder (a resolver made by
+    /// [`new`](Self::new), as before). Never the built-in set; `None` when
+    /// only the built-in set exists. A download also goes to the settings'
+    /// cache when both caches are set (see `DownloadStore::store`).
     pub fn download_root(&self) -> Option<&AssetRoot> {
-        self.cache.as_ref().or(self.user.as_ref())
+        self.game_cache.as_ref().or(self.cache.as_ref()).or(self.user.as_ref())
     }
 
     pub fn profile(&self) -> &'static VersionProfile {
@@ -167,8 +196,8 @@ impl AssetResolver {
 
     /// The folders to search for `kind`, in order, each with its layer.
     fn roots(&self, levels: bool) -> Vec<(Layer, &AssetRoot)> {
-        let mut v = Vec::with_capacity(3);
-        if let Some(r) = &self.cache {
+        let mut v = Vec::with_capacity(4);
+        for r in self.cache_roots() {
             v.push((Layer::Cache, r));
         }
         if let Some(r) = &self.user {
@@ -185,7 +214,7 @@ impl AssetResolver {
     /// Which layer a path found by this resolver is in.
     pub fn layer_of(&self, path: &Path) -> Option<Layer> {
         let mut best: Option<(Layer, usize)> = None;
-        for (layer, r) in [(Layer::Cache, &self.cache), (Layer::Assets, &self.user), (Layer::Builtin, &self.builtin)] {
+        for (layer, r) in [(Layer::Cache, &self.game_cache), (Layer::Cache, &self.cache), (Layer::Assets, &self.user), (Layer::Builtin, &self.builtin)] {
             if let Some(r) = r {
                 if path.starts_with(&r.root) {
                     let depth = r.root.components().count();

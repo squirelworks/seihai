@@ -745,12 +745,18 @@ fn main() {
     };
     let cache_for = |addr: &str, name: Option<&str>| seihai::servercache::cache_dir_for(&cache_root, addr, name);
     let cache_dir = online.as_deref().and_then(|a| cache_for(a, server_name(a).as_deref()));
+    // The cache in the Seihai folder (`_cache/<host>_<port>`), searched and
+    // written before the settings' one.
+    let seihai_dir = seihai::servercache::seihai_dir();
+    let game_cache_for = |addr: &str| seihai_dir.as_deref().and_then(|d| seihai::servercache::game_cache_dir_for(d, addr));
+    let game_cache_dir = online.as_deref().and_then(game_cache_for);
     // Every lookup of a level, GANI, image or sound goes through this: it
     // knows the folders of the 2.22 data folder and what this version opens.
     // The built-in levels are for offline play only: online, a level of the
     // same name (`new1.nw`) must come from the server.
     let mut resolver = AssetResolver::empty(version.profile())
         .with_assets(user_root)
+        .with_game_cache(game_cache_dir.clone())
         .with_cache(cache_dir.clone())
         .with_builtin(builtin_dir)
         .with_builtin_levels(online.is_none());
@@ -758,7 +764,7 @@ fn main() {
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
     if let Some(a) = online.as_deref() {
         files.store.set_cache_meta(Some(seihai::servercache::meta_text(a, server_name(a).as_deref())));
-        if let Some(d) = &cache_dir {
+        for d in game_cache_dir.iter().chain(cache_dir.iter()) {
             eprintln!("download cache: {}", d.display());
         }
     }
@@ -2205,8 +2211,10 @@ fn main() {
                         files.new_connection();
                         // The new server has its own cache folder, searched first.
                         let warp_cache = cache_for(&a, Some(&w.display_name()));
+                        let warp_game_cache = game_cache_for(&a);
+                        resolver.set_game_cache(warp_game_cache.clone());
                         resolver.set_cache(warp_cache.clone());
-                        files.store.set_cache(warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
+                        files.store.set_caches(warp_game_cache, warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
                         sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
