@@ -522,6 +522,8 @@ pub struct PoseSheets<'a> {
     pub sprites: Option<Sheet<'a>>,
     pub sword: Option<Sheet<'a>>,
     pub shield: Option<Sheet<'a>>,
+    /// The pictures of the `ATTR1` … `ATTR5` sprites (ATTR1 is the hat).
+    pub attrs: [Option<Sheet<'a>>; 5],
 }
 
 /// Draw one step of a player GANI for direction `dir` (Graal order: 0 up,
@@ -541,6 +543,11 @@ pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8,
             "SPRITES" => sheets.sprites,
             "SWORD" => sheets.sword,
             "SHIELD" => sheets.shield,
+            "ATTR1" => sheets.attrs[0],
+            "ATTR2" => sheets.attrs[1],
+            "ATTR3" => sheets.attrs[2],
+            "ATTR4" => sheets.attrs[3],
+            "ATTR5" => sheets.attrs[4],
             _ => None,
         };
         if let Some(sh) = sheet {

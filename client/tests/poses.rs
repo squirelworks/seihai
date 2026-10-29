@@ -172,7 +172,7 @@ fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
         Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword), shield: None }
+    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword), shield: None, attrs: Default::default() }
 }
 
 fn draw(g: &Gani, step: usize, dir: u8, a: &Art) -> Vec<u8> {
@@ -222,6 +222,24 @@ fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
     let only = PoseSheets { sword: sheets(&a).sword, ..PoseSheets::default() };
     draw_gani_frame(&mut fb, &gani("sword.gani"), 2, 2, &only, 8, 8);
     assert_ne!(fb.pixels, blank());
+}
+
+#[test]
+fn an_attr_sprite_draws_from_its_attribute_sheet() {
+    let g = Gani::parse("SPRITE 1 ATTR1 0 0 2 2 hat\nANI\n1 3 4\nANIEND\n").unwrap();
+    let px = vec![200u8, 10, 20, 255].repeat(4);
+    let mut fb = Framebuffer::new(64, 64);
+    draw_gani_frame(&mut fb, &g, 0, 2, &PoseSheets::default(), 8, 8);
+    assert_eq!(fb.pixels, blank(), "no hat sheet, nothing drawn");
+    let mut sheets = PoseSheets::default();
+    sheets.attrs[0] = Some(Sheet { px: &px, w: 2, bpp: 4 });
+    draw_gani_frame(&mut fb, &g, 0, 2, &sheets, 8, 8);
+    assert_ne!(fb.pixels, blank());
+    // ATTR2 does not take the hat's sheet.
+    let g2 = Gani::parse("SPRITE 1 ATTR2 0 0 2 2 x\nANI\n1 3 4\nANIEND\n").unwrap();
+    let mut fb = Framebuffer::new(64, 64);
+    draw_gani_frame(&mut fb, &g2, 0, 2, &sheets, 8, 8);
+    assert_eq!(fb.pixels, blank());
 }
 
 // ---- idle, walking and swimming ------------------------------------------

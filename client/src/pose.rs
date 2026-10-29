@@ -79,6 +79,15 @@ pub struct PoseGanis {
     pub pull: Option<Gani>,
 }
 
+impl PoseGanis {
+    /// Every loaded pose GANI.
+    pub fn all(&self) -> impl Iterator<Item = &Gani> {
+        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull]
+            .into_iter()
+            .flatten()
+    }
+}
+
 /// Which pose is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PoseKind {
