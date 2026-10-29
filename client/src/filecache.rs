@@ -296,6 +296,13 @@ pub fn download_dir(profile: &VersionProfile, name: &str) -> Vec<&'static str> {
     vec!["levels", sub]
 }
 
+/// Is this the name of an image the client draws (`.png`, `.gif`, `.mng`,
+/// in any case)?
+pub fn is_image_name(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    n.ends_with(".png") || n.ends_with(".gif") || n.ends_with(".mng")
+}
+
 /// The file's last-write time in Unix seconds.
 pub fn mod_time_of(path: &Path) -> Option<u32> {
     let t = fs::metadata(path).ok()?.modified().ok()?;
@@ -628,6 +635,12 @@ mod tests {
 
     fn names(r: &[FileRequest]) -> Vec<&str> {
         r.iter().map(FileRequest::name).collect()
+    }
+
+    #[test]
+    fn image_names_in_any_case() {
+        assert!(is_image_name("Block.PNG") && is_image_name("door.gif") && is_image_name("x.Mng"));
+        assert!(!is_image_name("a.nw") && !is_image_name("png"));
     }
 
     #[test]
