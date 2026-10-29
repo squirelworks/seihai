@@ -2107,6 +2107,26 @@ fn main() {
             }
         }
 
+        // Big map: ask for the level across a near edge before the player
+        // walks the link, so it is here when they cross. Once per name per
+        // connection.
+        if let (Some(map), Some(here), true, true) =
+            (session.big_map.as_ref(), net_state.current_level_name(), conn.is_some(), session.warp_pending.is_none())
+        {
+            let ahead: Vec<String> = map
+                .neighbours_near_edge(&here, session.player_x, session.player_y)
+                .into_iter()
+                .filter(|n| gmap_asked.insert(format!("near:{}", n.to_ascii_lowercase())))
+                .map(str::to_string)
+                .collect();
+            for n in ahead {
+                let file = if n.contains('.') { n } else { format!("{n}.nw") };
+                // Logged even when the request waits for a free slot.
+                eprintln!("asking for {file} ahead (big map neighbour)");
+                send_file_msgs(conn.as_mut(), files.need(&file));
+            }
+        }
+
         // Tell the server when swimming starts or stops (2.1+ clients; the
         // gani prop is the bow slot before that).
         if let Some(swimming) = session.take_swim_change() {
