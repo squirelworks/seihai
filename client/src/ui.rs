@@ -498,6 +498,130 @@ pub fn editor_key(has_editor: bool, label: &str, online: bool, is_f4: bool) -> E
     EditorKey::Run
 }
 
+/// How long a character key is held before it repeats.
+pub const REPEAT_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
+/// Time between repeats once a key repeats (30 a second).
+pub const REPEAT_RATE: std::time::Duration = std::time::Duration::from_millis(33);
+
+/// Repeats a held character key in the chat line where the window system
+/// does not (a Wayland window gets no repeat of its own, and a Mac with
+/// press-and-hold shows its accent menu instead). Where the system does
+/// repeat (Windows, X11), its repeats are seen and this adds none.
+///
+/// `K` is the key type; the caller says which key went down with each
+/// character and whether that key is still down.
+#[derive(Debug, Default)]
+pub struct CharRepeat<K> {
+    held: Option<Held<K>>,
+}
+
+#[derive(Debug)]
+struct Held<K> {
+    ch: char,
+    key: K,
+    since: std::time::Duration,
+    last: std::time::Duration,
+    /// The system sent a repeat of its own: add none.
+    system: bool,
+}
+
+impl<K: PartialEq + Copy> CharRepeat<K> {
+    pub fn new() -> Self {
+        Self { held: None }
+    }
+
+    /// One frame at time `now` (from any fixed start). `typed` is what the
+    /// system sent this frame, `pressed` the key that went down this frame
+    /// (if any) and `down(key)` whether a key is still held. Returns the
+    /// characters to type: `typed`, plus any repeats due.
+    pub fn frame(&mut self, now: std::time::Duration, typed: &[char], pressed: Option<K>, down: impl Fn(K) -> bool) -> Vec<char> {
+        let mut out = typed.to_vec();
+        for &c in typed {
+            match (&mut self.held, pressed) {
+                // A new press: this key is the one to repeat.
+                (_, Some(k)) => self.held = Some(Held { ch: c, key: k, since: now, last: now, system: false }),
+                // The same character with no new press: the system repeats.
+                (Some(h), None) if h.ch == c && down(h.key) => {
+                    h.system = true;
+                    h.last = now;
+                }
+                _ => self.held = None,
+            }
+        }
+        if self.held.as_ref().is_some_and(|h| !down(h.key)) {
+            self.held = None;
+        }
+        if let Some(h) = self.held.as_mut().filter(|h| !h.system && typed.is_empty()) {
+            if now >= h.since + REPEAT_DELAY {
+                // The first repeat comes at the delay, then one per rate.
+                let mut next = if h.last < h.since + REPEAT_DELAY { h.since + REPEAT_DELAY } else { h.last + REPEAT_RATE };
+                while next <= now {
+                    out.push(h.ch);
+                    h.last = next;
+                    next += REPEAT_RATE;
+                }
+            }
+        }
+        out
+    }
+
+    /// Forget the held key (the chat line closed).
+    pub fn clear(&mut self) {
+        self.held = None;
+    }
+}
+
+#[cfg(test)]
+mod char_repeat_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    #[test]
+    fn a_held_key_repeats_after_the_delay() {
+        let mut r = CharRepeat::new();
+        let down = |_: u8| true;
+        assert_eq!(r.frame(ms(0), &['a'], Some(1u8), down), ['a']);
+        assert!(r.frame(ms(400), &[], None, down).is_empty());
+        assert_eq!(r.frame(ms(500), &[], None, down), ['a']);
+        assert!(r.frame(ms(520), &[], None, down).is_empty());
+        // 533 and 566 are due by 570.
+        assert_eq!(r.frame(ms(570), &[], None, down), ['a', 'a']);
+    }
+
+    #[test]
+    fn letting_go_stops_it() {
+        let mut r = CharRepeat::new();
+        r.frame(ms(0), &['y'], Some(7u8), |_| true);
+        assert!(r.frame(ms(600), &[], None, |_| false).is_empty());
+        assert!(r.frame(ms(900), &[], None, |_| true).is_empty(), "nothing held any more");
+    }
+
+    #[test]
+    fn the_systems_own_repeat_is_not_doubled() {
+        let mut r = CharRepeat::new();
+        let down = |_: u8| true;
+        r.frame(ms(0), &['g'], Some(1u8), down);
+        assert_eq!(r.frame(ms(500), &['g'], None, down), ['g']);
+        assert!(r.frame(ms(520), &[], None, down).is_empty());
+        assert!(r.frame(ms(700), &[], None, down).is_empty());
+        assert_eq!(r.frame(ms(733), &['g'], None, down), ['g']);
+    }
+
+    #[test]
+    fn a_new_key_takes_over() {
+        let mut r = CharRepeat::new();
+        let down = |_: u8| true;
+        r.frame(ms(0), &['a'], Some(1u8), down);
+        r.frame(ms(300), &['y'], Some(2u8), down);
+        assert!(r.frame(ms(700), &[], None, down).is_empty());
+        assert_eq!(r.frame(ms(800), &[], None, down), ['y']);
+    }
+}
+
 #[cfg(test)]
 mod editor_key_tests {
     use super::*;

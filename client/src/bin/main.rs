@@ -1215,15 +1215,23 @@ fn main() {
     let mut combat_clock = Instant::now();
     // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
     let mut last_pp_sprite: Option<u8> = None;
+    let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
+    let run_clock = Instant::now();
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
+        if !input.is_open() {
+            char_repeat.clear();
+        }
         if !input.is_open()
             && (window.is_key_pressed(minifb::Key::F1, minifb::KeyRepeat::No) || typed_now.contains(&'?'))
         {
             show_help = !show_help;
         }
         if input.is_open() {
-            for c in typed_now {
+            // The key that went down with the typed text (not a modifier),
+            // so a held key repeats where the window system does not.
+            let pressed = window.get_keys_pressed(minifb::KeyRepeat::No).into_iter().find(|k| !is_modifier(*k));
+            for c in char_repeat.frame(run_clock.elapsed(), &typed_now, pressed, |k| window.is_key_down(k)) {
                 input.type_char(c);
             }
             if window.is_key_pressed(minifb::Key::Backspace, minifb::KeyRepeat::Yes) {
@@ -2584,6 +2592,12 @@ fn item_list_entries(session: &seihai::offline::OfflineSession, state: &SessionS
 
 fn me(state: &SessionState, account: &str) -> String {
     state.nickname.clone().unwrap_or_else(|| account.to_string())
+}
+
+/// Shift, Control, Alt and the like: keys that type nothing themselves.
+fn is_modifier(k: minifb::Key) -> bool {
+    use minifb::Key as K;
+    matches!(k, K::LeftShift | K::RightShift | K::LeftCtrl | K::RightCtrl | K::LeftAlt | K::RightAlt | K::LeftSuper | K::RightSuper | K::CapsLock | K::Menu)
 }
 
 /// Collects typed characters for the chat bar.
