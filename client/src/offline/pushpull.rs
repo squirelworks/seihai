@@ -128,14 +128,6 @@ pub struct Trigger {
     pub dir: u8,
 }
 
-/// What a block move did, for the caller to tell the server.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockMoved {
-    /// The 4 x 4 area that changed, top-left, as the client's board modify.
-    pub x: i32,
-    pub y: i32,
-}
-
 /// An NPC a push or a pull moved: its index in the level's NPC list, where
 /// it is now, and the event its script gets.
 #[derive(Debug, Clone, PartialEq)]
@@ -193,7 +185,6 @@ fn npc_edge(d: usize, x: f32, y: f32, w: f32, h: f32) -> Vec<(f32, f32)> {
     }
 }
 
-
 /// The push, jump and grab state of the player.
 #[derive(Debug, Clone, Default)]
 pub struct PushPull {
@@ -207,9 +198,7 @@ pub struct PushPull {
     pub pull_ticks: u32,
     clock_ms: u64,
     triggers: Vec<Trigger>,
-    moved_blocks: Vec<BlockMoved>,
     npc_moves: Vec<NpcMoved>,
-
     moved: bool,
 }
 
