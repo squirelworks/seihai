@@ -177,9 +177,11 @@ pub struct OfflineSession {
     /// The last step moved the player and no stop has come since: the walk
     /// animation is drawn instead of idle. Cleared by [`Self::stop_walking`].
     pub walking: bool,
-    /// Sounds from GANI frames entered since the last
-    /// [`Self::take_sound_events`].
+    /// Sounds from GANI frames entered and from scripts (`play`,
+    /// `playlooped`) since the last [`Self::take_sound_events`].
     pub sound_events: Vec<SoundEvent>,
+    /// `stopsound` names since the last [`Self::take_sound_stops`].
+    pub sound_stops: Vec<String>,
     /// Player health (for `hurt`).
     pub player_health: i32,
     /// Last message from `say` / `message`.
@@ -430,6 +432,7 @@ impl OfflineSession {
             walking: false,
             npc_ganis: HashMap::new(),
             sound_events: Vec::new(),
+            sound_stops: Vec::new(),
             player_health: 100,
             last_message: None,
             flags: HashMap::new(),
@@ -1733,6 +1736,11 @@ impl OfflineSession {
     /// Sounds queued by GANI frames since the last call.
     pub fn take_sound_events(&mut self) -> Vec<SoundEvent> {
         std::mem::take(&mut self.sound_events)
+    }
+
+    /// Sounds scripts stopped (`stopsound`) since the last call.
+    pub fn take_sound_stops(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.sound_stops)
     }
 
     /// Current walk-frame index, if a GANI is attached.

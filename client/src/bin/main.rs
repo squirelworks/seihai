@@ -2076,8 +2076,10 @@ fn main() {
                 last_step = seihai::offline::next_step_clock(last_step, Instant::now(), session.step_interval());
             }
         }
-        // Sound: GANI cues from the steps just taken. Leaving a level stops
-        // looped effects.
+        // Sound: GANI cues from the steps just taken and the scripts'
+        // `play` / `stopsound`. Leaving a level stops looped effects. Online,
+        // a sound that is not on disk is asked for (WANTFILE) and plays on a
+        // later trigger once it has arrived, as in 2.05.
         if sound.is_enabled() {
             if session.level_serial != sound_serial {
                 sound_serial = session.level_serial;
@@ -2088,11 +2090,22 @@ fn main() {
                 session.player_x + seihai::assets::LISTENER_DX,
                 session.player_y + seihai::assets::LISTENER_DY,
             );
+            for name in session.take_sound_stops() {
+                sound.stop(&name);
+            }
             for ev in session.take_sound_events() {
-                sound.play(&ev, listener, now);
+                if sound.play(&ev, listener, now) == seihai::sound::Outcome::Missing && conn.is_some() {
+                    let name = seihai::sound::wanted_name(&ev.file);
+                    let msgs = files.need(&name);
+                    if !msgs.is_empty() {
+                        eprintln!("requesting {name}");
+                    }
+                    send_file_msgs(conn.as_mut(), msgs);
+                }
             }
         } else {
             session.sound_events.clear();
+            session.sound_stops.clear();
         }
         // The debug log names each level the player enters, online (the
         // server's name for it) or offline (the file or gmap cell).

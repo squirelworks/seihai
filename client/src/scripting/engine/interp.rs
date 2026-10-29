@@ -965,7 +965,8 @@ impl<'a> Run<'a> {
                 }
                 self.core.effects.push(Effect::SetPlayerProp { code: sv(&v, 0), value: sv(&v, 1) });
             }
-            "play" | "playlooped" | "play2" => self.core.effects.push(Effect::Play { file: sv(&v, 0), looped: name == "playlooped" }),
+            "play" | "playlooped" => self.core.effects.push(Effect::Play { obj: id, file: sv(&v, 0), looped: name == "playlooped", at: None }),
+            "play2" => self.core.effects.push(Effect::Play { obj: id, file: sv(&v, 0), looped: false, at: Some((nv(&v, 1), nv(&v, 2))) }),
             "sendrpgmessage" => self.core.effects.push(Effect::RpgMessage { text: sv(&v, 0) }),
             "stopsound" => self.core.effects.push(Effect::StopSound { file: sv(&v, 0) }),
             "stopmidi" => self.core.effects.push(Effect::StopMidi),

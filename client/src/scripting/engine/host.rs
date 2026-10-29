@@ -540,11 +540,39 @@ impl SessionScripts {
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
                         | "timereverywhere" | "hideimg"
                     ) => {}
+                // `play`, `playlooped`, `play2`: queued with the GANI cues. 2.05
+                // places the sound at the NPC's centre; a weapon has no place of
+                // its own, so its sound is at the player (centre pan).
+                Effect::Play { obj, file, looped, at } => {
+                    let (x, y) = match at {
+                        Some((x, y)) => (x as f32, y as f32),
+                        None => self.sound_point(s, obj),
+                    };
+                    let file = if looped { format!("+{}", file.trim()) } else { file };
+                    s.sound_events.push(crate::sound::SoundEvent { file, x, y });
+                }
+                Effect::StopSound { file } => s.sound_stops.push(file),
                 Effect::StopMidi => {}
                 Effect::RpgMessage { text } => self.rpg_messages.push(text),
                 other => self.unhandled.push(other),
             }
         }
+    }
+
+    /// Where an object's sound comes from: an NPC's centre, else the
+    /// player's listening point. The NPC's size is its image part or its
+    /// shape; with neither (the image's size is not known here) a 32-pixel
+    /// image is assumed. Only x sets the pan, at 150 units a tile, so a
+    /// wrong guess moves it little.
+    fn sound_point(&self, s: &mut OfflineSession, obj: usize) -> (f32, f32) {
+        let listener = (s.player_x + crate::assets::LISTENER_DX, s.player_y + crate::assets::LISTENER_DY);
+        let Some(n) = self.level_npc(s, obj) else { return listener };
+        let (w, h) = match (n.image_part, n.shape) {
+            (Some((_, _, w, h)), _) => (w as f32 / 16.0, h as f32 / 16.0),
+            (None, Some((w, h))) => (w / 16.0, h / 16.0),
+            (None, None) => (2.0, 2.0),
+        };
+        (n.x + w / 2.0, n.y + h / 2.0)
     }
 
     fn level_npc<'s>(&self, s: &'s mut OfflineSession, obj: usize) -> Option<&'s mut crate::assets::Npc> {
@@ -749,10 +777,9 @@ mod tests {
 
     #[test]
     fn effects_with_no_session_equivalent_are_handed_back() {
-        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { play jump.wav; triggeraction 1,1,x,; sendtoserver hi; }\nNPCEND\n");
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { triggeraction 1,1,x,; sendtoserver hi; }\nNPCEND\n");
         let mut sc = SessionScripts::new(ClientVersion::V205);
         sc.load_level(&mut s, "a.nw");
-        assert!(sc.unhandled.contains(&Effect::Play { file: "jump.wav".into(), looped: false }));
         assert!(sc.unhandled.iter().any(|e| matches!(e, Effect::TriggerAction { .. })));
         // 2.05 has no sendtoserver: it was gated out and only logged.
         assert!(!sc.unhandled.iter().any(|e| matches!(e, Effect::SendToServer { .. })));
@@ -906,5 +933,52 @@ mod tests {
         assert_eq!(s.looks.colors[1], crate::looks::color_by_name("blue").unwrap());
         assert_eq!(s.looks.colors[4], 7);
         assert!(s.looks_changed);
+    }
+
+    #[test]
+    fn play_queues_a_sound_at_the_npc_centre() {
+        let mut s = session("GLEVNW01\nNPC - 10 20\nif (created) { play wolf.wav; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        // No image size known: a 32-pixel image, so one tile in.
+        assert_eq!(s.take_sound_events(), vec![crate::sound::SoundEvent { file: "wolf.wav".into(), x: 11.0, y: 21.0 }]);
+        assert!(!sc.unhandled.iter().any(|e| matches!(e, Effect::Play { .. })), "{:?}", sc.unhandled);
+    }
+
+    #[test]
+    fn play_uses_the_image_part_or_shape_for_the_centre() {
+        let mut s = session("GLEVNW01\nNPC - 10 20\nif (created) { setimgpart x.png,0,0,64,16; play a.wav; }\nNPCEND\nNPC - 4 4\nif (created) { setshape 1,16,48; play b.wav; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        let ev = s.take_sound_events();
+        assert!(ev.contains(&crate::sound::SoundEvent { file: "a.wav".into(), x: 12.0, y: 20.5 }), "{ev:?}");
+        assert!(ev.contains(&crate::sound::SoundEvent { file: "b.wav".into(), x: 4.5, y: 5.5 }), "{ev:?}");
+    }
+
+    #[test]
+    fn playlooped_gets_the_loop_prefix_and_stopsound_is_queued() {
+        let mut s = session("GLEVNW01\nNPC - 0 0\nif (created) { playlooped thunder.wav; stopsound rain.wav; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        let ev = s.take_sound_events();
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].file, "+thunder.wav");
+        assert_eq!(s.take_sound_stops(), vec!["rain.wav".to_string()]);
+        assert!(s.take_sound_stops().is_empty());
+    }
+
+    #[test]
+    fn play2_names_its_place_and_a_weapon_plays_at_the_player() {
+        let mut s = session("GLEVNW01\nNPC - 0 0\nif (created) { play2 bell.wav,30,40,1; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V222);
+        sc.load_level(&mut s, "a.nw");
+        assert_eq!(s.take_sound_events(), vec![crate::sound::SoundEvent { file: "bell.wav".into(), x: 30.0, y: 40.0 }]);
+        s.player_x = 7.0;
+        s.player_y = 9.0;
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "Bow", image: "", script: "if (weaponfired) { play arrow.wav; }" }]);
+        sc.world.weapon_fired("Bow");
+        sc.apply(&mut s);
+        let ev = s.take_sound_events();
+        assert_eq!(ev, vec![crate::sound::SoundEvent { file: "arrow.wav".into(), x: 8.5, y: 11.0 }]);
     }
 }
