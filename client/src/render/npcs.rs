@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use super::tiles::{draw_gani_frame, Framebuffer, PoseSheets, TILE_PX};
-use crate::assets::{DrawLayer, ImageEffect, Npc};
+use crate::assets::{DrawLayer, ImageEffect, Npc, SCREEN_HEIGHT};
 use crate::offline::OfflineSession;
 
 /// The facing an animated NPC is drawn with (down; NPCs have no direction
@@ -111,6 +111,9 @@ pub enum NpcPass {
     /// The `drawoverplayer` NPCs, the `showimg` images (whose default
     /// height is over the player), then the `drawaslight` NPCs.
     AbovePlayers,
+    /// The images `changeimgvis i,4` put on the screen layer, at screen
+    /// pixels, drawn after the status bar.
+    Screen,
 }
 
 /// Draw the NPCs of the session's level that belong to `pass`.
@@ -130,25 +133,34 @@ pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, c
             }
         }
     };
+    // The `showimg` images whose height is in `heights`, after the NPCs of
+    // that height (`documentation/npc-draw-order.md`).
+    let draw_images = |fb: &mut Framebuffer, heights: std::ops::RangeInclusive<i32>| {
+        for npc in &level.npcs {
+            for im in npc.images.iter().filter(|i| heights.contains(&i.height)) {
+                if let Some(img) = art.images.get(&im.file) {
+                    let (dx, dy) = if im.height >= SCREEN_HEIGHT { (im.x.round() as i32, im.y.round() as i32) } else { at(im.x, im.y) };
+                    blit_image(fb, img, im.part, dx, dy, im.effect, im.height == DrawLayer::Light.height());
+                }
+            }
+        }
+    };
     match pass {
         NpcPass::BelowPlayers => {
             draw_layer(fb, DrawLayer::Under);
+            draw_images(fb, i32::MIN..=-1);
             draw_layer(fb, DrawLayer::Player);
+            draw_images(fb, 0..=0);
         }
         NpcPass::AbovePlayers => {
             draw_layer(fb, DrawLayer::Over);
-            for npc in &level.npcs {
-                for im in &npc.images {
-                    if let Some(img) = art.images.get(&im.file) {
-                        let (dx, dy) = at(im.x, im.y);
-                        blit_image(fb, img, im.part, dx, dy, im.effect, false);
-                    }
-                }
-            }
+            draw_images(fb, 1..=8);
             // Day and night shading lies under the lights.
             shade_screen(fb, session.screen_effect);
             draw_layer(fb, DrawLayer::Light);
+            draw_images(fb, 9..=9);
         }
+        NpcPass::Screen => draw_images(fb, SCREEN_HEIGHT..=i32::MAX),
     }
 }
 

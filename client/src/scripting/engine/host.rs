@@ -262,26 +262,24 @@ impl SessionScripts {
                     }
                 }
                 // `showimg index,file,x,y`: image `index` at a level position. Using
-                // an index again replaces that image.
+                // an index again reuses that image: as in 2.05 it takes the new
+                // file and place, its part is cleared and its height goes back to
+                // one over the NPC; its colour and zoom stay.
                 Effect::Command { obj, ref name, ref args } if name == "showimg" => {
                     self.images_changed = true;
                     let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
-                    let img = crate::assets::NpcImage {
-                        index: num(0) as i64,
-                        file: args.get(1).map(|v| v.text()).unwrap_or_default(),
-                        x: num(2) as f32,
-                        y: num(3) as f32,
-                        part: None,
-                        effect: Default::default(),
-                    };
                     if let Some(n) = self.level_npc(s, obj) {
+                        let img = crate::assets::NpcImage {
+                            index: num(0) as i64,
+                            file: args.get(1).map(|v| v.text()).unwrap_or_default(),
+                            x: num(2) as f32,
+                            y: num(3) as f32,
+                            part: None,
+                            effect: Default::default(),
+                            height: n.layer.height() + 1,
+                        };
                         match n.images.iter_mut().find(|i| i.index == img.index) {
-                            // The same file only moves, and keeps its part.
-                            Some(old) if old.file == img.file => {
-                                old.x = img.x;
-                                old.y = img.y;
-                            }
-                            Some(old) => *old = img,
+                            Some(old) => *old = crate::assets::NpcImage { effect: old.effect, ..img },
                             None => {
                                 n.images.push(img);
                                 n.images.sort_by_key(|i| i.index);
@@ -297,6 +295,18 @@ impl SessionScripts {
                     if let Some(n) = self.level_npc(s, obj) {
                         if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
                             i.part = Some(part);
+                        }
+                    }
+                }
+                // `changeimgvis index,vis`: the image's height against its NPC
+                // (`documentation/npc-draw-order.md`).
+                Effect::Command { obj, ref name, ref args } if name == "changeimgvis" => {
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num()).round() as i64;
+                    if let Some(n) = self.level_npc(s, obj) {
+                        if let Some(h) = crate::assets::image_vis_height(num(1), n.layer.height()) {
+                            if let Some(i) = n.images.iter_mut().find(|i| i.index == num(0)) {
+                                i.height = h;
+                            }
                         }
                     }
                 }
@@ -494,8 +504,7 @@ impl SessionScripts {
                 // drawing them is still open.
                 Effect::Command { ref name, .. }
                     if matches!(name.as_str(),
-                        "changeimgvis"
-                        | "showtext" | "hideimgs" | "setbackpal"
+                        "showtext" | "hideimgs" | "setbackpal"
                         | "replaceani" | "addtiledef" | "addtiledef2"
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
                         | "timereverywhere" | "hideimg"
