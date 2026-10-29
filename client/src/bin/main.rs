@@ -1212,6 +1212,8 @@ fn main() {
     // Debug diagnostics go to one folder per run, named for the time
     // this process started. The file is opened once and appended to;
     // nothing creates a second folder while the process is alive.
+    // The run's debug folder, also used for the weapon scripts.
+    let mut debug_dir: Option<PathBuf> = None;
     let mut debug_file: Option<std::fs::File> = if debug_on {
         let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")).join("_debug");
         let stamp = std::time::SystemTime::now()
@@ -1238,6 +1240,7 @@ fn main() {
             .unwrap_or_else(|_| "unknown".into());
         let dir = root.join(format!("debug-{stamp}"));
         std::fs::create_dir_all(&dir).ok();
+        debug_dir = Some(dir.clone());
         let path = dir.join("script.log");
         let pkt_path = dir.join("packets.log");
         match std::fs::File::create(&path) {
@@ -1491,6 +1494,18 @@ fn main() {
                         })
                         .collect();
                     scripts.sync_weapons(&mut session, &ws);
+                    // Debug: keep each weapon's script text, so a parse error
+                    // in the script log can be read against its source.
+                    if let Some(dir) = &debug_dir {
+                        let dir = dir.join("weapons");
+                        for w in &ws {
+                            let safe: String = w.name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+                            let path = dir.join(format!("{safe}.txt"));
+                            if !path.exists() && std::fs::create_dir_all(&dir).is_ok() {
+                                let _ = std::fs::write(&path, w.script);
+                            }
+                        }
+                    }
                 }
                 if let Some(name) = &net_state.current_level_name() {
                     if loaded_level.as_deref().map_or(true, |l| !l.eq_ignore_ascii_case(name)) {
