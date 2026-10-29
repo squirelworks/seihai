@@ -11,7 +11,7 @@ The base of this branch is item 22 (`chiaki/gani-expansion`, PR #54), because an
 | `setimg f`, `setgif f` | `gs1-command-reference-205`: "sets the NPC image, shows the NPC, resets the visible part to the whole image" | the NPC's image becomes `f`, it is shown, its part is cleared, and it leaves any animation |
 | `setimgpart f,x,y,w,h` | same: "shows only (x, y, w, h)", x and y clamped to 0..16000, w and h to 0..220, then trimmed to the image | as `setimg`, and the NPC draws only that part (`Npc::image_part`, trimmed to the image size when drawn) |
 | `hide`, `show` | same: hide and show the NPC | `Npc::visible`; a hidden NPC draws nothing of its own (this already worked; now the renderer is tested) |
-| `showimg i,f,x,y` | same: "image *index* at (x, y) ... re-using an index replaces it; the same file only moves" | `Npc::images`, by index (sorted); a new file at a used index replaces the entry, the same file only moves it |
+| `showimg i,f,x,y` | same: "image *index* at (x, y) ... re-using an index replaces it; the same file only moves" | `Npc::images`, by index (sorted). A used index keeps its entry: the file and place change, the part is cleared and the height goes back to one over the NPC, as the 2.05 code does; colour and zoom stay |
 | `changeimgpart i,x,y,w,h` | same | sets the part of image `i` (clamps as above) |
 | `hideimg i` | same: "deletes image *index*" | removes image `i` |
 | `setcharani name,`, `setani name,` | the command table lists both | the NPC is drawn as that GANI (`Npc::ani`, lower case, no `.gani`) |
@@ -25,7 +25,7 @@ The base of this branch is item 22 (`chiaki/gani-expansion`, PR #54), because an
 - **Animation timing:** one step every 100 ms. A `LOOP` animation wraps; any other stays on its last step unless it has `SETBACKTO name`, which then switches the NPC to that animation. The real timing (and what `WAIT` means) is not documented here.
 - **Facing:** animated NPCs face down; they have no direction of their own yet.
 - **Position of `showimg`:** x and y are level positions in tiles, the unit of an NPC's own x and y. Evidence in the private script collection (derived facts only, no text kept): the `showimg` calls in it are all in weapon scripts and put images at `playerx` and `playery` plus a small offset, which fits tiles; a few HUD scripts use fixed small numbers, which may mean the "screen" image layer (layer 4 in the reference); screen-layer images are not implemented.
-- **Layer:** all shown images draw after every NPC. The reference gives layers 0 to 4 (`changeimgvis`); only "over" is drawn.
+- **Layer:** each image has its own height, set by `showimg` and `changeimgvis` (see `npc-draw-order.md`), and the screen layer is drawn over the status bar at screen pixels.
 - **Missing picture:** a name that is not loaded draws nothing, and the NPC's image falls back from an animation whose GANI or sheets are not loaded.
 
 ## An NPC with no picture draws nothing

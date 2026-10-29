@@ -1115,6 +1115,8 @@ fn main() {
             ),
             None => fb.draw_hud(session.player_health, session.rupees),
         }
+        // Images on the screen layer (`changeimgvis i,4`) go over the status bar.
+        seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::Screen);
         // The minimap is set by the game server from 2.1 on.
         if profile.ui.minimap {
             if let Some(level) = &session.current_level {

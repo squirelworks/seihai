@@ -28,4 +28,4 @@ Like the 2.05 client, Seihai runs them only offline or when the server has an NP
   - The blend formulas.
   - That lights add their colour.
   - That Seihai behaves as a client with a 3D card. The 2.05 client without one takes the effect path only for an alpha below 1.
-- Not done: `changeimgvis`, and effects on NPCs drawn as a character (`showcharacter`).
+- Not done: effects on NPCs drawn as a character (`showcharacter`). `changeimgvis` is in `npc-draw-order.md`.
