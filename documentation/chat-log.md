@@ -16,9 +16,9 @@ from the bubble, which follows the evidence.
 | Chat is drawn by the same routine that draws nicknames and the HUD numbers: plain text, word-wrapped on spaces at the view width, stacked upward from the head, no balloon, no alpha | derived |
 | Callers of that routine are the players (own and others), the computer, HUD numbers and the editor NPC. No caller draws a screen-space feed | derived |
 | Chat text is white, with a one-pixel offset shadow in a contrast colour | derived; the shadow colour decode is odd (looks blue for white text) and unverified |
-| An arriving chat line (prop 12) sets the player's text and a counter of 60 | derived |
+| Another player's chat line (prop 12 in `PLO_OTHERPLPROPS`) sets their text and the counter to **61**, held like your own line, and saves 60. An *empty* prop 12 does not clear the text: it sets the counter to the saved 60, so the line shows 60 more frames. With no line up it clears. (Your own prop 12 sent by the server, in `PLO_PLAYERPROPS`, sets 60 directly.) | derived |
 | The counter drops by one per drawn frame; at 0 the text is cleared. No fade, the text just goes | derived |
-| Your own typed line (Enter in the hidden edit box) sets the counter to **61**, one above the range that counts down, so it does **not** count down until one of the four direction keys is pressed; then it becomes 60 and runs out | derived |
+| Your own typed line (Enter in the hidden edit box) sets the counter to **61**, one above the range that counts down, so it does **not** count down until one of the four direction keys is pressed; then it becomes 60 and runs out. When it runs out with text up, the client sends an empty CURCHAT, which is what starts the 60 frames on everyone else's screen | derived |
 | The text is trimmed; `toall:` at the start sends a toall instead; exactly `showname` and `showap` are commands (they start a 60-frame name or ap display) | derived |
 | Typed lines are kept in a 100-entry history (Up/Down recall) | derived, and in the 1.41 vendor text |
 | A PM or toall is appended to a per-player message history with a time stamp, and a message window is opened or flashed. It does not go to an overlay | derived |
@@ -34,10 +34,16 @@ Those do not exist and are not invented as "real" anywhere in Seihai.
 ### Chat bubble (evidence-backed)
 
 * `chatlists::BUBBLE_MS` is 60 frames x 50 ms = 3000 ms.
-* An arriving prop 12 starts it (empty text clears it).
 * **Your own typed line is held**: it stays over your head until you press a
   direction key (with the chat line closed), then goes down after the same
-  3 s (`BubbleTimer::start_held`, `release`).
+  3 s (`BubbleTimer::start_held`, `release`). When it goes, Seihai sends an
+  empty CURCHAT, as 2.05 does. Before this, Seihai did not, so real clients
+  kept showing a Seihai player's line.
+* **Another player's line is held too**, until their client sends the empty
+  CURCHAT; then it shows 3 s more and goes. Before this, Seihai took it down
+  after 3 s whatever the speaker did.
+* Not done: your own prop 12 coming back from the server (`PLO_PLAYERPROPS`)
+  is not shown as your bubble.
 
 ### Chat overlay (Seihai's own, assumed timings)
 
@@ -77,8 +83,8 @@ for 8 s. This is a guess about the cause, not a confirmed one.
 ## Settled, open, assumed
 
 * **Settled (derived from the 2.05 client):** no on-screen log, no fade; chat
-  is a white outlined head label; counter 60 for others; own line held until a
-  direction key; PM/toall go to message windows with a history.
+  is a white outlined head label; every line held (own until a direction
+  key, others until their empty CURCHAT), then 60 frames; PM/toall go to message windows with a history.
 * **Assumed:** 50 ms frame (so 3 s); the overlay's 6 lines, 8 s, 2 s, 4 steps.
 * **Open:** the shadow colour; the layout of the real message window and
   whether a real PM also flashes something on the main screen; whether newer

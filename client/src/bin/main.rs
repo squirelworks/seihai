@@ -2406,6 +2406,13 @@ fn main() {
                 dirty = true;
             }
             if my_chat_timer.tick(dt) {
+                // The 2.05 client sends an empty CURCHAT when its own bubble
+                // ends, which is what takes the line down on other screens.
+                if !my_chat.is_empty() {
+                    if let Some(Err(e)) = conn.as_mut().map(|c| c.send_chat("")) {
+                        eprintln!("chat clear send failed: {e}");
+                    }
+                }
                 my_chat.clear();
                 dirty = true;
             }

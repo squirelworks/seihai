@@ -1365,9 +1365,20 @@ impl SessionState {
                 }
             } else {
                 let o = &mut self.others[i];
-                o.chat = Some(text.clone());
-                // An empty text clears the bubble; any other starts the timer.
-                o.chat_timer = if text.is_empty() { BubbleTimer::default() } else { BubbleTimer::start() };
+                // As in 2.05: a line stays up (held) until the speaker's client
+                // sends an empty CURCHAT, which it does when its own bubble
+                // ends; then the line shows for the usual 60 frames more.
+                if text.is_empty() {
+                    if o.chat.as_deref().is_some_and(|c| !c.is_empty()) {
+                        o.chat_timer = BubbleTimer::start();
+                    } else {
+                        o.chat = None;
+                        o.chat_timer = BubbleTimer::default();
+                    }
+                } else {
+                    o.chat = Some(text.clone());
+                    o.chat_timer = BubbleTimer::start_held();
+                }
                 if !text.is_empty() {
                     let who = self.name_of(u.id);
                     self.push_chat(ChatKind::Say, who, text);
@@ -2250,27 +2261,35 @@ mod tests {
     }
 
     #[test]
-    fn bubble_is_up_for_three_seconds_then_gone() {
+    fn bubble_is_held_until_the_speaker_clears_it_then_runs_three_seconds() {
         use crate::chatlists::BUBBLE_MS;
         let mut st = SessionState::default();
         st.apply_body(&other(5, &who_props("A", "a")));
         st.apply_body(&say(5, "hello"));
         assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
-        assert!(!st.tick_bubbles(BUBBLE_MS - 50), "still up");
+        // Held: the speaker has not cleared it, so it stays however long.
+        assert!(!st.tick_bubbles(600_000));
         assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        // The speaker's client sends an empty CURCHAT when its bubble ends:
+        // the line stays up for 60 more frames, then goes.
+        st.apply_body(&other(5, &[12 + 0x20, 0x20]));
+        assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        assert!(!st.tick_bubbles(BUBBLE_MS - 50), "still up");
         assert!(st.tick_bubbles(50), "this tick takes it down");
         assert_eq!(st.others[0].chat, None);
         // The history line stays.
         assert_eq!(st.chat_log.len(), 1);
         assert!(!st.tick_bubbles(1000), "nothing more to end");
-        // A new line restarts the clock; an empty text clears at once.
-        st.apply_body(&say(5, "again"));
-        st.tick_bubbles(BUBBLE_MS - 1);
-        st.apply_body(&say(5, "and more"));
-        assert!(!st.tick_bubbles(BUBBLE_MS - 1), "restarted by the newer line");
+        // An empty text with no line up does nothing visible.
         st.apply_body(&other(5, &[12 + 0x20, 0x20]));
-        assert_eq!(st.others[0].chat.as_deref(), Some(""));
-        assert!(!st.tick_bubbles(10), "an emptied bubble has no timer");
+        assert_eq!(st.others[0].chat, None);
+        assert!(!st.tick_bubbles(10));
+        // A new line during the countdown holds again.
+        st.apply_body(&say(5, "again"));
+        st.apply_body(&other(5, &[12 + 0x20, 0x20]));
+        st.apply_body(&say(5, "and more"));
+        assert!(!st.tick_bubbles(BUBBLE_MS * 2), "held by the newer line");
+        assert_eq!(st.others[0].chat.as_deref(), Some("and more"));
     }
 
     #[test]
