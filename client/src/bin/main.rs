@@ -1470,6 +1470,9 @@ fn main() {
                 if let Some(st) = net_state.own_status.take() {
                     status_base = st;
                 }
+                if let Some(g) = net_state.own_glove_power.take() {
+                    session.glove_power = g;
+                }
                 session.apply_server_power(
                     net_state.own_max_power.take(),
                     net_state.own_cur_power.take(),

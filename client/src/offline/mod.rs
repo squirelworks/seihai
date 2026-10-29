@@ -418,7 +418,9 @@ impl OfflineSession {
             darts: 10,
             sword_power: 1,
             shield_power: 1,
-            glove_power: 0,
+            // 2.05 starts every player at glove 1 (enough for a pot), as
+            // GServer's default account does (`GLOVEP 1`).
+            glove_power: 1,
             pushpull: PushPull::default(),
             max_hearts: 6,
             opened_chests: HashSet::new(),
@@ -778,7 +780,8 @@ impl OfflineSession {
                 "the spin attack".into()
             }
             "glove1" | "glove2" => {
-                self.glove_power = self.glove_power.max(if item == "glove1" { 1 } else { 2 });
+                // 2.05 and GServer: glove1 raises the power to 2, glove2 to 3.
+                self.glove_power = self.glove_power.max(if item == "glove1" { 2 } else { 3 });
                 "a glove".into()
             }
             "sword" | "battleaxe" | "lizardsword" | "goldensword" => {
@@ -863,8 +866,9 @@ impl OfflineSession {
     /// Lift the object in front of the player, if the glove allows it.
     ///
     /// The glove power `g` allows the first `g + 2` entries of the lift
-    /// table (a bare hand lifts the first two: the bush and the pot-like
-    /// block; a glove the heavier ones). The object's four tiles on the board
+    /// table (arrays.dat array 11: bush, sign, pot, light stone, black
+    /// stone). Players start at 1, which lifts up to the pot; glove1 (2)
+    /// adds the light stone and glove2 (3) the black stone. The object's four tiles on the board
     /// are replaced by the table's "left behind" tiles and the player carries
     /// it. Not while swimming, carrying, or dead.
     pub fn try_lift(&mut self) -> Option<usize> {
@@ -2103,6 +2107,24 @@ mod tests {
         assert!(s.carried.is_none());
         assert_eq!(s.pushpull.grab, Some(Grab { count: 1 }), "held until A is let go");
         assert_eq!(get(s.current_level.as_ref().unwrap(), 40, 20), ROCK, "the rock does not move");
+    }
+
+    /// arrays.dat array 11's third entry is the pot: 2.05 players start at
+    /// glove 1, which reaches it, and the glove items raise it to 2 and 3.
+    #[test]
+    fn players_start_at_glove_1_and_the_gloves_raise_it() {
+        assert_eq!(OfflineSession::new().glove_power, 1);
+        let mut s = object_session(OfflineSession::new().glove_power);
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.interact(), Interaction::Lifted { kind: 2 }, "the third entry without a glove item");
+        let mut s = OfflineSession::new();
+        s.glove_power = 1;
+        s.give_item("glove1");
+        assert_eq!(s.glove_power, 2);
+        s.give_item("glove2");
+        assert_eq!(s.glove_power, 3);
+        s.give_item("glove1");
+        assert_eq!(s.glove_power, 3, "never lowered");
     }
 
     #[test]
