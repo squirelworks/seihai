@@ -284,6 +284,15 @@ pub fn parse_board_modify2(payload: &[u8]) -> Option<BoardModify2> {
     })
 }
 
+/// `PLO_BOARDMODIFY` (7): `GCHAR x, y, w, h`, then `w*h` GSHORT tiles
+/// row-major, for the player's own level. The same shape as 186 without
+/// the cell, so it is read into a [`BoardModify2`] with cell (0, 0).
+pub fn parse_board_modify(payload: &[u8]) -> Option<BoardModify2> {
+    let mut p = vec![0x20, 0x20];
+    p.extend_from_slice(payload);
+    parse_board_modify2(&p)
+}
+
 impl BoardModify2 {
     /// Write the block into a 64-wide board (`board.len()` a multiple of
     /// 64, row by row) at `x`,`y`. A tile past column 63 or past the last
