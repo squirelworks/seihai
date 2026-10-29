@@ -536,6 +536,16 @@ impl<'a> Parser<'a> {
                     lhs = self.in_tail(lhs);
                     continue;
                 }
+                // `a,b in |lo,hi|`: both values in the range (GS1, as in
+                // `mapdx,mapdy in |-1,1|`). Anything else after a comma is
+                // left to the caller (an argument list).
+                Tok::Op(",") if min <= 3 => match self.pair_in(&lhs) {
+                    Some(e) => {
+                        lhs = e;
+                        continue;
+                    }
+                    None => break,
+                },
                 // In a condition a single `=` compares, as it does in level scripts.
                 // Text join, below comparison and above `&&` (the order of the
                 // GS2 grammar, which has the same four operators).
@@ -565,6 +575,27 @@ impl<'a> Parser<'a> {
             lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
         }
         lhs
+    }
+
+    /// At a `,` after `first`: if `, second in |lo,hi|` follows, both in
+    /// the range. Otherwise nothing is consumed.
+    fn pair_in(&mut self, first: &Expr) -> Option<Expr> {
+        let saved = (self.lx.clone(), self.peeked.clone(), self.diags.len());
+        self.next();
+        let second = self.binary(4);
+        if matches!(&self.peek().tok, Tok::Ident(w) if w == "in") {
+            self.next();
+            if self.is_op("|") {
+                if let Expr::InRange { e, lo, hi } = self.in_tail(second) {
+                    let a = Expr::InRange { e: Box::new(first.clone()), lo: lo.clone(), hi: hi.clone() };
+                    return Some(Expr::Bin(BinOp::And, Box::new(a), Box::new(Expr::InRange { e, lo, hi })));
+                }
+            }
+        }
+        self.lx = saved.0;
+        self.peeked = saved.1;
+        self.diags.truncate(saved.2);
+        None
     }
 
     /// After `in`: `|lo,hi|`, `|lo,hi>`, or `{a,b,c}`.
@@ -727,6 +758,13 @@ mod tests {
 
     fn g(src: &str) -> String {
         parse(src, Era::V21).to_string()
+    }
+
+    #[test]
+    fn the_quiver_condition_parses() {
+        // 2gta's *Quiver weapon, line 180.
+        let s = parse("if ((onmapx(#L)>=0 || strequals(#t(0),#L)) && mapdx,mapdy in |-1,1|) { this.a=1; } else { this.a=2; }", Era::V205);
+        assert!(s.diagnostics.is_empty(), "{:?}", s.diagnostics);
     }
 
     #[test]

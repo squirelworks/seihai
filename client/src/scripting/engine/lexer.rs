@@ -46,6 +46,7 @@ pub fn code_digits(code: &[u8]) -> usize {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     src: &'a str,
     b: &'a [u8],

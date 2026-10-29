@@ -318,6 +318,20 @@ fn in_ranges_and_lists() {
 }
 
 #[test]
+fn a_pair_in_a_range_needs_both() {
+    // The *Quiver weapon on 2gta: `mapdx,mapdy in |-1,1|`.
+    assert_eq!(eval("1 && 0,-1 in |-1,1|"), Val::Num(1.0));
+    assert_eq!(eval("1 && 2,0 in |-1,1|"), Val::Num(0.0));
+    assert_eq!(eval("0,2 in |-1,1|"), Val::Num(0.0));
+    let src = "if (created) { this.a=0; this.b=1; if ((1 || 0) && this.a,this.b in |-1,1|) { message near; } else { message far; } }";
+    let (mut w, id) = npc_in(src, Era::V205);
+    w.fire(id, "created", &[]);
+    assert_eq!(messages(&mut w), vec!["near"]);
+    // A comma in an argument list is still an argument list.
+    assert_eq!(eval("strequals(\"a\", \"a\")"), Val::Num(1.0));
+}
+
+#[test]
 fn string_concatenation_only_for_non_numeric_text() {
     assert_eq!(eval("\"ab\" + \"cd\""), Val::Str("abcd".into()));
     assert_eq!(eval("\"5\" + 1"), Val::Num(6.0));
