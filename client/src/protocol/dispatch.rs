@@ -370,6 +370,8 @@ pub struct SessionState {
     /// CURPOWER (2, hearts × 2), STATUS (18) and ALIGNMENT (32, AP).
     pub own_max_power: Option<u8>,
     pub own_cur_power: Option<u8>,
+    /// GLOVEPOWER (prop 6) the server last gave for the player.
+    pub own_glove_power: Option<u8>,
     pub own_status: Option<u8>,
     pub own_alignment: Option<u8>,
     /// Read prop 10 as the pre-2.1 bow slot.
@@ -1436,6 +1438,7 @@ impl SessionState {
                 }
                 (1, Some(v)) => self.own_max_power = Some(v),
                 (2, Some(v)) => self.own_cur_power = Some(v),
+                (6, Some(v)) => self.own_glove_power = Some(v),
                 (18, Some(v)) => self.own_status = Some(v),
                 (32, Some(v)) => self.own_alignment = Some(v),
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
@@ -2135,6 +2138,9 @@ mod tests {
             (st.own_max_power, st.own_cur_power, st.own_status, st.own_alignment),
             (Some(3), Some(5), Some(0x14), Some(50))
         );
+        // GLOVEPOWER (6).
+        st.apply_body(&[9 + 0x20, 6 + 0x20, 3 + 0x20, b'\n']);
+        assert_eq!(st.own_glove_power, Some(3));
     }
 
     #[test]

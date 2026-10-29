@@ -33,9 +33,9 @@ bush `2 3 / 18 19` and `420 421 / 436 437`) and 5 liftable ones (the rock is
   entries, no glove) and write the entry's "left" tiles over the four, then a
   spawn routine takes the entry index (debris or items; not read).
 * **Lift.** The A key tries this first (before a chest). Glove
-  power `g` allows the first `g + 2` entries: with no glove the bush and the
-  512 block, power 1 adds the 684 block, power 2 the rock and the 990 block (the
-  table order is the client's). The four tiles
+  power `g` allows the first `g + 2` entries of arrays.dat array 11: power 0
+  the bush and the sign (512), power 1 adds the pot (684), power 2 the light
+  stone (34), power 3 the black stone (990) (the table order is the client's). The four tiles
   are replaced by the entry's "left" tiles and the player carries the object.
 
 ## What Seihai does
@@ -112,8 +112,11 @@ uses the 2.05 rule for every build until they are.
   respawn time. Seihai applies an incoming 7 to the player's level, which
   is how it sees other players' lifts, cuts and stone blocks and the
   server's respawns.
-* The glove power values come from items (`glove1` = 1, `glove2` = 2 in
-  Seihai); how the server's player props carry it online is not wired.
+* **Glove power.** 2.05 starts every player at 1, so pots lift without a
+  glove item; `glove1` raises it to 2 and `glove2` to 3 (2.05's item pickup,
+  and GServer's `GLOVEP 1` default and item code). Online Seihai takes the
+  server's GLOVEPOWER (player prop 6). Seihai used to start at 0, which is
+  why the pots in houses would not lift.
 * Grabbing, pulling and pushing follow the 2.05 client: A on any wall
   (a rock the glove cannot lift is one) holds it while A is down, the arrow
   away from it pulls, and stone blocks move. See `ledges-push-pull.md`.
