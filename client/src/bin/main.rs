@@ -232,6 +232,27 @@ fn colored_body_pass(
     added
 }
 
+/// Tell the server what changed in the player's hearts and pose
+/// ([`OfflineSession::take_power_report`]): the real client reports its own
+/// CURPOWER, and GServer keeps whatever it last heard. Only for builds with
+/// the death rules, the ones whose health handling was traced. Returns true
+/// when a message went out. A failed send drops the connection.
+fn send_power_report(conn: &mut Option<Connection>, session: &mut OfflineSession, version: ClientVersion) -> bool {
+    let Some(report) = session.take_power_report() else { return false };
+    if version.death_rules().is_none() {
+        return false;
+    }
+    let Some(msg) = report.message(version.profile().ui.ganis) else { return false };
+    let Some(c) = conn.as_mut() else { return false };
+    eprintln!("hearts report: {report:?}");
+    if let Err(e) = c.send_messages(&[msg]) {
+        eprintln!("send failed: {e}");
+        *conn = None;
+        return false;
+    }
+    true
+}
+
 /// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
 /// one we have), and the `PLI_ADJACENTLEVEL` messages in one frame.
 fn send_world_requests(conn: Option<&mut Connection>, req: WorldRequests, files: &mut FileSession) {
@@ -1610,11 +1631,16 @@ fn main() {
                             }
                         }
                         if took {
-                            // Hurt mode shows in the sprite others see.
-                            if let Some(c) = conn.as_mut() {
-                                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
-                                    eprintln!("send failed: {e}");
-                                    conn = None;
+                            // The hearts report carries the new CURPOWER,
+                            // GANI `hurt` and the hurt sprite, as the real
+                            // client sends it in the tick of the hit. Without
+                            // one, hurt mode still shows in the sprite.
+                            if !send_power_report(&mut conn, &mut session, version) {
+                                if let Some(c) = conn.as_mut() {
+                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                                        eprintln!("send failed: {e}");
+                                        conn = None;
+                                    }
                                 }
                             }
                         }
@@ -1807,6 +1833,9 @@ fn main() {
                     }
                 }
             }
+            // A death (CURPOWER 0, GANI `dead`), a respawn (the hearts by AP,
+            // after the warp and the status clear), a lava burn, a heart.
+            send_power_report(&mut conn, &mut session, version);
         }
         // Combat: S swings the sword (others judge the hit from the sprite
         // we send), and the swing and hurt mode run on the 50 ms clock.
@@ -1869,6 +1898,8 @@ fn main() {
             if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
+            // A thrown object's hit, or the end of hurt mode (GANI `idle`).
+            send_power_report(&mut conn, &mut session, version);
             if sprite_changed {
                 dirty = true;
                 if let Some(c) = conn.as_mut() {
