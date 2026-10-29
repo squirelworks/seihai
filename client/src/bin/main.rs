@@ -1832,6 +1832,14 @@ fn main() {
                 if !no_scripts && scripts.trigger(&mut session, &t) {
                     eprintln!("{} at {:.1},{:.1} (dir {})", t.action, t.x, t.y, t.dir);
                 }
+                // Online the 2.05 client sends every push and pull try to
+                // the server too.
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_trigger_action(t.x, t.y, t.action, &t.dir.to_string()) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
             }
             for m in session.take_npc_moves() {
                 eprintln!("npc {} moved to {:.1},{:.1} ({})", m.index, m.x, m.y, m.event);
@@ -1839,19 +1847,6 @@ fn main() {
                     scripts.npc_moved(&mut session, &m);
                 }
                 dirty = true;
-            }
-            for b in session.take_moved_blocks() {
-                eprintln!("stone block moved (4x4 at {},{})", b.x, b.y);
-                dirty = true;
-            }
-            // Online the 2.05 client sends every push and pull try to
-            // the server too.
-            if let Some(c) = conn.as_mut() {
-                if let Err(e) = c.send_trigger_action(t.x, t.y, t.action, &t.dir.to_string()) {
-                    eprintln!("send failed: {e}");
-                    conn = None;
-                }
-            }
             }
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
@@ -2595,6 +2590,7 @@ fn main() {
                 eprintln!("looks send failed: {e}");
             }
             dirty = true;
+        }
         // Tiles the player changed this frame (a lift, a cut, a moved stone
         // block): the server writes them into the level for the others.
         for b in session.take_board_changes() {
@@ -2605,7 +2601,6 @@ fn main() {
                     conn = None;
                 }
             }
-
         }
         // The pictures other players and our own shield are drawn with.
         {

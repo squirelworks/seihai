@@ -495,7 +495,6 @@ fn the_starter_level_chest_and_sign_tiles_have_open_art_two_ids_on() {
     }
 }
 
-<<<<<<< HEAD
 // ---- downloads land where the resolver looks (laundry list P6, 2026-10-29) ----
 
 /// Every image a server sends is found again by the resolver, at the path
@@ -517,7 +516,8 @@ fn a_downloaded_image_is_found_where_it_was_saved() {
         }
         let _ = fs::remove_dir_all(&cache);
     }
-=======
+}
+
 // ---- the Seihai folder's cache (laundry list P2, 2026-10-29) ---------------------
 
 /// `_cache/<host>_<port>/` in the Seihai folder is searched before the
@@ -559,5 +559,4 @@ fn the_seihai_folder_cache_is_searched_first_and_downloads_go_to_both() {
     assert_eq!(got, Stored::Disk(cache.join("levels/hats/hat0.png")));
     let _ = fs::remove_dir_all(&game);
     let _ = fs::remove_dir_all(&cache);
->>>>>>> origin/main
 }
