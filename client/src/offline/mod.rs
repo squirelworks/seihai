@@ -13,7 +13,7 @@ use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
 mod pushpull;
-pub use pushpull::{Grab, Jump, PushPull, Trigger};
+pub use pushpull::{NpcMoved, BlockMoved, Grab, Jump, PushPull, Trigger};
 use pushpull::StepResult;
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
@@ -1444,8 +1444,17 @@ impl OfflineSession {
     /// not). The tile is `floor(coordinate + 0.0001)`, as in the real client.
     /// Water and lava are open. Developer mode skips the test.
     fn walk_blocked(&self, px: f64, py: f64) -> bool {
+        self.walk_blocked_except(px, py, None)
+    }
+
+    /// [`Self::walk_blocked`], with NPC `except` left out (an NPC that is
+    /// being moved does not stop itself).
+    fn walk_blocked_except(&self, px: f64, py: f64, except: Option<usize>) -> bool {
         if self.dev.wallhack() {
             return false;
+        }
+        if self.npc_blocks_at(px as f32, py as f32, except) {
+            return true;
         }
         if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
             if self.kind_at_point(level, types, (px + WALK_FLOOR_EPS) as f32, (py + WALK_FLOOR_EPS) as f32) == TileKind::Blocking {
