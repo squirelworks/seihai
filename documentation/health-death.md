@@ -70,7 +70,7 @@ in that order, each only when it changed (`life::PowerReporter`,
 | Hurt mode ends | GANI `idle` | 2.05 lab run 1 (`2A 24 idle`, 1.5 s after the hit) |
 | A killing hit | CURPOWER 0, GANI `dead` | 2.22 lab |
 | The server set hearts to 0 | GANI `dead` | 2.22 lab |
-| Respawn | CURPOWER by the AP table, GANI `idle` | CURPOWER: 2.22 lab. `idle`: Seihai's choice, so others stop drawing `dead` |
+| Respawn | CURPOWER by the AP table (no GANI) | 2.22 lab |
 | Lava burn, heart pickup, script `hurt` | CURPOWER | inferred, not captured |
 
 Hearts from the server (MAXPOWER, CURPOWER) count as known and are not sent

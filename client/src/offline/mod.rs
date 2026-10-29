@@ -3497,7 +3497,7 @@ mod tests {
         assert!(s.respawn(false).is_some());
         // AP 30: min(5 hearts, max 3 hearts) = 6 half hearts.
         let r = s.take_power_report().unwrap();
-        assert_eq!((r.cur_half, r.pose), (Some(6), Some(crate::life::ReportPose::Idle)));
+        assert_eq!((r.cur_half, r.pose), (Some(6), None));
     }
 
     #[test]

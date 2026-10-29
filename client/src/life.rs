@@ -275,8 +275,7 @@ impl PowerReport {
 /// - **Respawn** (2.22): CURPOWER by the AP table.
 ///
 /// Lava burns and heart pickups are reported the same way, as a plain
-/// CURPOWER; that is inferred, not captured. So is GANI `idle` after a
-/// respawn (it clears `dead` for the others).
+/// CURPOWER; that is inferred, not captured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PowerReporter {
     reported_half: i32,
@@ -317,12 +316,16 @@ impl PowerReporter {
         };
         let half = half.clamp(0, 223);
         let cur_half = (half != self.reported_half).then_some(half as u8);
-        let new_pose = (pose != self.pose).then_some(pose);
+        // Coming back from `dead` sends no GANI: the respawn report seen
+        // (2.22) is CURPOWER alone. Hurt mode left over from the killing hit
+        // is not reported either.
+        let pose = if self.pose == ReportPose::Dead && pose == ReportPose::Hurt { ReportPose::Dead } else { pose };
+        let new_pose = (pose != self.pose && self.pose != ReportPose::Dead).then_some(pose);
+        self.pose = pose;
         if cur_half.is_none() && new_pose.is_none() {
             return None;
         }
         self.reported_half = half;
-        self.pose = pose;
         let sprite = (new_pose == Some(ReportPose::Hurt)).then_some(sprite);
         Some(PowerReport { cur_half, pose: new_pose, sprite })
     }
@@ -580,9 +583,15 @@ mod tests {
         let mut p = PowerReporter::default();
         let r = p.report(0, true, true, 130).unwrap();
         assert_eq!(r.message(true).unwrap(), b"\x22\x22\x20\x2a\x24dead\n".to_vec());
-        // Respawn: the hearts by AP and idle.
+        // Respawn: the hearts by AP alone, no GANI.
         let r = p.report(6, false, false, 2).unwrap();
-        assert_eq!(r.message(true).unwrap(), b"\x22\x22\x26\x2a\x24idle\n".to_vec());
+        assert_eq!(r.message(true).unwrap(), b"\x22\x22\x26\n".to_vec());
+        assert_eq!(p.report(6, false, false, 2), None, "idle is not sent later either");
+        // Respawned while the killing hit's hurt mode still runs: nothing.
+        let mut p = PowerReporter::default();
+        p.report(0, true, true, 130);
+        assert_eq!(p.report(6, false, true, 130).unwrap().message(true).unwrap(), b"\x22\x22\x26\n".to_vec());
+        assert_eq!(p.report(6, false, false, 2), None);
     }
 
     #[test]
