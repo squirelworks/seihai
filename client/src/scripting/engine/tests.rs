@@ -1000,3 +1000,62 @@ fn the_2_1_forms_are_not_read_by_2_05() {
         assert!(super::parse(src, Era::V21).diagnostics.is_empty(), "{src}");
     }
 }
+
+// ---- 2.2 string lists and the builtins from the laundry list (2026-10-29) ----
+
+#[test]
+fn string_lists_add_insert_replace_remove_delete() {
+    let (mut w, _) = npc(
+        "if (created) {\n\
+         addstring client.l,apple; addstring client.l,pear; addstring client.l,plum;\n\
+         insertstring client.l,1,fig; replacestring client.l,0,kiwi;\n\
+         message #s(client.l)|#I(client.l,2)|#I(client.l,3)|#v(sarraylen(#s(client.l)));\n\
+         deletestring client.l,1; removestring client.l,pear;\n\
+         message #s(client.l)|#v(lindexof(kiwi,#s(client.l)))|#v(lindexof(fig,#s(client.l)));\n\
+         }",
+    );
+    w.start_all();
+    let m = messages(&mut w);
+    assert_eq!(m.len(), 2, "{m:?}");
+    assert_eq!(m[0], "kiwi,fig,pear,plum|pear|plum|4");
+    assert_eq!(m[1], "kiwi,plum|0|-1");
+}
+
+#[test]
+fn addstring_before_2_1_adds_text() {
+    let (mut w, _) = npc_in("if (created) { setstring client.s,ab; addstring client.s,cd; message #s(client.s); }", Era::V205);
+    w.start_all();
+    assert_eq!(messages(&mut w), ["abcd"]);
+}
+
+#[test]
+fn strcontains_and_onmap() {
+    let (mut w, _) = npc(
+        "if (created) { message #v(strcontains(Hello World,WORLD))#v(strcontains(Hello,xyz))#v(onmapx(e.nw)); }",
+    );
+    w.start_all();
+    assert_eq!(messages(&mut w), ["10-1"], "no map: -1");
+    let (mut w, _) = npc("if (created) { message #v(onmapx(e.nw)),#v(onmapy(e.nw)),#v(onmapx(nowhere.nw)); }");
+    w.core.map = crate::gmap::Gmap::parse_grid("\"a.nw\",\"b.nw\"\n\"c.nw\",\"e.nw\"\n");
+    w.start_all();
+    assert_eq!(messages(&mut w), ["1,1,0"]);
+}
+
+#[test]
+fn play2_and_sendrpgmessage_are_effects() {
+    let (mut w, _) = npc("if (created) { play2 bell.wav,30,30,1; sendrpgmessage Hi there; }");
+    w.start_all();
+    let e = w.take_effects();
+    assert!(e.contains(&Effect::Play { file: "bell.wav".into(), looped: false }), "{e:?}");
+    assert!(e.contains(&Effect::RpgMessage { text: "Hi there".into() }), "{e:?}");
+}
+
+#[test]
+fn a_list_entry_with_a_comma_is_quoted() {
+    use super::interp::{join_list, split_list};
+    let items = vec!["a,b".to_string(), "say \"hi\"".to_string(), "c".to_string()];
+    let text = join_list(&items);
+    assert_eq!(text, "\"a,b\",\"say \"\"hi\"\"\",c");
+    assert_eq!(split_list(&text), items);
+    assert!(split_list("").is_empty());
+}
