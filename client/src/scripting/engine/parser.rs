@@ -228,6 +228,7 @@ impl<'a> Parser<'a> {
                 let cond = self.expr();
                 self.expect_op(")");
                 let then = Box::new(self.stmt().unwrap_or(Stmt::Block(Vec::new())));
+                self.skip_semis_before_else();
                 let els = if matches!(&self.peek().tok, Tok::Ident(e) if e == "else" || e == "elseif") {
                     let is_elseif = matches!(&self.peek().tok, Tok::Ident(e) if e == "elseif");
                     self.next();
@@ -579,6 +580,21 @@ impl<'a> Parser<'a> {
 
     /// At a `,` after `first`: if `, second in |lo,hi|` follows, both in
     /// the range. Otherwise nothing is consumed.
+    /// Eat stray `;` between an if's statement and its `else`, as in
+    /// `if (a) b=1;; else b=2;` (the Quiver weapon). Nothing is eaten when
+    /// no `else` follows.
+    fn skip_semis_before_else(&mut self) {
+        if !self.is_op(";") {
+            return;
+        }
+        let saved = (self.lx.clone(), self.peeked.clone());
+        while self.eat_op(";") {}
+        if !matches!(&self.peek().tok, Tok::Ident(e) if e == "else" || e == "elseif") {
+            self.lx = saved.0;
+            self.peeked = saved.1;
+        }
+    }
+
     fn pair_in(&mut self, first: &Expr) -> Option<Expr> {
         let saved = (self.lx.clone(), self.peeked.clone(), self.diags.len());
         self.next();
@@ -765,6 +781,14 @@ mod tests {
         // 2gta's *Quiver weapon, line 180.
         let s = parse("if ((onmapx(#L)>=0 || strequals(#t(0),#L)) && mapdx,mapdy in |-1,1|) { this.a=1; } else { this.a=2; }", Era::V205);
         assert!(s.diagnostics.is_empty(), "{:?}", s.diagnostics);
+    }
+
+    #[test]
+    fn a_double_semicolon_before_else_keeps_the_else() {
+        // 2gta's *Quiver weapon, line 322.
+        let s = g("if (a>4) b=a-4;;\nelse b=0;");
+        assert_eq!(s, g("if (a>4) b=a-4; else b=0;"));
+        assert!(parse("if (a) b=1;; else b=2;", Era::V205).diagnostics.is_empty());
     }
 
     #[test]
