@@ -28,12 +28,15 @@
 //!   Letting go of the arrow returns to the grab pose, letting go of A ends
 //!   the grab.
 //!
-//! `canbepushed` / `canbepulled` NPCs are moved by the same two routines in
-//! 2.05. Seihai's scripts do not move NPCs yet, so only the trigger events
-//! reach them (`actionpushed`, `actionpulled`).
+//! * **NPCs.** When no block is there, the same two routines look for an
+//!   NPC with `canbepushed` (at the probe point) or `canbepulled` (at the
+//!   grab point). If every cell along the edge it moves into is free, the
+//!   NPC moves one tile, the player one tile with it, and the NPC gets
+//!   `waspushed` / `waspulled` (after `actionpushed` / `actionpulled`). The
+//!   2.05 client sends nothing to the server for the NPC.
 
 use super::{walk_floor, OfflineSession, DIR_NORTH, DIR_SOUTH, DIR_WEST};
-use crate::assets::{Object2x2, TileKind};
+use crate::assets::{Npc, Object2x2, TileKind};
 use crate::sound::SoundEvent;
 
 /// Per facing (up, left, down, right): the point, from the player's
@@ -54,6 +57,10 @@ pub const PUSH_DEST: [[(i32, i32); 2]; 4] = [[(0, -1), (1, -1)], [(-1, 0), (-1, 
 /// Per facing: the two cells, from a pulled block's top-left, that must be
 /// free behind the player (the player steps back one tile).
 pub const PULL_DEST: [[(i32, i32); 2]; 4] = [[(0, 4), (1, 4)], [(4, 0), (4, 1)], [(0, -3), (1, -3)], [(-3, 0), (-3, 1)]];
+
+/// Per facing: the two cells, from the grab cell, that must be free behind
+/// the player before an NPC is pulled.
+pub const NPC_PULL_BEHIND: [[(i32, i32); 2]; 4] = [[(0, 3), (1, 3)], [(3, 0), (3, 1)], [(0, -3), (1, -3)], [(-3, 0), (-3, 1)]];
 
 /// Ticks a jump lasts.
 pub const JUMP_TICKS: u8 = 8;
@@ -129,6 +136,63 @@ pub struct BlockMoved {
     pub y: i32,
 }
 
+/// An NPC a push or a pull moved: its index in the level's NPC list, where
+/// it is now, and the event its script gets.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NpcMoved {
+    pub index: usize,
+    pub x: f32,
+    pub y: f32,
+    /// `waspushed` or `waspulled`.
+    pub event: &'static str,
+}
+
+/// The box an NPC is hit in, `(x, y, w, h)` in tiles, as the 2.05 hit test
+/// has it: a character the fixed box `x + 0.5 .. x + 2.5`, `y + 1 .. y + 3`;
+/// otherwise its `setshape` size, else the part of its image it shows. An
+/// NPC whose image size Seihai does not know counts as 2 x 2 tiles (32
+/// pixels, the script world's default).
+pub fn npc_hit_box(n: &Npc) -> (f32, f32, f32, f32) {
+    if n.ani.is_some() {
+        return (n.x + 0.5, n.y + 1.0, 2.0, 2.0);
+    }
+    let (w, h) = npc_size_px(n);
+    (n.x, n.y, w / 16.0, h / 16.0)
+}
+
+/// The size, in pixels, a moving NPC's edge is walked along: 48 x 48 for a
+/// character, else as [`npc_hit_box`].
+fn npc_move_size(n: &Npc) -> (f32, f32) {
+    if n.ani.is_some() {
+        return (3.0, 3.0);
+    }
+    let (w, h) = npc_size_px(n);
+    (w / 16.0, h / 16.0)
+}
+
+fn npc_size_px(n: &Npc) -> (f32, f32) {
+    if let Some((w, h)) = n.shape {
+        return (w, h);
+    }
+    if let Some((_, _, w, h)) = n.image_part {
+        return (w as f32, h as f32);
+    }
+    (32.0, 32.0)
+}
+
+/// The points along the edge an NPC at `(x, y)`, `w` by `h` tiles, moves
+/// into going `d` (0 up, 1 left, 2 down, 3 right): one per tile, starting
+/// at its left or top.
+fn npc_edge(d: usize, x: f32, y: f32, w: f32, h: f32) -> Vec<(f32, f32)> {
+    let along = |from: f32, len: f32| (0..).map(move |i| from + i as f32).take_while(move |&t| t < from + len);
+    match d {
+        0 => along(x, w).map(|t| (t, y - 1.0)).collect(),
+        1 => along(y, h).map(|t| (x - 1.0, t)).collect(),
+        2 => along(x, w).map(|t| (t, y + h)).collect(),
+        _ => along(y, h).map(|t| (x + w, t)).collect(),
+    }
+}
+
 /// The push, jump and grab state of the player.
 #[derive(Debug, Clone, Default)]
 pub struct PushPull {
@@ -143,6 +207,7 @@ pub struct PushPull {
     clock_ms: u64,
     triggers: Vec<Trigger>,
     moved_blocks: Vec<BlockMoved>,
+    npc_moves: Vec<NpcMoved>,
     moved: bool,
 }
 
@@ -274,16 +339,73 @@ impl OfflineSession {
             return None;
         }
         self.pushpull.triggers.push(Trigger { action: "pushed", x: px, y: py, dir });
-        let block = self.object_tables.as_ref()?.blocks.first().copied()?;
-        let (ax, ay) = self.block_origin(&block, tx, ty)?;
-        if PUSH_DEST[d].iter().any(|&(dx, dy)| self.block_way_shut(ax + dx, ay + dy)) {
+        let block = self.object_tables.as_ref().and_then(|t| t.blocks.first().copied());
+        let at = block.and_then(|b| self.block_origin(&b, tx, ty));
+        if let Some((ax, ay)) = at {
+            if PUSH_DEST[d].iter().any(|&(dx, dy)| self.block_way_shut(ax + dx, ay + dy)) {
+                return None;
+            }
+            self.move_block(ax, ay, DIR_STEP[d]);
+        } else if !self.move_npc(d, px, py, false) {
             return None;
         }
-        self.move_block(ax, ay, DIR_STEP[d]);
         let (sx, sy) = DIR_STEP[d];
         let (nx, ny) = (x + sx as f32, y + sy as f32);
         self.sound_events.push(SoundEvent { file: "stonemove.wav".into(), x: nx + 1.5, y: ny + 2.0 });
         Some((nx, ny))
+    }
+
+    /// The NPC with `canbepushed` (or, pulling, `canbepulled`) whose hit
+    /// box holds `(px, py)`.
+    fn movable_npc_at(&self, px: f32, py: f32, pull: bool) -> Option<usize> {
+        self.current_level.as_ref()?.npcs.iter().position(|n| {
+            let (x, y, w, h) = npc_hit_box(n);
+            n.visible && (if pull { n.pullable } else { n.pushable }) && px >= x && px < x + w && py >= y && py < y + h
+        })
+    }
+
+    /// A pushable or pullable NPC stops walking at `(px, py)` (other than
+    /// `except`). The 2.05 client stops at every NPC that blocks; Seihai
+    /// only at these, since it does not know most NPCs' image sizes.
+    pub(crate) fn npc_blocks_at(&self, px: f32, py: f32, except: Option<usize>) -> bool {
+        self.current_level.as_ref().is_some_and(|l| {
+            l.npcs.iter().enumerate().any(|(i, n)| {
+                let (x, y, w, h) = npc_hit_box(n);
+                Some(i) != except && n.visible && n.blocks && (n.pushable || n.pullable) && px >= x && px < x + w && py >= y && py < y + h
+            })
+        })
+    }
+
+    /// Move the pushable (or pullable) NPC at `(px, py)` one tile, the 2.05
+    /// way: every point along the edge it moves into must be free of walls,
+    /// chests and other NPCs; then it moves one tile in facing `d` (against
+    /// it when pulling) and the player with it. True if it moved; the
+    /// player's own move is the caller's.
+    fn move_npc(&mut self, d: usize, px: f32, py: f32, pull: bool) -> bool {
+        let Some(i) = self.movable_npc_at(px, py, pull) else { return false };
+        let Some(n) = self.current_level.as_ref().map(|l| &l.npcs[i]) else { return false };
+        let (w, h) = npc_move_size(n);
+        let way = if pull { (d + 2) % 4 } else { d };
+        let edge = npc_edge(way, n.x, n.y, w, h);
+        if edge.iter().any(|&(cx, cy)| self.npc_way_shut(cx, cy, i)) {
+            return false;
+        }
+        let (sx, sy) = DIR_STEP[way];
+        let Some(n) = self.current_level.as_mut().map(|l| &mut l.npcs[i]) else { return false };
+        n.x += sx as f32;
+        n.y += sy as f32;
+        let (x, y) = (n.x, n.y);
+        self.pushpull.npc_moves.push(NpcMoved { index: i, x, y, event: if pull { "waspulled" } else { "waspushed" } });
+        true
+    }
+
+    /// 2.05's blocked-point test for a moving NPC: a wall tile, a chest,
+    /// or another NPC (`except` is the one moving). Water does not stop it.
+    fn npc_way_shut(&self, cx: f32, cy: f32, except: usize) -> bool {
+        if !(0.0..64.0).contains(&cx) || !(0.0..64.0).contains(&cy) {
+            return true;
+        }
+        self.walk_blocked_except(f64::from(cx), f64::from(cy), Some(except))
     }
 
     /// The pull: `pulled` one tile out, then the pullable block at the grab
@@ -299,13 +421,24 @@ impl OfflineSession {
         }
         let (qx, qy) = (x + PULL_TRIGGER[d].0, y + PULL_TRIGGER[d].1);
         self.pushpull.triggers.push(Trigger { action: "pulled", x: qx, y: qy, dir: opposite(dir) });
-        let Some(block) = self.object_tables.as_ref().and_then(|t| t.blocks.get(1).copied()) else { return false };
-        let Some((ax, ay)) = self.block_origin(&block, tx, ty) else { return false };
-        if PULL_DEST[d].iter().any(|&(dx, dy)| self.block_way_shut(ax + dx, ay + dy)) {
-            return false;
-        }
+        let block = self.object_tables.as_ref().and_then(|t| t.blocks.get(1).copied());
+        let at = block.and_then(|b| self.block_origin(&b, tx, ty));
         let (sx, sy) = DIR_STEP[d];
-        self.move_block(ax, ay, (-sx, -sy));
+        if let Some((ax, ay)) = at {
+            if PULL_DEST[d].iter().any(|&(dx, dy)| self.block_way_shut(ax + dx, ay + dy)) {
+                return false;
+            }
+            self.move_block(ax, ay, (-sx, -sy));
+        } else {
+            // An NPC: the two cells behind the player, from the grab cell,
+            // must be free first.
+            if self.movable_npc_at(gx, gy, true).is_none()
+                || NPC_PULL_BEHIND[d].iter().any(|&(dx, dy)| self.block_way_shut(tx + dx, ty + dy))
+                || !self.move_npc(d, gx, gy, true)
+            {
+                return false;
+            }
+        }
         self.player_x = x - sx as f32;
         self.player_y = y - sy as f32;
         self.pushpull.moved = true;
@@ -378,7 +511,7 @@ impl OfflineSession {
         let wall = match (&self.current_level, &self.tiletypes) {
             (Some(level), Some(types)) => self.kind_at_point(level, types, gx, gy) == TileKind::Blocking,
             _ => false,
-        };
+        } || self.npc_blocks_at(gx, gy, None);
         if wall {
             self.pushpull.grab = Some(Grab { count: 1 });
             self.pushpull.pull_ticks = 0;
@@ -462,6 +595,11 @@ impl OfflineSession {
             });
         }
         self.push_pose().then(|| PUSH_SPRITE_S[frame(&self.poses.push, self.pushpull.blocked_steps as usize).min(4)])
+    }
+
+    /// The NPCs pushes and pulls moved since the last call.
+    pub fn take_npc_moves(&mut self) -> Vec<NpcMoved> {
+        std::mem::take(&mut self.pushpull.npc_moves)
     }
 
     /// The `pushed` / `pulled` triggers since the last call.
@@ -753,6 +891,80 @@ mod tests {
         let t = s.take_triggers();
         assert_eq!((t[0].action, t[0].dir), ("pulled", DIR_SOUTH));
         assert!(s.tick_pushpull(0), "the step back goes out");
+    }
+
+    fn add_npc(s: &mut OfflineSession, x: f32, y: f32, push: bool, pull: bool) {
+        let mut n = Npc::new(String::new(), x, y, String::new());
+        n.pushable = push;
+        n.pullable = pull;
+        s.current_level.as_mut().unwrap().npcs.push(n);
+    }
+
+    fn npc_pos(s: &OfflineSession) -> (f32, f32) {
+        let n = &s.current_level.as_ref().unwrap().npcs[0];
+        (n.x, n.y)
+    }
+
+    #[test]
+    fn a_canbepushed_npc_moves_one_tile_and_the_player_follows() {
+        let mut s = session(|_, _| FLOOR);
+        add_npc(&mut s, 20.0, 10.0, true, false);
+        s.player_x = 19.5;
+        s.player_y = 11.0;
+        s.player_dir = DIR_NORTH;
+        for _ in 0..28 {
+            s.try_move(0.0, -0.5);
+        }
+        assert_eq!(npc_pos(&s), (20.0, 10.0), "it blocks, and has not moved yet");
+        assert_eq!(s.player_y, 11.0);
+        s.try_move(0.0, -0.5);
+        assert_eq!(npc_pos(&s), (20.0, 9.0), "one tile up");
+        assert_eq!(s.player_y, 10.0, "the player follows");
+        assert_eq!(s.take_npc_moves(), vec![NpcMoved { index: 0, x: 20.0, y: 9.0, event: "waspushed" }]);
+        assert_eq!(s.take_triggers()[0].action, "pushed", "actionpushed comes first");
+        assert!(s.take_sound_events().iter().any(|e| e.file == "stonemove.wav"));
+    }
+
+    #[test]
+    fn a_pushed_npc_stops_at_a_wall_and_a_plain_npc_does_not_move() {
+        let mut s = session(|_, y| if y == 9 { WALL } else { FLOOR });
+        add_npc(&mut s, 20.0, 10.0, true, false);
+        s.player_x = 19.5;
+        s.player_y = 11.0;
+        s.player_dir = DIR_NORTH;
+        for _ in 0..29 {
+            s.try_move(0.0, -0.5);
+        }
+        assert_eq!(npc_pos(&s), (20.0, 10.0), "the cells above it are wall");
+        assert!(s.take_npc_moves().is_empty());
+
+        let mut s = session(|_, _| FLOOR);
+        add_npc(&mut s, 20.0, 10.0, false, true);
+        s.player_x = 19.5;
+        s.player_y = 11.0;
+        s.player_dir = DIR_NORTH;
+        for _ in 0..29 {
+            s.try_move(0.0, -0.5);
+        }
+        assert_eq!(npc_pos(&s), (20.0, 10.0), "canbepulled only: a push does not move it");
+    }
+
+    #[test]
+    fn a_canbepulled_npc_comes_along_one_tile() {
+        let mut s = session(|_, _| FLOOR);
+        add_npc(&mut s, 20.0, 8.0, false, true);
+        s.player_x = 19.5;
+        s.player_y = 9.0;
+        s.player_dir = DIR_NORTH;
+        assert!(s.try_grab(), "a pullable NPC can be held");
+        s.try_move(0.0, 0.5);
+        for _ in 0..17 {
+            s.tick_pushpull(50);
+        }
+        s.try_move(0.0, 0.5);
+        assert_eq!(npc_pos(&s), (20.0, 9.0), "one tile towards the player");
+        assert_eq!(s.player_y, 10.0, "the player stepped back");
+        assert_eq!(s.take_npc_moves(), vec![NpcMoved { index: 0, x: 20.0, y: 9.0, event: "waspulled" }]);
     }
 
     /// `new3.nw` with the ledge and block lists of the 2.22 install's

@@ -1724,6 +1724,13 @@ fn main() {
                     eprintln!("{} at {:.1},{:.1} (dir {})", t.action, t.x, t.y, t.dir);
                 }
             }
+            for m in session.take_npc_moves() {
+                eprintln!("npc {} moved to {:.1},{:.1} ({})", m.index, m.x, m.y, m.event);
+                if !no_scripts {
+                    scripts.npc_moved(&mut session, &m);
+                }
+                dirty = true;
+            }
             for b in session.take_moved_blocks() {
                 eprintln!("stone block moved (4x4 at {},{}); the server is not told", b.x, b.y);
                 dirty = true;
