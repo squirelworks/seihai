@@ -27,3 +27,19 @@ look at.
 `unstick me` is not special to the client: it is sent as an ordinary line and
 the server handles it. A `playerchats` script can rewrite the line before it
 goes out, as in the real client. See `unstick-me.md`.
+
+## Holding a key repeats it (laundry list P5, 2026-10-29)
+
+The real clients took typed text from Windows (`WM_CHAR`), which repeats a held
+key by itself. Seihai's window library passes on whatever the system sends: on
+Windows and X11 that includes the repeats, but a Wayland window gets none (the
+client must repeat by itself there), and a Mac with press-and-hold shows its
+accent menu instead. So a held key typed one letter.
+
+`ui::CharRepeat` now repeats the held character key in the chat line itself:
+after 500 ms, then 30 times a second, until the key is let go or another key
+goes down. When the system's own repeats arrive (the same character again with
+no new key press), it adds none, so Windows and X11 do not get double letters.
+Modifiers (Shift, Ctrl, Alt, Super, Caps Lock) are not counted as the key that
+typed. The delay and the rate are Seihai's choice (common system defaults), not
+read from a client.
