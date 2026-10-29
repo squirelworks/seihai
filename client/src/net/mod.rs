@@ -1022,8 +1022,9 @@ impl Connection {
 
     /// Tell the server the player's looks changed: `PLI_PLAYERPROPS` (2)
     /// with HEADGIF (11, length + 100 then the name), BODYIMG (35, a
-    /// GSTRING) and COLORS (13, five GCHARs). The defaults go as their
-    /// names (`head0.png`, `body.png`).
+    /// GSTRING), COLORS (13, five GCHARs) and the GANI attributes that are
+    /// set (GATTRIB1..5, 37..41, GSTRINGs). The defaults go as their names
+    /// (`head0.png`, `body.png`).
     pub fn send_looks(&mut self, looks: &crate::looks::Looks) -> io::Result<()> {
         let mut msg = vec![2 + 0x20, 11 + 0x20];
         let head = looks.head_name().as_bytes();
@@ -1034,6 +1035,13 @@ impl Connection {
         push_gstring_latin1(&mut msg, looks.body_name());
         msg.push(13 + 0x20);
         msg.extend(looks.colors.map(|c| c + 0x20));
+        // GATTRIB1..5 (37..41), the ones set.
+        for (i, a) in looks.attrs.iter().enumerate() {
+            if let Some(a) = a {
+                msg.push(37 + i as u8 + 0x20);
+                push_gstring_latin1(&mut msg, a);
+            }
+        }
         msg.push(b'\n');
         self.send_messages(&[msg])
     }

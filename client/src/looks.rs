@@ -55,12 +55,31 @@ pub struct Looks {
     pub head: Option<String>,
     pub body: Option<String>,
     pub colors: [u8; 5],
+    /// GANI attributes 1 to 5 (props 37 to 41; attribute 1 is the hat).
+    /// `None` until one is set: the GANI's `DEFAULTATTR` is drawn then.
+    pub attrs: [Option<String>; 5],
 }
 
 impl Default for Looks {
     fn default() -> Self {
-        Looks { head: None, body: None, colors: DEFAULT_COLORS }
+        Looks { head: None, body: None, colors: DEFAULT_COLORS, attrs: Default::default() }
     }
+}
+
+/// The picture an `ATTR1` … `ATTR5` sprite (`i` 0 to 4) of `gani` is drawn
+/// with for a player whose attributes are `attrs`: their own, else the
+/// GANI's default. An attribute set to an empty text draws nothing.
+pub fn attr_image<'a>(attrs: &'a [Option<String>; 5], gani: &'a crate::assets::Gani, i: usize) -> Option<&'a str> {
+    match attrs.get(i)? {
+        Some(a) => Some(a.as_str()).filter(|a| !a.is_empty()),
+        None => gani.default_attrs.get(i)?.as_deref().filter(|a| !a.is_empty()),
+    }
+}
+
+/// The folder an attribute picture is looked for in: the hat (attribute 1)
+/// in `hats/`, the others wherever images are.
+pub fn attr_dir(i: usize) -> &'static str {
+    if i == 0 { "hats" } else { "" }
 }
 
 impl Looks {
@@ -184,6 +203,19 @@ mod tests {
             r,
             vec![(5, [255, 173, 107]), (6, [255, 255, 255]), (4, [255, 0, 0]), (3, [206, 24, 41]), (1, [0, 0, 255]), (0, [0, 0, 8])]
         );
+    }
+
+    #[test]
+    fn own_attribute_wins_over_the_gani_default() {
+        let g = crate::assets::Gani::parse("DEFAULTATTR1 hat0.png\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap();
+        let mut attrs: [Option<String>; 5] = Default::default();
+        assert_eq!(attr_image(&attrs, &g, 0), Some("hat0.png"));
+        attrs[0] = Some("hat3.png".into());
+        assert_eq!(attr_image(&attrs, &g, 0), Some("hat3.png"));
+        // Set to nothing takes the hat off.
+        attrs[0] = Some(String::new());
+        assert_eq!(attr_image(&attrs, &g, 0), None);
+        assert_eq!(attr_dir(0), "hats");
     }
 
     #[test]

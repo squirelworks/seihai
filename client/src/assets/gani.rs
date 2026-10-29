@@ -50,6 +50,10 @@ pub struct Gani {
     pub sprites: Vec<GaniSprite>,
     pub frames: Vec<GaniFrame>,
     pub default_attr1: Option<String>,
+    /// `DEFAULTATTR1` … `DEFAULTATTR5`: the picture an `ATTR1` … `ATTR5`
+    /// sprite uses while the player has none of their own (index 0 is
+    /// ATTR1, the hat in the stock files).
+    pub default_attrs: [Option<String>; 5],
     pub default_head: Option<String>,
     pub default_body: Option<String>,
     pub single_direction: bool,
@@ -105,6 +109,7 @@ impl Gani {
         let mut sprites = Vec::new();
         let mut frames: Vec<GaniFrame> = Vec::new();
         let mut default_attr1 = None;
+        let mut default_attrs: [Option<String>; 5] = Default::default();
         let mut default_head = None;
         let mut default_body = None;
         let mut single_direction = false;
@@ -177,9 +182,15 @@ impl Gani {
                 continue;
             }
 
-            if line.starts_with("DEFAULTATTR1 ") {
-                default_attr1 = Some(line[13..].trim().to_string());
-                continue;
+            if let Some(n) = line.strip_prefix("DEFAULTATTR").and_then(|r| r.chars().next()).and_then(|c| c.to_digit(10)).filter(|n| (1..=5).contains(n)) {
+                if line.as_bytes().get(12) == Some(&b' ') {
+                    let v = line[13..].trim().to_string();
+                    if n == 1 {
+                        default_attr1 = Some(v.clone());
+                    }
+                    default_attrs[n as usize - 1] = Some(v);
+                    continue;
+                }
             }
             if line.starts_with("DEFAULTHEAD ") {
                 default_head = Some(line[12..].trim().to_string());
@@ -225,6 +236,7 @@ impl Gani {
             sprites,
             frames,
             default_attr1,
+            default_attrs,
             default_head,
             default_body,
             single_direction,
@@ -297,6 +309,15 @@ impl GaniPlayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn defaultattr_lines_fill_their_slots() {
+        let g = Gani::parse("DEFAULTATTR1 hat0.png\nDEFAULTATTR3 star.png\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap();
+        assert_eq!(g.default_attr1.as_deref(), Some("hat0.png"));
+        assert_eq!(g.default_attrs[0].as_deref(), Some("hat0.png"));
+        assert_eq!(g.default_attrs[1], None);
+        assert_eq!(g.default_attrs[2].as_deref(), Some("star.png"));
+    }
 
     #[test]
     fn setbackto_names_the_animation_to_return_to() {

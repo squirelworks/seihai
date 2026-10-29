@@ -29,4 +29,4 @@ The GANI's `SWORD` and `SHIELD` sprites take the player's own sword and shield p
 
 - Confirmed: the prop wire forms (`protocol/props.rs`, from the 2.05 tables) and the S table (Graal_analysis, 2.05 sprite step table).
 - Not tested against a real client: whether 2.05 draws another player's walk from S or from its own clock, and how long it shows each step. Seihai's choice is above.
-- Not done: GANI attributes (`#P1` and the like), other players' colours (prop 13), and the hat props.
+- Done since: other players' colours (prop 13, `appearance.md`) and GANI attributes 1 to 5 (props 37 to 41, the hat is 1; `appearance.md`).

@@ -237,7 +237,7 @@ fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
         Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: None, shield: None }
+    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: None, shield: None, attrs: Default::default() }
 }
 
 fn with_default_ganis(s: &mut OfflineSession) {
@@ -440,8 +440,8 @@ fn drawoverplayer_npcs_and_showimg_images_draw_after_the_players() {
     let (s, _sc) = session(
         "NPC red.png 2 2\nif (playerenters) { drawoverplayer; }\nNPCEND\n\
          NPC blue.png 5 2\nif (playerenters) { drawunderplayer; }\nNPCEND\n\
-         NPC blue.png 8 2\nNPCEND\n\
-         NPC red.png 11 2\nif (playerenters) { drawaslight; showimg 1,blue.png,14,2; }\nNPCEND\n",
+         NPC blue.png 8 2\nif (playerenters) { showimg 1,blue.png,14,2; }\nNPCEND\n\
+         NPC red.png 11 2\nif (playerenters) { drawaslight; }\nNPCEND\n",
     );
     let below = draw_pass(&s, &imgs, NpcPass::BelowPlayers);
     let above = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
@@ -553,4 +553,43 @@ fn a_character_npc_takes_its_colour_and_zoom_effect() {
     // Zoom 2: the figure covers more of the picture.
     let count = |fb: &Framebuffer| fb.pixels.chunks(3).filter(|p| *p != [0, 0, 0]).count();
     assert!(count(&pic("setzoomeffect 2;")) > 3 * count(&plain));
+// ---- changeimgvis ----------------------------------------------------------------
+
+#[test]
+fn changeimgvis_moves_an_image_between_the_heights() {
+    let imgs = images();
+    let (mut s, mut sc) = session(
+        "NPC - 2 2\nif (playerenters) { showimg 1,red.png,4,2; showimg 2,red.png,6,2; showimg 3,red.png,8,2; \
+         showimg 4,red.png,10,2; showimg 5,blue.png,100,40; showimg 6,red.png,12,2; \
+         changeimgvis 1,0; changeimgvis 2,1; changeimgvis 3,2; changeimgvis 4,3; changeimgvis 5,4; changeimgvis 6,9; }\n\
+         if (playersays(again)) { changeimgcolors 5,1,1,1,0.5; showimg 5,blue.png,100,40; }\nNPCEND\n",
+    );
+    let heights = |s: &OfflineSession| s.current_level.as_ref().unwrap().npcs[0].images.iter().map(|i| i.height).collect::<Vec<_>>();
+    // Under, level with and over the NPC (height 0); light; screen; and a
+    // value past 4 leaves the default (one over the NPC).
+    assert_eq!(heights(&s), vec![-1, 0, 1, 9, 10, 1]);
+    let below = draw_pass(&s, &imgs, NpcPass::BelowPlayers);
+    let above = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
+    let screen = draw_pass(&s, &imgs, NpcPass::Screen);
+    let p = |x: u32| x * 16 + 1;
+    for (x, b, a) in [(4, RED, BLACK), (6, RED, BLACK), (8, BLACK, RED), (10, BLACK, RED), (12, BLACK, RED)] {
+        assert_eq!((at(&below, p(x), p(2)), at(&above, p(x), p(2))), (b, a), "image at x {x}");
+    }
+    // The screen layer: at screen pixels, and only in its own pass.
+    assert_eq!(at(&screen, 101, 41), BLUE);
+    assert_eq!(at(&above, 101, 41), BLACK);
+    assert_eq!(at(&screen, p(8), p(2)), BLACK);
+    // showimg on an index in use puts it back one over the NPC; its colour stays.
+    sc.chat(&mut s, "again");
+    assert_eq!(heights(&s)[4], 1);
+    assert_eq!(s.current_level.as_ref().unwrap().npcs[0].images[4].effect.color, [1.0, 1.0, 1.0, 0.5]);
+}
+
+#[test]
+fn an_image_of_an_npc_over_the_player_sits_one_higher() {
+    let (s, _sc) = session("NPC - 2 2\nif (playerenters) { drawoverplayer; showimg 1,red.png,4,2; showimg 2,red.png,6,2; changeimgvis 2,0; }\nNPCEND\n");
+    let imgs = &s.current_level.as_ref().unwrap().npcs[0].images;
+    // drawoverplayer is height 1: showimg gives 2, changeimgvis 0 gives 0.
+    assert_eq!((imgs[0].height, imgs[1].height), (2, 0));
+
 }
