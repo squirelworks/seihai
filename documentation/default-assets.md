@@ -28,6 +28,7 @@ assets/default/
   gani/sword.gani            5 steps, sword.wav after step 0, SETBACKTO idle         2.3 KB
   gani/sit.gani              1 step                                                  0.7 KB
   gani/hurt.gani             1 step                                                  0.9 KB
+  gani/dead.gani             15 steps, fall and lie down, held on the last step      2.7 KB
   gani/carrystill.gani       1 step, arms raised (an object is held)                0.7 KB
   gani/carry.gani            8 steps, arms raised, footsteps after steps 0 and 4    2.9 KB
   sounds/steps.wav           22,050 Hz, 8-bit, mono, 150 ms                          3.3 KB
@@ -76,7 +77,7 @@ The foot point (links and water; walls are tested on the body box, `walking-coll
 
 ### Player sheets
 
-- **`body.png` 128x720**: four 32 px direction columns (`x = 0, 32, 64, 96` = up, left, down, right) and 22 rows of 32 px (22 x 32 = 704, plus 16 spare). Row 0 is the idle pose (the cell `draw_player_sprites` reads at `(dir * 32, 0)`); rows 1 to 8 are the eight walk poses (foot-falls at poses 1 and 5); rows 9 to 12 are the item 22 poses (9 sword wind-up, 10 sword swing, 11 sit, 12 hurt, our own numbering). Row 13 is the carry standing pose and rows 14 to 21 the eight carry-walk poses (both arms raised, our own art; `carrystill.gani` and `carry.gani` place them). Body sprite id = `200 + 4 * pose + dir`. The "right" column is the "left" column mirrored.
+- **`body.png` 128x720**: four 32 px direction columns (`x = 0, 32, 64, 96` = up, left, down, right) and 22 rows of 32 px (22 x 32 = 704, plus 16 spare). Row 0 is the idle pose (the cell `draw_player_sprites` reads at `(dir * 32, 0)`); rows 1 to 8 are the eight walk poses (foot-falls at poses 1 and 5); rows 9 to 12 are the item 22 poses (9 sword wind-up, 10 sword swing, 11 sit, 12 hurt, our own numbering). Row 13 is the carry standing pose and rows 14 to 21 the eight carry-walk poses (both arms raised, our own art; `carrystill.gani` and `carry.gani` place them). The 16 spare rows at `y = 704` hold the lying body of `dead.gani`, a 32x16 cell per direction (all four the same). Body sprite id = `200 + 4 * pose + dir`. The "right" column is the "left" column mirrored.
 - **`head0.png` 32x560**: one 32 px column, rows `y = 32 * dir` for the four directions (read at `(0, dir * 32)` by `draw_player_sprites`; head sprite id `100 + dir`). Rows from y = 128 down are empty; the extra head poses of other sets (hurt, sword) are not drawn.
 - **`sword1.png` 128x96**: four direction columns by three rows of 32x32 (held, mid-swing with an arc, thrust). `sword.gani` places these (symbolic sheet `SWORD`, sprite ids `300 + 4 * row + dir`).
 - **`shield1.png` 38x20**: four sprites at `x = 0, 6, 14, 30` of 6x18, 8x20, 16x20 and 8x20 (up, left, down, right). The core GANIs draw no shield (a player without one draws none); the sheet is there for the shield layer.
@@ -97,6 +98,7 @@ Our own text files, in the format `Gani::parse` reads: `SPRITE id SHEET x y w h 
 | `sword.gani` | 5 | shadow, body (pose 9 or 10), head, sword cell (`SWORD` ids 300..311) | `sword.wav 1.5 2` after step 0; `SETBACKTO idle` |
 | `sit.gani` | 1 | shadow, body (pose 11), head 6 px lower | none |
 | `hurt.gani` | 1 | shadow, body (pose 12, leaning away), head shifted away | none |
+| `dead.gani` | 15 | 6 steps as `hurt.gani`, 8 kneeling (sit pose, head 10 px lower), then lying: the 32x16 lying body (ids 288..291) with the down-facing head at its left end, the same for every direction | none; held on the last step |
 
 Offsets are the idle offsets already in `draw_player_sprites` (`OFFSETS`: shadow, body, head per direction inside the 48x48 player box). The swim head is lowered by 14 px, the number `draw_player_sprites` uses; the 2.22 animation uses 16 or 20 (asset-reference, "not settled"), and this set follows the code so that the GANI and the renderer agree until that is settled.
 
