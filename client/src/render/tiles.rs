@@ -558,6 +558,54 @@ pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8,
     }
 }
 
+/// One step of a GANI drawn into its own RGBA picture, for drawing it again
+/// with an effect: `(x, y, w, px)`, where `(x, y)` is the picture's top-left
+/// against the GANI's origin. Transparent where nothing was drawn. `None`
+/// when the step draws nothing.
+pub fn compose_gani_frame(gani: &Gani, frame: usize, dir: u8, sheets: &PoseSheets) -> Option<(i32, i32, u32, Vec<u8>)> {
+    let step = gani.frame(frame)?;
+    let row = step.rows.get(usize::from(dir % 4)).or_else(|| step.rows.first())?;
+    let placed: Vec<_> = row
+        .iter()
+        .filter_map(|pl| {
+            let sp = gani.sprites.iter().find(|s| s.id == pl.sprite_id)?;
+            let sheet = match sp.sheet.to_ascii_uppercase().as_str() {
+                "BODY" => sheets.body,
+                "HEAD" => sheets.head,
+                "SPRITES" => sheets.sprites,
+                "SWORD" => sheets.sword,
+                "SHIELD" => sheets.shield,
+                _ => None,
+            }?;
+            (sp.x >= 0 && sp.y >= 0 && sp.w > 0 && sp.h > 0).then_some((pl, sp, sheet))
+        })
+        .collect();
+    let x0 = placed.iter().map(|(pl, _, _)| pl.x).min()?;
+    let y0 = placed.iter().map(|(pl, _, _)| pl.y).min()?;
+    let x1 = placed.iter().map(|(pl, sp, _)| pl.x + sp.w).max()?;
+    let y1 = placed.iter().map(|(pl, sp, _)| pl.y + sp.h).max()?;
+    let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
+    let mut px = vec![0u8; w * h * 4];
+    for (pl, sp, sheet) in placed {
+        for ty in 0..sp.h {
+            for tx in 0..sp.w {
+                let si = ((sp.y + ty) as usize * sheet.w as usize + (sp.x + tx) as usize) * sheet.bpp;
+                let Some(src) = sheet.px.get(si..si + sheet.bpp) else { continue };
+                let rgba = match sheet.bpp {
+                    4 if src[3] == 0 => continue,
+                    4 => [src[0], src[1], src[2], src[3]],
+                    3 if src == [255, 0, 255] => continue,
+                    3 => [src[0], src[1], src[2], 255],
+                    _ => continue,
+                };
+                let di = ((pl.y + ty - y0) as usize * w + (pl.x + tx - x0) as usize) * 4;
+                px[di..di + 4].copy_from_slice(&rgba);
+            }
+        }
+    }
+    Some((x0, y0, w as u32, px))
+}
+
 fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
     level.tile_id_at(x, y).or_else(|| {
         // Fallback for boards that store runs.
