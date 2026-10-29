@@ -61,3 +61,32 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
 - `showimg` / `hideimg`: images appear at their level position, an index in use is replaced, the same file only moves, `hideimg` deletes, a hidden NPC keeps its images;
 - `setcharani` switches an NPC between `idle` and `walk` with Seihai's own default GANIs: the 8 walk steps are 8 different pictures, they advance every 100 ms and loop, and idle is another picture; an animation that is not loaded falls back to the image; `setimg x.gani`; a non-looping GANI plays once and follows `SETBACKTO`.
 - **Smoke test against real scripts** (`#[ignore]`, runs only with `SEIHAI_SCRIPT_CORPUS=<file>`, a text file of one script per line): it runs every script that uses `setimg`, `setgif`, `showimg`, `hideimg`, `setcharani`, `setani`, `showcharacter` or `changeimgpart` as an NPC under the 2.05 and 2.22 vocabularies (created, `playerenters`, a touch, three seconds of ticks, a few chat lines), checks the invariants of the state left behind (image indexes unique and sorted, parts inside the clamps), draws the result, and counts. Nothing of the scripts is printed or stored. On the author's private collection (a 9,516-line file, scripts and blank separators): 183 scripts use these commands, 366 runs, 0 panics, 234 runs changed an NPC image, 22 ended with the NPC hidden; no run left a `showimg` image up and none animated, because the 6 scripts with `showimg` are weapon scripts that fire on weapon events, and none of the collection uses `setcharani` or `setani`.
+
+## Images that did not show (laundry list P6, 2026-10-29)
+
+* **GIF.** The image reader took PNG only, so a server's `.gif` (old worlds name
+  their images `.gif`, and a pre-2.1 server asks for `.gif` by default) was
+  saved and then never drawn. `assets::gif` now reads the first image of a
+  GIF87a or GIF89a file (global or local colour table, interlace, the
+  transparent colour of a graphic control block), and `read_png_rgba` hands GIF
+  data to it, so every image path takes both. Checked against a reference
+  decoder on 43 files (40 from the 1.21 archive, 3 made with transparency and
+  interlace): the same pixels in every file. Later frames of an animated GIF
+  are not read.
+* **Names in another case.** A file that arrives is kept under the name the
+  server sent. An NPC that names it in another case now gets it too: the level's
+  NPC names are looked up again (case-blind) when any image arrives. On the
+  lab's older GServer-v2 a request in the wrong case gets `PLO_FILESENDFAILED`;
+  beta4 looks names up case-blind and answers with the name as asked.
+* **Where a download lands.** Checked by a test that stores 14 kinds of image
+  name (heads, bodies, hats, bomys, emoticons, map pictures, `.mng`, a name with
+  a folder, upper case) for 1.39, 2.05, 2.22 and 2.31: the resolver and the
+  store's own lookup find each one at the path it was written to. No mismatch
+  was found there.
+* **Not covered:** NPCs that exist only on the server (`PLO_NPCPROPS`, id 3) are
+  kept as raw records and not drawn at all. An NPC that is not in the level
+  file has no sprite in Seihai until that is built.
+
+Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): a level with `NPC labgif.gif`
+and a 64 x 48 interlaced GIF with transparency. Seihai asked for it, logged
+`image labgif.gif`, and drew it at the NPC's place.

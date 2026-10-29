@@ -114,8 +114,16 @@ fn zlib_rows(data: &[u8], stride: usize) -> io::Result<Vec<u8>> {
 /// Handles non-interlaced grayscale, RGB, palette (1/2/4/8-bit, with
 /// `tRNS`), gray+alpha and RGBA images at 8 bits per channel, and all
 /// five row filters. Returns `(width, height, pixels)` where `pixels`
-/// is row-major RGBA.
+/// is row-major RGBA. GIF data is read too (the first image, see
+/// [`super::gif`]).
 pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
+<<<<<<< HEAD
+    // A server sends an image as it has it: a `.gif` (or a GIF under a
+    // `.png` name) is read here too, so every image path takes both.
+    if super::gif::is_gif(data) {
+        return super::gif::read_gif_rgba(data);
+    }
+=======
     read_png_rgba_recolored(data, &[])
 }
 
@@ -124,6 +132,7 @@ pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
 /// colour types ignore `recolor`. This is how a body picture is drawn in
 /// the player's colours (see `looks.rs`).
 pub fn read_png_rgba_recolored(data: &[u8], recolor: &[(usize, [u8; 3])]) -> io::Result<(u32, u32, Vec<u8>)> {
+>>>>>>> origin/main
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, m.to_string());
     if data.len() < 8 || &data[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         return Err(bad("not a PNG"));
@@ -260,6 +269,14 @@ fn paeth(a: u8, b: u8, c: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A server's `.gif` goes through the same reader as a PNG (laundry
+    /// list P6: such images were never drawn).
+    #[test]
+    fn gif_data_is_read_too() {
+        let gif = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
+        assert_eq!(read_png_rgba(gif).unwrap(), (1, 1, vec![255, 0, 0, 255]));
+    }
 
     #[test]
     fn rgb_roundtrip_header() {

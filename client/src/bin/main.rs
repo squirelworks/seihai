@@ -1360,13 +1360,23 @@ fn main() {
                                 load_pose_gani(&resolver, &mut session, name);
                             } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
                                 load_motion_gani(&resolver, &mut session, name);
-                            } else if name.ends_with(".png") || name.ends_with(".gif") {
+                            } else if seihai::filecache::is_image_name(name) {
                                 // A new copy of an image replaces the one in memory.
                                 if let Some(data) = files.store.read(name) {
-                                    if let Ok((w, _, px)) = read_png_rgba(&data) {
-                                        npc_images.insert(name.clone(), (w, px));
-                                        eprintln!("image {name}");
+                                    match read_png_rgba(&data) {
+                                        Ok((w, _, px)) => {
+                                            npc_images.insert(name.clone(), (w, px));
+                                            eprintln!("image {name}");
+                                        }
+                                        Err(e) => eprintln!("image {name} not read: {e}"),
                                     }
+                                }
+                                // The level's NPCs may name it in another case:
+                                // look their names up again (the store's lookup
+                                // ignores case).
+                                if let Some(level) = session.current_level.clone() {
+                                    npc_images.retain(|k, _| k == name || !k.eq_ignore_ascii_case(name));
+                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
                                 }
                             }
                         }

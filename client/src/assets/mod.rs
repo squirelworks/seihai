@@ -3,6 +3,7 @@
 pub mod builtin;
 mod crc32;
 mod gani;
+pub mod gif;
 mod level;
 mod objects;
 mod png;
