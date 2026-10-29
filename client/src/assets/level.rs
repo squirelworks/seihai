@@ -100,6 +100,30 @@ pub enum DrawLayer {
     Light,
 }
 
+impl DrawLayer {
+    /// The number the 2.05 client keeps: -1, 0, 1 or 9.
+    pub fn height(self) -> i32 {
+        match self {
+            DrawLayer::Under => -1,
+            DrawLayer::Player => 0,
+            DrawLayer::Over => 1,
+            DrawLayer::Light => 9,
+        }
+    }
+}
+
+/// The height `changeimgvis` gives an image of an object at `owner`
+/// height: 0, 1, 2 are one under, level with and one over the owner; 3 is
+/// the light height (9) and 4 the screen layer (10), whatever the owner.
+/// Other values change nothing.
+pub fn image_vis_height(vis: i64, owner: i32) -> Option<i32> {
+    match vis {
+        0..=2 => Some(owner + vis as i32 - 1),
+        3 | 4 => Some(vis as i32 + 6),
+        _ => None,
+    }
+}
+
 /// An image a script put up with `showimg index,file,x,y` (index 0 to 199).
 /// `hideimg index` removes it.
 #[derive(Debug, Clone, PartialEq)]
@@ -112,7 +136,14 @@ pub struct NpcImage {
     pub part: Option<(i32, i32, i32, i32)>,
     /// `changeimgcolors` and `changeimgzoom`.
     pub effect: ImageEffect,
+    /// Drawing height, on the scale of [`DrawLayer::height`]: `showimg`
+    /// puts the image one above its NPC, `changeimgvis` moves it. 10 and up
+    /// is the screen layer, where `x` and `y` are screen pixels.
+    pub height: i32,
 }
+
+/// The first height of the screen layer (`changeimgvis i,4`).
+pub const SCREEN_HEIGHT: i32 = 10;
 
 /// How an NPC's picture, or a `showimg` image, is coloured and scaled:
 /// `setcoloreffect` / `changeimgcolors` (red, green, blue, alpha; default

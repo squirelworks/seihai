@@ -262,26 +262,24 @@ impl SessionScripts {
                     }
                 }
                 // `showimg index,file,x,y`: image `index` at a level position. Using
-                // an index again replaces that image.
+                // an index again reuses that image: as in 2.05 it takes the new
+                // file and place, its part is cleared and its height goes back to
+                // one over the NPC; its colour and zoom stay.
                 Effect::Command { obj, ref name, ref args } if name == "showimg" => {
                     self.images_changed = true;
                     let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
-                    let img = crate::assets::NpcImage {
-                        index: num(0) as i64,
-                        file: args.get(1).map(|v| v.text()).unwrap_or_default(),
-                        x: num(2) as f32,
-                        y: num(3) as f32,
-                        part: None,
-                        effect: Default::default(),
-                    };
                     if let Some(n) = self.level_npc(s, obj) {
+                        let img = crate::assets::NpcImage {
+                            index: num(0) as i64,
+                            file: args.get(1).map(|v| v.text()).unwrap_or_default(),
+                            x: num(2) as f32,
+                            y: num(3) as f32,
+                            part: None,
+                            effect: Default::default(),
+                            height: n.layer.height() + 1,
+                        };
                         match n.images.iter_mut().find(|i| i.index == img.index) {
-                            // The same file only moves, and keeps its part.
-                            Some(old) if old.file == img.file => {
-                                old.x = img.x;
-                                old.y = img.y;
-                            }
-                            Some(old) => *old = img,
+                            Some(old) => *old = crate::assets::NpcImage { effect: old.effect, ..img },
                             None => {
                                 n.images.push(img);
                                 n.images.sort_by_key(|i| i.index);
@@ -297,6 +295,18 @@ impl SessionScripts {
                     if let Some(n) = self.level_npc(s, obj) {
                         if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
                             i.part = Some(part);
+                        }
+                    }
+                }
+                // `changeimgvis index,vis`: the image's height against its NPC
+                // (`documentation/npc-draw-order.md`).
+                Effect::Command { obj, ref name, ref args } if name == "changeimgvis" => {
+                    let num = |i: usize| args.get(i).map_or(0.0, |v| v.num()).round() as i64;
+                    if let Some(n) = self.level_npc(s, obj) {
+                        if let Some(h) = crate::assets::image_vis_height(num(1), n.layer.height()) {
+                            if let Some(i) = n.images.iter_mut().find(|i| i.index == num(0)) {
+                                i.height = h;
+                            }
                         }
                     }
                 }
@@ -365,6 +375,37 @@ impl SessionScripts {
                     s.strings.remove(&name);
                 }
                 Effect::SetPlayerProp { code, value } => {
+                    // The looks codes change the player as the looks commands
+                    // do (gs1 reference: `#3` head, `#8` body, `#C0`..`#C4`
+                    // colours by name or number, `#P1`..`#P5` attributes).
+                    let v = value.trim();
+                    let changed = match code.as_str() {
+                        "#3" if !v.is_empty() => {
+                            s.looks.head = Some(v.to_string());
+                            true
+                        }
+                        "#8" if !v.is_empty() => {
+                            s.looks.body = Some(v.to_string());
+                            true
+                        }
+                        c if c.len() == 3 && c.starts_with("#C") => {
+                            let slot = usize::from(c.as_bytes()[2].wrapping_sub(b'0'));
+                            let color = crate::looks::color_by_name(v).or_else(|| v.parse::<f64>().ok().map(f64::round).filter(|n| (0.0..20.0).contains(n)).map(|n| n as u8));
+                            match (s.looks.colors.get_mut(slot), color) {
+                                (Some(old), Some(c)) => {
+                                    *old = c;
+                                    true
+                                }
+                                _ => false,
+                            }
+                        }
+                        c if c.len() == 3 && c.starts_with("#P") && (b'1'..=b'5').contains(&c.as_bytes()[2]) => {
+                            s.looks.attrs[usize::from(c.as_bytes()[2] - b'1')] = Some(v.to_string());
+                            true
+                        }
+                        _ => false,
+                    };
+                    s.looks_changed |= changed;
                     s.props.insert(code, value);
                 }
                 // `noplayerkilling`: other players' hits do nothing in this level.
@@ -494,8 +535,7 @@ impl SessionScripts {
                 // drawing them is still open.
                 Effect::Command { ref name, .. }
                     if matches!(name.as_str(),
-                        "changeimgvis"
-                        | "showtext" | "hideimgs" | "setbackpal"
+                        "showtext" | "hideimgs" | "setbackpal"
                         | "replaceani" | "addtiledef" | "addtiledef2"
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
                         | "timereverywhere" | "hideimg"
@@ -847,5 +887,24 @@ mod tests {
         assert_eq!(s.looks.colors, [18, 4, 18, 5, 18]);
         assert!(s.looks_changed);
         assert!(sc.unhandled.iter().all(|e| !format!("{e:?}").contains("set")), "{:?}", sc.unhandled);
+    }
+
+    const PROPS: &str = "GLEVNW01\n\
+        NPC - 20 20\n\
+        //#CLIENTSIDE\n\
+        if (created) { setplayerprop #P1,hat3.png; setplayerprop #C1,blue; setplayerprop #C4,7; setplayerprop #8,body2.png; setplayerprop #3,head5.png; }\n\
+        NPCEND\n";
+
+    #[test]
+    fn setplayerprop_looks_codes_change_the_player() {
+        let mut s = session(PROPS);
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "shop.nw");
+        assert_eq!(s.looks.attrs[0].as_deref(), Some("hat3.png"));
+        assert_eq!(s.looks.body.as_deref(), Some("body2.png"));
+        assert_eq!(s.looks.head.as_deref(), Some("head5.png"));
+        assert_eq!(s.looks.colors[1], crate::looks::color_by_name("blue").unwrap());
+        assert_eq!(s.looks.colors[4], 7);
+        assert!(s.looks_changed);
     }
 }

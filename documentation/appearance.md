@@ -39,6 +39,16 @@ These are server commands, not client ones.
   its colours. Other players' bodies are drawn in their prop 13 colours (the
   2.05 defaults until one arrives). A picture not here yet is asked for
   from the server and the default is drawn meanwhile.
+- **GANI attributes (hats).** A GANI's `ATTR1` … `ATTR5` sprites draw
+  from the player's attributes 1 to 5, or from the GANI's `DEFAULTATTR1` …
+  `DEFAULTATTR5` while the player has none. Attribute 1 is the hat and is
+  looked for in `hats/`; the stock `idle.gani` names `hat0.png` as its
+  default. An attribute set to nothing draws no picture. They come from
+  props 37 to 41 (GATTRIB1 to 5, which 2.05 reads for other players), for
+  us and for others, and from `setplayerprop #P1,<image>` … `#P5`. Online,
+  the attributes we have set go out as props 37 and up with the looks.
+- `setplayerprop` also takes the looks codes `#3` (head), `#8` (body) and
+  `#C0` … `#C4` (colours, by name or number), the same as the commands.
 - Seihai's own `body.png` was re-laid to the 2.05 palette layout, so the
   colours land on the right parts (`default-assets.md`).
 
@@ -48,6 +58,9 @@ These are server commands, not client ones.
   not recoloured.
 - Only PNG bodies and heads are drawn; a `.gif` or `.mng` name is asked
   for but not decoded.
+- Attributes other than the hat are looked for where other images are;
+  where 2.05 looks for them is not checked. Seihai's default GANIs have no
+  `ATTR` sprites, so hats show only with a data folder whose GANIs do.
 - Not run against a server. The online send of props 11, 35 and 13 is
   inferred from the PLAYERPROPS layout, not from a capture of 2.05 sending
   it.
