@@ -105,7 +105,7 @@ the same in every build read; this keeps `profiles_golden.txt` unchanged.
 | Id 46 | settled and implemented |
 | Bomb, arrow, baddy powers | documented and skipped: the hurt routine's callers use 0.5 hearts by default and 1 for certain object types, but which object kind maps to bomb, arrow or baddy was not resolved, and Seihai has no bomb, arrow or baddy objects to send them. Capture: a real client hit by a server-side bomb and by an arrow, read the power byte |
 | End-of-respawn save | needs capture: respawn the real client twice online (first with the server's level-warp reply delayed) and see whether the next respawn point is the death spot |
-| CURPOWER on damage | needs capture: a real client at 12 half hearts hit by an injected id 40, trace for a PLI_PLAYERPROPS with CURPOWER |
+| CURPOWER on damage | settled and implemented: the 2.05 and 2.22 clients send CURPOWER + GANI `hurt` + SPRITE on a hit (`health-death.md`, "Hearts report") |
 
 ## Open
 
@@ -134,5 +134,4 @@ the same in every build read; this keeps `profiles_golden.txt` unchanged.
   is not used. A `sparringzone` NPC script command (which also lets a paused or
   editing player be hurt) saves the entry through the `playerenters` event path;
   not modelled.
-- **Whether the real client sends CURPOWER on damage.** Unchanged: not known.
 - **Lab.** None of this has been seen on a wire.

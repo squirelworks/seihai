@@ -219,6 +219,118 @@ pub fn messages_for(event: LifeEvent, version: ClientVersion, status_base: u8) -
     }
 }
 
+/// The player's own pose as the hearts report names it in GANI (10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReportPose {
+    #[default]
+    Idle,
+    Hurt,
+    Dead,
+}
+
+impl ReportPose {
+    pub fn gani(self) -> &'static str {
+        match self {
+            ReportPose::Idle => "idle",
+            ReportPose::Hurt => "hurt",
+            ReportPose::Dead => "dead",
+        }
+    }
+}
+
+/// One hearts report for the server: what changed since the last one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PowerReport {
+    /// New CURPOWER in half hearts, when the hearts changed.
+    pub cur_half: Option<u8>,
+    /// New pose, when it changed.
+    pub pose: Option<ReportPose>,
+    /// SPRITE, sent with the start of hurt mode (the hurt sprite).
+    pub sprite: Option<u8>,
+}
+
+impl PowerReport {
+    /// The `PLI_PLAYERPROPS` message. `ganis` is false for a build without
+    /// GANIs: the pose is then left out.
+    pub fn message(&self, ganis: bool) -> Option<Vec<u8>> {
+        let gani = self.pose.filter(|_| ganis).map(ReportPose::gani);
+        if self.cur_half.is_none() && gani.is_none() && self.sprite.is_none() {
+            return None;
+        }
+        Some(crate::net::power_props_message(self.cur_half, gani, self.sprite))
+    }
+}
+
+/// What the server knows of the player's hearts and pose, so the client
+/// can tell it what changed.
+///
+/// The real client reports its own hearts: GServer never decides them for
+/// a hit, and does not echo the client's CURPOWER. Seen on the wire:
+///
+/// - **Hit** (2.05 lab run 1 and the 2.22 lab of 2026-10-25): one message
+///   with CURPOWER, GANI `hurt` and SPRITE, in the same tick as the hit.
+///   After it the client sends GANI `idle` when it stands again.
+/// - **Death** (2.22): CURPOWER 0 and GANI `dead`. When the server set the
+///   hearts to 0 itself, GANI `dead` without CURPOWER.
+/// - **Respawn** (2.22): CURPOWER by the AP table.
+///
+/// Lava burns and heart pickups are reported the same way, as a plain
+/// CURPOWER; that is inferred, not captured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PowerReporter {
+    reported_half: i32,
+    pose: ReportPose,
+}
+
+impl Default for PowerReporter {
+    /// A new session: three hearts (the default account) and idle.
+    fn default() -> Self {
+        PowerReporter { reported_half: 6, pose: ReportPose::Idle }
+    }
+}
+
+impl PowerReporter {
+    /// The server gave the hearts (its PLAYERPROPS): it knows them, so they
+    /// are not sent back.
+    pub fn server_set(&mut self, half: i32) {
+        self.reported_half = half;
+    }
+
+    /// The hearts the server last heard of.
+    pub fn reported_half(&self) -> i32 {
+        self.reported_half
+    }
+
+    /// Compare the player's state with what was reported and return what
+    /// changed. `dead` counts a player at 0 hearts whose death has not yet
+    /// started (the death starts on the next life tick), so a killing hit
+    /// reports `dead`, not `hurt`. `sprite` is the SPRITE value to send with
+    /// the start of hurt mode.
+    pub fn report(&mut self, half: i32, dead: bool, hurting: bool, sprite: u8) -> Option<PowerReport> {
+        let pose = if dead {
+            ReportPose::Dead
+        } else if hurting {
+            ReportPose::Hurt
+        } else {
+            ReportPose::Idle
+        };
+        let half = half.clamp(0, 223);
+        let cur_half = (half != self.reported_half).then_some(half as u8);
+        // Coming back from `dead` sends no GANI: the respawn report seen
+        // (2.22) is CURPOWER alone. Hurt mode left over from the killing hit
+        // is not reported either.
+        let pose = if self.pose == ReportPose::Dead && pose == ReportPose::Hurt { ReportPose::Dead } else { pose };
+        let new_pose = (pose != self.pose && self.pose != ReportPose::Dead).then_some(pose);
+        self.pose = pose;
+        if cur_half.is_none() && new_pose.is_none() {
+            return None;
+        }
+        self.reported_half = half;
+        let sprite = (new_pose == Some(ReportPose::Hurt)).then_some(sprite);
+        Some(PowerReport { cur_half, pose: new_pose, sprite })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -444,4 +556,69 @@ mod tests {
         assert_eq!(u64::from(r.timer_cap) * TICK_MS, 1500);
         assert_eq!((f32::from(r.default_x2) / 2.0, f32::from(r.default_y2) / 2.0), (30.5, 30.0));
     }
+
+    #[test]
+    fn a_hit_reports_curpower_hurt_and_sprite_as_the_205_capture() {
+        // 2.05 lab run 1, t = 130.962 s: 6 -> 5 half hearts, facing up.
+        let mut p = PowerReporter::default();
+        let r = p.report(5, false, true, 128).expect("a report");
+        assert_eq!(r, PowerReport { cur_half: Some(5), pose: Some(ReportPose::Hurt), sprite: Some(128) });
+        let mut want = vec![0x22];
+        want.extend_from_slice(b"\x22\x25\x2a\x24hurt\x31\xa0\n");
+        assert_eq!(r.message(true).unwrap(), want);
+        assert_eq!(p.report(5, false, true, 128), None, "reported once");
+    }
+
+    #[test]
+    fn the_end_of_hurt_mode_sends_idle_alone() {
+        let mut p = PowerReporter::default();
+        p.report(5, false, true, 128);
+        let r = p.report(5, false, false, 0).unwrap();
+        // As the client's `*$idle` after the hit.
+        assert_eq!(r.message(true).unwrap(), b"\x22\x2a\x24idle\n".to_vec());
+    }
+
+    #[test]
+    fn a_killing_hit_reports_zero_and_dead() {
+        let mut p = PowerReporter::default();
+        let r = p.report(0, true, true, 130).unwrap();
+        assert_eq!(r.message(true).unwrap(), b"\x22\x22\x20\x2a\x24dead\n".to_vec());
+        // Respawn: the hearts by AP alone, no GANI.
+        let r = p.report(6, false, false, 2).unwrap();
+        assert_eq!(r.message(true).unwrap(), b"\x22\x22\x26\n".to_vec());
+        assert_eq!(p.report(6, false, false, 2), None, "idle is not sent later either");
+        // Respawned while the killing hit's hurt mode still runs: nothing.
+        let mut p = PowerReporter::default();
+        p.report(0, true, true, 130);
+        assert_eq!(p.report(6, false, true, 130).unwrap().message(true).unwrap(), b"\x22\x22\x26\n".to_vec());
+        assert_eq!(p.report(6, false, false, 2), None);
+    }
+
+    #[test]
+    fn server_hearts_are_not_sent_back() {
+        let mut p = PowerReporter::default();
+        p.server_set(10);
+        assert_eq!(p.report(10, false, false, 2), None);
+        // The server set 0: only the dead gani goes out.
+        p.server_set(0);
+        let r = p.report(0, true, false, 2).unwrap();
+        assert_eq!(r.message(true).unwrap(), b"\x22\x2a\x24dead\n".to_vec());
+    }
+
+    #[test]
+    fn a_burn_or_a_heart_is_a_plain_curpower() {
+        let mut p = PowerReporter::default();
+        assert_eq!(p.report(5, false, false, 2).unwrap().message(true).unwrap(), b"\x22\x22\x25\n".to_vec());
+        assert_eq!(p.report(6, false, false, 2).unwrap().message(true).unwrap(), b"\x22\x22\x26\n".to_vec());
+    }
+
+    #[test]
+    fn a_build_without_ganis_leaves_the_pose_out() {
+        let mut p = PowerReporter::default();
+        let r = p.report(5, false, true, 128).unwrap();
+        assert_eq!(r.message(false).unwrap(), b"\x22\x22\x25\x31\xa0\n".to_vec());
+        // Only a pose changed: nothing to send.
+        assert_eq!(p.report(5, false, false, 0).unwrap().message(false), None);
+    }
+
 }

@@ -55,6 +55,28 @@ revive: only a key press does. A player who is dead cannot be hurt (script
 - The server's side (Graal_analysis): the dead bit going 0 to 1 counts a death
   and drops items; going 1 to 0 sets hearts by AP and pushes CURPOWER.
 
+## Hearts report
+
+The real client tells the server its own hearts; GServer does not work them
+out for a hit and never echoes the client's CURPOWER. A client that keeps
+hearts to itself leaves the server holding full hearts. Seihai now sends,
+in `PLI_PLAYERPROPS` (2), CURPOWER (2), GANI (10, a GSTRING) and SPRITE (17)
+in that order, each only when it changed (`life::PowerReporter`,
+`OfflineSession::take_power_report`, `send_power_report` in `bin/main.rs`):
+
+| When | Sent | Source |
+|---|---|---|
+| A hit (sword, packet 40/46, thrown object) | CURPOWER, GANI `hurt`, SPRITE (the hurt sprite), in the frame of the hit | 2.05 lab run 1 (`22 25 2A 24 hurt 31 A0`) and the 2.22 lab |
+| Hurt mode ends | GANI `idle` | 2.05 lab run 1 (`2A 24 idle`, 1.5 s after the hit) |
+| A killing hit | CURPOWER 0, GANI `dead` | 2.22 lab |
+| The server set hearts to 0 | GANI `dead` | 2.22 lab |
+| Respawn | CURPOWER by the AP table (no GANI) | 2.22 lab |
+| Lava burn, heart pickup, script `hurt` | CURPOWER | inferred, not captured |
+
+Hearts from the server (MAXPOWER, CURPOWER) count as known and are not sent
+back. Builds without death rules send nothing; builds without GANIs leave
+GANI out. Not yet captured for 2.05: lava, heart pickup, death and respawn.
+
 ## Respawn hearts
 
 | AP | Hearts |
@@ -114,9 +136,7 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   are Seihai's choice. The sprite prop on the wire stays idle plus direction, as the notes
   say. Other players' dead pose (the dead bit in their STATUS) is not drawn
   yet.
-- **CURPOWER on damage.** Whether the real client sends its own CURPOWER when
-  hearts drop is not in the notes, so Seihai sends none. The server learns of
-  the death from the dead bit.
+- **CURPOWER on damage** is done (see "Hearts report" below).
 - **Order of the respawn frame** (level warp then status clear) is a guess;
   the notes do not say.
 - **Hurt state** (mode 3 for 40 ticks) is now modelled for hits from other

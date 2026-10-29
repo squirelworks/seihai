@@ -244,6 +244,29 @@ pub fn carry_sprite_message(sprite: Option<u16>) -> Vec<u8> {
     vec![2 + 0x20, 19 + 0x20, crate::throwing::carry_wire_byte(sprite), b'\n']
 }
 
+/// `PLI_PLAYERPROPS` (2) with the player's own hearts report, in the
+/// order the real client writes it: CURPOWER (2, half hearts), GANI (10, a
+/// GSTRING) and SPRITE (17), each only when given. The real 2.05 client's
+/// hit report, lab run 1 (2026-10-29 note), was `22 25 2A 24 "hurt" 31 A0`:
+/// 5 half hearts, `hurt`, sprite 128 (hurt sprite 32, facing up).
+pub fn power_props_message(cur_half: Option<u8>, gani: Option<&str>, sprite: Option<u8>) -> Vec<u8> {
+    let mut m = vec![2 + 0x20];
+    if let Some(c) = cur_half {
+        m.push(2 + 0x20);
+        m.push(c.min(223) + 0x20);
+    }
+    if let Some(g) = gani {
+        m.push(10 + 0x20);
+        push_gstring_latin1(&mut m, g);
+    }
+    if let Some(s) = sprite {
+        m.push(17 + 0x20);
+        m.push(s.wrapping_add(0x20));
+    }
+    m.push(b'\n');
+    m
+}
+
 /// `PLI_LEVELWARP` (0): `GCHAR x*2`, `GCHAR y*2` (tiles), level name.
 pub fn levelwarp_message(x: f32, y: f32, level: &str) -> Vec<u8> {
     let mut msg = vec![0x20];

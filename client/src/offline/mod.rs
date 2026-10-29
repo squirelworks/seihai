@@ -249,6 +249,9 @@ pub struct OfflineSession {
     /// until the game loop gives it its version's (see
     /// [`Life::set_rules`]), so a bare session never dies.
     pub life: Life,
+    /// What the server knows of the hearts and pose (see
+    /// [`Self::take_power_report`]).
+    pub power: crate::life::PowerReporter,
     /// The sword swing and hurt mode (see [`crate::combat`]).
     pub combat: crate::combat::CombatState,
     /// Alignment points (AP, 0–100): decide the hearts after a respawn.
@@ -458,6 +461,7 @@ impl OfflineSession {
             swim_sent: false,
             level_serial: 0,
             life: Life::default(),
+            power: crate::life::PowerReporter::default(),
             combat: crate::combat::CombatState::default(),
             alignment: 50,
             entry: None,
@@ -523,6 +527,21 @@ impl OfflineSession {
         if let Some(a) = alignment {
             self.alignment = a.min(100);
         }
+        if max_power.is_some() || cur_power.is_some() {
+            self.power.server_set(self.hearts_half());
+        }
+    }
+
+    /// What the server must hear about the player's hearts and pose since
+    /// the last report: a hit, a death, a respawn, a lava burn, a heart.
+    /// `None` when nothing changed. The caller sends it online
+    /// ([`crate::life::PowerReport::message`]).
+    pub fn take_power_report(&mut self) -> Option<crate::life::PowerReport> {
+        let half = self.hearts_half();
+        let dead = self.life.is_dead() || (half <= 0 && self.life.rules().is_some());
+        let hurting = self.combat.is_hurt();
+        let sprite = self.sprite_value();
+        self.power.report(half, dead, hurting, sprite)
     }
 
     /// Take damage in half hearts from `attacker` (a player id) or from
@@ -3444,6 +3463,50 @@ mod tests {
         assert!(s.respawn(false).is_some());
         assert_eq!(s.hearts_half(), 6, "AP 50: full hearts back");
         assert!(!s.controls_locked());
+    }
+
+    #[test]
+    fn a_hit_is_reported_with_the_new_hearts_and_hurt() {
+        let mut s = mortal();
+        s.combat.set_rules(Some(crate::protocol::COMBAT_205));
+        s.apply_server_power(Some(3), Some(6), Some(50));
+        assert_eq!(s.take_power_report(), None, "the server's own hearts");
+        let h = crate::combat::HurtPlayer { attacker: 2, dx: 1.0, dy: 0.0, half: 1, npc: None };
+        assert!(s.receive_hurtplayer(&h, Some((s.player_x, s.player_y))).outcome.is_ok());
+        let r = s.take_power_report().unwrap();
+        assert_eq!(r.cur_half, Some(5));
+        assert_eq!(r.pose, Some(crate::life::ReportPose::Hurt));
+        assert_eq!(r.sprite, Some(s.sprite_value()));
+        // Hurt mode over: idle.
+        s.tick_combat(40 * 50);
+        let r = s.take_power_report().unwrap();
+        assert_eq!((r.cur_half, r.pose), (None, Some(crate::life::ReportPose::Idle)));
+    }
+
+    #[test]
+    fn death_and_respawn_are_reported() {
+        let mut s = mortal();
+        s.apply_server_power(Some(3), Some(6), Some(30));
+        assert!(s.damage_half(6, None));
+        // Before the life tick: already reported as dead, not hurt.
+        let r = s.take_power_report().unwrap();
+        assert_eq!((r.cur_half, r.pose), (Some(0), Some(crate::life::ReportPose::Dead)));
+        s.tick_life(0);
+        s.tick_life(28 * 50);
+        assert_eq!(s.take_power_report(), None);
+        assert!(s.respawn(false).is_some());
+        // AP 30: min(5 hearts, max 3 hearts) = 6 half hearts.
+        let r = s.take_power_report().unwrap();
+        assert_eq!((r.cur_half, r.pose), (Some(6), None));
+    }
+
+    #[test]
+    fn a_lava_burn_is_reported() {
+        let mut s = mortal();
+        s.apply_server_power(Some(3), Some(6), Some(50));
+        s.damage_half(1, None);
+        let r = s.take_power_report().unwrap();
+        assert_eq!((r.cur_half, r.pose, r.sprite), (Some(5), None, None));
     }
 
     #[test]
