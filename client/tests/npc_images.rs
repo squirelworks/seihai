@@ -553,6 +553,8 @@ fn a_character_npc_takes_its_colour_and_zoom_effect() {
     // Zoom 2: the figure covers more of the picture.
     let count = |fb: &Framebuffer| fb.pixels.chunks(3).filter(|p| *p != [0, 0, 0]).count();
     assert!(count(&pic("setzoomeffect 2;")) > 3 * count(&plain));
+}
+
 // ---- changeimgvis ----------------------------------------------------------------
 
 #[test]
@@ -591,5 +593,4 @@ fn an_image_of_an_npc_over_the_player_sits_one_higher() {
     let imgs = &s.current_level.as_ref().unwrap().npcs[0].images;
     // drawoverplayer is height 1: showimg gives 2, changeimgvis 0 gives 0.
     assert_eq!((imgs[0].height, imgs[1].height), (2, 0));
-
 }
