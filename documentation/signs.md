@@ -50,9 +50,13 @@ Seihai does this in `OfflineSession::read_sign_ahead`, called from every walk at
 
 ## Keys while reading
 
-- The action key (A by default; see `keys.md`) turns to the next three lines, unless the page on show is not full (the sign has fewer lines than the page's first line plus three); then reading ends. A sign of exactly three lines therefore shows an empty second page before it closes, as in the client.
-- The first direction key (Up) turns back three lines, when not on the first page.
-- Another key ends reading at once (Esc in Seihai).
+While a sign is open the game keys work the sign and nothing else: the player does not walk, swing, lift, use an item or open the item list.
+
+- The map key (M) ends reading at once.
+- Up turns back three lines, when not on the first page.
+- Every other game key (Left, Down, Right, D, S, A, the item list key and pause) turns to the next three lines, unless the page on show is not full (the sign has fewer lines than the page's first line plus three); then reading ends. A sign of exactly three lines therefore shows an empty second page before it closes, as in the client.
+- A key counts only when no game key was down the frame before: the arrow that walked into the sign does nothing until it is let go, and keys do not repeat.
+- Esc also closes the sign in Seihai.
 - The client plays a sound when the page turns and runs `playerendsreading` when reading ends. Neither is done in Seihai yet.
 
 ## Confirmed, inferred, not tested
