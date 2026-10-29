@@ -727,6 +727,7 @@ mod tests {
         }
         assert_eq!(s.pushpull.blocked_steps, 17);
         assert!(!s.push_pose(), "the push pose starts after 17");
+        assert!(s.walking, "the player runs in place against the ledge");
         s.try_move(0.0, -0.5);
         assert!(s.jumping(), "the 18th blocked step jumps");
         // The first step of the flight is shown at once.

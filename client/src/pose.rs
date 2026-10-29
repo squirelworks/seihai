@@ -31,8 +31,11 @@
 //!   per blocked step), the grab pose while A holds a wall, and the pull pose
 //!   (one step of `pull.gani` per tick, looping) while the arrow away from
 //!   the wall is held. The 2.05 client plays its `push`, `grab` and `pull`
-//!   ganis then. A ledge jump keeps the walk pose: 2.05 plays no other gani
-//!   in the air.
+//!   ganis then. Before the push pose (and before a ledge jump) the walk
+//!   pose keeps stepping while the arrow is held: 2.05 sets the walk gani
+//!   on every walk tick whether the step moved or not, so the player runs in
+//!   place against the wall. A ledge jump keeps the walk pose: 2.05 plays no
+//!   other gani in the air.
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the

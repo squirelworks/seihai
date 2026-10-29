@@ -1610,6 +1610,16 @@ impl OfflineSession {
         let round = |v: f64| ((v * 1000.0).round() / 1000.0) as f32;
         let (nx, ny) = (round(x), round(y));
         if nx == self.player_x && ny == self.player_y {
+            // Running in place: 2.05 sets the walk gani on every walk tick,
+            // moved or not, so the legs keep going against a wall or a ledge
+            // until the push pose takes over. No footsteps then (2.05 plays
+            // them only in modes 0 and 10, and a refused step is mode 1).
+            self.walking = true;
+            if !(self.in_water && self.swim_gani.is_some()) {
+                if let Some(gani) = self.walk_gani.as_mut() {
+                    gani.step();
+                }
+            }
             // Pushing against a sign reads it.
             self.read_sign_ahead();
             return None;
@@ -3475,12 +3485,17 @@ mod tests {
     }
 
     #[test]
-    fn a_blocked_move_does_not_step_the_gani_or_queue_a_sound() {
+    fn a_blocked_move_runs_in_place_without_a_sound() {
         let mut s = body_at(level(|x, _| if x == 20 { WALL } else { OPEN }), 17.5, 10.0);
-        s.set_walk_gani(gani_with(1, &[(0, "steps.wav")]));
+        s.set_walk_gani(gani_with(4, &[(1, "steps.wav"), (2, "steps.wav")]));
         assert!(s.try_move(0.5, 0.0).is_none());
+        assert!(s.try_move(0.5, 0.0).is_none());
+        // 2.05 keeps the walk gani going against the wall (the legs run),
+        // but plays no footsteps: the player has not moved.
+        assert!(s.walking);
+        assert_eq!(s.walk_frame(), Some(2));
         assert!(s.sound_events.is_empty());
-        assert_eq!(s.walk_frame(), Some(0));
+        assert_eq!(s.player_x, 17.5);
     }
 
     #[test]
