@@ -512,11 +512,13 @@ impl OfflineSession {
             }
         }
         if let Some(c) = cur_power {
-            if c > 0 || self.hearts_half() == 0 {
-                self.set_hearts_half(i32::from(c));
-            } else {
-                eprintln!("server sent cur power 0; keeping {}", self.hearts_half());
+            // Zero is applied, and the player dies: the 2.05 prop reader
+            // (case 2 at 0x530dd8) has no zero test, and a 2.22 client sent
+            // the dead gani on an injected CURPOWER 0. Respawn gives hearts.
+            if c == 0 && self.hearts_half() > 0 {
+                eprintln!("server sent cur power 0; hearts {} -> 0", self.hearts_half());
             }
+            self.set_hearts_half(i32::from(c));
         }
         if let Some(a) = alignment {
             self.alignment = a.min(100);
@@ -3428,6 +3430,20 @@ mod tests {
         assert_eq!(s.player_health, 0);
         s.apply_server_power(None, None, Some(250));
         assert_eq!(s.alignment, 100);
+    }
+
+    #[test]
+    fn server_cur_power_zero_kills_and_respawn_frees_controls() {
+        let mut s = mortal();
+        s.apply_server_power(Some(3), Some(6), Some(50));
+        s.apply_server_power(None, Some(0), None);
+        assert_eq!(s.tick_life(50), vec![LifeEvent::Died { attacker: None }]);
+        assert!(s.controls_locked());
+        s.tick_life(28 * 50);
+        assert!(!s.controls_locked());
+        assert!(s.respawn(false).is_some());
+        assert_eq!(s.hearts_half(), 6, "AP 50: full hearts back");
+        assert!(!s.controls_locked());
     }
 
     #[test]
