@@ -968,6 +968,7 @@ fn main() {
                 sprites: sprites.as_ref().map(pose_sheet),
                 sword: sword_sheet.as_ref().map(pose_sheet),
                 shield: None,
+                attrs: Default::default(),
             },
         };
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
@@ -1009,6 +1010,7 @@ fn main() {
                             Some(_) => own(&l.sword).or(sword_sheet.as_ref().map(pose_sheet)),
                         },
                         shield: own(&l.shield),
+                        attrs: attr_sheets(&l.attrs, gani, npc_imgs),
                     };
                     let (ox, oy) = ((other.x * 16.0) as i32 - cam_x, (other.y * 16.0) as i32 - cam_y);
                     seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
@@ -1058,6 +1060,7 @@ fn main() {
                     sword: sword_sheet.as_ref().map(pose_sheet),
                     // The default shield of the player's shield power.
                     shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
+                    attrs: pose.map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs)).unwrap_or_default(),
                 };
                 if let Some(p) = pose {
                     seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
@@ -1553,6 +1556,12 @@ fn main() {
                 if let Some(c) = net_state.own_colors.take() {
                     session.looks.colors = c;
                     dirty = true;
+                }
+                for (own, new) in session.looks.attrs.iter_mut().zip(net_state.own_attrs.iter_mut()) {
+                    if let Some(a) = new.take() {
+                        *own = Some(a);
+                        dirty = true;
+                    }
                 }
                 // Hearts, AP and STATUS the server gave.
                 if let Some(st) = net_state.own_status.take() {
@@ -2618,6 +2627,22 @@ fn main() {
                 wanted.push(("shields", own_shield));
             }
             wanted.push(("heads", session.looks.head_name().to_string()));
+            // GANI attribute pictures (the hat): everyone's own, and the
+            // defaults of the player GANIs.
+            for attrs in net_state.others.iter().map(|o| &o.looks.attrs).chain([&session.looks.attrs]) {
+                for (i, a) in attrs.iter().enumerate() {
+                    if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
+                        wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+                    }
+                }
+            }
+            for g in session.poses.all().chain(session.walk_gani.as_ref().map(|w| &w.gani)) {
+                for (i, a) in g.default_attrs.iter().enumerate() {
+                    if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
+                        wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+                    }
+                }
+            }
             wanted.push(("bodies", session.looks.body_name().to_string()));
             if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried) {
                 dirty = true;
@@ -2778,4 +2803,14 @@ fn apply_chat_look(session: &mut OfflineSession, cmd: &seihai::looks::ChatLook) 
         ChatLook::Body(b) => session.looks.body = Some(with_image_ext(b)),
         ChatLook::Color { slot, color } => session.looks.colors[*slot] = *color,
     }
+}
+
+/// The `ATTR1` … `ATTR5` sheets of `gani` for a player with `attrs`: their
+/// pictures, else the GANI's defaults, when loaded.
+fn attr_sheets<'a>(
+    attrs: &[Option<String>; 5],
+    gani: &Gani,
+    images: &'a HashMap<String, (u32, Vec<u8>)>,
+) -> [Option<seihai::render::Sheet<'a>>; 5] {
+    [0, 1, 2, 3, 4].map(|i| seihai::looks::attr_image(attrs, gani, i).and_then(|n| images.get(n)).map(pose_sheet))
 }

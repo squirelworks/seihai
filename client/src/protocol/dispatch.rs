@@ -252,6 +252,8 @@ pub struct OtherLooks {
     pub gani: Option<String>,
     /// Body colours (prop 13: skin, coat, sleeves, shoes, belt).
     pub colors: Option<[u8; 5]>,
+    /// GANI attributes 1 to 5 (props 37 to 41; 1 is the hat).
+    pub attrs: [Option<String>; 5],
 }
 
 impl OtherLooks {
@@ -263,6 +265,11 @@ impl OtherLooks {
         }
         if u.colors.is_some() {
             self.colors = u.colors;
+        }
+        for (old, new) in self.attrs.iter_mut().zip(u.attrs) {
+            if new.is_some() {
+                *old = new;
+            }
         }
     }
 }
@@ -385,6 +392,8 @@ pub struct SessionState {
     pub own_head: Option<String>,
     pub own_body: Option<String>,
     pub own_colors: Option<[u8; 5]>,
+    /// Own GANI attributes 1 to 5 (props 37 to 41), taken by the game loop.
+    pub own_attrs: [Option<String>; 5],
     /// Read prop 10 as the pre-2.1 bow slot.
     pub bow_prop10: bool,
     /// Server→client ids this client version handles. Others are counted
@@ -1456,6 +1465,7 @@ impl SessionState {
                 (11, _) => self.own_head = head_image(&prop.raw),
                 (35, _) => self.own_body = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))).filter(|b| !b.is_empty()),
                 (13, _) => self.own_colors = crate::looks::colors_from_prop(&prop.raw),
+                (37..=41, _) => self.own_attrs[usize::from(prop.id - 37)] = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
                 _ => {}
             }
         }
@@ -1560,6 +1570,7 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             11 => u.looks.head = head_image(&prop.raw),
             35 => u.looks.body = Some(text(&prop.raw)).filter(|b| !b.is_empty()),
             13 => u.looks.colors = crate::looks::colors_from_prop(&prop.raw),
+            37..=41 => u.looks.attrs[usize::from(prop.id - 37)] = Some(text(&prop.raw)),
             18 => u.status = prop.gchar(),
             19 => u.carry = prop.raw.first().map(|&b| crate::throwing::carry_sprite_from_wire(crate::throwing::carry_code_from_byte(b))),
             32 => u.ap = prop.gchar(),
@@ -1741,7 +1752,7 @@ mod tests {
         let want = |s: &str| Some(s.to_string());
         assert_eq!(
             u.looks,
-            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk"), colors: None }
+            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk"), colors: None, attrs: Default::default() }
         );
         // Plain powers name the default pictures; 0 is none.
         let u = parse_other_player(&[0x20, 0x22, g(8), g(2), g(9), g(0), g(11), g(4)], false, None).unwrap();
@@ -2176,6 +2187,22 @@ mod tests {
         // A later update without prop 13 keeps the colours.
         st.apply_body(&other(7, &[15 + 0x20, 0x30]));
         assert_eq!(st.others[0].looks.colors, Some([2, 0, 10, 4, 18]));
+    }
+
+    #[test]
+    fn attribute_props_37_to_41_name_the_hat_and_others() {
+        let mut st = SessionState::default();
+        let mut props = vec![37 + 0x20, 8 + 0x20];
+        props.extend(b"hat3.png");
+        st.apply_body(&[&[9 + 0x20][..], &props, b"\n"].concat());
+        assert_eq!(st.own_attrs[0].as_deref(), Some("hat3.png"));
+        let mut props = vec![39 + 0x20, 5 + 0x20];
+        props.extend(b"x.png");
+        st.apply_body(&other(7, &props));
+        assert_eq!(st.others[0].looks.attrs[2].as_deref(), Some("x.png"));
+        // A later update without the prop keeps it.
+        st.apply_body(&other(7, &[15 + 0x20, 0x30]));
+        assert_eq!(st.others[0].looks.attrs[2].as_deref(), Some("x.png"));
     }
 
     #[test]
