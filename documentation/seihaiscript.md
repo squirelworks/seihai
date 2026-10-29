@@ -108,3 +108,29 @@ OpenGS1 (`../shanalysis/OpenGS1`) is the primary reference implementation for th
 - Archived Classic scripting corpus (see `documentation/legacy-scripts.md` for patterns useful for host effects and open items)
 
 Detailed language semantics and edge-case notes go in `../shworkingpapers/scripting/`.
+
+## String lists and the 2.2 builtins (2026-10-29)
+
+From the 2.2 command list (`commands.rtf`), with GServer-v2 beta4's GS1 code
+as the reference where the list says little. All are 2.1 and later.
+
+* **String lists.** A list is a flag holding comma-separated entries; an entry
+  with a comma or a quote is written in double quotes (`""` is a quote).
+  `addstring list,text` adds an entry (before 2.1 `addstring` still adds text
+  to the string, as Seihai did), `insertstring list,index,text`,
+  `replacestring list,index,text`, `removestring list,text` (every equal
+  entry), `deletestring list,index`. An index past the end does nothing.
+  `#I(list,index)` reads an entry, `sarraylen(list)` counts them (0 for an
+  empty list; GServer counts 1) and `lindexof(text,list)` gives the first
+  equal entry's index or -1. Entries compare with spaces trimmed.
+* `strcontains(text,part)`: true when `part` is in `text`, ignoring case
+  (GServer's case-blind find).
+* `onmapx(level)` / `onmapy(level)`: the level's cell on the current map, the
+  gmap the player is on, else the big map. -1 with no map, 0 for a level not
+  on it (as GServer).
+* `play2 file,x,y,volume` is `play file`: Seihai has no positional sound or
+  volume yet (and plays no script sounds at all so far, as before).
+* `sendrpgmessage text`: GServer's GS1 sends it to the player's F2 message
+  window (`PLO_RPGWINDOW`); Seihai puts the line in its chat log.
+
+Corpus: scripts with diagnostics read as 2.1 and later went from 160 to 148.

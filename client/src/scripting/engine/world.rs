@@ -181,6 +181,8 @@ pub enum Effect {
     SetFlag { name: String, value: Option<String> },
     UnsetFlag { name: String },
     TriggerAction { x: f64, y: f64, action: String, params: String },
+    /// `sendrpgmessage text`: a line for the player's message window.
+    RpgMessage { text: String },
     /// Seihai's `sendtoserver` stub.
     SendToServer { text: String },
     /// Any other command in the table, with its evaluated arguments.
@@ -233,6 +235,9 @@ pub struct Core {
     /// The same 64 by 64 layout, true on a liquid tile (water or lava: the
     /// 2.05 water test asks the liquid list, which holds both).
     pub water: Option<Vec<bool>>,
+    /// The map the current level is on (the gmap, else the big map), for
+    /// `onmapx` / `onmapy`. `None` when there is none.
+    pub map: Option<crate::gmap::Gmap>,
     rng: u64,
 }
 
@@ -290,6 +295,7 @@ impl ScriptWorld {
                 pending: VecDeque::new(),
                 walls: None,
                 water: None,
+                map: None,
                 rng: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
             },
             objects: Vec::new(),

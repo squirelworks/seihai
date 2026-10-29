@@ -24,11 +24,13 @@ pub struct SessionScripts {
     /// Set when a script changed an NPC image (`setimg`, `showimg`), so the
     /// host can load the new picture. The host clears it.
     pub images_changed: bool,
+    /// Lines from `sendrpgmessage`, for the player's message window.
+    pub rpg_messages: Vec<String>,
 }
 
 impl SessionScripts {
     pub fn new(version: ClientVersion) -> Self {
-        SessionScripts { world: ScriptWorld::new(Era::for_version(version)), was_reading: false, unhandled: Vec::new(), images_changed: false }
+        SessionScripts { world: ScriptWorld::new(Era::for_version(version)), was_reading: false, unhandled: Vec::new(), images_changed: false, rpg_messages: Vec::new() }
     }
 
     /// Replace the level's scripts with those of `session`'s current
@@ -53,6 +55,8 @@ impl SessionScripts {
         use crate::assets::TileKind::{Blocking, Lava, Water};
         self.world.core.walls = kinds.as_ref().map(|k| k.iter().map(|&k| k == Blocking).collect());
         self.world.core.water = kinds.map(|k| k.into_iter().map(|k| k == Water || k == Lava).collect());
+        // The map for `onmapx` / `onmapy`: the gmap the player is on, else the big map.
+        self.world.core.map = session.gmap.as_ref().map(|g| g.map.clone()).or_else(|| session.big_map.clone());
         self.sync_player(session);
         self.world.start_all();
         self.world.broadcast("playerenters");
@@ -497,6 +501,7 @@ impl SessionScripts {
                         | "timereverywhere" | "hideimg"
                     ) => {}
                 Effect::StopMidi => {}
+                Effect::RpgMessage { text } => self.rpg_messages.push(text),
                 other => self.unhandled.push(other),
             }
         }

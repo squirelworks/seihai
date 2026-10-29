@@ -96,6 +96,10 @@ pub static COMMANDS: &[Cmd] = &[
     c("message", "S", V200, Effect),
     c("play", "F", V200, Effect),
     c("playlooped", "F", V200, Effect),
+    // 2.2 list: a sound at x, y with a volume.
+    c("play2", "FRRR", V21, Effect),
+    // 2.2 (GServer GS1): a line for the player's message window.
+    c("sendrpgmessage", "S", V21, Effect),
     c("stopsound", "F", V200, Effect),
     c("stopmidi", "", V200, Effect),
     c("setmusicvolume", "RR", V200, Effect),
@@ -109,6 +113,11 @@ pub static COMMANDS: &[Cmd] = &[
     c("unset", "S", V200, Engine),
     c("setstring", "SS", V200, Engine),
     c("addstring", "SS", V200, Engine),
+    // String lists (2.2 command list): comma-separated, in a flag.
+    c("insertstring", "SRS", V21, Engine),
+    c("replacestring", "SRS", V21, Engine),
+    c("removestring", "SS", V21, Engine),
+    c("deletestring", "SR", V21, Engine),
     c("setarray", "NR", V200, Engine),
     c("tokenize", "S", V202, Engine),
     c("tokenize2", "SS", V202, Engine),
@@ -458,6 +467,11 @@ pub static BUILTINS: &[Builtin] = &[
     Builtin { name: "startswith", args: &[T, T], since: V202 },
     Builtin { name: "indexof", args: &[T, T], since: V202 },
     Builtin { name: "ascii", args: &[T], since: V21 },
+    // 2.2 command list.
+    Builtin { name: "strcontains", args: &[T, T], since: V21 },
+    Builtin { name: "lindexof", args: &[T, T], since: V21 },
+    Builtin { name: "onmapx", args: &[T], since: V21 },
+    Builtin { name: "onmapy", args: &[T], since: V21 },
     Builtin { name: "arraylen", args: &[T], since: V200 },
     // Level collision at a point in tiles; true off the board.
     Builtin { name: "onwall", args: &[N, N], since: V200 },

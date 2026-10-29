@@ -2072,6 +2072,11 @@ fn main() {
                 }
                 dirty = true;
             }
+            // `sendrpgmessage`: the player's message window is the chat log here.
+            for text in std::mem::take(&mut scripts.rpg_messages) {
+                net_state.push_chat(ChatKind::Admin, String::new(), text);
+                dirty = true;
+            }
             if let Some(f) = debug_file.as_mut() {
                 use std::io::Write;
                 // Script lines are kept once per level, so a message seen

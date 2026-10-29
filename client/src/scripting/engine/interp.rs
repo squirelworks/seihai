@@ -55,6 +55,44 @@ fn as_number(v: &Val) -> Option<f64> {
     }
 }
 
+/// A string list as its entries: comma-separated, an entry in double
+/// quotes may hold commas (`""` is a quote). An empty list has no entries.
+pub(super) fn split_list(s: &str) -> Vec<String> {
+    if s.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' if quoted && chars.peek() == Some(&'"') => {
+                cur.push('"');
+                chars.next();
+            }
+            '"' if quoted => quoted = false,
+            '"' if cur.trim().is_empty() => {
+                cur.clear();
+                quoted = true;
+            }
+            ',' if !quoted => out.push(std::mem::take(&mut cur)),
+            _ => cur.push(c),
+        }
+    }
+    out.push(cur);
+    out
+}
+
+/// The entries as a string list, quoting those with a comma or a quote.
+pub(super) fn join_list(items: &[String]) -> String {
+    items
+        .iter()
+        .map(|i| if i.contains(',') || i.contains('"') { format!("\"{}\"", i.replace('"', "\"\"")) } else { i.clone() })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn sv(v: &[Val], i: usize) -> String {
     v.get(i).map(Val::text).unwrap_or_default()
 }
@@ -566,10 +604,24 @@ impl<'a> Run<'a> {
                 Val::Num(text.find(&part).map_or(-1.0, |b| text[..b].chars().count() as f64))
             }
             "ascii" => Val::Num(s(0).chars().next().map_or(0.0, |c| c as u32 as f64)),
+            "strcontains" => s(0).to_lowercase().contains(&s(1).to_lowercase()).into(),
+            "lindexof" => {
+                let t = s(0);
+                Val::Num(split_list(&s(1)).iter().position(|i| i.trim() == t.trim()).map_or(-1.0, |p| p as f64))
+            }
+            // The level's cell on the current map: -1 with no map, 0 for a
+            // level not on it (as GServer-v2's GS1).
+            "onmapx" | "onmapy" => match &self.core.map {
+                None => Val::Num(-1.0),
+                Some(m) => {
+                    let (x, y) = m.cell_of(s(0).trim()).unwrap_or((0, 0));
+                    Val::Num(if name == "onmapx" { x } else { y } as f64)
+                }
+            },
             "strtofloat" => Val::Num(s(0).trim().parse().unwrap_or(0.0)),
             "hasweapon" => Val::Num(0.0),
             "keydown" | "keydown2" => Val::Num(0.0),
-            "sarraylen" => Val::Num(0.0),
+            "sarraylen" => Val::Num(split_list(&s(0)).len() as f64),
             "onwall" => {
                 let (x, y) = (n(0).floor(), n(1).floor());
                 let blocked = match &self.core.walls {
@@ -682,6 +734,16 @@ impl<'a> Run<'a> {
                     Some(self.core.tokens.get(n).cloned().unwrap_or_default())
                 }
                 ('T', Some(x)) if era >= Era::V202 => Some(self.expand(x, depth + 1).trim().to_string()),
+                // `#I(list,index)`: an entry of a string list (2.2 list).
+                ('I', Some(x)) if era >= Era::V21 => {
+                    let (list, index) = x.rsplit_once(',').unwrap_or((x, "0"));
+                    let i = self.expand(index, depth + 1).trim().parse::<f64>().unwrap_or(0.0);
+                    let list = self.expand(list, depth + 1);
+                    let name = list.trim().to_ascii_lowercase();
+                    // A list is named like `#s(...)`: a flag or variable.
+                    let text = self.core.flags.get(&name).cloned().unwrap_or(list);
+                    Some(if i < 0.0 { String::new() } else { split_list(&text).get(i as usize).cloned().unwrap_or_default() })
+                }
                 ('e', Some(x)) if era >= Era::V202 => {
                     let parts: Vec<&str> = x.splitn(3, ',').collect();
                     if parts.len() == 3 {
@@ -782,13 +844,33 @@ impl<'a> Run<'a> {
                     self.write_flag(&k, val);
                 }
             }
-            "addstring" => {
+            "addstring" | "insertstring" | "replacestring" | "removestring" | "deletestring" => {
                 let k = sv(v, 0).trim().to_ascii_lowercase();
                 if k.is_empty() {
                     return;
                 }
                 let cur = self.core.flags.get(&k).cloned().unwrap_or_default();
-                self.write_flag(&k, format!("{cur}{}", sv(v, 1)));
+                // Before 2.1 `addstring` adds text to the string.
+                if name == "addstring" && self.era() < Era::V21 {
+                    self.write_flag(&k, format!("{cur}{}", sv(v, 1)));
+                    return;
+                }
+                let mut items = split_list(&cur);
+                let at = |i: usize| nv(v, i).max(0.0).floor() as usize;
+                match name {
+                    "addstring" => items.push(sv(v, 1)),
+                    "insertstring" => items.insert(at(1).min(items.len()), sv(v, 2)),
+                    "replacestring" if at(1) < items.len() => items[at(1)] = sv(v, 2),
+                    "removestring" => {
+                        let t = sv(v, 1);
+                        items.retain(|s| s.trim() != t.trim());
+                    }
+                    "deletestring" if at(1) < items.len() => {
+                        items.remove(at(1));
+                    }
+                    _ => return,
+                }
+                self.write_flag(&k, join_list(&items));
             }
             "setarray" => {
                 let k = sv(v, 0).trim().to_ascii_lowercase();
@@ -883,7 +965,8 @@ impl<'a> Run<'a> {
                 }
                 self.core.effects.push(Effect::SetPlayerProp { code: sv(&v, 0), value: sv(&v, 1) });
             }
-            "play" | "playlooped" => self.core.effects.push(Effect::Play { file: sv(&v, 0), looped: name == "playlooped" }),
+            "play" | "playlooped" | "play2" => self.core.effects.push(Effect::Play { file: sv(&v, 0), looped: name == "playlooped" }),
+            "sendrpgmessage" => self.core.effects.push(Effect::RpgMessage { text: sv(&v, 0) }),
             "stopsound" => self.core.effects.push(Effect::StopSound { file: sv(&v, 0) }),
             "stopmidi" => self.core.effects.push(Effect::StopMidi),
             "triggeraction" => {
