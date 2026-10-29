@@ -117,13 +117,11 @@ fn zlib_rows(data: &[u8], stride: usize) -> io::Result<Vec<u8>> {
 /// is row-major RGBA. GIF data is read too (the first image, see
 /// [`super::gif`]).
 pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
-<<<<<<< HEAD
     // A server sends an image as it has it: a `.gif` (or a GIF under a
     // `.png` name) is read here too, so every image path takes both.
     if super::gif::is_gif(data) {
         return super::gif::read_gif_rgba(data);
     }
-=======
     read_png_rgba_recolored(data, &[])
 }
 
@@ -132,7 +130,6 @@ pub fn read_png_rgba(data: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
 /// colour types ignore `recolor`. This is how a body picture is drawn in
 /// the player's colours (see `looks.rs`).
 pub fn read_png_rgba_recolored(data: &[u8], recolor: &[(usize, [u8; 3])]) -> io::Result<(u32, u32, Vec<u8>)> {
->>>>>>> origin/main
     let bad = |m: &str| io::Error::new(io::ErrorKind::InvalidData, m.to_string());
     if data.len() < 8 || &data[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         return Err(bad("not a PNG"));
