@@ -193,6 +193,7 @@ fn npc_edge(d: usize, x: f32, y: f32, w: f32, h: f32) -> Vec<(f32, f32)> {
     }
 }
 
+
 /// The push, jump and grab state of the player.
 #[derive(Debug, Clone, Default)]
 pub struct PushPull {
@@ -208,6 +209,7 @@ pub struct PushPull {
     triggers: Vec<Trigger>,
     moved_blocks: Vec<BlockMoved>,
     npc_moves: Vec<NpcMoved>,
+
     moved: bool,
 }
 
@@ -496,7 +498,7 @@ impl OfflineSession {
             }
         }
         level.put_object(ax + sx, ay + sy, &saved);
-        self.pushpull.moved_blocks.push(BlockMoved { x: ax - 1, y: ay - 1 });
+        self.note_board_change(ax - 1, ay - 1, 4, 4);
     }
 
     /// A on a wall: start holding it. The point is [`GRAB_POINT`]; anything
@@ -607,14 +609,10 @@ impl OfflineSession {
         std::mem::take(&mut self.pushpull.triggers)
     }
 
-    /// Blocks moved since the last call.
-    pub fn take_moved_blocks(&mut self) -> Vec<BlockMoved> {
-        std::mem::take(&mut self.pushpull.moved_blocks)
-    }
-
     /// Drop a jump or grab in progress (a level change).
     pub(crate) fn reset_pushpull(&mut self) {
         self.pushpull = PushPull::default();
+        self.board_changes.clear();
     }
 }
 
@@ -811,7 +809,10 @@ mod tests {
         assert_eq!(tile(&s, 20, 11), FLOOR2, "the vacated row takes the tile from two ahead");
         assert_eq!(s.player_y, 10.0, "the player follows one tile");
         assert!(s.take_sound_events().iter().any(|e| e.file == "stonemove.wav"));
-        assert_eq!(s.take_moved_blocks(), vec![BlockMoved { x: 19, y: 9 }]);
+        let c = s.take_board_changes();
+        assert_eq!(c.len(), 1);
+        assert_eq!((c[0].x, c[0].y, c[0].width, c[0].height), (19, 9, 4, 4), "the 4 x 4 around the old spot");
+        assert_eq!(c[0].tiles[1], PUSH_BLOCK[0][0], "the new tiles, row by row");
         let t = s.take_triggers();
         assert_eq!(t.len(), 1);
         assert_eq!((t[0].action, t[0].dir), ("pushed", DIR_NORTH));
@@ -863,7 +864,7 @@ mod tests {
         }
         assert_eq!(pulls, 2, "one pull try every 18 ticks");
         assert_eq!((s.player_x, s.player_y), (19.5, 10.0), "nothing moved");
-        assert!(s.take_moved_blocks().is_empty());
+        assert!(s.take_board_changes().is_empty());
         // Letting go of the arrow: back to holding. Letting go of A: done.
         assert!(s.arrow_released());
         assert_eq!(s.pushpull.grab, Some(Grab { count: 1 }));

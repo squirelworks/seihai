@@ -360,6 +360,31 @@ fn a_dead_player_shows_dead_gani_stepped_by_the_death_timer() {
 }
 
 #[test]
+fn the_default_dead_gani_falls_and_lies_down() {
+    let dead = gani("dead.gani");
+    assert_eq!(dead.frame_count(), 15);
+    let a = art();
+    for dir in 0..4u8 {
+        let hurt = draw(&dead, 0, dir, &a);
+        let kneel = draw(&dead, 6, dir, &a);
+        let lying = draw(&dead, 14, dir, &a);
+        assert_eq!(hurt, draw(&gani("hurt.gani"), 0, dir, &a), "dir {dir}: the fall starts from the hurt pose");
+        assert_ne!(kneel, hurt);
+        assert_ne!(lying, kneel);
+        assert_ne!(lying, blank());
+    }
+    // Lying is the same whatever the direction.
+    assert_eq!(draw(&dead, 14, 0, &a), draw(&dead, 14, 3, &a));
+    // In the session, the death timer reaches the last step and holds it.
+    let mut s = session();
+    s.set_pose_gani(PoseKind::Dead, dead);
+    s.damage_half(100, None);
+    s.tick_life(0);
+    s.tick_life(5000);
+    assert_eq!(pose(&s), Some((PoseKind::Dead, 14)));
+}
+
+#[test]
 fn hurt_gani_steps_and_a_looping_one_lasts_the_hurt_mode() {
     let mut s = session();
     s.set_pose_gani(PoseKind::Hurt, steps(12, false));

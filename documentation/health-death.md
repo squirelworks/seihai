@@ -109,8 +109,9 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   the script-warp work); online they do, through the normal level arrival.
 - **Dead gani** is done: while dead the player is drawn with `dead.gani`, one
   step per 50 ms tick of the death timer, held on its last step (`pose.rs`).
-  Seihai's default set has no `dead.gani`, so it shows with a data folder that
-  has one. The sprite prop on the wire stays idle plus direction, as the notes
+  Seihai's default set has its own `dead.gani` (our art): 6 steps of the hurt
+  pose, 8 kneeling, then lying on the back, held. The steps and their timing
+  are Seihai's choice. The sprite prop on the wire stays idle plus direction, as the notes
   say. Other players' dead pose (the dead bit in their STATUS) is not drawn
   yet.
 - **CURPOWER on damage.** Whether the real client sends its own CURPOWER when

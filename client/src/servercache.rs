@@ -33,6 +33,20 @@ pub fn default_cache_root() -> PathBuf {
     crate::settings::config_dir().join("cache")
 }
 
+/// The Seihai folder: the folder the program file is in, or `None` when
+/// that cannot be found.
+pub fn seihai_dir() -> Option<PathBuf> {
+    std::env::current_exe().ok()?.parent().map(Path::to_path_buf)
+}
+
+/// The cache of the server at `addr` in the Seihai folder `dir`:
+/// `<dir>/_cache/<host>_<port>`, the key only (no server name). Checked
+/// before the settings' cache, and written by every download.
+pub fn game_cache_dir_for(dir: &Path, addr: &str) -> Option<PathBuf> {
+    let (host, port) = split_addr(addr)?;
+    Some(dir.join("_cache").join(server_key(&host, port)))
+}
+
 /// Split `host:port` (or `[v6]:port`). `None` when there is no usable port.
 pub fn split_addr(addr: &str) -> Option<(String, u16)> {
     let addr = addr.trim();
@@ -149,6 +163,14 @@ pub fn meta_text(addr: &str, name: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn game_cache_is_named_by_host_and_port() {
+        let d = std::path::Path::new("/s");
+        assert_eq!(super::game_cache_dir_for(d, "Play.Example.ORG:14900"), Some(d.join("_cache/play.example.org_14900")));
+        assert_eq!(super::game_cache_dir_for(d, "[::1]:14802"), Some(d.join("_cache/__1_14802")));
+        assert_eq!(super::game_cache_dir_for(d, "nohost"), None);
+    }
+
     use super::*;
 
     fn tmp(tag: &str) -> PathBuf {

@@ -11,7 +11,7 @@ use super::extras::{
 };
 use super::levelcache::{same_level, CachedLevel, LevelCache};
 use super::layouts::{
-    parse_board_heights, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
+    parse_board_heights, parse_board_modify, parse_board_modify2, parse_flag, parse_npc_del2, parse_npc_id_rest,
     parse_player_toggle, parse_player_warp2, parse_profile, parse_screenshot_name, parse_server_warp,
     parse_shoot, parse_showimg_relay, BoardHeights, BoardModify2, PlayerWarp2, ProfileCard, ServerMode, ServerWarp,
 };
@@ -370,6 +370,8 @@ pub struct SessionState {
     /// CURPOWER (2, hearts × 2), STATUS (18) and ALIGNMENT (32, AP).
     pub own_max_power: Option<u8>,
     pub own_cur_power: Option<u8>,
+    /// GLOVEPOWER (prop 6) the server last gave for the player.
+    pub own_glove_power: Option<u8>,
     pub own_status: Option<u8>,
     pub own_alignment: Option<u8>,
     /// Read prop 10 as the pre-2.1 bow slot.
@@ -642,6 +644,9 @@ impl SessionState {
                 // PLO_BOARDMODIFY
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.board_modifies.push(s);
+                }
+                if let Some(m) = parse_board_modify(&msg.payload) {
+                    self.apply_board_modify(&m);
                 }
             }
             8 => {
@@ -1182,6 +1187,29 @@ impl SessionState {
             self.board_mods_dropped += 1;
             return;
         };
+        self.apply_board_block(&level, m);
+    }
+
+    /// Apply a `PLO_BOARDMODIFY` (7) to the player's level: the server
+    /// sends it for a change another player made (a bush lifted or cut, a
+    /// stone block pushed), and GServer echoes some back to the sender. The
+    /// block has no cell of its own; it goes where 186 goes for the
+    /// player's cell.
+    fn apply_board_modify(&mut self, m: &BoardModify2) {
+        let level = match &self.gmap {
+            Some(g) => g.current_level(),
+            None => self.level_name.clone(),
+        };
+        let Some(level) = level else {
+            self.board_mods_dropped += 1;
+            return;
+        };
+        self.apply_board_block(&level, m);
+    }
+
+    /// Write a board block into `level`'s board (and the live board when it
+    /// is the player's level), and queue it for whoever draws the levels.
+    fn apply_board_block(&mut self, level: &str, m: &BoardModify2) {
         let key = level.to_ascii_lowercase();
         let is_live = self.level_name.as_deref().map(str::to_ascii_lowercase).as_deref() == Some(key.as_str());
         if let Some(g) = self.gmap.as_mut() {
@@ -1365,9 +1393,20 @@ impl SessionState {
                 }
             } else {
                 let o = &mut self.others[i];
-                o.chat = Some(text.clone());
-                // An empty text clears the bubble; any other starts the timer.
-                o.chat_timer = if text.is_empty() { BubbleTimer::default() } else { BubbleTimer::start() };
+                // As in 2.05: a line stays up (held) until the speaker's client
+                // sends an empty CURCHAT, which it does when its own bubble
+                // ends; then the line shows for the usual 60 frames more.
+                if text.is_empty() {
+                    if o.chat.as_deref().is_some_and(|c| !c.is_empty()) {
+                        o.chat_timer = BubbleTimer::start();
+                    } else {
+                        o.chat = None;
+                        o.chat_timer = BubbleTimer::default();
+                    }
+                } else {
+                    o.chat = Some(text.clone());
+                    o.chat_timer = BubbleTimer::start_held();
+                }
                 if !text.is_empty() {
                     let who = self.name_of(u.id);
                     self.push_chat(ChatKind::Say, who, text);
@@ -1399,6 +1438,7 @@ impl SessionState {
                 }
                 (1, Some(v)) => self.own_max_power = Some(v),
                 (2, Some(v)) => self.own_cur_power = Some(v),
+                (6, Some(v)) => self.own_glove_power = Some(v),
                 (18, Some(v)) => self.own_status = Some(v),
                 (32, Some(v)) => self.own_alignment = Some(v),
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
@@ -2098,6 +2138,9 @@ mod tests {
             (st.own_max_power, st.own_cur_power, st.own_status, st.own_alignment),
             (Some(3), Some(5), Some(0x14), Some(50))
         );
+        // GLOVEPOWER (6).
+        st.apply_body(&[9 + 0x20, 6 + 0x20, 3 + 0x20, b'\n']);
+        assert_eq!(st.own_glove_power, Some(3));
     }
 
     #[test]
@@ -2250,27 +2293,35 @@ mod tests {
     }
 
     #[test]
-    fn bubble_is_up_for_three_seconds_then_gone() {
+    fn bubble_is_held_until_the_speaker_clears_it_then_runs_three_seconds() {
         use crate::chatlists::BUBBLE_MS;
         let mut st = SessionState::default();
         st.apply_body(&other(5, &who_props("A", "a")));
         st.apply_body(&say(5, "hello"));
         assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
-        assert!(!st.tick_bubbles(BUBBLE_MS - 50), "still up");
+        // Held: the speaker has not cleared it, so it stays however long.
+        assert!(!st.tick_bubbles(600_000));
         assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        // The speaker's client sends an empty CURCHAT when its bubble ends:
+        // the line stays up for 60 more frames, then goes.
+        st.apply_body(&other(5, &[12 + 0x20, 0x20]));
+        assert_eq!(st.others[0].chat.as_deref(), Some("hello"));
+        assert!(!st.tick_bubbles(BUBBLE_MS - 50), "still up");
         assert!(st.tick_bubbles(50), "this tick takes it down");
         assert_eq!(st.others[0].chat, None);
         // The history line stays.
         assert_eq!(st.chat_log.len(), 1);
         assert!(!st.tick_bubbles(1000), "nothing more to end");
-        // A new line restarts the clock; an empty text clears at once.
-        st.apply_body(&say(5, "again"));
-        st.tick_bubbles(BUBBLE_MS - 1);
-        st.apply_body(&say(5, "and more"));
-        assert!(!st.tick_bubbles(BUBBLE_MS - 1), "restarted by the newer line");
+        // An empty text with no line up does nothing visible.
         st.apply_body(&other(5, &[12 + 0x20, 0x20]));
-        assert_eq!(st.others[0].chat.as_deref(), Some(""));
-        assert!(!st.tick_bubbles(10), "an emptied bubble has no timer");
+        assert_eq!(st.others[0].chat, None);
+        assert!(!st.tick_bubbles(10));
+        // A new line during the countdown holds again.
+        st.apply_body(&say(5, "again"));
+        st.apply_body(&other(5, &[12 + 0x20, 0x20]));
+        st.apply_body(&say(5, "and more"));
+        assert!(!st.tick_bubbles(BUBBLE_MS * 2), "held by the newer line");
+        assert_eq!(st.others[0].chat.as_deref(), Some("and more"));
     }
 
     #[test]
@@ -2861,6 +2912,23 @@ mod tests {
         assert_eq!(st.board_modify2.as_ref().map(|m| m.map_x), Some(5), "still recorded");
     }
 
+    /// `PLO_BOARDMODIFY` (7) has no cell: it goes to the player's level.
+    #[test]
+    fn board_modify_goes_to_the_live_level() {
+        let mut st = SessionState::for_version(ClientVersion::V205);
+        st.apply_body(&[msg(6, b"a.nw"), raw_board(3)].concat());
+        let mut p = vec![gc(2), gc(2), gc(2), gc(1)];
+        p.extend(gsh(7));
+        p.extend(gsh(8));
+        st.apply_body(&msg(7, &p));
+        assert_eq!(&st.board.as_ref().unwrap()[2 * 64 + 2..2 * 64 + 4], &[7, 8]);
+        let mods = st.take_board_mods();
+        assert_eq!((mods.len(), mods[0].0.as_str()), (1, "a.nw"));
+        // Cut short: dropped.
+        st.apply_body(&msg(7, &p[..5]));
+        assert!(st.take_board_mods().is_empty());
+    }
+
     /// Off a gmap there is one level, cell (0, 0).
     #[test]
     fn board_modify2_off_a_gmap_is_cell_zero() {
@@ -2953,7 +3021,7 @@ mod tests {
             let (r, sent) = run(v, &mut sess, &mut st, Some(&mut el), None);
             let r = r.expect("sent");
             assert_eq!(sent, vec![vec![warp_to_c(0)]]);
-            assert_eq!(r.cached_arrival, None);
+            assert_eq!(r.arrival, Some((12.0, 3.0)), "GServer-v2 sends no PLO_PLAYERWARP for a plain level");
             assert_eq!(sess.warp_pending.as_deref(), Some("c.nw"));
             // The server's answer loads the new level; 46 is owed once.
             st.apply_body(&full_answer("c.nw", 2_000, 5, "", ""));
@@ -2982,7 +3050,7 @@ mod tests {
             assert_eq!(sent.len(), 1, "one frame");
             let ids: Vec<u8> = sent[0].iter().map(|m| m[0] - 0x20).collect();
             assert_eq!(ids, vec![30, 46, 2]);
-            assert_eq!(r.cached_arrival, Some((12.0, 3.0)));
+            assert_eq!(r.arrival, Some((12.0, 3.0)));
             assert_eq!(r.cached_mod_time, Some(T));
             // The 46 went along: none owed after the answer.
             st.expect_cached_level("c.nw");
@@ -3013,7 +3081,7 @@ mod tests {
             let mut sess = OfflineSession::new();
             let (r, sent) = run(v, &mut sess, &mut st, None, None);
             assert_eq!(sent, vec![vec![warp_to_c(0)]]);
-            assert_eq!(r.unwrap().cached_arrival, None);
+            assert_eq!(r.unwrap().arrival, Some((12.0, 3.0)));
         }
 
         /// A warp already waiting for the server: a second script warp

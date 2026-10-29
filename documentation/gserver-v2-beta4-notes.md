@@ -11,7 +11,8 @@ Source: https://github.com/xtjoeytx/GServer-v2/tree/beta4
 ## Warps
 
 - `Player::warp` calls `enterLevel`. If already on the level it sends X2/Y2 and the gmap cell. Otherwise it sets the position before the level is entered.
-- The first-load arrival problem is on the client side: the client applies the link arrival before the board arrives, then the board overwrites it.
+- A link request (`PLI_LEVELWARP`, id 0, or `PLI_LEVELWARPMOD`, id 30) to a plain level (not part of a gmap) goes to `enterLevel` with the requested position, not to `warp`. The server keeps the position and sends the level (`PLO_LEVELNAME`, board, links, signs, chests, NPCs, `PLO_SETACTIVELEVEL`), but no `PLO_PLAYERWARP`. A link into a gmap part does go through `warp` and gets `PLO_PLAYERWARP2`.
+- So the client must put the player at the link's arrival itself, cached copy or not. Seihai only did that for cached links, so a link to a level it did not hold left the player where they stood in the old level ("first-load warps", 2026-10-29). It now holds the requested arrival for every link it starts and applies it when the server names the new level; a position the server does send still wins.
 
 ## File transfer
 

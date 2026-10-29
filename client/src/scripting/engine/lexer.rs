@@ -36,6 +36,16 @@ const OPS1: &[&str] = &[
     "+", "-", "*", "/", "%", "^", "=", "<", ">", "!", "(", ")", "{", "}", "[", "]", ",", ";", "|", ":", "?", "@", ".",
 ];
 
+/// The digits that belong to a message code whose letter starts `code`:
+/// `#P1` to `#P30` (gani attributes) and `#C0` to `#C4` (colours), as in
+/// the 2.2 command list. Other codes are one character.
+pub fn code_digits(code: &[u8]) -> usize {
+    match code.first() {
+        Some(b'P' | b'C') => code[1..].iter().take(2).take_while(|d| d.is_ascii_digit()).count(),
+        _ => 0,
+    }
+}
+
 pub struct Lexer<'a> {
     src: &'a str,
     b: &'a [u8],
@@ -113,6 +123,7 @@ impl<'a> Lexer<'a> {
             let mut i = self.pos + 1;
             if i < self.b.len() && self.b[i].is_ascii_alphanumeric() {
                 i += 1;
+                i += code_digits(&self.b[i - 1..]);
                 if self.b.get(i) == Some(&b'(') {
                     let mut depth = 0;
                     while i < self.b.len() {
@@ -198,7 +209,18 @@ impl<'a> Lexer<'a> {
     /// text such as `Hello :)` is safe. A pair of surrounding double
     /// quotes is removed.
     pub fn raw_arg(&mut self, stops: &[u8]) -> String {
+        self.raw_arg_in(stops, false)
+    }
+
+    /// [`Self::raw_arg`], where `{...}` pairs are kept whole (`showpoly
+    /// 300,{0,0,32,0}` of an unknown command), so their `}` ends nothing.
+    pub fn raw_arg_braced(&mut self, stops: &[u8]) -> String {
+        self.raw_arg_in(stops, true)
+    }
+
+    fn raw_arg_in(&mut self, stops: &[u8], braces: bool) -> String {
         self.skip_blank();
+        let mut brace = 0i32;
         let start = self.pos;
         let mut depth = 0i32;
         let mut i = self.pos;
@@ -219,16 +241,26 @@ impl<'a> Lexer<'a> {
         }
         while i < self.b.len() {
             let c = self.b[i];
-            if depth == 0 && stops.contains(&c) {
+            if braces && c == b'{' {
+                brace += 1;
+            } else if braces && c == b'}' && brace > 0 {
+                brace -= 1;
+                i += 1;
+                continue;
+            }
+            if depth == 0 && brace == 0 && stops.contains(&c) {
                 break;
             }
             if c == b'\n' {
                 self.line += 1;
             }
-            if c == b'#' && self.b.get(i + 1).is_some_and(|d| d.is_ascii_alphanumeric()) && self.b.get(i + 2) == Some(&b'(') {
-                depth += 1;
-                i += 3;
-                continue;
+            if c == b'#' && self.b.get(i + 1).is_some_and(|d| d.is_ascii_alphanumeric()) {
+                let open = i + 2 + code_digits(&self.b[i + 1..]);
+                if self.b.get(open) == Some(&b'(') {
+                    depth += 1;
+                    i = open + 1;
+                    continue;
+                }
             }
             if depth > 0 {
                 if c == b'(' {

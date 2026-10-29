@@ -123,6 +123,19 @@ Seihai (`offline::edge_link_arrival`, `OfflineSession::big_map`,
 * Level names are compared without case; the real client's compare of the
   link destination with the neighbour name is exact (not changed here, open
   whether it matters).
+* **Asked for ahead (laundry list P7, 2026-10-29).** Online, when the
+  player's body (sprite position plus 1.5, 2) is within 10 tiles of an edge,
+  Seihai asks the server for the big-map neighbour on that side (and the
+  corner one when two sides are near), once per name per connection, as a
+  level file (`files.need`, the same request as for a level it does not
+  have). The file lands in the cache, so the link loads it at once instead of
+  drawing the server's board first. Before, the neighbour was asked for only
+  after the link was walked. The real 2.05 client keeps the eight levels
+  around it (above); how and when it fetches them online is not traced, so
+  the 10-tile distance is Seihai's.
+  Lab check (GServer-v2 at 127.0.0.1:14802, 2.22, `--bigmap` with
+  `giftest.nw` west of `new1.nw`, player at x 56): `new1.nw` arrived and was
+  saved without the player moving.
 * Open: walking past the edge into a loaded neighbour, the probe offsets,
   and whether 2.22 and 2.31 use the `PLO_BIGMAP` grid the same way.
 * `new3.nw` (the laundry list's fixture) has no links, so it cannot show

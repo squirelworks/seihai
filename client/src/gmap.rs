@@ -150,6 +150,11 @@ impl GmapWorld {
     }
 }
 
+/// How close (in tiles) to a big-map level's edge the player gets before the
+/// level on that side is asked for. Seihai's choice: the real clients do not
+/// ask for big-map neighbours ahead.
+pub const BIGMAP_NEAR_EDGE: f32 = 10.0;
+
 /// A parsed `.gmap` file (`GRMAP001`), the reader keys only: the keys a
 /// client needs to place levels. Generator keys (`GENERATED`, `HEIGHTMAP`,
 /// ...) are skipped.
@@ -284,6 +289,31 @@ impl Gmap {
     pub fn cell_of(&self, level: &str) -> Option<(i32, i32)> {
         let i = self.names.iter().position(|n| !n.is_empty() && n.eq_ignore_ascii_case(level))?;
         Some(((i % self.width) as i32, (i / self.width) as i32))
+    }
+
+    /// The big-map levels next to `here` on the sides the player at `(x, y)`
+    /// (sprite top-left, tiles) is within [`BIGMAP_NEAR_EDGE`] tiles of, the
+    /// corner one too when two sides are near. Asked for ahead so a walk
+    /// across the edge finds the level already here (laundry list P7).
+    /// Nothing when `here` is not on the grid.
+    pub fn neighbours_near_edge(&self, here: &str, x: f32, y: f32) -> Vec<&str> {
+        // The middle of the player's body, as the edge links test it.
+        let (fx, fy) = (x + 1.5, y + 2.0);
+        let near = BIGMAP_NEAR_EDGE;
+        let dx = if fx < near { -1 } else if fx >= 64.0 - near { 1 } else { 0 };
+        let dy = if fy < near { -1 } else if fy >= 64.0 - near { 1 } else { 0 };
+        let mut v = Vec::new();
+        for (ox, oy) in [(dx, 0), (0, dy), (dx, dy)] {
+            if (ox, oy) == (0, 0) {
+                continue;
+            }
+            if let Some(n) = self.neighbour_of(here, ox, oy) {
+                if !v.contains(&n) {
+                    v.push(n);
+                }
+            }
+        }
+        v
     }
 
     /// The cells around `(cx, cy)` (up to eight) that hold a level.
@@ -607,6 +637,23 @@ pub fn sync_world(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn big_map_neighbours_are_asked_for_near_an_edge() {
+        let g = super::Gmap::parse_grid("\"nw.nw\",\"n.nw\",\"ne.nw\"\n\"w.nw\",\"mid.nw\",\"e.nw\"\n\"sw.nw\",\"\",\"se.nw\"\n").unwrap();
+        // The middle of the level: nothing.
+        assert!(g.neighbours_near_edge("mid.nw", 30.0, 30.0).is_empty());
+        // Near the east edge: east only.
+        assert_eq!(g.neighbours_near_edge("MID.nw", 55.0, 30.0), ["e.nw"]);
+        // Near the north-west corner: west, north and the corner.
+        assert_eq!(g.neighbours_near_edge("mid.nw", 2.0, 1.0), ["w.nw", "n.nw", "nw.nw"]);
+        // South: a hole below, so only the corner to the south-east.
+        assert_eq!(g.neighbours_near_edge("mid.nw", 60.0, 60.0), ["e.nw", "se.nw"]);
+        // At the grid's edge there is nothing beyond.
+        assert!(g.neighbours_near_edge("n.nw", 30.0, 0.0).is_empty());
+        // A level not on the big map.
+        assert!(g.neighbours_near_edge("house.nw", 0.0, 0.0).is_empty());
+    }
+
     use super::*;
 
     #[test]

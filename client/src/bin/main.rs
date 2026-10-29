@@ -745,12 +745,18 @@ fn main() {
     };
     let cache_for = |addr: &str, name: Option<&str>| seihai::servercache::cache_dir_for(&cache_root, addr, name);
     let cache_dir = online.as_deref().and_then(|a| cache_for(a, server_name(a).as_deref()));
+    // The cache in the Seihai folder (`_cache/<host>_<port>`), searched and
+    // written before the settings' one.
+    let seihai_dir = seihai::servercache::seihai_dir();
+    let game_cache_for = |addr: &str| seihai_dir.as_deref().and_then(|d| seihai::servercache::game_cache_dir_for(d, addr));
+    let game_cache_dir = online.as_deref().and_then(game_cache_for);
     // Every lookup of a level, GANI, image or sound goes through this: it
     // knows the folders of the 2.22 data folder and what this version opens.
     // The built-in levels are for offline play only: online, a level of the
     // same name (`new1.nw`) must come from the server.
     let mut resolver = AssetResolver::empty(version.profile())
         .with_assets(user_root)
+        .with_game_cache(game_cache_dir.clone())
         .with_cache(cache_dir.clone())
         .with_builtin(builtin_dir)
         .with_builtin_levels(online.is_none());
@@ -758,7 +764,7 @@ fn main() {
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
     if let Some(a) = online.as_deref() {
         files.store.set_cache_meta(Some(seihai::servercache::meta_text(a, server_name(a).as_deref())));
-        if let Some(d) = &cache_dir {
+        for d in game_cache_dir.iter().chain(cache_dir.iter()) {
             eprintln!("download cache: {}", d.display());
         }
     }
@@ -1188,11 +1194,13 @@ fn main() {
     let mut confirm_quit = false;
     // The first line of the sign page on show.
     let mut sign_page = 0usize;
+    // Some game key was down last frame (the 2.05 sign debounce).
+    let mut game_keys_held = false;
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
     // Where a cached level link (PLI 30) lands the player; see the link send.
-    let mut cached_arrival: Option<(f32, f32)> = None;
+    let mut link_arrival: Option<(f32, f32)> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -1207,15 +1215,23 @@ fn main() {
     let mut combat_clock = Instant::now();
     // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
     let mut last_pp_sprite: Option<u8> = None;
+    let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
+    let run_clock = Instant::now();
     while window.is_open() {
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
+        if !input.is_open() {
+            char_repeat.clear();
+        }
         if !input.is_open()
             && (window.is_key_pressed(minifb::Key::F1, minifb::KeyRepeat::No) || typed_now.contains(&'?'))
         {
             show_help = !show_help;
         }
         if input.is_open() {
-            for c in typed_now {
+            // The key that went down with the typed text (not a modifier),
+            // so a held key repeats where the window system does not.
+            let pressed = window.get_keys_pressed(minifb::KeyRepeat::No).into_iter().find(|k| !is_modifier(*k));
+            for c in char_repeat.frame(run_clock.elapsed(), &typed_now, pressed, |k| window.is_key_down(k)) {
                 input.type_char(c);
             }
             if window.is_key_pressed(minifb::Key::Backspace, minifb::KeyRepeat::Yes) {
@@ -1448,10 +1464,11 @@ fn main() {
                 }
                 // Take server positions once, so local walking is not
                 // snapped back by later frames.
-                // A cached link got no PLO_PLAYERWARP: the position is the
-                // one the link request carried (the server's, if it did send
-                // one, wins).
-                if let Some((x, y)) = cached_arrival.take_if(|_| entered) {
+                // Our own link: the position is the one the request carried.
+                // A cached link gets no PLO_PLAYERWARP, and GServer-v2 sends
+                // none for a plain level either (only the level). The
+                // server's, if it did send one, wins.
+                if let Some((x, y)) = link_arrival.take_if(|_| entered) {
                     net_state.player_x.get_or_insert(x);
                     net_state.player_y.get_or_insert(y);
                 }
@@ -1469,6 +1486,9 @@ fn main() {
                 // Hearts, AP and STATUS the server gave.
                 if let Some(st) = net_state.own_status.take() {
                     status_base = st;
+                }
+                if let Some(g) = net_state.own_glove_power.take() {
+                    session.glove_power = g;
                 }
                 session.apply_server_power(
                     net_state.own_max_power.take(),
@@ -1584,11 +1604,31 @@ fn main() {
             }
         }
 
+        // A sign being read takes the game keys this frame (2.05): Up turns
+        // back a page, the map key closes it, any other game key turns to
+        // the next page or closes it on the last. The player does not walk,
+        // swing, lift or open the item list meanwhile.
+        let sign_was_open = session.reading.is_some();
+        if sign_was_open && !input.is_open() && !confirm_quit {
+            use seihai::render::signs::{next_page, previous_page, sign_key, SignKey};
+            match sign_key(|a| keymap.pressed(&window, a), game_keys_held) {
+                Some(SignKey::Close) => session.reading = None,
+                Some(SignKey::Back) => sign_page = previous_page(sign_page).unwrap_or(sign_page),
+                Some(SignKey::Next) => match session.reading.as_deref().and_then(|t| next_page(t, sign_page)) {
+                    Some(p) => sign_page = p,
+                    None => session.reading = None,
+                },
+                None => {}
+            }
+            dirty = true;
+        }
+        game_keys_held = Action::ALL.iter().any(|&a| a != Action::SwitchToChat && keymap.down(&window, a));
+
         // The item list (Q). While it is open the arrows move its
         // selection and the game keys close it; none of them reach the
         // player this frame, so the player does not walk, swing or interact.
         let list_was_open = item_list.open;
-        if !input.is_open() && !confirm_quit {
+        if !input.is_open() && !confirm_quit && !sign_was_open {
             let entries = item_list_entries(&session, &net_state);
             let pressed = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
             if keymap.pressed(&window, Action::ItemList) {
@@ -1732,8 +1772,17 @@ fn main() {
                 dirty = true;
             }
             for b in session.take_moved_blocks() {
-                eprintln!("stone block moved (4x4 at {},{}); the server is not told", b.x, b.y);
+                eprintln!("stone block moved (4x4 at {},{})", b.x, b.y);
                 dirty = true;
+            }
+            // Online the 2.05 client sends every push and pull try to
+            // the server too.
+            if let Some(c) = conn.as_mut() {
+                if let Err(e) = c.send_trigger_action(t.x, t.y, t.action, &t.dir.to_string()) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
+            }
             }
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
@@ -1742,7 +1791,7 @@ fn main() {
                 sprite_changed = true;
                 dirty = true;
             }
-            if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
+            if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
             if sprite_changed {
@@ -1766,6 +1815,7 @@ fn main() {
         // was refused above).
         let interact = !input.is_open()
             && !list_was_open
+            && !sign_was_open
             && !session.life.is_dead()
             && seihai::throwing::interact_pressed(
                 session.carried.is_some(),
@@ -1773,67 +1823,55 @@ fn main() {
                 false,
                 keymap.pressed(&window, Action::Attack),
             );
-        // The map key (M) closes a sign, as in the readme.
-        if !input.is_open() && !list_was_open && keymap.pressed(&window, Action::Map) && session.reading.take().is_some() {
-            dirty = true;
-        }
         if interact {
-            // Reading: the next three lines, or the end of the sign.
-            if let Some(text) = &session.reading {
-                match seihai::render::signs::next_page(text, sign_page) {
-                    Some(p) => sign_page = p,
-                    None => session.reading = None,
+            sign_page = 0;
+            match session.interact() {
+                seihai::offline::Interaction::Chest { x, y, item, got } => {
+                    eprintln!("chest {x},{y}: {item}");
+                    net_state.push_chat(ChatKind::Admin, "Chest".into(), format!("You got {got}."));
+                    if let Some(c) = conn.as_mut() {
+                        let _ = c.send_open_chest(x, y);
+                    }
                 }
-            } else {
-                sign_page = 0;
-                match session.interact() {
-                    seihai::offline::Interaction::Chest { x, y, item, got } => {
-                        eprintln!("chest {x},{y}: {item}");
-                        net_state.push_chat(ChatKind::Admin, "Chest".into(), format!("You got {got}."));
-                        if let Some(c) = conn.as_mut() {
-                            let _ = c.send_open_chest(x, y);
+                seihai::offline::Interaction::Grabbed => {
+                    eprintln!("grabbed the wall in front (held while A is down)");
+                }
+                seihai::offline::Interaction::Lifted { kind } => {
+                    eprintln!("lifted object {kind}");
+                    // Others see the object (CARRYSPRITE) and the carry
+                    // pose (the sprite value).
+                    if let Some(c) = conn.as_mut() {
+                        let sent = c
+                            .send_carry_sprite(seihai::throwing::carry_sprite(kind))
+                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                        if let Err(e) = sent {
+                            eprintln!("send failed: {e}");
+                            conn = None;
                         }
                     }
-                    seihai::offline::Interaction::Grabbed => {
-                        eprintln!("grabbed the wall in front (held while A is down)");
-                    }
-                    seihai::offline::Interaction::Lifted { kind } => {
-                        eprintln!("lifted object {kind}");
-                        // Others see the object (CARRYSPRITE) and the carry
-                        // pose (the sprite value).
-                        if let Some(c) = conn.as_mut() {
-                            let sent = c
-                                .send_carry_sprite(seihai::throwing::carry_sprite(kind))
-                                .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
-                            if let Err(e) = sent {
+                }
+                seihai::offline::Interaction::Thrown { kind } => {
+                    eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
+                    if let Some(c) = conn.as_mut() {
+                        match c.send_throw_carried() {
+                            Ok(()) => {
+                                eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
+                                let sent = c
+                                    .send_carry_sprite(None)
+                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                                if let Err(e) = sent {
+                                    eprintln!("send failed: {e}");
+                                    conn = None;
+                                }
+                            }
+                            Err(e) => {
                                 eprintln!("send failed: {e}");
                                 conn = None;
                             }
                         }
                     }
-                    seihai::offline::Interaction::Thrown { kind } => {
-                        eprintln!("thrown object {kind} (facing {}, flies up to {} ticks)", session.player_dir, seihai::throwing::FLIGHT_TICKS);
-                        if let Some(c) = conn.as_mut() {
-                            match c.send_throw_carried() {
-                                Ok(()) => {
-                                    eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
-                                    let sent = c
-                                        .send_carry_sprite(None)
-                                        .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
-                                    if let Err(e) = sent {
-                                        eprintln!("send failed: {e}");
-                                        conn = None;
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("send failed: {e}");
-                                    conn = None;
-                                }
-                            }
-                        }
-                    }
-                    seihai::offline::Interaction::Nothing => {}
                 }
+                seihai::offline::Interaction::Nothing => {}
             }
             dirty = true;
         }
@@ -1850,14 +1888,7 @@ fn main() {
         {
             dirty = true;
         }
-        // Up while reading turns back a page.
-        if session.reading.is_some() && !input.is_open() && keymap.pressed(&window, Action::Up) {
-            if let Some(p) = seihai::render::signs::previous_page(sign_page) {
-                sign_page = p;
-                dirty = true;
-            }
-        }
-        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && !sign_was_open && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
@@ -1955,7 +1986,7 @@ fn main() {
                     ) {
                         Ok(Some(started)) => {
                             warp_since = Some(Instant::now());
-                            cached_arrival = started.cached_arrival;
+                            link_arrival = started.arrival;
                             script_warp_sent = true;
                         }
                         // Another warp is pending: nothing more to do.
@@ -2081,7 +2112,7 @@ fn main() {
                         ) {
                             Ok(Some(started)) => {
                                 warp_since = Some(Instant::now());
-                                cached_arrival = started.cached_arrival;
+                                link_arrival = started.arrival;
                             }
                             Ok(None) => {}
                             Err(_) => conn = None,
@@ -2114,6 +2145,26 @@ fn main() {
             }
         }
 
+        // Big map: ask for the level across a near edge before the player
+        // walks the link, so it is here when they cross. Once per name per
+        // connection.
+        if let (Some(map), Some(here), true, true) =
+            (session.big_map.as_ref(), net_state.current_level_name(), conn.is_some(), session.warp_pending.is_none())
+        {
+            let ahead: Vec<String> = map
+                .neighbours_near_edge(&here, session.player_x, session.player_y)
+                .into_iter()
+                .filter(|n| gmap_asked.insert(format!("near:{}", n.to_ascii_lowercase())))
+                .map(str::to_string)
+                .collect();
+            for n in ahead {
+                let file = if n.contains('.') { n } else { format!("{n}.nw") };
+                // Logged even when the request waits for a free slot.
+                eprintln!("asking for {file} ahead (big map neighbour)");
+                send_file_msgs(conn.as_mut(), files.need(&file));
+            }
+        }
+
         // Tell the server when swimming starts or stops (2.1+ clients; the
         // gani prop is the bow slot before that).
         if let Some(swimming) = session.take_swim_change() {
@@ -2128,7 +2179,7 @@ fn main() {
         if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
             warp_since = None;
             session.cancel_warp();
-            cached_arrival = None;
+            link_arrival = None;
             net_state.cancel_cached_request();
             eprintln!("warp not answered");
         }
@@ -2175,7 +2226,7 @@ fn main() {
                 frames = None;
                 session.cancel_warp();
                 warp_since = None;
-                cached_arrival = None;
+                link_arrival = None;
                 let target = w.address();
                 eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {
@@ -2212,8 +2263,10 @@ fn main() {
                         files.new_connection();
                         // The new server has its own cache folder, searched first.
                         let warp_cache = cache_for(&a, Some(&w.display_name()));
+                        let warp_game_cache = game_cache_for(&a);
+                        resolver.set_game_cache(warp_game_cache.clone());
                         resolver.set_cache(warp_cache.clone());
-                        files.store.set_cache(warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
+                        files.store.set_caches(warp_game_cache, warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
                         sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
@@ -2413,6 +2466,13 @@ fn main() {
                 dirty = true;
             }
             if my_chat_timer.tick(dt) {
+                // The 2.05 client sends an empty CURCHAT when its own bubble
+                // ends, which is what takes the line down on other screens.
+                if !my_chat.is_empty() {
+                    if let Some(Err(e)) = conn.as_mut().map(|c| c.send_chat("")) {
+                        eprintln!("chat clear send failed: {e}");
+                    }
+                }
                 my_chat.clear();
                 dirty = true;
             }
@@ -2444,6 +2504,17 @@ fn main() {
                         npc_images.insert(name, (w, px));
                         dirty = true;
                     }
+                }
+            }
+        }
+        // Tiles the player changed this frame (a lift, a cut, a moved stone
+        // block): the server writes them into the level for the others.
+        for b in session.take_board_changes() {
+            dirty = true;
+            if let Some(c) = conn.as_mut() {
+                if let Err(e) = c.send_board_modify(b.x as u8, b.y as u8, b.width as u8, b.height as u8, &b.tiles) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
                 }
             }
         }
@@ -2556,6 +2627,12 @@ fn item_list_entries(session: &seihai::offline::OfflineSession, state: &SessionS
 
 fn me(state: &SessionState, account: &str) -> String {
     state.nickname.clone().unwrap_or_else(|| account.to_string())
+}
+
+/// Shift, Control, Alt and the like: keys that type nothing themselves.
+fn is_modifier(k: minifb::Key) -> bool {
+    use minifb::Key as K;
+    matches!(k, K::LeftShift | K::RightShift | K::LeftCtrl | K::RightCtrl | K::LeftAlt | K::RightAlt | K::LeftSuper | K::RightSuper | K::CapsLock | K::Menu)
 }
 
 /// Collects typed characters for the chat bar.

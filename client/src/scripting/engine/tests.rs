@@ -956,3 +956,47 @@ fn chat_and_player_attributes_read_and_write() {
     assert_eq!(w.core.player.chat, "Bob says hi");
     assert_eq!(messages(&mut w), vec!["Bob says hi"]);
 }
+
+// ---- 2.1 forms from the NPC corpus ----
+
+#[test]
+fn an_array_literal_fills_an_array() {
+    let (mut w, id) = npc("if (created) { this.a = {4,5,6}; this.n = arraylen(this.a); this.b = this.a[1]; this.c = this.a[3]; }");
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.n"), Val::Num(3.0));
+    assert_eq!(var(&w, id, "this.b"), Val::Num(5.0));
+    assert_eq!(var(&w, id, "this.c"), Val::Num(0.0), "past the end");
+}
+
+#[test]
+fn the_choice_operator_picks_a_side() {
+    let (mut w, id) = npc("if (created) { this.a = (1 > 2) ? 3 : 4; this.b = 1 ? 5 : 6; }");
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.a"), Val::Num(4.0));
+    assert_eq!(var(&w, id, "this.b"), Val::Num(5.0));
+}
+
+#[test]
+fn a_with_body_is_skipped_not_run_on_the_wrong_object() {
+    let (mut w, id) = npc("if (created) { with (getnpc(other)) { this.x = 1; } this.after = 2; }");
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.x"), Val::default());
+    assert_eq!(var(&w, id, "this.after"), Val::Num(2.0));
+}
+
+#[test]
+fn a_gani_attribute_reads_back_what_setcharprop_set() {
+    let (mut w, id) = npc("if (created) { setcharprop #P1,7; this.a = strtofloat(#P1(-1)); this.b = strtofloat(#P1); message #P2(-1)x; }");
+    w.fire(id, "created", &[]);
+    assert_eq!(var(&w, id, "this.a"), Val::Num(7.0));
+    assert_eq!(var(&w, id, "this.b"), Val::Num(7.0));
+    assert_eq!(messages(&mut w), vec!["x"]);
+}
+
+#[test]
+fn the_2_1_forms_are_not_read_by_2_05() {
+    for src in ["this.a = {1,2};", "this.a = 1 ? 2 : 3;", "with (players[0]) { x = 1; }"] {
+        assert!(!super::parse(src, Era::V205).diagnostics.is_empty(), "{src}");
+        assert!(super::parse(src, Era::V21).diagnostics.is_empty(), "{src}");
+    }
+}
