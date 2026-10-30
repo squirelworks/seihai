@@ -31,11 +31,13 @@ pub const PLI_PROCESSLIST: u8 = 44;
 pub const PLO_LISTPROCESSES: u8 = 182;
 
 /// What a profile records about the post-login frame. `Some` only for the
-/// builds observed doing it (2.17, 2.22, 2.31 and 3.04).
+/// builds observed doing it (2.17, 2.22, 2.31 and 3.04), and for 3.153,
+/// which takes 3.04's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoginInfo {
     /// The props carry `OSTYPE` (75) and `TEXTCODEPAGE` (76) with these
-    /// values: 2.22 and 2.31 (`wind`, 1252), 3.04 (`linux`, 1250). The 2.17
+    /// values: 2.22 and 2.31 (`wind`, 1252), 3.04 (`linux`, 1250), 3.153
+    /// (`mac`, the code page carried from 3.04). The 2.17
     /// message stops at `PLANGUAGE`.
     pub os_props: Option<(&'static str, u32)>,
     /// `WANTFILE idle.gani` goes out at once with the first frame after the
@@ -61,6 +63,11 @@ pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_ga
 /// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
 pub const LOGIN_304: LoginInfo =
     LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"] };
+/// 3.153 (Mac OS X), never run: 3.04's frame with `OSTYPE` `mac`, the value
+/// its binary writes (Graal_analysis `version-profiles/3.04-3.153.toml`). The
+/// code page and the rest of the frame are 3.04's; the notes have no 3.153
+/// value for them.
+pub const LOGIN_3153: LoginInfo = LoginInfo { os_props: Some(("mac", 1250)), ..LOGIN_304 };
 
 /// What the Windows clients put in `OSTYPE` and `TEXTCODEPAGE`. Seihai has
 /// no value of its own to report, so the Windows builds send the one
@@ -565,6 +572,14 @@ mod tests {
         want.push(b'\n');
         assert_eq!(names.len(), 7);
         assert_eq!(names[6], want.as_slice());
+    }
+
+    /// 3.153 writes `OSTYPE` `mac` (binary); the rest of its frame is 3.04's.
+    #[test]
+    fn the_3153_login_frame_is_304s_with_ostype_mac() {
+        let p = super::super::ClientVersion::V3153.profile().protocol.login.unwrap();
+        assert_eq!(p.os_props, Some(("mac", 1250)));
+        assert_eq!(LoginInfo { os_props: LOGIN_304.os_props, ..p }, LOGIN_304);
     }
 
     #[test]

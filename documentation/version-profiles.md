@@ -25,6 +25,7 @@ The rows are the resolved **version chain** (`client/src/protocol/chain.rs`):
 build before it, so a new version is one step with only what changed. A
 generated per-step handler-change table (`seihai --version-chain`) lists those
 changes, each step's source and what is still unknown. See `version-chain.md`.
+The 3.x login and framing, locked against unknown, is in `3x-session.md`.
 
 ## What changes when you pick a version
 

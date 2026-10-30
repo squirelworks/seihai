@@ -149,6 +149,12 @@ The walk and sword props follow the 2.22 cadence (`protocol/walkcadence.rs`):
 real 3.04 sent `idle` one tick after the last step, with its position, and the
 sword GANI with no `SPRITE`, `idle` 249 ms later (Seihai 244 ms).
 
+## 3.153 (Mac OS X)
+
+Never run. Its frame is 3.04's with `OSTYPE` `mac`, the value its binary
+writes; the code page (1250), the first-frame files and the image checks are
+3.04's. What is locked and what is carried is in `3x-session.md`.
+
 ## Tests
 
 `protocol::login::tests` pin the image order, the icon names, the process list text,
