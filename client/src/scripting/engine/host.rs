@@ -293,6 +293,7 @@ impl SessionScripts {
                 Effect::SetCharAni { obj, ani, .. } => {
                     if let Some(n) = self.level_npc(s, obj) {
                         set_ani(n, &ani);
+                        n.ani_calls = n.ani_calls.wrapping_add(1);
                     }
                 }
                 // `setani name,params` is the same for an NPC that is not a character.
