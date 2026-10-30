@@ -155,6 +155,38 @@ server is asked, and no mod time is ever sent for it.**
 * For the pre-2.1 builds that give no mod time in the file reply the cache copy
   gets the download time (as before).
 
+### Base files asked for when only the built-in set has them (2026-10-30)
+
+The real client ships its base files (`pics1.png`, `sprites.png`,
+`state.png`, `letters.png`, `body.png`, `head0.png`, `sword1.png`,
+`shield1.png`, the pose and motion GANIs, the step, sword and water sounds) and
+never asks a server for them. A Seihai run with no Graal folder has only its
+built-in stand-ins, and on a server with its own tiles the built-in sheet draws
+the level as the purple/black "unassigned" checker.
+
+So Seihai goes beyond the real client here, as a fallback only
+(`FileSession::request_base_files`, `BASE_FILES`):
+
+* Right after login (and after a server warp), for each base file that **no
+  layer but the built-in set** has (or no layer at all), it sends `WANTFILE`
+  with the build's image extension. `pics1` goes first.
+* A base file in the user's folder or in the cache is **not asked about at
+  all**, not even with `UPDATEFILE`. With a full Graal folder the wire is the
+  same as before. A cached copy from an earlier run is used as it is.
+* The requests share the normal four-at-a-time `WANTFILE` window, so the
+  level's own image requests wait behind them until the server answers.
+* What arrives is saved in the cache like any download and drawn from then on:
+  the tile sheet, player, sprite, status and sign sheets are swapped in place
+  (`reload_base_art` in `main.rs`), GANIs and sounds reload as before. A new
+  sheet drops the built-in tile types (they describe only the built-in sheet);
+  a `tiledefs.txt` or `arrays.dat` in the user's folder or the cache is used
+  instead when there is one. Without one there are no walls.
+* `FILESENDFAILED`, or no reply, leaves the built-in file in use. GServer-v2
+  (`TPlayer::sendFile`) answers every `WANTFILE` with the file or
+  `FILESENDFAILED`, searching only its own file system (the world folder and
+  `foldersconfig.txt`). Before 2.14 it fails any file over 64000 bytes (no
+  large-file packets), so a 2.05 client gets no real `pics1.png` from it.
+
 ### The first-step files (decision of 2026-10-25, t122u)
 
 The real client's clean folder has no `walk.gani`, `steps.wav` or `steps2.wav`,
