@@ -45,6 +45,9 @@
 //!   other gani in the air.
 //! * **Lift** shows `lift.gani` once when an object is picked up (the stock
 //!   file: 6 ticks), then the carry poses.
+//! * **Hidden** under a carried object (D): `hiddenstill` / `hidden` on
+//!   builds that play them (2.05 on), else the carry poses go on (see
+//!   `offline/hide.rs`).
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
@@ -61,6 +64,11 @@ use crate::sound::SoundEvent;
 
 /// One GANI tick: a step is shown for `1 + WAIT` of these.
 pub const GANI_STEP_MS: u64 = 50;
+
+/// The 1.39 hurt pose, built into the client: about 10 ticks (video, ±1).
+/// Used for the blink of a build that blinks after the hurt pose when no
+/// `hurt.gani` is loaded.
+pub const HURT_POSE_139_TICKS: usize = 10;
 
 /// The loaded pose animations.
 #[derive(Debug, Clone, Default)]
@@ -80,12 +88,15 @@ pub struct PoseGanis {
     pub pull: Option<Gani>,
     /// Picking an object up, before `carrystill`.
     pub lift: Option<Gani>,
+    /// Hiding under the carried object, standing and walking.
+    pub hiddenstill: Option<Gani>,
+    pub hidden: Option<Gani>,
 }
 
 impl PoseGanis {
     /// Every loaded pose GANI.
     pub fn all(&self) -> impl Iterator<Item = &Gani> {
-        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift]
+        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift, &self.hiddenstill, &self.hidden]
             .into_iter()
             .flatten()
     }
@@ -107,6 +118,8 @@ pub enum PoseKind {
     Grab,
     Pull,
     Lift,
+    HiddenStill,
+    Hidden,
 }
 
 /// A pose step ready to draw.
@@ -135,6 +148,8 @@ impl PoseKind {
             PoseKind::Grab => "grab.gani",
             PoseKind::Pull => "pull.gani",
             PoseKind::Lift => "lift.gani",
+            PoseKind::HiddenStill => "hiddenstill.gani",
+            PoseKind::Hidden => "hidden.gani",
         }
     }
 
@@ -153,6 +168,8 @@ impl PoseKind {
             PoseKind::Grab,
             PoseKind::Pull,
             PoseKind::Lift,
+            PoseKind::HiddenStill,
+            PoseKind::Hidden,
         ]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
@@ -204,15 +221,40 @@ impl OfflineSession {
             PoseKind::Grab => self.poses.grab = Some(gani),
             PoseKind::Pull => self.poses.pull = Some(gani),
             PoseKind::Lift => self.poses.lift = Some(gani),
+            PoseKind::HiddenStill => self.poses.hiddenstill = Some(gani),
+            PoseKind::Hidden => self.poses.hidden = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
+    }
+
+    /// Take the mannerisms of a build.
+    pub fn set_mannerisms(&mut self, m: crate::protocol::Mannerisms) {
+        self.mannerisms = m;
+        self.combat.set_knockback_ticks(m.knockback_ticks);
+    }
+
+    /// The hurt blink leaves the figure out this tick: only its shadow is
+    /// drawn. Every other tick of hurt mode, from the hit (1.41 on) or once
+    /// the hurt pose is over (1.39).
+    pub fn blink_off(&self) -> bool {
+        let Some(ms) = self.combat.hurt_elapsed_ms() else { return false };
+        let tick = (ms / GANI_STEP_MS) as usize;
+        let from = match self.mannerisms.blink {
+            crate::protocol::Blink::FromHit => 0,
+            crate::protocol::Blink::AfterHurtPose => self.poses.hurt.as_ref().map_or(HURT_POSE_139_TICKS, |g| g.total_ticks()),
+        };
+        tick >= from && (tick - from) % 2 == 1
     }
 
     /// Advance the poses that run on the 50 ms tick, not on steps taken:
     /// the swim stroke (moving or not) and the lift. Each swim step entered
     /// queues its `PLAYSOUND` cues. True if the drawn pose may have changed.
     pub fn tick_poses(&mut self, ms: u64) -> bool {
+        // Empty hands: no hiding place.
+        if self.carried.is_none() {
+            self.hidden = false;
+        }
         let swimming = self.in_water && self.swim_gani.is_some();
         if !swimming && self.lift_ticks.is_none() {
             self.pose_clock_ms = 0;
@@ -231,8 +273,26 @@ impl OfflineSession {
                 }
             }
             if swimming {
-                self.swim_ticks += 1;
+                use crate::protocol::SwimStill;
+                let moving = self.walking;
+                let stopped = std::mem::replace(&mut self.swim_was_moving, moving) && !moving;
                 let Some(p) = self.swim_gani.as_mut() else { continue };
+                match self.mannerisms.swim_still {
+                    // NewMain 1.41: back to the first step and held.
+                    SwimStill::Freezes if !moving => {
+                        self.swim_ticks = 0;
+                        p.frame = 0;
+                        continue;
+                    }
+                    // 2.22: back to the first step at the stop, then on.
+                    SwimStill::Restarts if stopped => {
+                        self.swim_ticks = 0;
+                        p.frame = 0;
+                        continue;
+                    }
+                    _ => {}
+                }
+                self.swim_ticks += 1;
                 let total = p.gani.total_ticks().max(1);
                 let t = self.swim_ticks % total;
                 p.frame = p.gani.frame_at_tick(t, true);
@@ -284,13 +344,21 @@ impl OfflineSession {
             return at_tick(PoseKind::Pull, &self.poses.pull, self.pushpull.pull_ticks as usize, true)
                 .or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
-        if self.pushpull.grab.is_some() {
+        if self.pushpull.grab.is_some() || self.pushpull.grab_shown {
             return pick(PoseKind::Grab, &self.poses.grab, 0).or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
         // Holding an object: the carry poses (the 2.05 client plays its
         // carrystill and carry ganis then). The carry walk shows the step the
         // walk has reached.
         if self.carried.is_some() {
+            // Hidden (2.05 on): `hiddenstill` / `hidden`, which draw only a
+            // shadow; the object is drawn where the player stands. Without
+            // those files nothing of the figure is drawn. Builds that keep
+            // the carry poses (1.39, NewMain 1.41) fall through.
+            if self.figure_hidden() {
+                let (kind, g) = if self.walking { (PoseKind::Hidden, &self.poses.hidden) } else { (PoseKind::HiddenStill, &self.poses.hiddenstill) };
+                return pick(kind, g, 0);
+            }
             if let Some(p) = self.lift_ticks.and_then(|t| once(PoseKind::Lift, &self.poses.lift, t as usize)) {
                 return Some(p);
             }

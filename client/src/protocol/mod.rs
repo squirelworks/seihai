@@ -39,7 +39,7 @@ pub use props::{
 };
 pub use profile::{
     by_label, profile, Basis, BuiltIn, ChatFace, ChatText, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol,
-    ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
+    ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, Blink, HidePose, Mannerisms, PullRelease, SwimStill, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
     PROFILES, SUPPORTED_LIST_PORT,
 };
 pub use showimg::{

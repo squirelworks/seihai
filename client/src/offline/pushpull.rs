@@ -199,6 +199,9 @@ pub struct PushPull {
     pub pull_ticks: u32,
     /// The pull pose is on: from the first pull until the player moves.
     pub pull_shown: bool,
+    /// The grab pose stays after A is let go (NewMain 1.41), until the
+    /// next action.
+    pub grab_shown: bool,
     clock_ms: u64,
     triggers: Vec<Trigger>,
     npc_moves: Vec<NpcMoved>,
@@ -236,6 +239,7 @@ impl OfflineSession {
         match res {
             StepResult::Free => {
                 self.pushpull.pull_shown = false;
+                self.pushpull.grab_shown = false;
                 self.pushpull.pushing = false;
                 self.pushpull.blocked_steps = 0;
             }
@@ -295,6 +299,7 @@ impl OfflineSession {
         self.pushpull.pushing = false;
         self.pushpull.blocked_steps = 0;
         self.pushpull.pull_shown = false;
+        self.pushpull.grab_shown = false;
         self.pushpull.jump = Some(Jump { dir, x0: x, y0: y, shown: 0 });
         self.sound_events.push(SoundEvent { file: "jump.wav".into(), x: x + 1.5, y: y + 2.0 });
         // 2.05 shows the first step of the flight in the tick the jump starts.
@@ -525,14 +530,20 @@ impl OfflineSession {
             self.pushpull.grab = Some(Grab { count: 1 });
             self.pushpull.pull_ticks = 0;
             self.pushpull.pull_shown = false;
+            self.pushpull.grab_shown = false;
             self.pushpull.pushing = false;
         }
         wall
     }
 
-    /// A was let go: the grab ends.
+    /// A was let go: the grab ends. A build whose pull lets go to `grab`
+    /// (NewMain 1.41) keeps showing the grab pose until the next action.
     pub fn release_grab(&mut self) -> bool {
-        self.pushpull.grab.take().is_some()
+        let released = self.pushpull.grab.take().is_some();
+        if released && !self.pushpull.pull_shown && self.mannerisms.pull_release == crate::protocol::PullRelease::BackToGrab {
+            self.pushpull.grab_shown = true;
+        }
+        released
     }
 
     /// An arrow key was let go: a push ends, and a pull stops its cycle (the
@@ -540,9 +551,14 @@ impl OfflineSession {
     pub fn arrow_released(&mut self) -> bool {
         let was_pushing = self.push_pose();
         self.pushpull.pushing = false;
+        let back_to_grab = self.mannerisms.pull_release == crate::protocol::PullRelease::BackToGrab;
         match &mut self.pushpull.grab {
             Some(g) if g.pulling() => {
                 g.count = 1;
+                // NewMain 1.41 goes back to the grab pose; 2.05 keeps pulling.
+                if back_to_grab {
+                    self.pushpull.pull_shown = false;
+                }
                 true
             }
             _ => was_pushing,
@@ -581,6 +597,7 @@ impl OfflineSession {
         // A swing, a hit or a lift sets its own gani: the stale pull is gone.
         if self.combat.swing_frame().is_some() || self.combat.is_hurt() || self.carried.is_some() || self.life.is_dead() {
             self.pushpull.pull_shown = false;
+            self.pushpull.grab_shown = false;
         }
         if self.pushpull.jump.is_none() && !self.pushpull.pull_pose() {
             self.pushpull.clock_ms = 0;
@@ -610,7 +627,7 @@ impl OfflineSession {
         if self.pushpull.pull_pose() {
             return Some(PULL_SPRITE_S[frame(&self.poses.pull, self.pushpull.pull_ticks as usize).min(2)]);
         }
-        if self.pushpull.grab.is_some() {
+        if self.pushpull.grab.is_some() || self.pushpull.grab_shown {
             return Some(GRAB_SPRITE_S);
         }
         self.push_tick().map(|t| PUSH_SPRITE_S[frame(&self.poses.push, t).min(4)])
@@ -920,6 +937,23 @@ mod tests {
         assert_eq!(s.pushpull_sprite_s().map(|v| PULL_SPRITE_S.contains(&v)), Some(true));
         assert!(s.try_move(0.0, 0.5).is_some(), "walks again");
         assert!(!s.pushpull.pull_pose());
+        assert_eq!(s.pushpull_sprite_s(), None);
+    }
+
+    #[test]
+    fn newmain_141_lets_a_pull_go_back_to_the_grab() {
+        let mut s = grabbing_a_wall();
+        s.set_mannerisms(crate::protocol::MANNER_141);
+        s.try_move(0.0, 0.5);
+        assert!(s.pushpull.pull_pose());
+        // Letting go of the arrow: back to the grab pose.
+        s.arrow_released();
+        assert!(!s.pushpull.pull_pose());
+        assert_eq!(s.pushpull_sprite_s(), Some(GRAB_SPRITE_S));
+        // Letting go of A: the grab pose stays until the player moves.
+        assert!(s.release_grab());
+        assert_eq!(s.pushpull_sprite_s(), Some(GRAB_SPRITE_S));
+        assert!(s.try_move(0.0, 0.5).is_some());
         assert_eq!(s.pushpull_sprite_s(), None);
     }
 

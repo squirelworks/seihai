@@ -451,3 +451,29 @@ fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
     n.lift_ticks = Some(0);
     assert_eq!(pose(&n).map(|p| p.0), Some(PoseKind::CarryStill));
 }
+
+// ---- per-build mannerisms ----------------------------------------------------
+
+#[test]
+fn the_hurt_blink_starts_at_the_hit_or_after_the_hurt_pose() {
+    use seihai::protocol::{MANNER_139, MANNER_205};
+    let mut s = session();
+    s.set_mannerisms(MANNER_205);
+    s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
+    let mut seen = Vec::new();
+    for _ in 0..41 {
+        seen.push(s.blink_off());
+        s.tick_combat(50);
+    }
+    // 2.05: every other tick from the hit, for the 40 ticks of hurt mode.
+    assert_eq!(&seen[..4], [false, true, false, true]);
+    assert_eq!(seen.iter().filter(|b| **b).count(), 20);
+    assert!(!seen[40], "over with hurt mode");
+    // 1.39: only once the hurt pose (31 ticks with this hurt.gani) is over.
+    let mut o = session();
+    o.set_mannerisms(MANNER_139);
+    o.receive_hurtplayer(&hurt_packet(1), Some((o.player_x + 2.0, o.player_y)));
+    let seen: Vec<bool> = (0..40).map(|_| { let b = o.blink_off(); o.tick_combat(50); b }).collect();
+    assert!(seen[..31].iter().all(|b| !b));
+    assert_eq!(&seen[31..34], [false, true, false]);
+}

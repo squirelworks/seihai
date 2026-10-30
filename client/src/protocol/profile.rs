@@ -621,6 +621,69 @@ pub struct Health {
     pub combat: Option<CombatRules>,
 }
 
+/// When the hurt blink starts (the body drawn on alternate ticks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Blink {
+    /// From the hit, for the whole of hurt mode (1.41 on).
+    FromHit,
+    /// Only once the hurt pose is over, to the end of hurt mode (1.39).
+    AfterHurtPose,
+}
+
+/// What a player hiding under a carried object (D) looks like.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HidePose {
+    /// `hiddenstill` / `hidden`: only the object is drawn (2.05, 2.22).
+    Hidden,
+    /// The carry poses go on, legs cycling (1.39, NewMain 1.41).
+    Carry,
+}
+
+/// What the pull pose does when the arrow is let go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PullRelease {
+    /// It stays, looping, until the player moves (2.05, 2.22).
+    StaysPull,
+    /// Back to `grab`, which stays after A too (NewMain 1.41).
+    BackToGrab,
+}
+
+/// What the swim stroke does while the player floats still.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwimStill {
+    /// It runs on (2.05).
+    Animates,
+    /// Back to its first step at the stop, then runs on (2.22).
+    Restarts,
+    /// Back to its first step and held (NewMain 1.41).
+    Freezes,
+}
+
+/// How the player moves and looks, where builds differ: read live tick by
+/// tick in 1.39, NewMain 1.41, 2.05 rev 2 and 2.22 (Graal_analysis
+/// `client-internals/player-mannerisms-live.md`, "Cross-version table").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mannerisms {
+    pub blink: Blink,
+    pub hide: HidePose,
+    pub pull_release: PullRelease,
+    pub swim_still: SwimStill,
+    /// Knockback steps of one tile at the start of hurt mode (1.39: 4).
+    pub knockback_ticks: u16,
+}
+
+/// 1.39 (video and memory read).
+pub const MANNER_139: Mannerisms =
+    Mannerisms { blink: Blink::AfterHurtPose, hide: HidePose::Carry, pull_release: PullRelease::StaysPull, swim_still: SwimStill::Animates, knockback_ticks: 4 };
+/// NewMain 1.41.1, the first gani client.
+pub const MANNER_141: Mannerisms =
+    Mannerisms { blink: Blink::FromHit, hide: HidePose::Carry, pull_release: PullRelease::BackToGrab, swim_still: SwimStill::Freezes, knockback_ticks: 5 };
+/// 2.05 rev 2.
+pub const MANNER_205: Mannerisms =
+    Mannerisms { blink: Blink::FromHit, hide: HidePose::Hidden, pull_release: PullRelease::StaysPull, swim_still: SwimStill::Animates, knockback_ticks: 5 };
+/// 2.22.
+pub const MANNER_222: Mannerisms = Mannerisms { swim_still: SwimStill::Restarts, ..MANNER_205 };
+
 /// Everything that makes one client version itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VersionProfile {
@@ -638,6 +701,7 @@ pub struct VersionProfile {
     pub levels: Levels,
     pub life: Health,
     pub ui: Ui,
+    pub mannerisms: Mannerisms,
 }
 
 impl VersionProfile {
