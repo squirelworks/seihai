@@ -1,7 +1,8 @@
 # Public-server checks (overnight item 14)
 
 Status: **list checks done from the user's own machine on 2026-10-25 (two
-runs); the game-server checks are still to do.** The build box itself cannot
+runs); first game-server checks done on 2026-10-30 (2.22 on three servers,
+2.05 refused), see `public-gserver-2026-10-30.md`.** The build box itself cannot
 reach any listserver port. This page says what the first public results were
 and what they settle, what was tried from the build box, what the sources say
 about the listserver ports, and the checklist for the rest.
