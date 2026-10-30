@@ -482,20 +482,40 @@ pub fn menu_items(pli: &IdSet) -> Vec<MenuItem> {
 /// counter one above the countdown range (61), which does not count down
 /// until a direction key is pressed, and then runs the usual 60. So a line
 /// typed while standing still stays over the head until the player moves.
+///
+/// Another player's line is a *floor* timer: it counts down from arrival
+/// while it waits for the speaker's empty CURCHAT, and only ends once both
+/// have happened. So it shows for at least 60 frames and until the empty
+/// line comes (real 2.05 rev 2 under Wine, 2026-10-30: the text went 3.0 s
+/// after it arrived when the empty line came 0.5 s in, and at once when it
+/// came after 20 s).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BubbleTimer {
     left_ms: u32,
     held: bool,
+    /// Counts down while held ([`Self::start_floor`]).
+    floor: bool,
 }
 
 impl BubbleTimer {
     pub fn start() -> Self {
-        BubbleTimer { left_ms: BUBBLE_MS, held: false }
+        BubbleTimer { left_ms: BUBBLE_MS, held: false, floor: false }
     }
 
     /// The timer of a line the player typed: waits for [`Self::release`].
     pub fn start_held() -> Self {
-        BubbleTimer { left_ms: BUBBLE_MS, held: true }
+        BubbleTimer { left_ms: BUBBLE_MS, held: true, floor: false }
+    }
+
+    /// The timer of another player's line: runs at once, but the line also
+    /// waits for [`Self::release`] (their empty CURCHAT).
+    pub fn start_floor() -> Self {
+        BubbleTimer { left_ms: BUBBLE_MS, held: true, floor: true }
+    }
+
+    /// Time left before the line may end.
+    pub fn left_ms(&self) -> u32 {
+        self.left_ms
     }
 
     /// A direction key was pressed: a held bubble starts its countdown.
@@ -509,11 +529,11 @@ impl BubbleTimer {
 
     /// Advance by `dt_ms`. True when this step ended the bubble.
     pub fn tick(&mut self, dt_ms: u32) -> bool {
-        if self.left_ms == 0 || self.held {
+        if self.left_ms == 0 || (self.held && !self.floor) {
             return false;
         }
         self.left_ms = self.left_ms.saturating_sub(dt_ms);
-        self.left_ms == 0
+        self.left_ms == 0 && !self.held
     }
 
     pub fn active(&self) -> bool {
@@ -827,5 +847,20 @@ mod tests {
         assert!(!b.active());
         // An ordinary bubble is not held.
         assert!(!BubbleTimer::start().is_held());
+    }
+
+    #[test]
+    fn floor_bubble_runs_while_held_and_ends_on_release_or_time() {
+        // Released early: it still runs its 60 frames.
+        let mut b = BubbleTimer::start_floor();
+        assert!(!b.tick(500));
+        b.release();
+        assert!(!b.tick(BUBBLE_MS - 501));
+        assert!(b.tick(1));
+        // Never released: the time runs out but the line stays.
+        let mut b = BubbleTimer::start_floor();
+        assert!(!b.tick(60_000));
+        assert_eq!(b.left_ms(), 0);
+        assert!(b.is_held());
     }
 }

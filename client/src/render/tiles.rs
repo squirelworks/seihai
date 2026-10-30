@@ -253,15 +253,6 @@ impl Framebuffer {
         }
         self.draw_text(x, y, text, rgb);
     }
-
-    /// Draw a nickname tag centred under a player box.
-    ///
-    /// `dx`/`dy` is the top-left of the 48×48 player box.
-    pub fn draw_nick(&mut self, nick: &str, dx: i32, dy: i32) {
-        let nick: String = nick.chars().take(24).collect();
-        let x = dx + 24 - super::font::text_width(&nick) / 2;
-        self.draw_text_outlined(x, dy + 48, &nick, [0xFF, 0xFF, 0xFF]);
-    }
 }
 
 /// Closed chest tile ids of the built-in tile sheet, and the open tile of

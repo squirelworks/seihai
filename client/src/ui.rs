@@ -7,6 +7,7 @@
 use crate::chatlists::{ChatFilter, Identity, NameList};
 use crate::protocol::{ChatKind, ChatLine, OtherPlayer};
 use crate::render::font::{text_width, CELL_H, CELL_W};
+use crate::render::chattext::{draw_chat_text, draw_nick_text, ChatFont};
 use crate::render::{Framebuffer, TILE_PX};
 
 /// Chat history lines shown at once.
@@ -71,12 +72,17 @@ pub enum ChatSend {
     Say(String),
     /// `PLI_TOALL`.
     Toall(String),
+    /// Exactly `showname`: shows our own nickname for 60 frames. Not sent.
+    ShowName,
 }
 
 /// Sort a chat-bar line the way 2.05 does: text that starts with
 /// `toall:` (any case, after trimming) goes out as a toall.
 pub fn classify_chat(line: &str) -> ChatSend {
     let t = line.trim();
+    if t.eq_ignore_ascii_case("showname") {
+        return ChatSend::ShowName;
+    }
     match t.get(..6) {
         Some(p) if p.eq_ignore_ascii_case("toall:") => ChatSend::Toall(t[6..].trim().to_string()),
         _ => ChatSend::Say(line.to_string()),
@@ -308,28 +314,22 @@ fn to_screen(x: f32, y: f32, cam: (i32, i32)) -> (i32, i32) {
     )
 }
 
-/// Draw a chat bubble centred over a 48×48 player box at `(dx, dy)`.
-pub fn draw_bubble(fb: &mut Framebuffer, text: &str, dx: i32, dy: i32) {
-    if text.is_empty() {
-        return;
-    }
-    let text = fit(text, 240);
-    let tw = text_width(&text);
-    let x = dx + 24 - tw / 2;
-    let y = dy - CELL_H - 2;
-    fb.shade_rect(x - 2, y - 2, tw + 3, CELL_H + 3, 90);
-    fb.draw_text(x, y, &text, [0xFF, 0xFF, 0xFF]);
+/// Draw a player's chat text over the 48×48 player box at `(dx, dy)`, the
+/// way the version's own client does (see [`crate::render::chattext`]).
+pub fn draw_bubble(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, dx: i32, dy: i32, carrying: bool) {
+    draw_chat_text(fb, font, text, dx, dy, carrying);
 }
 
-/// Nickname tags and chat bubbles for other players.
-pub fn draw_other_labels(fb: &mut Framebuffer, others: &[OtherPlayer], cam: (i32, i32)) {
+/// Nicknames and chat text for other players. Their nickname is always up,
+/// in the colour of their AP (50, white, until the server sends one).
+pub fn draw_other_labels(fb: &mut Framebuffer, font: Option<&ChatFont>, others: &[OtherPlayer], cam: (i32, i32)) {
     for o in others {
         let (dx, dy) = to_screen(o.x, o.y, cam);
         if let Some(nick) = &o.nick {
-            fb.draw_nick(nick, dx, dy);
+            draw_nick_text(fb, font, nick, o.ap.unwrap_or(50), dx, dy);
         }
         if let Some(chat) = &o.chat {
-            draw_bubble(fb, chat, dx, dy);
+            draw_bubble(fb, font, chat, dx, dy, o.carry.is_some());
         }
     }
 }
@@ -708,6 +708,8 @@ mod tests {
         assert_eq!(classify_chat("  ToAll: hi all "), ChatSend::Toall("hi all".into()));
         assert_eq!(classify_chat("hello"), ChatSend::Say("hello".into()));
         assert_eq!(classify_chat("toal"), ChatSend::Say("toal".into()));
+        assert_eq!(classify_chat(" ShowName "), ChatSend::ShowName);
+        assert_eq!(classify_chat("showname please"), ChatSend::Say("showname please".into()));
     }
 
     #[test]
