@@ -8,6 +8,9 @@
 //!   new X or Y. The server passes it on to the other players in the level,
 //!   so everyone sees the NPC where it was pushed.
 //! * After `canbepushed`, `canbepulled` or `dontblock`, the NPC's BLOCKFLAGS.
+//! * VISFLAGS for every NPC once its script has run (`hide`, `drawoverplayer`
+//!   and `drawunderplayer` change it later), IMAGE after `setimg`, and
+//!   MESSAGE after `message`.
 //!
 //! Seihai may also have the level file. An NPC of the file that has the
 //! server NPC's image and position *is* that NPC and takes its id; a server
@@ -16,9 +19,10 @@
 use std::collections::HashMap;
 
 use super::OfflineSession;
-use crate::assets::{Level, Npc};
+use crate::assets::{DrawLayer, Level, Npc};
 use crate::protocol::npcprops::{
-    half_tiles, npc_props_message, NpcProps, BLOCK_DONTBLOCK, BLOCK_PULLABLE, BLOCK_PUSHABLE, NPCPROP_BLOCKFLAGS, NPCPROP_X, NPCPROP_Y,
+    half_tiles, npc_props_message, NpcProps, PropValue, BLOCK_DONTBLOCK, BLOCK_PULLABLE, BLOCK_PUSHABLE, NPCPROP_BLOCKFLAGS, NPCPROP_IMAGE,
+    NPCPROP_MESSAGE, NPCPROP_VISFLAGS, NPCPROP_X, NPCPROP_Y, VIS_CLIENT, VIS_DEFAULT, VIS_OVER, VIS_UNDER, VIS_VISIBLE,
 };
 
 const OUR_BITS: u8 = BLOCK_DONTBLOCK | BLOCK_PULLABLE | BLOCK_PUSHABLE;
@@ -39,8 +43,46 @@ pub fn block_flags(n: &Npc, server: u8) -> u8 {
     f
 }
 
+const OUR_VIS: u8 = VIS_VISIBLE | VIS_OVER | VIS_UNDER;
+
+/// The VISFLAGS byte for `n`: shown, over or under the players from its
+/// script, the client bit, and the server's other bits (`base`).
+pub fn vis_flags(n: &Npc, base: u8) -> u8 {
+    let mut f = (base & !OUR_VIS) | VIS_CLIENT;
+    if n.visible {
+        f |= VIS_VISIBLE;
+    }
+    match n.layer {
+        DrawLayer::Over => f |= VIS_OVER,
+        DrawLayer::Under => f |= VIS_UNDER,
+        _ => {}
+    }
+    f
+}
+
 /// Put the props a server record carries on a level NPC.
 fn apply(n: &mut Npc, p: &NpcProps) {
+    if let Some(image) = &p.image {
+        if !n.image.eq_ignore_ascii_case(image) {
+            n.image = image.clone();
+            n.image_part = None;
+        }
+    }
+    if let Some(v) = p.vis_flags {
+        n.visible = v & VIS_VISIBLE != 0;
+        n.layer = if v & VIS_OVER != 0 {
+            DrawLayer::Over
+        } else if v & VIS_UNDER != 0 {
+            DrawLayer::Under
+        } else if matches!(n.layer, DrawLayer::Over | DrawLayer::Under) {
+            DrawLayer::Player
+        } else {
+            n.layer
+        };
+    }
+    if let Some(m) = &p.message {
+        n.message = m.clone();
+    }
     if let Some(x) = p.x {
         n.x = x;
     }
@@ -81,7 +123,6 @@ impl OfflineSession {
         }
         let mut n = Npc::new(image.to_string(), x, y, p.script.clone().unwrap_or_default());
         n.server_id = Some(id);
-        n.visible = p.vis_flags.map_or(true, |v| v & 1 != 0);
         apply(&mut n, p);
         level.npcs.push(n);
         Linked::Added(level.npcs.len() - 1)
@@ -96,11 +137,26 @@ fn file_twin(level: &Level, image: &str, x: f32, y: f32) -> Option<usize> {
     })
 }
 
-/// The values the server last had for each linked NPC: X, Y (half tiles)
-/// and BLOCKFLAGS. Anything the level's NPC has that differs goes out.
+/// What the server last had for one linked NPC.
+#[derive(Debug, Clone)]
+struct Known {
+    /// X and Y in half tiles.
+    x: u8,
+    y: u8,
+    block: u8,
+    /// VISFLAGS: `None` until the server or Seihai has said one.
+    vis: Option<u8>,
+    /// The server's VISFLAGS, for the bits Seihai does not set.
+    vis_base: u8,
+    image: String,
+    message: String,
+}
+
+/// The values the server last had for each linked NPC. Anything the
+/// level's NPC has that differs goes out.
 #[derive(Debug, Default)]
 pub struct ServerNpcSync {
-    known: HashMap<u32, [u8; 3]>,
+    known: HashMap<u32, Known>,
 }
 
 impl ServerNpcSync {
@@ -111,30 +167,70 @@ impl ServerNpcSync {
 
     /// The server sent `p` for `id`: those are now the values it has.
     pub fn heard(&mut self, id: u32, p: &NpcProps, n: &Npc) {
-        let k = self.known.entry(id).or_insert([half_tiles(n.x), half_tiles(n.y), 0]);
+        let k = self.known.entry(id).or_insert_with(|| Known {
+            x: half_tiles(n.x),
+            y: half_tiles(n.y),
+            block: 0,
+            vis: None,
+            vis_base: VIS_DEFAULT,
+            image: n.image.clone(),
+            message: String::new(),
+        });
         if let Some(x) = p.x {
-            k[0] = half_tiles(x);
+            k.x = half_tiles(x);
         }
         if let Some(y) = p.y {
-            k[1] = half_tiles(y);
+            k.y = half_tiles(y);
         }
         if let Some(f) = p.block_flags {
-            k[2] = f;
+            k.block = f;
+        }
+        if let Some(v) = p.vis_flags {
+            k.vis = Some(v);
+            k.vis_base = v;
+        }
+        if let Some(i) = &p.image {
+            k.image = i.clone();
+        }
+        if let Some(m) = &p.message {
+            k.message = m.clone();
         }
     }
 
-    /// `PLI_NPCPROPS` messages for every linked NPC of `level` whose X, Y
-    /// or BLOCKFLAGS differ from what the server has; those become known.
+    /// `PLI_NPCPROPS` messages for every linked NPC of `level` whose props
+    /// differ from what the server has; those become known.
     pub fn changes(&mut self, level: &Level) -> Vec<Vec<u8>> {
         let mut out = Vec::new();
         for n in &level.npcs {
             let Some(id) = n.server_id else { continue };
             let Some(k) = self.known.get_mut(&id) else { continue };
-            let now = [half_tiles(n.x), half_tiles(n.y), block_flags(n, k[2])];
-            let props: Vec<(u8, u8)> =
-                [NPCPROP_X, NPCPROP_Y, NPCPROP_BLOCKFLAGS].into_iter().zip(now).zip(*k).filter(|&((_, v), was)| v != was).map(|(p, _)| p).collect();
+            let mut props = Vec::new();
+            // A character NPC's image is its animation; that is not sent.
+            if n.ani.is_none() && !n.image.eq_ignore_ascii_case(&k.image) {
+                k.image = n.image.clone();
+                props.push((NPCPROP_IMAGE, PropValue::Text(n.image.clone())));
+            }
+            for (prop, now, was) in [(NPCPROP_X, half_tiles(n.x), &mut k.x), (NPCPROP_Y, half_tiles(n.y), &mut k.y)] {
+                if now != *was {
+                    *was = now;
+                    props.push((prop, PropValue::Byte(now)));
+                }
+            }
+            let vis = vis_flags(n, k.vis_base);
+            if k.vis != Some(vis) {
+                k.vis = Some(vis);
+                props.push((NPCPROP_VISFLAGS, PropValue::Byte(vis)));
+            }
+            let block = block_flags(n, k.block);
+            if block != k.block {
+                k.block = block;
+                props.push((NPCPROP_BLOCKFLAGS, PropValue::Byte(block)));
+            }
+            if n.message != k.message {
+                k.message = n.message.clone();
+                props.push((NPCPROP_MESSAGE, PropValue::Text(n.message.clone())));
+            }
             if !props.is_empty() {
-                *k = now;
                 out.push(npc_props_message(id, &props));
             }
         }
@@ -197,6 +293,8 @@ mod tests {
         s.take_server_npc(1001, &p);
         let mut sync = ServerNpcSync::default();
         sync.heard(1001, &p, &s.current_level.as_ref().unwrap().npcs[0]);
+        // The first look: VISFLAGS 81 (the server gave none), as 2.05.
+        assert_eq!(sync.changes(s.current_level.as_ref().unwrap()), vec![b"# '\x89-q\n".to_vec()]);
         assert!(sync.changes(s.current_level.as_ref().unwrap()).is_empty());
         // `canbepushed` ran: BLOCKFLAGS 8, as the 2.05 client sent it.
         s.current_level.as_mut().unwrap().npcs[0].pushable = true;
@@ -216,6 +314,51 @@ mod tests {
     fn npcs_without_a_server_id_send_nothing() {
         let s = session("GLEVNW01\nNPC a.png 3 3\n//\nNPCEND\n");
         let mut sync = ServerNpcSync::default();
+        assert!(sync.changes(s.current_level.as_ref().unwrap()).is_empty());
+    }
+
+    /// The lab's VISFLAGS replies: server none → 81, 0 → 16, 64 → 80,
+    /// 16 → nothing; `hide` 80, `drawoverplayer` 83, `drawunderplayer` 85.
+    #[test]
+    fn vis_flags_follow_the_2_05_client() {
+        let first = |server: Option<u8>, f: &dyn Fn(&mut Npc)| {
+            let mut s = session("GLEVNW01\n");
+            let p = NpcProps { vis_flags: server, ..record("a.png", 1.0, 1.0) };
+            s.take_server_npc(5, &p);
+            f(&mut s.current_level.as_mut().unwrap().npcs[0]);
+            let mut sync = ServerNpcSync::default();
+            sync.heard(5, &p, &s.current_level.as_ref().unwrap().npcs[0]);
+            sync.changes(s.current_level.as_ref().unwrap())
+        };
+        let vis = |v: u8| vec![[&b"#  %-"[..], &[v + 0x20], b"\n"].concat()];
+        assert_eq!(first(None, &|_| {}), vis(81));
+        assert_eq!(first(Some(0), &|_| {}), vis(16));
+        assert_eq!(first(Some(64), &|_| {}), vis(80));
+        assert!(first(Some(16), &|_| {}).is_empty());
+        assert!(first(Some(81), &|_| {}).is_empty());
+        assert_eq!(first(None, &|n| n.visible = false), vis(80));
+        assert_eq!(first(None, &|n| n.layer = DrawLayer::Over), vis(83));
+        assert_eq!(first(None, &|n| n.layer = DrawLayer::Under), vis(85));
+        assert_eq!(first(None, &|n| n.layer = DrawLayer::Light), vis(81));
+        assert_eq!(first(Some(1), &|n| n.visible = false), vis(16));
+    }
+
+    #[test]
+    fn image_and_message_go_out_in_prop_order() {
+        let mut s = session("GLEVNW01\n");
+        let p = NpcProps { vis_flags: Some(81), ..record("a.png", 1.0, 1.0) };
+        s.take_server_npc(1118, &p);
+        let mut sync = ServerNpcSync::default();
+        sync.heard(1118, &p, &s.current_level.as_ref().unwrap().npcs[0]);
+        let n = &mut s.current_level.as_mut().unwrap().npcs[0];
+        n.image = "bomb1.png".into();
+        n.message = "hi".into();
+        assert_eq!(sync.changes(s.current_level.as_ref().unwrap()), vec![b"# (~ )bomb1.png/\"hi\n".to_vec()]);
+        // The server's message and image are taken, not sent back.
+        let back = NpcProps { message: Some("yo".into()), image: Some("c.png".into()), ..NpcProps::default() };
+        s.take_server_npc(1118, &back);
+        sync.heard(1118, &back, &s.current_level.as_ref().unwrap().npcs[0]);
+        assert_eq!(s.current_level.as_ref().unwrap().npcs[0].message, "yo");
         assert!(sync.changes(s.current_level.as_ref().unwrap()).is_empty());
     }
 }
