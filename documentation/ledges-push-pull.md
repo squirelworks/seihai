@@ -136,13 +136,13 @@ So VISFLAGS is 1 for shown, 2 for `drawoverplayer` and 4 for `drawunderplayer`. 
 | case | real 2.05 sent | Seihai sends |
 |---|---|---|
 | 10 s idle | nothing | nothing |
-| a 0.05 s timeout doing `x+=0.5` | X every 0.1 s (51 in 5 s), a whole tile each | nothing after the first VISFLAGS: a position a script set stays on this client (the user's call) |
+| a 0.05 s timeout doing `x+=0.5` | X every 0.1 s (51 in 5 s), a whole tile each | the same (51 in 5 s, the same values) |
 | a 0.05 s timeout doing `message hi; dir=2` | MESSAGE once | MESSAGE once |
 | `message changed` after 1 s | MESSAGE once | MESSAGE once |
-| a `setcharani idle,` loop | GANI about ten times a second, the same value each time | GANI once |
+| a `setcharani idle,` loop | GANI every 0.1 s, the same value each time (51 in 5 s) | the same (51 in 5 s) |
 | a push right | `PLI_TRIGGERACTION pushed,3` each second the player pushes, X (half tiles) of the NPC once it moves | the same |
 
-Seihai sends X and Y only for an NPC a push or a pull moved (`ServerNpcSync::pushed`), and the other props when they change, at most every 100 ms (`ServerNpcSync::tick`). `tests/npc_sync_rate.rs` counts both over five seconds of script frames.
+Seihai sends a prop when it changes, and GANI again after each `setcharani` (`Npc::ani_calls`), at most every 100 ms (`ServerNpcSync::tick`). `tests/npc_sync_rate.rs` counts both over five seconds of script frames.
 
 **Drawing the message.** 2.05 draws an NPC's `message` in the chat style (white over a blue shadow, the #141 font): centred over the NPC's picture (the image part, or the whole image; the 48-pixel player box for a `showcharacter` NPC), the top of the line one tile above the NPC, so the glyphs sit just over its top edge. Checked with a 32-pixel crate, a 64-pixel image part and a character NPC on one level, in the real client and in Seihai (`render::draw_npc_messages`). Hidden NPCs show no message.
 

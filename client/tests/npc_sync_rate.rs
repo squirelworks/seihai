@@ -1,9 +1,9 @@
 //! How many NPC prop messages Seihai sends while the scripts run: none for
-//! NPCs whose scripts keep setting the same values, and none for an NPC a
-//! script keeps moving (its position is this client's business; only a
-//! push or a pull sends X and Y). See `documentation/ledges-push-pull.md`.
+//! NPCs whose scripts keep setting the same values, and one every 100 ms
+//! for an NPC a script keeps moving or a `setcharani` loop, as the 2.05
+//! client did in the lab (`documentation/ledges-push-pull.md`).
 
-use seihai::offline::{Linked, OfflineSession, ServerNpcSync};
+use seihai::offline::{Linked, OfflineSession, ServerNpcSync, NPC_SEND_INTERVAL};
 use seihai::protocol::npcprops::NpcProps;
 use seihai::protocol::ClientVersion;
 use seihai::scripting::engine::host::SessionScripts;
@@ -47,7 +47,7 @@ fn npcs_whose_scripts_set_the_same_values_send_nothing_after_the_first_round() {
         &[
             (1, "//"),
             (2, "if (created||timeout) { message hi; dir=2; timeout=0.05; }\n"),
-            (3, "if (created||timeout) { showcharacter; setcharprop #3,head0.png; setcharani idle,; message yo; timeout=0.05; }\n"),
+            (3, "if (created) { showcharacter; setcharprop #3,head0.png; message yo; } if (created||timeout) { dir=2; timeout=0.05; }\n"),
             (4, "if (created||timeout) { canbepushed; hide; show; timeout=0.1; }\n"),
         ],
         5,
@@ -58,10 +58,19 @@ fn npcs_whose_scripts_set_the_same_values_send_nothing_after_the_first_round() {
     assert_eq!(n[1..].iter().sum::<usize>(), 0, "{n:?}");
 }
 
+/// What 2.05 sent in the lab: X every 0.1 s for an NPC a 0.05 s timeout
+/// moves, and GANI every 0.1 s for a `setcharani` loop with the same
+/// animation. Ten a second, never more.
 #[test]
-fn an_npc_a_script_keeps_moving_stays_on_this_client() {
-    let n = messages_per_second(&[(1, "if (created||timeout) { x+=0.5; if (x>40) x=20; timeout=0.05; }\n")], 5);
-    // The first round is its VISFLAGS, as 2.05 sends for every NPC.
-    assert!(n[0] <= 1, "{n:?}");
-    assert_eq!(n[1..].iter().sum::<usize>(), 0, "{n:?}");
+fn a_moving_npc_and_a_setcharani_loop_go_out_every_100_ms() {
+    for script in [
+        "if (created||timeout) { x+=0.5; if (x>40) x=20; timeout=0.05; }\n",
+        "if (created||timeout) { showcharacter; setcharani idle,; timeout=0.05; }\n",
+    ] {
+        let n = messages_per_second(&[(1, script)], 5);
+        let most = (Duration::from_secs(1).as_millis() / NPC_SEND_INTERVAL.as_millis()) as usize;
+        for (sec, &count) in n.iter().enumerate() {
+            assert!(count <= most && count >= most - 1, "{script}second {sec}: {count} messages ({n:?})");
+        }
+    }
 }
