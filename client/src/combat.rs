@@ -1759,6 +1759,22 @@ mod tests {
     }
 
     #[test]
+    fn a_205_swing_relayed_by_gserver_is_seen_by_every_profile() {
+        for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&plo8(300, &[8 + 0x20, 0x20 + 31, 0x20 + 10, b's', b'w', b'o', b'r', b'd', b'1', b'.', b'g', b'i', b'f']));
+            // GServer-v2 relays a 2.05 player's X, Y, SPRITE, then adds X2, Y2 for 2.30+.
+            let x2 = gs((20 * 16) << 1);
+            let props = [15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + sw(6, 3), 78 + 0x20, x2[0], x2[1], 79 + 0x20, x2[0], x2[1]];
+            st.apply_body(&plo8(300, &props));
+            // GServer-v2 re-encodes the sword as power + 30 and the image.
+            assert_eq!(st.swings, vec![300], "{}", v.label());
+            let o = &st.others[0];
+            assert_eq!((o.x, o.y, o.sprite, o.sword_power), (20.0, 20.0, Some(sw(6, 3)), Some(1)), "{}", v.label());
+        }
+    }
+
+    #[test]
     fn packet_hits_are_decoded_by_profile() {
         let m40 = |id: u16| {
             let mut m = vec![40 + 0x20];
