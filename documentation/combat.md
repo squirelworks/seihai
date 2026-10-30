@@ -176,7 +176,12 @@ The swing and hurt mode are shown with the player's own animations: the S key pl
   S = 6, 7, 8, 9, 10 in the walk message, then idle. Walking during a swing
   sends the swing sprite, so it is not cut short. A 2.17, 2.22 or 3.04
   session sends GANI `sword` and the direction instead (see "Who reports a
-  sword hit, by version").
+  sword hit, by version"). A 2.00 to 2.05 session sends what the real 2.00
+  and 2.05 sent in the lab: prop 10 in the bow form, `c(10 + 5)` + `sword`,
+  as the swing starts (`spin` for the spin), `idle` when it ends, and SPRITE
+  left on the direction (`combat::swing_in_bow_slot`, `net::bow_slot_message`).
+  A real 2.00 took no damage from the sprite swing; 2.01 to 2.04 are taken to
+  send the same as their neighbours (not captured).
 - **Hits that are messages.** `hurtplayer_message` is the filter for the
   messages that do name a victim. **No game-loop code calls it yet**: the
   only sources would be script commands (`hitplayer`, `hitobjects`), and
