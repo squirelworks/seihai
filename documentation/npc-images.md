@@ -49,7 +49,7 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
 - `showimg` in **weapon** scripts (all the `showimg` calls found in the private collection are in weapon scripts): the weapon object has no image list, so those calls are accepted and nothing is drawn.
 - Layers other than "over", colours, zoom, the `@text` images, screen-layer images.
 - Walk animations of the local player (item 22 left that open too).
-- NPC directions, `setcharprop` heads and bodies.
+- NPC directions. (`setcharprop` heads, bodies, colours and hats are drawn now; see `appearance.md`.)
 
 ## Tests
 
@@ -83,9 +83,10 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
   a folder, upper case) for 1.39, 2.05, 2.22 and 2.31: the resolver and the
   store's own lookup find each one at the path it was written to. No mismatch
   was found there.
-* **Not covered:** NPCs that exist only on the server (`PLO_NPCPROPS`, id 3) are
-  kept as raw records and not drawn at all. An NPC that is not in the level
-  file has no sprite in Seihai until that is built.
+* **NPCs that exist only on the server** (`PLO_NPCPROPS`, id 3): the image,
+  script and position are read, and an NPC the level file does not have is
+  added to the level, drawn and scripted (`ledges-push-pull.md`, *Online*).
+  Props past image, script, position and the two flag bytes are not used.
 
 Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): a level with `NPC labgif.gif`
 and a 64 x 48 interlaced GIF with transparency. Seihai asked for it, logged

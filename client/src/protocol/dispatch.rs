@@ -18,6 +18,7 @@ use super::layouts::{
 use super::profile::{CombatRules, IdSet};
 use crate::combat::{self, IncomingHit};
 use super::props::parse_player_props_in;
+use super::npcprops::{parse_npc_props, NpcProps};
 use super::version::ClientVersion;
 use crate::chatlists::{BubbleTimer, ChatFilter, Identity};
 use std::collections::HashMap;
@@ -350,6 +351,11 @@ pub struct SessionState {
     pub board_modifies: Vec<String>,
     pub baddies: Vec<String>,
     pub npcs: Vec<String>,
+    /// Server NPCs by id, every prop merged, with the level they were on
+    /// when their last record came (see [`super::npcprops`]).
+    pub server_npcs: std::collections::BTreeMap<u32, (Option<String>, NpcProps)>,
+    /// `PLO_NPCPROPS` updates in arrival order, taken by the game loop.
+    pub npc_changes: Vec<(u32, NpcProps)>,
     pub items: Vec<String>,
     pub warps: Vec<String>,
     pub player_props: Vec<u8>,
@@ -691,6 +697,13 @@ impl SessionState {
                 // PLO_NPCPROPS
                 if let Ok(s) = String::from_utf8(msg.payload.clone()) {
                     self.npcs.push(s);
+                }
+                if let Some((id, p)) = parse_npc_props(&msg.payload, self.bow_prop10) {
+                    let level = self.current_level_name();
+                    let e = self.server_npcs.entry(id).or_insert_with(|| (level.clone(), NpcProps::default()));
+                    e.0 = level;
+                    e.1.merge(&p);
+                    self.npc_changes.push((id, p));
                 }
             }
             14 => {

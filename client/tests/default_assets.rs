@@ -293,6 +293,8 @@ fn ganis_parse_with_the_documented_structure() {
         "HEAD" => (hw, hh),
         "SPRITES" => (spw, sph),
         "SWORD" => (sww, swh),
+        // The hat: Seihai ships none; the stock hat sheet is 192x144.
+        "ATTR1" => (192, 144),
         other => panic!("unexpected sheet {other}"),
     };
     // name, steps, sound cues as (step, file)
@@ -315,10 +317,19 @@ fn ganis_parse_with_the_documented_structure() {
             assert_eq!(f.rows.len(), 4, "{name} step {i}: one row per direction");
             for row in &f.rows {
                 assert!(!row.is_empty());
-                for p in row {
+                for (k, p) in row.iter().enumerate() {
                     let s = g.sprites.iter().find(|s| s.id == p.sprite_id).unwrap_or_else(|| panic!("{name}: sprite {} undefined", p.sprite_id));
                     let (w, h) = sheet_size(&s.sheet);
                     assert!(s.x >= 0 && s.y >= 0 && (s.x + s.w) as u32 <= w && (s.y + s.h) as u32 <= h, "{name}: sprite {} outside {}", s.id, s.sheet);
+                    // the hat comes right after its head, at the stock offset for the head's facing
+                    if s.sheet == "ATTR1" {
+                        let head = &row[k - 1];
+                        let facing = (head.sprite_id - 100) as usize;
+                        assert_eq!(p.sprite_id, 40 + facing as u32, "{name}: hat of the head's facing");
+                        let (dx, dy) = [(-8, -18), (-12, -18), (-8, -18), (-4, -18)][facing];
+                        assert_eq!((p.x - head.x, p.y - head.y), (dx, dy), "{name}: hat offset");
+                        continue;
+                    }
                     // placements stay inside the 48x48 player box (the ripple may reach the bottom edge);
                     // a 32x32 sword cell may hang over the edge by its empty margin
                     let slack = if s.sheet == "SWORD" { 16 } else { 0 };
@@ -342,11 +353,13 @@ fn ganis_parse_with_the_documented_structure() {
             assert!(opaque_pixels(&body, bw, s.x as u32, s.y as u32, s.w as u32, s.h as u32) > 100, "{name}: sprite {}", s.id);
         }
     }
-    // idle uses body pose 0 (ids 200..203) and heads 100..103, as draw_player_sprites does
+    // idle uses body pose 0 (ids 200..203) and heads 100..103, as draw_player_sprites does,
+    // then the hat (ids 40..43) as the stock idle.gani does
     let idle = Gani::load(root().join("gani/idle.gani")).unwrap();
+    assert_eq!(idle.default_attrs, <[Option<String>; 5]>::default(), "Seihai ships no hat");
     for dir in 0..4usize {
         let ids: Vec<u32> = idle.frames[0].rows[dir].iter().map(|p| p.sprite_id).collect();
-        assert_eq!(ids, vec![0, 200 + dir as u32, 100 + dir as u32]);
+        assert_eq!(ids, vec![0, 200 + dir as u32, 100 + dir as u32, 40 + dir as u32]);
     }
     // sword.gani: five steps that play once and go back to idle; every step has
     // a body pose 9 or 10 and a sword sprite; sit and hurt use their own body poses

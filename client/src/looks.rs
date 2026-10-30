@@ -136,6 +136,29 @@ pub fn colors_from_prop(raw: &[u8]) -> Option<[u8; 5]> {
     Some([0, 1, 2, 3, 4].map(|i| b[i].wrapping_sub(0x20)))
 }
 
+/// A colour as `setplayerprop #C0` and `setcharprop #C0` take it: a name of
+/// the list or a number, rounded. `None` past the list.
+pub fn color_value(v: &str) -> Option<u8> {
+    let v = v.trim();
+    color_by_name(v).or_else(|| v.parse::<f64>().ok().map(f64::round).filter(|n| (0.0..20.0).contains(n)).map(|n| n as u8))
+}
+
+/// A character NPC's looks, from what `setcharprop` set (2.05: `#1` sword,
+/// `#2` shield, `#3` head, `#8` body, `#C0` … `#C4` colours, `#P1` … `#P5`
+/// attributes). Colours not set are the new-player ones.
+pub fn npc_looks(n: &crate::assets::Npc) -> Looks {
+    let mut l = Looks { head: n.head.clone().filter(|h| !h.is_empty()), body: n.body.clone().filter(|b| !b.is_empty()), ..Looks::default() };
+    for (i, c) in l.colors.iter_mut().enumerate() {
+        if let Some(v) = n.props.get(&format!("#C{i}")).and_then(|v| color_value(v)) {
+            *c = v;
+        }
+    }
+    for (i, a) in l.attrs.iter_mut().enumerate() {
+        *a = n.props.get(&format!("#P{}", i + 1)).map(|v| v.trim().to_string());
+    }
+    l
+}
+
 /// A change of looks typed in chat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatLook {
@@ -203,6 +226,23 @@ mod tests {
             r,
             vec![(5, [255, 173, 107]), (6, [255, 255, 255]), (4, [255, 0, 0]), (3, [206, 24, 41]), (1, [0, 0, 255]), (0, [0, 0, 8])]
         );
+    }
+
+    #[test]
+    fn a_character_npc_takes_its_looks_from_setcharprop() {
+        let mut n = crate::assets::Npc::new("-".into(), 0.0, 0.0, String::new());
+        assert_eq!(npc_looks(&n), Looks::default());
+        n.head = Some("head9.png".into());
+        n.props.insert("#C0".into(), "blue".into());
+        n.props.insert("#C4".into(), "3.4".into());
+        n.props.insert("#C2".into(), "nocolour".into());
+        n.props.insert("#P1".into(), "hat2.png".into());
+        let l = npc_looks(&n);
+        assert_eq!(l.head_name(), "head9.png");
+        assert_eq!(l.body_name(), DEFAULT_BODY);
+        assert_eq!(l.colors, [10, 5, 18, 5, 3]);
+        assert_eq!(l.attrs[0].as_deref(), Some("hat2.png"));
+        assert_eq!(l.attrs[1], None);
     }
 
     #[test]
