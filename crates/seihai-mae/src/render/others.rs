@@ -21,7 +21,8 @@ const WALK_S: [u8; 8] = [4, 5, 4, 3, 2, 1, 2, 3];
 
 /// The GANI prop (10) of another player, lower case, without `.gani`.
 fn gani_name(o: &OtherPlayer) -> Option<String> {
-    o.looks.gani.as_deref().map(|n| n.to_ascii_lowercase().trim_end_matches(".gani").to_string())
+    // GServer-v2 adds `.gif` to a name a 2.05 player sends in the bow slot.
+    o.looks.gani.as_deref().map(|n| n.to_ascii_lowercase().trim_end_matches(".gani").trim_end_matches(".gif").to_string())
 }
 
 /// Another player is hidden under what they carry, and only the object is
