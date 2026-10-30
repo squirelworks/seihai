@@ -22,6 +22,7 @@ assets/default/
   heads/head0.png            32x560 head sheet, 4-bit palette PNG                   0.6 KB
   swords/sword1.png          128x96 sword sheet, 4-bit palette PNG                  0.5 KB
   shields/shield1.png        38x20 shield sheet, 4-bit palette PNG                  0.2 KB
+  */*.gif (4)                GIF copies of the four player sheets, for 2.05 builds  10 KB
   gani/idle.gani             1 step                                                  0.7 KB
   gani/walk.gani             8 steps, footsteps after steps 0 and 4                  2.9 KB
   gani/swim.gani             8 steps, head only, splash after step 0                 1.3 KB

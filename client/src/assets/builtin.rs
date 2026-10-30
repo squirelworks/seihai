@@ -30,6 +30,7 @@ use super::crc32::crc32_update;
 /// Every file of `assets/default/`, by path relative to it, sorted. A test
 /// walks the folder and fails when this list and the folder differ.
 pub const FILES: &[(&str, &[u8])] = &[
+    ("bodies/body.gif", include_bytes!("../../../assets/default/bodies/body.gif")),
     ("bodies/body.png", include_bytes!("../../../assets/default/bodies/body.png")),
     ("gani/carry.gani", include_bytes!("../../../assets/default/gani/carry.gani")),
     ("gani/carrystill.gani", include_bytes!("../../../assets/default/gani/carrystill.gani")),
@@ -40,11 +41,13 @@ pub const FILES: &[(&str, &[u8])] = &[
     ("gani/swim.gani", include_bytes!("../../../assets/default/gani/swim.gani")),
     ("gani/sword.gani", include_bytes!("../../../assets/default/gani/sword.gani")),
     ("gani/walk.gani", include_bytes!("../../../assets/default/gani/walk.gani")),
+    ("heads/head0.gif", include_bytes!("../../../assets/default/heads/head0.gif")),
     ("heads/head0.png", include_bytes!("../../../assets/default/heads/head0.png")),
     ("levels/new1.nw", include_bytes!("../../../assets/default/levels/new1.nw")),
     ("levels/new2.nw", include_bytes!("../../../assets/default/levels/new2.nw")),
     ("levels/tiledefs/tiledefsOffline.txt", include_bytes!("../../../assets/default/levels/tiledefs/tiledefsOffline.txt")),
     ("pics1.png", include_bytes!("../../../assets/default/pics1.png")),
+    ("shields/shield1.gif", include_bytes!("../../../assets/default/shields/shield1.gif")),
     ("shields/shield1.png", include_bytes!("../../../assets/default/shields/shield1.png")),
     ("sounds/steps.wav", include_bytes!("../../../assets/default/sounds/steps.wav")),
     ("sounds/steps2.wav", include_bytes!("../../../assets/default/sounds/steps2.wav")),
@@ -52,6 +55,7 @@ pub const FILES: &[(&str, &[u8])] = &[
     ("sounds/water.wav", include_bytes!("../../../assets/default/sounds/water.wav")),
     ("sprites.png", include_bytes!("../../../assets/default/sprites.png")),
     ("state.png", include_bytes!("../../../assets/default/state.png")),
+    ("swords/sword1.gif", include_bytes!("../../../assets/default/swords/sword1.gif")),
     ("swords/sword1.png", include_bytes!("../../../assets/default/swords/sword1.png")),
     ("tiledefs.txt", include_bytes!("../../../assets/default/tiledefs.txt")),
 ];

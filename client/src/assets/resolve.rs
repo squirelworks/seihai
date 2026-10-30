@@ -45,7 +45,7 @@ pub const IMAGE_CATEGORIES: &[&str] = &[
     "horses", "backpals", "smilies", "letters", "snapshot", "webgifs", "tutorial",
 ];
 
-/// The player-art folders a GIF build reads as `.gif` first.
+/// The player-art folders a GIF build reads as `.gif` only.
 pub const PLAYER_ART: &[&str] = &["heads", "bodies", "swords", "shields"];
 
 /// `rel` with its image extension (if any) replaced by `ext`.
@@ -335,28 +335,32 @@ impl AssetResolver {
     ///
     /// **Player art in a GIF build.** A build whose `image_ext` is `.gif`
     /// (up to 2.05) looks for heads, bodies, swords and shields as `.gif`
-    /// first in every layer, whatever extension the name has. The real
-    /// 2.05 rev 2 reads `.gif` only: given the 2.22 folder (PNG only) it
-    /// finds nothing and draws no body (Graal_analysis
-    /// `player-mannerisms-live.md`, "Asset gotcha"). Seihai then falls back
-    /// to the usual names on purpose, so the player is never invisible.
+    /// only, in every layer, whatever extension the name has. The real
+    /// 2.05 rev 2 does the same: given the 2.22 folder (PNG only) it draws
+    /// no head, body or shadow, yet the name tag and chat still show
+    /// (Graal_analysis `player-mannerisms-live.md`, "Asset gotcha"; lab
+    /// check in `documentation/assets.md`). Seihai matches that: there is
+    /// no PNG fallback for these.
     pub fn image_in(&self, category: &str, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name)?;
-        let all = self.image_names(&rel);
-        let gif = self.gif_first_player_art(category).then(|| vec![with_ext(&rel, ".gif")]);
-        // GIF player art in any layer first, then the usual names.
-        let passes: Vec<&Vec<String>> = gif.iter().chain(std::iter::once(&all)).collect();
+        let gif_only = self.gif_only_player_art(category);
+        let candidates = if gif_only { vec![with_ext(&rel, ".gif")] } else { self.image_names(&rel) };
         let cat = if category.is_empty() { None } else { Some(clean_name(category)?) };
-        for candidates in passes {
-            if let Some(p) = self.image_pass(cat.as_deref(), candidates) {
-                return Some(p);
-            }
-        }
-        None
+        // The built-in .gif player art stands in for a 2.05 install's own
+        // pictures. When the assets folder has player art of its own (a
+        // `bodies` or `heads` folder, at its root or under `levels/`), a GIF
+        // build uses only that folder's: a PNG-only folder shows no figure,
+        // as with the real client. An empty or missing folder still gets
+        // the built-in art.
+        let skip_builtin = gif_only && cat.as_deref().is_some_and(|c| self.user_has_folder(c));
+        self.image_pass(cat.as_deref(), &candidates, skip_builtin)
     }
 
-    fn image_pass(&self, cat: Option<&str>, candidates: &[String]) -> Option<PathBuf> {
-        for (_, root) in self.roots(false) {
+    fn image_pass(&self, cat: Option<&str>, candidates: &[String], skip_builtin: bool) -> Option<PathBuf> {
+        for (layer, root) in self.roots(false) {
+            if skip_builtin && layer == Layer::Builtin {
+                continue;
+            }
             let r = &root.root;
             let mut dirs: Vec<PathBuf> = Vec::new();
             if let Some(cat) = cat {
@@ -383,8 +387,13 @@ impl AssetResolver {
         None
     }
 
+    /// The assets folder has a `category` folder, at its root or under `levels/`.
+    fn user_has_folder(&self, category: &str) -> bool {
+        self.user.as_ref().is_some_and(|u| u.root.join(category).is_dir() || u.root.join(DOWNLOADS).join(category).is_dir())
+    }
+
     /// See [`image_in`](Self::image_in): player art of a GIF build.
-    fn gif_first_player_art(&self, category: &str) -> bool {
+    fn gif_only_player_art(&self, category: &str) -> bool {
         self.profile.files.image_ext.eq_ignore_ascii_case(".gif") && PLAYER_ART.iter().any(|c| c.eq_ignore_ascii_case(category))
     }
 
@@ -759,7 +768,7 @@ mod tests {
     }
 
     #[test]
-    fn a_gif_build_reads_player_art_as_gif_first() {
+    fn a_gif_build_reads_player_art_as_gif_only() {
         let d = tmp("gifart");
         touch(&d, "levels/heads/head0.png");
         touch(&d, "levels/heads/head0.gif");
@@ -769,12 +778,28 @@ mod tests {
         let old = resolver(&d, ClientVersion::V205);
         // 2.05 asks for head0.png and gets the GIF, as the real client reads.
         assert_eq!(old.image_in("heads", "head0.png"), Some(d.join("levels/heads/head0.gif")));
-        // No GIF body: the real 2.05 draws none; Seihai falls back to the PNG.
-        assert_eq!(old.image_in("bodies", "body.png"), Some(d.join("levels/bodies/body.png")));
+        // No GIF body: the real 2.05 draws none, and finds none here either.
+        assert_eq!(old.image_in("bodies", "body.png"), None);
         // Only player art: other images keep the name's extension.
         assert_eq!(old.image_in("images", "door.png"), Some(d.join("levels/images/door.png")));
         let new = resolver(&d, ClientVersion::V222);
         assert_eq!(new.image_in("heads", "head0.png"), Some(d.join("levels/heads/head0.png")));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_gif_build_takes_built_in_player_art_only_without_its_own() {
+        let d = tmp("gifbuiltin");
+        let ours = d.join("builtin");
+        touch(&ours, "bodies/body.gif");
+        // A PNG-only folder with its own bodies: no body at all, as the real 2.05.
+        touch(&d, "pngonly/levels/bodies/body.png");
+        let p = AssetResolver::new(AssetRoot::new(&d.join("pngonly")), ClientVersion::V205.profile()).with_builtin(Some(ours.clone()));
+        assert_eq!(p.image_in("bodies", "body.png"), None);
+        // A folder without player art: the built-in GIF.
+        fs::create_dir_all(d.join("empty")).unwrap();
+        let e = AssetResolver::new(AssetRoot::new(&d.join("empty")), ClientVersion::V205.profile()).with_builtin(Some(ours.clone()));
+        assert_eq!(e.image_in("bodies", "body.png"), Some(ours.join("bodies/body.gif")));
         let _ = fs::remove_dir_all(&d);
     }
 

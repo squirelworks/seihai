@@ -174,6 +174,12 @@ impl FileRequester {
         next
     }
 
+    /// Whether the server said it could not send `name` (`FILESENDFAILED`)
+    /// on this connection.
+    pub fn has_failed(&self, name: &str) -> bool {
+        self.failed.contains(&key(name))
+    }
+
     /// Names waiting for a reply to `WANTFILE`, in order. The first
     /// [`WINDOW`] are on the wire.
     pub fn wanted(&self) -> &[String] {

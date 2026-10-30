@@ -997,6 +997,11 @@ fn main() {
     // GANI attributes (`ATTR1` … `ATTR5`, the hat) exist from 2.02, the
     // build that added props 37 to 41; before it they draw nothing.
     let gani_attrs = profile.props.own.contains(37);
+    // A build that reads player art as .gif only (up to 2.05; see
+    // `AssetResolver::image_in`). With a part of the figure missing it draws
+    // the rest, never a marker; with no body, no shadow either (lab, real
+    // 2.05 on a PNG-only folder).
+    let gif_art = profile.files.image_ext.eq_ignore_ascii_case(".gif");
     // The readme keys; from 1.38 `keyset_<action>` lines in the settings
     // file replace them.
     let keymap = KeyMap::for_version(profile.ui.key_config, &Settings::load().keysets);
@@ -1037,7 +1042,7 @@ fn main() {
         }
         f
     };
-    if body.is_none() || head.is_none() {
+    if (body.is_none() || head.is_none()) && !gif_art {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
     let draw = |session: &OfflineSession,
@@ -1045,7 +1050,8 @@ fn main() {
                 my_chat: &str,
                 my_nick: Option<&str>,
                 npc_imgs: &HashMap<String, (u32, Vec<u8>)>,
-                item: Option<&str>|
+                item: Option<&str>,
+                own_failed: (bool, bool)|
      -> Framebuffer {
         let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
         let (cam_x, cam_y) = (
@@ -1078,14 +1084,14 @@ fn main() {
             .collect();
         let others = others.as_slice();
         // Other players first, so the local player draws on top.
-        if body.is_none() || head.is_none() {
+        if (body.is_none() || head.is_none()) && !gif_art {
             for other in others {
                 let ox = (other.x * 16.0) as i32 - cam_x;
                 let oy = (other.y * 16.0) as i32 - cam_y;
                 draw_player_marker(&mut fb, false, ox, oy);
             }
         }
-        if let (Some((bw, b)), Some((hw, h))) = (&body, &head) {
+        if gif_art || (body.is_some() && head.is_some()) {
             let clock_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
             for other in others {
                 // Drawn through its GANI with its own pictures when the pose is
@@ -1094,10 +1100,12 @@ fn main() {
                     let own = |n: &Option<String>| n.as_deref().and_then(|n| npc_imgs.get(n)).map(pose_sheet);
                     let l = &other.looks;
                     let colored = npc_imgs.get(&other_body_key(other)).map(pose_sheet);
+                    let other_body = colored.or(own(&l.body)).or(body.as_ref().map(pose_sheet));
                     let sheets = seihai::render::PoseSheets {
-                        body: colored.or(own(&l.body)).or(body.as_ref().map(pose_sheet)),
+                        body: other_body,
                         head: own(&l.head).or(head.as_ref().map(pose_sheet)),
-                        sprites: sprites.as_ref().map(pose_sheet),
+                        // No body in a GIF build: no shadow either.
+                        sprites: sprites.as_ref().filter(|_| other_body.is_some() || !gif_art).map(pose_sheet),
                         // No sword prop yet: the default sword; power 0: none.
                         sword: match l.sword.as_deref() {
                             None => sword_sheet.as_ref().map(pose_sheet),
@@ -1111,6 +1119,7 @@ fn main() {
                     seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
                     continue;
                 }
+                let (Some((bw, b)), Some((hw, h))) = (&body, &head) else { continue };
                 draw_other_player(
                     &mut fb,
                     b,
@@ -1142,16 +1151,19 @@ fn main() {
         let (dx, dy) = player_box_origin(session, view_w, view_h);
         let pose = session.current_pose();
         match (&body, &head) {
-            (Some(_), Some(_)) if pose.is_some() => {
+            (b, h) if pose.is_some() && (gif_art || (b.is_some() && h.is_some())) => {
                 // Our own head and body, the body in our colours; until
-                // they are here, the default pictures.
+                // they are here, the default pictures. A GIF build whose
+                // server could not send one draws none for it.
                 let looks = &session.looks;
                 let own_body = npc_imgs.get(&seihai::looks::colored_body_key(looks.body_name(), &looks.colors));
                 let own_head = npc_imgs.get(looks.head_name());
+                let body_sheet = own_body.or(b.as_ref().filter(|_| !(gif_art && own_failed.0))).map(pose_sheet);
                 let sheets = seihai::render::PoseSheets {
-                    body: own_body.or(body.as_ref()).map(pose_sheet),
-                    head: own_head.or(head.as_ref()).map(pose_sheet),
-                    sprites: sprites.as_ref().map(pose_sheet),
+                    body: body_sheet,
+                    head: own_head.or(h.as_ref().filter(|_| !(gif_art && own_failed.1))).map(pose_sheet),
+                    // No body in a GIF build: no shadow either.
+                    sprites: sprites.as_ref().filter(|_| body_sheet.is_some() || !gif_art).map(pose_sheet),
                     sword: sword_sheet.as_ref().map(pose_sheet),
                     // The default shield of the player's shield power.
                     shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
@@ -1182,6 +1194,7 @@ fn main() {
                 dy,
                 session.in_water,
             ),
+            _ if gif_art => {}
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),
         }
         // What the player carries, what is in flight, and the break effects:
@@ -1254,7 +1267,7 @@ fn main() {
     // AP and a typed `showname` (2.05); other players' always shows.
     let mut my_name_timer = seihai::chatlists::BubbleTimer::start();
     let mut my_name_ap = session.alignment;
-    let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None);
+    let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None, (false, false));
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
@@ -2989,7 +3002,8 @@ fn main() {
         }
         if dirty {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
-            scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image());
+            let own_failed = (files.requests.has_failed(session.looks.body_name()), files.requests.has_failed(session.looks.head_name()));
+            scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image(), own_failed);
             dirty = false;
         }
         let mut frame = scene.clone();

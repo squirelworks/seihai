@@ -71,6 +71,16 @@ def save_png(im, pal, path, bits, size, transparent, clear=0):
     im.save(path, "PNG", **kw)
 
 
+def save_gif_copy(png_path):
+    """A .gif copy of a player-art PNG, same palette and transparent index.
+    Builds up to 2.05 read heads, bodies, swords and shields as .gif only."""
+    im = Image.open(png_path)
+    kw = {}
+    if "transparency" in im.info:
+        kw["transparency"] = im.info["transparency"]
+    im.save(os.path.splitext(png_path)[0] + ".gif", "GIF", optimize=False, **kw)
+
+
 # ---------------------------------------------------------------------------
 # Tile sheet (pics1.png): 2048 x 512, 128 x 32 cells of 16 x 16
 # ---------------------------------------------------------------------------
@@ -1376,6 +1386,8 @@ def write_all(out):
     save_png(im, p, os.path.join(out, "swords", "sword1.png"), 4, 16, True)
     im, p = build_shield()
     save_png(im, p, os.path.join(out, "shields", "shield1.png"), 4, 16, True)
+    for rel in (("bodies", "body.png"), ("heads", "head0.png"), ("swords", "sword1.png"), ("shields", "shield1.png")):
+        save_gif_copy(os.path.join(out, *rel))
     im, p = build_sprites()
     save_png(im, p, os.path.join(out, "sprites.png"), 4, 16, True)
     im, p = build_state()
