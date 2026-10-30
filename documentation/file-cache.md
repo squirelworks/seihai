@@ -239,8 +239,18 @@ requested for default weapons 8 and 7 (`weapon-images.md`).
 * `FileSession::need(name)` asks the store for the local copy's mtime (a
   built-in-only file has none; see above) and
   returns a `WANTFILE`, an `UPDATEFILE` or nothing. The client binary calls
-  it for level files it lacks, for the images of NPCs, and for a `.gmap`
-  (`sync_world` returns `gmap_local` when the grid came from a local file).
+  it for the images of NPCs and for a `.gmap` (`sync_world` returns
+  `gmap_local` when the grid came from a local file). It asks for no level
+  file, as the real clients do not.
+* **Online levels come from the server.** On a level change (and for each
+  gmap cell) Seihai draws the server's board (`PLO_BOARDPACKET`) with its
+  links, signs and chests. A local level file of the same name stands in only
+  when its last-write time is the server's `PLO_LEVELMODTIME` for that level
+  (`AssetResolver::level_at_mod_time`), the role of the real clients'
+  modtime-keyed web-level cache (Graal_analysis `formats/gwebl001-cache.md`).
+  A client install's own `new1.nw` therefore no longer hides a server's
+  `new1.nw` (lab, 2026-10-30: the 2.22 watcher drew the install's indoor
+  room while the real clients drew the server's grass level).
 * `FileSession::process` saves every finished file, sets its mtime, settles
   replies and sends the next waiting requests.
 * Profile gating: `protocol.pli` (34), `files.modtime`, and the new
@@ -253,8 +263,9 @@ requested for default weapons 8 and 7 (`weapon-images.md`).
 ### Seihai's own choices (not what the clients do)
 
 * A downloaded level file (`.nw`, `.graal`, `.gmap`) is always written, and
-  goes straight under `levels/`. Seihai loads levels from files; the real
-  clients would use the board packet and their level cache.
+  goes straight under `levels/`, with the server's time. Online the board
+  packet comes first; a saved level is used only at the server's mod time
+  (above).
 * The lists and the failure memory are per connection, as in the real client:
   a server warp that reconnects starts them again (`FileSession::new_connection`).
 * The local copy is found by the real order (root-relative name, then the

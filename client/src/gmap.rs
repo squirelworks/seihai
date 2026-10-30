@@ -518,8 +518,10 @@ pub fn adjacent_requests(
 pub trait WorldLoader {
     /// The text of the `.gmap` file `name`, if it is available locally.
     fn gmap_text(&self, name: &str) -> Option<String>;
-    /// The level file `name`, if it is available locally.
-    fn level(&self, name: &str) -> Option<Level>;
+    /// The level file `name`, if it is available locally and may stand in
+    /// for the server's: `server_mod_time` is the time the server gave for
+    /// it (`PLO_LEVELMODTIME`), if any.
+    fn level(&self, name: &str, server_mod_time: Option<u32>) -> Option<Level>;
 }
 
 /// What the network side has to do after [`sync_world`].
@@ -617,9 +619,12 @@ pub fn sync_world(
     w.levels.retain(|c, _| around.contains(c));
     for c in w.missing() {
         let Some(name) = map.level_at(c.0, c.1) else { continue };
-        let level = loader
-            .level(name)
-            .or_else(|| net.board_of(name).map(|b| Level::from_board(b)));
+        // The server's board first, as the real client draws it; a local
+        // file only as the loader allows.
+        let level = net
+            .board_of(name)
+            .map(|b| Level::from_board(b))
+            .or_else(|| loader.level(name, net.server_mod_time(name)));
         if let Some(l) = level {
             w.levels.insert(c, l);
         }
@@ -918,7 +923,7 @@ mod tests {
         fn gmap_text(&self, _: &str) -> Option<String> {
             self.grid.clone()
         }
-        fn level(&self, name: &str) -> Option<Level> {
+        fn level(&self, name: &str, _: Option<u32>) -> Option<Level> {
             self.levels.get(name).cloned()
         }
     }
@@ -996,6 +1001,26 @@ mod tests {
         assert_eq!(sw.tile_id_at(5, 5), Some(7));
     }
 
+    /// A local file of the same name does not hide the board the server
+    /// sent for a level.
+    #[test]
+    fn the_server_board_wins_over_a_local_file() {
+        let mut net = SessionState::for_version(ClientVersion::V222);
+        login(&mut net);
+        let mut board = vec![100 + 0x20, 0x20, 64 + 0x20, 2 + 0x20, b'\n', 101 + 0x20];
+        board.extend((0..64 * 64).flat_map(|_| 7u16.to_le_bytes()));
+        board.push(b'\n');
+        net.apply_body(&[msg(6, b"gm_ne.nw"), board, msg(6, b"g.gmap")].concat());
+        let mut session = OfflineSession::new();
+        let rules = GmapRules::for_version(ClientVersion::V222);
+        let mut files = Files { grid: Some(TWO_BY_TWO.into()), levels: HashMap::new() };
+        files.levels.insert("gm_ne.nw".into(), flat(1));
+        let mut asked = HashSet::new();
+        sync_world(&mut session, &mut net, &rules, &files, &mut asked);
+        let ne = session.gmap.as_ref().unwrap().levels.get(&(1, 0)).expect("gm_ne is drawn");
+        assert_eq!(ne.tile_id_at(5, 5), Some(7), "the server's board, not the local file");
+    }
+
     #[test]
     fn world_follows_a_crossing_and_keeps_only_neighbours() {
         let mut net = SessionState::for_version(ClientVersion::V231);
@@ -1007,7 +1032,7 @@ mod tests {
             files.levels.insert(n.into(), flat(2));
         }
         let mut asked = HashSet::new();
-        session.current_level = files.level("gm_nw.nw");
+        session.current_level = files.level("gm_nw.nw", None);
         sync_world(&mut session, &mut net, &rules, &files, &mut asked);
         // Walk east across the edge: the session and the net follow.
         session.player_x = 63.5;

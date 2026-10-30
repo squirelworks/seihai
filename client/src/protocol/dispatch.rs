@@ -1191,6 +1191,15 @@ impl SessionState {
         }
     }
 
+    /// The mod time the server gave for `level`: the current level's
+    /// `PLO_LEVELMODTIME` (39), else the one of its cached copy.
+    pub fn server_mod_time(&self, level: &str) -> Option<u32> {
+        match &self.level_mod_time {
+            Some((n, t)) if same_level(n, level) => Some(*t),
+            _ => self.level_cache.mod_time(level),
+        }
+    }
+
     /// The 64×64 tiles the server sent for `level` (a gmap keeps them for
     /// every level it was sent; without one, only the current level's board
     /// is known).
@@ -2031,6 +2040,21 @@ mod tests {
         // b is cached now, and a (the player is in it) is not offered.
         assert_eq!(st.cached_mod_time("b.nw"), Some(2_000));
         assert!(st.cached_mod_time("a.nw").is_none());
+    }
+
+    /// The server's mod time for a level: the current one's 39, else the
+    /// cached copy's; none for a level the server has not timed.
+    #[test]
+    fn server_mod_time_of_current_and_cached_levels() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        assert_eq!(st.server_mod_time("a.nw"), None);
+        st.apply_body(&full_answer("a.nw", 1_000, 0, "b.nw 0 0 2 2 1 1", "sign a"));
+        assert_eq!(st.server_mod_time("a.nw"), Some(1_000));
+        assert_eq!(st.server_mod_time("A"), Some(1_000));
+        st.apply_body(&full_answer("b.nw", 2_000, 3, "a.nw 0 0 2 2 1 1", "sign b"));
+        assert_eq!(st.server_mod_time("b.nw"), Some(2_000));
+        assert_eq!(st.server_mod_time("a.nw"), Some(1_000), "from the cache");
+        assert_eq!(st.server_mod_time("new1.nw"), None);
     }
 
     /// The copy was stale: the server sends the whole level after all. The
