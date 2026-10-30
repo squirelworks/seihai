@@ -15,11 +15,14 @@ A GANI step is shown for `1 + WAIT` ticks, where `WAIT n` is the line after the 
 | hurt | 31 ticks (`WAIT 30`), then idle | by the file's waits; the default `hurt.gani` now has `WAIT 30` |
 | lift | 6 ticks (`WAIT 5`), then carrystill | `lift.gani` by its waits, then the carry poses; without the file, carrystill at once |
 | swim | 8 steps × 2 ticks, **animating while still**; 0.5 tile a tick, the walking pace | runs on the tick clock, moving or not; `SWIM_STEP_MS` is 50 (was 100, with no source) |
+| spin | S pressed again during a swing, with the has-spin status (STATUS 0x40): the swing is cut off, then `spin` plays 13 × 1 tick, then idle. A press during the spin is ignored, and holding S does nothing (seen live online) | same (`CombatState::start_spin`); the length comes from `spin.gani`'s waits, or 13 ticks without it |
 | dead | by the file's waits | by the file's waits, held on the last step |
 
 `push.gani`, `grab.gani`, `pull.gani` and `lift.gani` now load at start from the asset folders as well (before, only a copy the server sent was loaded).
 
 ## Not known or not done
+
+* **The spin.** In Seihai, spin frame 0 shows in the same tick as the press. In the real client it shows in the next tick. The real client also sends `GANI=spin` and then `GANI=idle` to the server; Seihai sends neither, because Seihai's 2.05 profile does not send the gani prop. What the spin cuts and hits was not read, so it cuts and hits nothing.
 
 * **1.39.** It has no ganis. Its push frames change about every 2 ticks, not 4 (video only). Seihai has no built-in pre-gani poses, so a 1.39 profile draws whatever ganis it finds.
 * **The pull sprite after A is let go.** The pose was read live; what sprite number the 2.05 client sends others then was not traced. Seihai sends the pull sprite while the pose is on (inferred).

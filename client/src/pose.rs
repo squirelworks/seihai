@@ -22,6 +22,9 @@
 //!   sound event when that step is entered, so `sword.wav` plays at the start
 //!   of the swing. When the swing ends the pose is gone and the player is
 //!   drawn as idle again, which is what the file's `SETBACKTO idle` says.
+//! * **Spin** plays `spin.gani` once by its waits (the stock file: 13
+//!   ticks) when S is pressed again during a swing with the has-spin
+//!   status (STATUS 0x40), then idle.
 //! * **Hurt** follows hurt mode. The 2.05 client sets the `hurt` gani when
 //!   hurt mode starts (Graal_analysis 01-death-respawn). A `LOOP` file
 //!   repeats for the whole hurt mode; any other plays once by its waits (the
@@ -80,12 +83,14 @@ pub struct PoseGanis {
     pub pull: Option<Gani>,
     /// Picking an object up, before `carrystill`.
     pub lift: Option<Gani>,
+    /// The spin attack.
+    pub spin: Option<Gani>,
 }
 
 impl PoseGanis {
     /// Every loaded pose GANI.
     pub fn all(&self) -> impl Iterator<Item = &Gani> {
-        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift]
+        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift, &self.spin]
             .into_iter()
             .flatten()
     }
@@ -107,6 +112,7 @@ pub enum PoseKind {
     Grab,
     Pull,
     Lift,
+    Spin,
 }
 
 /// A pose step ready to draw.
@@ -135,6 +141,7 @@ impl PoseKind {
             PoseKind::Grab => "grab.gani",
             PoseKind::Pull => "pull.gani",
             PoseKind::Lift => "lift.gani",
+            PoseKind::Spin => "spin.gani",
         }
     }
 
@@ -153,6 +160,7 @@ impl PoseKind {
             PoseKind::Grab,
             PoseKind::Pull,
             PoseKind::Lift,
+            PoseKind::Spin,
         ]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
@@ -204,6 +212,7 @@ impl OfflineSession {
             PoseKind::Grab => self.poses.grab = Some(gani),
             PoseKind::Pull => self.poses.pull = Some(gani),
             PoseKind::Lift => self.poses.lift = Some(gani),
+            PoseKind::Spin => self.poses.spin = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
@@ -268,6 +277,10 @@ impl OfflineSession {
         }
         if self.in_water {
             return self.swim_gani.as_ref().and_then(|p| pick_player(PoseKind::Swim, p));
+        }
+        // The spin attack: `spin.gani` by its waits, once, then idle.
+        if let Some(p) = self.combat.spin_elapsed_ms().and_then(|ms| once(PoseKind::Spin, &self.poses.spin, (ms / GANI_STEP_MS) as usize)) {
+            return Some(p);
         }
         if let Some(i) = self.combat.swing_frame() {
             if let Some(p) = pick(PoseKind::Sword, &self.poses.sword, i) {
