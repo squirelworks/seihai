@@ -59,3 +59,11 @@ These went to the Seihai fix PRs #194, #195 and #196.
 - **Linux screenshots weren't possible from a script.** GNOME refuses the D-Bus screenshot call, and Seihai's F12 screenshot needs a key press in its window.
 - **The watcher's packet log** records only ids and lengths. Positions, facing and chat on the watcher side come from its stderr and from what the user saw, not from decoded props.
 - **Cleanup:** remove the hosts lines on the Windows laptop (`graalonline.com`, `www.graalonline.com`) and its 104.26.3.198 route. On the Linux laptop, run `sudo ip addr del 104.26.3.198/32 dev lo`.
+
+## The Windows freeze (follow-up)
+
+Seihai's stderr from the Windows run stops at the first slow frame, after "position 30 32 dir 1". The first frame queues its file requests, and the post-login frame is due on the second, so the very first send after the reader started never went out. The login itself went out before the reader started. The same build on Linux, against a stand-in 2.22 server with the same flags, sends its post-login frame at about 0.3 s and walks normally.
+
+Up to 4b45cd3 the reader thread did a blocking read on a `try_clone` of the socket while the game loop wrote on the original handle. On Windows the clone is a `WSADuplicateSocket` handle of the same socket, and with a filter driver or LSP in the path, I/O on one socket can be serialised. A write stuck behind a read that only ends on the next server packet fits everything seen: no bytes out, almost no CPU, keys ignored, and a process Windows could not end. This is the likely cause, not a confirmed one. Since the fix, one thread owns the socket for both directions with the socket non-blocking, and the game loop's sends are queued to it.
+
+The game loop also has a stall watch now. A pass that stops for 3 s is written to `_debug/stall.log` (under the working directory) and to stderr, naming the last part of the pass that finished. If Windows still freezes, that line names the part.

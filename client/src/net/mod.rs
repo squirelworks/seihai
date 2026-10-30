@@ -18,7 +18,7 @@ use crate::protocol::{
 };
 use crate::offline::OfflineSession;
 use crate::protocol::parse_list_reply;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
@@ -574,6 +574,77 @@ pub fn login_gserver_with(
     Ok(GserverSession { conn, tamper, enter_level, tamper_unavailable, warnings })
 }
 
+/// The socket's own thread ([`Connection::spawn_reader_timed`]): write what
+/// the game loop queued, read what has arrived, and hand on each whole frame
+/// with the time it came in. Ends after the first error or when the game
+/// loop drops its receiver; then the queue's sender sees the end too.
+fn socket_thread(
+    mut stream: TcpStream,
+    mut cipher: Option<Gen5>,
+    out: Receiver<Vec<u8>>,
+    frames: mpsc::Sender<(Instant, io::Result<Vec<u8>>)>,
+) {
+    let mut pending: Vec<u8> = Vec::new();
+    let mut inbuf: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    let mut queue_open = true;
+    let fail = |frames: &mpsc::Sender<(Instant, io::Result<Vec<u8>>)>, e: io::Error| {
+        let _ = frames.send((Instant::now(), Err(e)));
+    };
+    loop {
+        let mut busy = false;
+        while queue_open {
+            match out.try_recv() {
+                Ok(data) => pending.extend(data),
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => queue_open = false,
+            }
+        }
+        while !pending.is_empty() {
+            match stream.write(&pending) {
+                Ok(0) => return fail(&frames, io::ErrorKind::WriteZero.into()),
+                Ok(n) => {
+                    pending.drain(..n);
+                    busy = true;
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return fail(&frames, e),
+            }
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => return fail(&frames, io::ErrorKind::UnexpectedEof.into()),
+            Ok(n) => {
+                inbuf.extend_from_slice(&chunk[..n]);
+                busy = true;
+            }
+            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => {}
+            Err(e) => return fail(&frames, e),
+        }
+        let at = Instant::now();
+        // Every whole frame: a u16 length, then that many bytes.
+        while inbuf.len() >= 2 {
+            let len = u16::from_be_bytes([inbuf[0], inbuf[1]]) as usize;
+            if inbuf.len() < 2 + len {
+                break;
+            }
+            let mut raw: &[u8] = &inbuf[..2 + len];
+            let frame = match cipher.as_mut() {
+                Some(g) => crate::protocol::read_frame(&mut raw, g),
+                None => read_zlib_frame(&mut raw),
+            };
+            inbuf.drain(..2 + len);
+            let stop = frame.is_err();
+            if frames.send((at, frame)).is_err() || stop {
+                return;
+            }
+        }
+        if !busy {
+            std::thread::park_timeout(IO_IDLE);
+        }
+    }
+}
+
 /// How long one address gets to accept a connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -654,7 +725,21 @@ pub struct Connection {
     /// X, Y and SPRITE again is not re-sent (the real client sends props
     /// only when they change).
     last_walk: Option<Vec<u8>>,
+    /// Set once the reader runs ([`Self::spawn_reader`]): the reader's
+    /// thread owns the socket from then on, and frames to send go to it.
+    io_thread: Option<IoThread>,
 }
+
+/// The frames handed to the socket's own thread, and the thread to wake.
+struct IoThread {
+    out: mpsc::Sender<Vec<u8>>,
+    thread: std::thread::Thread,
+}
+
+/// How long the socket thread sleeps when there was nothing to read or
+/// write. A frame to send wakes it at once; a frame from the server waits
+/// at most this long.
+const IO_IDLE: Duration = Duration::from_millis(2);
 
 impl Connection {
     /// Connect to `host:port`.
@@ -667,7 +752,7 @@ impl Connection {
         let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
         let stream = connect_any(&addrs, CONNECT_TIMEOUT)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None, files_out: Vec::new(), files_since: None, last_walk: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None, files_out: Vec::new(), files_since: None, last_walk: None, io_thread: None })
     }
 
     /// Close the connection in both directions. A reader thread from
@@ -677,8 +762,19 @@ impl Connection {
     }
 
     /// Send a raw byte buffer.
+    ///
+    /// Once the reader runs, the bytes go to its thread, which writes them
+    /// between its reads; an error comes back only when that thread has
+    /// ended (the connection is gone).
     pub fn send_raw(&mut self, data: &[u8]) -> io::Result<()> {
-        self.stream.write_all(data)
+        match &self.io_thread {
+            Some(t) => {
+                t.out.send(data.to_vec()).map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "connection closed"))?;
+                t.thread.unpark();
+                Ok(())
+            }
+            None => self.stream.write_all(data),
+        }
     }
 
     /// Send a version-aware game-server login.
@@ -1068,18 +1164,13 @@ impl Connection {
     /// decompress) and takes over the server→client iterator. Otherwise
     /// it reads plain zlib frames.
     pub fn spawn_reader(&mut self) -> io::Result<Receiver<io::Result<Vec<u8>>>> {
-        let mut stream = self.stream.try_clone()?;
-        stream.set_read_timeout(None)?;
-        let mut cipher = self.gen5_in.take();
+        let timed = self.spawn_reader_timed()?;
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || loop {
-            let frame = match cipher.as_mut() {
-                Some(g) => crate::protocol::read_frame(&mut stream, g),
-                None => read_zlib_frame(&mut stream),
-            };
-            let stop = frame.is_err();
-            if tx.send(frame).is_err() || stop {
-                break;
+        std::thread::spawn(move || {
+            for (_, frame) in timed {
+                if tx.send(frame).is_err() {
+                    break;
+                }
             }
         });
         Ok(rx)
@@ -1089,21 +1180,24 @@ impl Connection {
     /// socket, so a timer that counts from a server message (the post-login
     /// frame, 240 ms after the level) does not start late when the game loop
     /// is slow to take it.
+    ///
+    /// One thread does all the socket's reads and writes from here on, with
+    /// the socket non-blocking: the game loop's sends ([`Self::send_raw`])
+    /// are queued to it. A blocking read on one handle and a write on a
+    /// clone of it from another thread froze Seihai on Windows: the 2.22
+    /// login went out, then not one byte more, and the process could not be
+    /// ended (lab, 2026-10-31, `documentation/cross-laptop-2026-10-31.md`).
     pub fn spawn_reader_timed(&mut self) -> io::Result<Receiver<(Instant, io::Result<Vec<u8>>)>> {
-        let mut stream = self.stream.try_clone()?;
+        let stream = self.stream.try_clone()?;
         stream.set_read_timeout(None)?;
-        let mut cipher = self.gen5_in.take();
+        stream.set_nonblocking(true)?;
+        let cipher = self.gen5_in.take();
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || loop {
-            let frame = match cipher.as_mut() {
-                Some(g) => crate::protocol::read_frame(&mut stream, g),
-                None => read_zlib_frame(&mut stream),
-            };
-            let stop = frame.is_err();
-            if tx.send((Instant::now(), frame)).is_err() || stop {
-                break;
-            }
-        });
+        let (out_tx, out_rx) = mpsc::channel::<Vec<u8>>();
+        let handle = std::thread::Builder::new()
+            .name("seihai-net".into())
+            .spawn(move || socket_thread(stream, cipher, out_rx, tx))?;
+        self.io_thread = Some(IoThread { out: out_tx, thread: handle.thread().clone() });
         Ok(rx)
     }
 
@@ -1724,6 +1818,45 @@ mod tests {
         let (mut conn, mut srv) = pair();
         conn.login_versioned(ClientVersion::V139, 0x42, "ab", "cd").unwrap();
         assert_eq!(read_frame(&mut srv), b" GNW07080\"ab\"cd\n");
+    }
+
+    /// With the reader running, the game loop's sends still go out, in
+    /// order, while the server's frames come in, including one the server
+    /// wrote in two pieces. (The socket's own thread does both; the Windows
+    /// freeze of 2026-10-31 was a send stuck behind the reader's read.)
+    #[test]
+    fn sends_go_out_while_the_reader_waits() {
+        let (mut conn, mut srv) = pair();
+        conn.login_versioned(ClientVersion::V222, 0x21, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let rx = conn.spawn_reader_timed().unwrap();
+        // Nothing from the server yet: the reader is waiting, and sends
+        // must not wait with it.
+        let mut g = Gen5::new(0x21);
+        srv.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        for i in 0..3u8 {
+            conn.send_messages(&[vec![2 + 0x20, 15 + 0x20, 0x20 + i, b'\n']]).unwrap();
+            assert_eq!(gen5_body(&mut srv, &mut g), [2 + 0x20, 15 + 0x20, 0x20 + i, b'\n']);
+        }
+        // A server frame in two writes arrives whole.
+        let mut out = Gen5::new(0x21);
+        let frame = write_frame(Gen5Comp::None, &out.encode(b"&new1.nw\n".to_vec(), Gen5Comp::None));
+        srv.write_all(&frame[..3]).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        conn.send_messages(&[vec![2 + 0x20, 16 + 0x20, 0x21, b'\n']]).unwrap();
+        assert_eq!(gen5_body(&mut srv, &mut g), [2 + 0x20, 16 + 0x20, 0x21, b'\n']);
+        srv.write_all(&frame[3..]).unwrap();
+        let (_, body) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(body.unwrap(), b"&new1.nw\n");
+        // The server goes away: the reader says so, and later sends fail.
+        drop(srv);
+        let (_, end) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(end.is_err());
+        let until = Instant::now() + Duration::from_secs(5);
+        while conn.send_messages(&[vec![2 + 0x20, 15 + 0x20, 0x20, b'\n']]).is_ok() {
+            assert!(Instant::now() < until, "sends still accepted after the close");
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// A gen-5 server that refuses the login: the reader hands over the
