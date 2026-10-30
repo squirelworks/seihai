@@ -1461,8 +1461,21 @@ fn main() {
     let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
     let run_clock = Instant::now();
     let mut slow_log = SlowFrameLog::default();
+    // A pass stuck for seconds is named in `stall.log` (in `_debug`) and on
+    // stderr: the file first, in case stderr is what blocks.
+    let stall = {
+        let path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("_debug").join("stall.log");
+        seihai::stall::StallWatch::spawn(seihai::stall::STALL_LIMIT, move |line| {
+            use std::io::Write;
+            let _ = std::fs::create_dir_all(path.parent().unwrap_or(&path));
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                let _ = writeln!(f, "{line}");
+            }
+            eprintln!("{line} (also in {})", path.display());
+        })
+    };
     while window.is_open() {
-        let mut ft = FrameTimes::start();
+        let mut ft = FrameTimes::start(&stall);
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open() {
             char_repeat.clear();
@@ -3303,12 +3316,15 @@ struct FrameTimes {
     last: Instant,
     began: Instant,
     parts: Vec<(&'static str, Duration)>,
+    /// Told of each mark, so a pass that stops is reported with its part.
+    watch: seihai::stall::StallWatch,
 }
 
 impl FrameTimes {
-    fn start() -> Self {
+    fn start(watch: &seihai::stall::StallWatch) -> Self {
         let now = Instant::now();
-        Self { last: now, began: now, parts: Vec::new() }
+        watch.mark("start of pass");
+        Self { last: now, began: now, parts: Vec::new(), watch: watch.clone() }
     }
 
     /// The time since the previous mark goes to `part`.
@@ -3316,6 +3332,7 @@ impl FrameTimes {
         let now = Instant::now();
         self.parts.push((part, now - self.last));
         self.last = now;
+        self.watch.mark(part);
     }
 }
 

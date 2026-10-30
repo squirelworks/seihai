@@ -24,6 +24,7 @@ pub mod scripting;
 pub mod servercache;
 pub mod settings;
 pub mod sound;
+pub mod stall;
 pub mod throwing;
 pub mod ui;
 pub mod viewer;
