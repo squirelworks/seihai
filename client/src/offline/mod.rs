@@ -17,7 +17,7 @@ mod pushpull;
 mod servernpcs;
 pub use hide::{HIDDEN_STATUS, HIDE_KINDS};
 pub use pushpull::{NpcMoved, Grab, Jump, PushPull, Trigger};
-pub use servernpcs::{block_flags, Linked, ServerNpcSync};
+pub use servernpcs::{block_flags, Linked, ServerNpcSync, NPC_SEND_INTERVAL};
 use pushpull::StepResult;
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,
