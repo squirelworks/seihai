@@ -162,14 +162,14 @@ pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, c
         }
     };
     // The `showimg` images whose height is in `heights`, after the NPCs of
-    // that height (`documentation/npc-draw-order.md`).
+    // that height (`documentation/npc-draw-order.md`): the NPCs' own, then
+    // the ones weapon scripts put up for the player.
     let draw_images = |fb: &mut Framebuffer, heights: std::ops::RangeInclusive<i32>| {
-        for npc in &level.npcs {
-            for im in npc.images.iter().filter(|i| heights.contains(&i.height)) {
-                if let Some(img) = art.images.get(&im.file) {
-                    let (dx, dy) = if im.height >= SCREEN_HEIGHT { (im.x.round() as i32, im.y.round() as i32) } else { at(im.x, im.y) };
-                    blit_image(fb, img, im.part, dx, dy, im.effect, im.height == DrawLayer::Light.height());
-                }
+        let all = level.npcs.iter().flat_map(|n| n.images.iter()).chain(&session.player_images);
+        for im in all.filter(|i| heights.contains(&i.height)) {
+            if let Some(img) = art.images.get(&im.file) {
+                let (dx, dy) = if im.height >= SCREEN_HEIGHT { (im.x.round() as i32, im.y.round() as i32) } else { at(im.x, im.y) };
+                blit_image(fb, img, im.part, dx, dy, im.effect, im.height == DrawLayer::Light.height());
             }
         }
     };

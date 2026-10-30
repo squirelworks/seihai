@@ -17,7 +17,9 @@ The base of this branch is item 22 (`chiaki/gani-expansion`, PR #54), because an
 | `setcharani name,`, `setani name,` | the command table lists both | the NPC is drawn as that GANI (`Npc::ani`, lower case, no `.gani`) |
 | `showcharacter` | the command table | the NPC is drawn as a character, as `idle`, unless it already has an animation |
 
-**The plan text said `showimg` / `hideimg` toggle the NPC's visible flag.** That is not what the command reference says: they put up and delete numbered images, and `hide` / `show` are the visibility commands. Seihai follows the reference: `showimg` / `hideimg` change the NPC's image list, the renderer draws that list, and an image stays up when its NPC is hidden. (The old `OfflineSession::handle_command` still maps `hideimg` to "hide every NPC"; nothing calls it any more.)
+**The plan text said `showimg` / `hideimg` toggle the NPC's visible flag.** That is not what the command reference says: they put up and delete numbered images, and `hide` / `show` are the visibility commands. Seihai follows the reference: `showimg` / `hideimg` change the NPC's image list, the renderer draws that list, and an image stays up when its NPC is hidden. The old `OfflineSession::handle_command`, which nothing calls, mapped `showimg` / `hideimg` to "show / hide every NPC"; that mapping is gone (2026-10-30), so it handles only `hide` / `show` there.
+
+**Weapons (2026-10-30).** The 2.05 reference says weapon NPCs act as the player: "commands that spawn things (... `showimg` layers ...) use the player's level", and `showimg` puts the image "on the NPC's layer +1 (player's for weapons)" (Graal_analysis `npc-library/gs1-command-reference-205.md`). So a weapon's `showimg` goes into `OfflineSession::player_images`, at height 1 (one over the player), and `hideimg`, `changeimgpart`, `changeimgvis`, `changeimgcolors` and `changeimgzoom` from a weapon act on that list. The renderer draws it with the NPCs' images, the host loads its files with the NPC image pass, and the list is cleared when a level is loaded, since the images belong to the level the player was on. Whether the real client keeps a weapon's images across a level change was not checked; clearing them is Seihai's reading of "the player's level".
 
 ## Seihai's own conventions (not documented real-client behaviour)
 
@@ -46,19 +48,21 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
 
 ## Not done
 
-- `showimg` in **weapon** scripts (all the `showimg` calls found in the private collection are in weapon scripts): the weapon object has no image list, so those calls are accepted and nothing is drawn.
+- `hideimgs` (a later command, not in the 2.05 table): recognized and ignored, since no source here says what range it takes.
 - Layers other than "over", colours, zoom, the `@text` images, screen-layer images.
 - Walk animations of the local player (item 22 left that open too).
 - NPC directions. (`setcharprop` heads, bodies, colours and hats are drawn now; see `appearance.md`.)
 
 ## Tests
 
-`client/tests/npc_images.rs`, 12 tests (and one ignored). Each runs a real NPC script through `SessionScripts` and draws the level with `render::draw_npcs`:
+`client/tests/npc_images.rs` (and one ignored test). Each runs a real NPC script through `SessionScripts` and draws the level with `render::draw_npcs`:
 
 - `setimg` changes the pixels drawn (and a picture that is not loaded draws nothing, then shows when it arrives);
 - `setimgpart` draws the part and `setimg` resets it;
 - `hide` / `show` toggle the drawn NPC;
 - `showimg` / `hideimg`: images appear at their level position, an index in use is replaced, the same file only moves, `hideimg` deletes, a hidden NPC keeps its images;
+- a **weapon**'s `showimg` is drawn over the player with its part, not as an NPC's image; `hideimg` from the weapon takes it down; a level load clears it;
+- **a real NPC script, unchanged** (The Mollusk's chest, `quest_boom2.nw` NPC 1 in `tests/fixtures/npc-scripts/02_phoenix.npc.txt`): `playerenters` `setimg`s the closed chest, a touch `setimg`s the open one and `showimg 300` puts the key up at `x+0.5, y-1`, and after its `sleep 3` `hideimg 300` takes the key down. Each step is checked in the drawn pixels;
 - `setcharani` switches an NPC between `idle` and `walk` with Seihai's own default GANIs: the 8 walk steps are 8 different pictures, they advance every 100 ms and loop, and idle is another picture; an animation that is not loaded falls back to the image; `setimg x.gani`; a non-looping GANI plays once and follows `SETBACKTO`.
 - **Smoke test against real scripts** (`#[ignore]`, runs only with `SEIHAI_SCRIPT_CORPUS=<file>`, a text file of one script per line): it runs every script that uses `setimg`, `setgif`, `showimg`, `hideimg`, `setcharani`, `setani`, `showcharacter` or `changeimgpart` as an NPC under the 2.05 and 2.22 vocabularies (created, `playerenters`, a touch, three seconds of ticks, a few chat lines), checks the invariants of the state left behind (image indexes unique and sorted, parts inside the clamps), draws the result, and counts. Nothing of the scripts is printed or stored. On the author's private collection (a 9,516-line file, scripts and blank separators): 183 scripts use these commands, 366 runs, 0 panics, 234 runs changed an NPC image, 22 ended with the NPC hidden; no run left a `showimg` image up and none animated, because the 6 scripts with `showimg` are weapon scripts that fire on weapon events, and none of the collection uses `setcharani` or `setani`.
 

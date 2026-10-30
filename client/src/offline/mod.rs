@@ -208,6 +208,10 @@ pub struct OfflineSession {
     /// `seteffect red,green,blue,alpha`: the colour the map is shaded with
     /// (default 0,0,0,0, no shading).
     pub screen_effect: [f32; 4],
+    /// Images a weapon script put up with `showimg`: weapons act as the
+    /// player, so these sit on the player's level at the player's height.
+    /// Cleared when a level is loaded.
+    pub player_images: Vec<crate::assets::NpcImage>,
     /// Lava burn ticks so far, and time not yet a whole tick.
     lava_ticks: u32,
     lava_ms: u64,
@@ -483,6 +487,7 @@ impl OfflineSession {
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
             screen_effect: [0.0; 4],
+            player_images: Vec::new(),
             lava_ticks: 0,
             lava_ms: 0,
             walking: false,
@@ -1220,7 +1225,7 @@ impl OfflineSession {
     /// Returns true if the command was recognized and applied.
     pub fn handle_command(&mut self, name: &str, args: &[crate::scripting::Value]) -> bool {
         match name {
-            "hide" | "hideimg" => {
+            "hide" => {
                 if let Some(level) = self.current_level.as_mut() {
                     for npc in &mut level.npcs {
                         npc.visible = false;
@@ -1228,7 +1233,7 @@ impl OfflineSession {
                 }
                 true
             }
-            "show" | "showimg" => {
+            "show" => {
                 if let Some(level) = self.current_level.as_mut() {
                     for npc in &mut level.npcs {
                         npc.visible = true;

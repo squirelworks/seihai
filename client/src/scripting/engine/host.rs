@@ -46,6 +46,8 @@ impl SessionScripts {
     pub fn load_level(&mut self, session: &mut OfflineSession, level_name: &str) {
         self.world.clear_level();
         self.world.core.level = level_name.to_string();
+        // A weapon's images belong to the level the player was on.
+        session.player_images.clear();
         if let Some(level) = &session.current_level {
             for (i, n) in level.npcs.iter().enumerate() {
                 let mut spec = ObjSpec::npc(&n.image, n.x as f64, n.y as f64, &n.script).with_tag(i);
@@ -315,11 +317,12 @@ impl SessionScripts {
                 // `showimg index,file,x,y`: image `index` at a level position. Using
                 // an index again reuses that image: as in 2.05 it takes the new
                 // file and place, its part is cleared and its height goes back to
-                // one over the NPC; its colour and zoom stay.
+                // one over the NPC (over the player for a weapon); its colour and
+                // zoom stay.
                 Effect::Command { obj, ref name, ref args } if name == "showimg" => {
                     self.images_changed = true;
                     let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
-                    if let Some(n) = self.level_npc(s, obj) {
+                    if let Some((images, owner)) = self.images_of(s, obj) {
                         let img = crate::assets::NpcImage {
                             index: num(0) as i64,
                             file: args.get(1).map(|v| v.text()).unwrap_or_default(),
@@ -327,13 +330,13 @@ impl SessionScripts {
                             y: num(3) as f32,
                             part: None,
                             effect: Default::default(),
-                            height: n.layer.height() + 1,
+                            height: owner + 1,
                         };
-                        match n.images.iter_mut().find(|i| i.index == img.index) {
+                        match images.iter_mut().find(|i| i.index == img.index) {
                             Some(old) => *old = crate::assets::NpcImage { effect: old.effect, ..img },
                             None => {
-                                n.images.push(img);
-                                n.images.sort_by_key(|i| i.index);
+                                images.push(img);
+                                images.sort_by_key(|i| i.index);
                             }
                         }
                     }
@@ -343,8 +346,8 @@ impl SessionScripts {
                     let num = |i: usize| args.get(i).map_or(0.0, |v| v.num());
                     let index = num(0) as i64;
                     let part = (num(1).clamp(0.0, 16000.0) as i32, num(2).clamp(0.0, 16000.0) as i32, num(3).clamp(0.0, 220.0) as i32, num(4).clamp(0.0, 220.0) as i32);
-                    if let Some(n) = self.level_npc(s, obj) {
-                        if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
+                    if let Some((images, _)) = self.images_of(s, obj) {
+                        if let Some(i) = images.iter_mut().find(|i| i.index == index) {
                             i.part = Some(part);
                         }
                     }
@@ -353,9 +356,9 @@ impl SessionScripts {
                 // (`documentation/npc-draw-order.md`).
                 Effect::Command { obj, ref name, ref args } if name == "changeimgvis" => {
                     let num = |i: usize| args.get(i).map_or(0.0, |v| v.num()).round() as i64;
-                    if let Some(n) = self.level_npc(s, obj) {
-                        if let Some(h) = crate::assets::image_vis_height(num(1), n.layer.height()) {
-                            if let Some(i) = n.images.iter_mut().find(|i| i.index == num(0)) {
+                    if let Some((images, owner)) = self.images_of(s, obj) {
+                        if let Some(h) = crate::assets::image_vis_height(num(1), owner) {
+                            if let Some(i) = images.iter_mut().find(|i| i.index == num(0)) {
                                 i.height = h;
                             }
                         }
@@ -365,8 +368,8 @@ impl SessionScripts {
                 Effect::Command { obj, ref name, ref args } if name == "hideimg" => {
                     self.images_changed = true;
                     let index = args.first().map_or(0.0, |v| v.num()) as i64;
-                    if let Some(n) = self.level_npc(s, obj) {
-                        n.images.retain(|i| i.index != index);
+                    if let Some((images, _)) = self.images_of(s, obj) {
+                        images.retain(|i| i.index != index);
                     }
                 }
                 // The world has already moved the object; copy its position.
@@ -576,14 +579,14 @@ impl SessionScripts {
                         }
                     };
                     let color = name.ends_with("coloreffect") || name == "changeimgcolors";
-                    if let Some(n) = self.level_npc(s, obj) {
-                        if name.starts_with("set") {
+                    if name.starts_with("set") {
+                        if let Some(n) = self.level_npc(s, obj) {
                             set(&mut n.effect, 0, color);
-                        } else {
-                            let index = num(0) as i64;
-                            if let Some(i) = n.images.iter_mut().find(|i| i.index == index) {
-                                set(&mut i.effect, 1, color);
-                            }
+                        }
+                    } else if let Some((images, _)) = self.images_of(s, obj) {
+                        let index = num(0) as i64;
+                        if let Some(i) = images.iter_mut().find(|i| i.index == index) {
+                            set(&mut i.effect, 1, color);
                         }
                     }
                 }
@@ -605,7 +608,7 @@ impl SessionScripts {
                         "showtext" | "hideimgs" | "setbackpal"
                         | "replaceani" | "addtiledef" | "addtiledef2"
                         | "removetiledefs" | "setchargender" | "enabledefmovement"
-                        | "timereverywhere" | "hideimg"
+                        | "timereverywhere"
                     ) => {}
                 // `play`, `playlooped`, `play2`: queued with the GANI cues. 2.05
                 // places the sound at the NPC's centre; a weapon has no place of
@@ -648,6 +651,18 @@ impl SessionScripts {
             return None;
         }
         s.current_level.as_mut()?.npcs.get_mut(o.tag)
+    }
+
+    /// The `showimg` images of `obj` and the height of what owns them: a
+    /// level NPC's own images, or for a weapon the player's, at the
+    /// player's height ("weapon NPCs act as the player": Graal_analysis
+    /// `npc-library/gs1-command-reference-205.md`).
+    fn images_of<'s>(&self, s: &'s mut OfflineSession, obj: usize) -> Option<(&'s mut Vec<crate::assets::NpcImage>, i32)> {
+        let o = self.world.obj(obj)?;
+        match o.kind {
+            ObjKind::Npc => s.current_level.as_mut()?.npcs.get_mut(o.tag).map(|n| (&mut n.images, n.layer.height())),
+            ObjKind::Weapon => Some((&mut s.player_images, crate::assets::DrawLayer::Player.height())),
+        }
     }
 }
 
