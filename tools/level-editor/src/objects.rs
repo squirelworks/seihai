@@ -76,6 +76,22 @@ pub enum ObjectEdit {
     LinkSize(i32, i32),
     /// The first line of an NPC script or of a sign's text.
     FirstLine(String),
+    /// Up to the first [`SCRIPT_PANE_LINES`] lines of an NPC script. They
+    /// replace that many lines at the top of the script; any lines after
+    /// them are kept as they are.
+    ScriptHead(Vec<String>),
+}
+
+/// How many script lines the NPC script pane shows and edits.
+pub const SCRIPT_PANE_LINES: usize = 20;
+
+/// The top of an NPC script, as the script pane shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScriptHead {
+    /// The first lines of the script (at most [`SCRIPT_PANE_LINES`]).
+    pub lines: Vec<String>,
+    /// How many lines the whole script has.
+    pub total: usize,
 }
 
 fn strip_eol(line: &[u8]) -> &[u8] {
@@ -180,6 +196,20 @@ impl Document {
         self.records.get(id).map(|r| self.read_record(id, r))
     }
 
+    /// The first [`SCRIPT_PANE_LINES`] lines of an NPC's script, read from
+    /// the file's own lines (between the `NPC` line and `NPCEND`).
+    pub fn script_head(&self, id: usize) -> Result<ScriptHead, EditError> {
+        let r = *self.records.get(id).ok_or_else(|| bad(format!("there is no object {id}")))?;
+        if r.kind != ObjectKind::Npc {
+            return Err(bad(format!("a {} has no script", r.kind.name())));
+        }
+        if self.read_record(id, &r).unreadable || r.last == r.first || text(&self.lines[r.last]).trim() != "NPCEND" {
+            return Err(bad("this NPC record could not be read, so it is left as it is"));
+        }
+        let body = &self.lines[r.first + 1..r.last];
+        Ok(ScriptHead { lines: body.iter().take(SCRIPT_PANE_LINES).map(|l| text(l)).collect(), total: body.len() })
+    }
+
     /// Replace the lines `first..=last` with `new` and read the file again,
     /// so record and row positions stay right.
     fn splice(&mut self, first: usize, last: usize, new: Vec<Vec<u8>>) -> Result<(), EditError> {
@@ -215,6 +245,9 @@ impl Document {
         let current = self.read_record(id, &r);
         if current.unreadable {
             return Err(bad(format!("this {} record could not be read, so it is left as it is", r.kind.name())));
+        }
+        if let ObjectEdit::ScriptHead(new_lines) = edit {
+            return self.set_script_head(id, r, new_lines);
         }
         let mut head = tokens(&self.lines[r.first]);
         // header positions of x and y
@@ -277,6 +310,7 @@ impl Document {
                     self.splice(r.last, r.last, vec![new, end_line])
                 };
             }
+            ObjectEdit::ScriptHead(_) => unreachable!("handled above"),
         }
         let new = self.line(&head.join(" "), r.first);
         let check = Level::parse(&format!("GLEVNW01\n{}\n", String::from_utf8_lossy(strip_eol(&new)))).ok();
@@ -284,6 +318,33 @@ impl Document {
             return Err(bad("the link would not read back; nothing was changed"));
         }
         self.splice(r.first, r.first, vec![new])
+    }
+
+    /// Replace the top of an NPC script: the lines the pane showed (up to
+    /// [`SCRIPT_PANE_LINES`]) become `new_lines`; lines after them are kept.
+    fn set_script_head(&mut self, id: usize, r: Record, new_lines: Vec<String>) -> Result<(), EditError> {
+        let shown = self.script_head(id)?.lines.len();
+        if new_lines.len() > SCRIPT_PANE_LINES {
+            return Err(bad(format!("the script pane edits the first {SCRIPT_PANE_LINES} lines only; the full script editor is not there yet")));
+        }
+        if new_lines.iter().any(|l| l.contains(['\n', '\r'])) {
+            return Err(bad("a script line cannot hold a line break"));
+        }
+        if new_lines.iter().any(|l| l.trim() == "NPCEND") {
+            return Err(bad("a script line cannot be NPCEND; it would end the NPC early"));
+        }
+        // each new line keeps the line ending of the line it replaces (or the file's)
+        let new: Vec<Vec<u8>> = new_lines.iter().enumerate().map(|(i, l)| self.line(l, r.first + 1 + i.min(shown.saturating_sub(1)))).collect();
+        if shown == 0 {
+            if new.is_empty() {
+                return Ok(());
+            }
+            let mut with_end = new;
+            with_end.push(self.lines[r.last].clone());
+            return self.splice(r.last, r.last, with_end);
+        }
+        let (first, last) = (r.first + 1, r.first + shown);
+        self.splice(first, last, new)
     }
 
     /// Add a link, sign, chest or NPC at (x, y) at the end of the file.

@@ -36,7 +36,7 @@ use std::io::Write;
 use std::path::Path;
 
 pub mod objects;
-pub use objects::{Object, ObjectEdit, ObjectKind};
+pub use objects::{Object, ObjectEdit, ObjectKind, ScriptHead, SCRIPT_PANE_LINES};
 
 /// Board edge in tiles.
 pub const SIZE: usize = 64;
