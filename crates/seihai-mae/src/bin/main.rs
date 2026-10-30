@@ -1492,6 +1492,17 @@ fn main() {
     let mut last_pp_sprite: Option<u8> = None;
     // The animation name a 2.00 to 2.05 build last put in prop 10.
     let mut last_bow_anim = "idle";
+    // 2.00 to 2.05: prop 10 `lift`, sent in the frame of the lift's
+    // BOARDMODIFY, and the CARRYSPRITE that waits until the object counts
+    // as carried (the real 2.00: 195 ms later, lab 2026-10-30).
+    let mut lift_props: Vec<Vec<u8>> = Vec::new();
+    let mut carry_pending: Option<Option<u16>> = None;
+    // A build that sends its walk props at most every so often
+    // (`walk_props_every_ms`): when the last went out, and whether a step
+    // since is still to send.
+    let walk_every = seihai::protocol::walkcadence::walk_props_every_ms(version).map(Duration::from_millis);
+    let mut walk_sent_at = Instant::now();
+    let mut walk_held = false;
     let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
     let run_clock = Instant::now();
     let mut slow_log = SlowFrameLog::default();
@@ -2437,8 +2448,16 @@ fn main() {
                 seihai::offline::Interaction::Lifted { kind } => {
                     eprintln!("lifted object {kind}");
                     // Others see the object (CARRYSPRITE) and the carry
-                    // pose (the sprite value).
-                    if let Some(c) = conn.as_mut() {
+                    // pose (the sprite value). A bow-slot build names the
+                    // pose in prop 10 instead, with the tiles, and sends
+                    // the object once it is carried.
+                    if seihai::combat::swing_in_bow_slot(version) {
+                        if conn.is_some() {
+                            lift_props.push(seihai::net::bow_slot_message("lift"));
+                            last_bow_anim = "lift";
+                            carry_pending = Some(seihai::throwing::carry_sprite(kind));
+                        }
+                    } else if let Some(c) = conn.as_mut() {
                         let sent = c
                             .send_carry_sprite(seihai::throwing::carry_sprite(kind))
                             .and_then(|()| c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)));
@@ -2804,10 +2823,17 @@ fn main() {
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req, &mut files);
             } else if let (Some(c), false, None) = (conn.as_mut(), script_warp_sent, &walk_cadence) {
-                // Online: send the new position as PLI_PLAYERPROPS.
-                if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
-                    eprintln!("send failed: {e}");
-                    conn = None;
+                // Online: send the new position as PLI_PLAYERPROPS, or hold
+                // it for the build's next send slot.
+                if walk_every.is_some_and(|every| walk_sent_at.elapsed() < every) {
+                    walk_held = true;
+                } else {
+                    walk_sent_at = Instant::now();
+                    walk_held = false;
+                    if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
                 }
             }
             // Check links after every move, online or offline.
@@ -3295,6 +3321,27 @@ fn main() {
                 }
             }
         }
+        // A held walk step goes out in its send slot.
+        if walk_held && walk_every.is_some_and(|every| walk_sent_at.elapsed() >= every) {
+            walk_held = false;
+            walk_sent_at = Instant::now();
+            if let Some(c) = conn.as_mut() {
+                if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
+            }
+        }
+        // The lifted object counts as carried: now others get it.
+        if carry_pending.is_some() && (session.carried.is_none() || session.lift_ticks.map_or(true, |t| t >= seihai::offline::LIFT_CARRIED_TICK)) {
+            let sprite = carry_pending.take().flatten();
+            if let (Some(c), true) = (conn.as_mut(), session.carried.is_some()) {
+                if let Err(e) = c.send_carry_sprite(sprite) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
+            }
+        }
         // Tiles the player changed this frame (a lift, a cut, a moved stone
         // block): the server writes them into the level for the others.
         let mut boards = Vec::new();
@@ -3337,14 +3384,27 @@ fn main() {
                 conn = None;
             }
         } else if let Some(c) = conn.as_mut() {
-            for m in boards {
-                if let Err(e) = c.send_messages(&[m]) {
+            // A lift on a bow-slot build: its BOARDMODIFY and prop 10
+            // `lift` in one frame, as the real 2.00 sends them.
+            if !lift_props.is_empty() {
+                let mut frame = std::mem::take(&mut boards);
+                frame.append(&mut lift_props);
+                if let Err(e) = c.send_messages(&frame) {
                     eprintln!("send failed: {e}");
                     conn = None;
-                    break;
+                }
+            }
+            for m in boards {
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_messages(&[m]) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                        break;
+                    }
                 }
             }
         }
+        lift_props.clear();
         ft.mark("after scripts");
         // The pictures other players and our own shield are drawn with.
         {
