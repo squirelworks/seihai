@@ -1486,6 +1486,8 @@ fn main() {
         {
             show_help = !show_help;
         }
+        // The quit prompt as it was before this frame's Escape.
+        let quit_was_open = confirm_quit;
         if input.is_open() {
             // The key that went down with the typed text (not a modifier),
             // so a held key repeats where the window system does not.
@@ -1520,16 +1522,17 @@ fn main() {
             dirty = true;
         }
         if confirm_quit {
-            if window.is_key_pressed(minifb::Key::Y, minifb::KeyRepeat::No)
-                || window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No)
-            {
-                break;
-            }
-            if window.is_key_pressed(minifb::Key::N, minifb::KeyRepeat::No)
-                || window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No)
-            {
-                confirm_quit = false;
-                dirty = true;
+            let yes = window.is_key_pressed(minifb::Key::Y, minifb::KeyRepeat::No)
+                || window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No);
+            let no = window.is_key_pressed(minifb::Key::N, minifb::KeyRepeat::No);
+            let escape = window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No);
+            match ui::quit_key(quit_was_open, yes, no, escape) {
+                ui::QuitKey::Quit => break,
+                ui::QuitKey::Cancel => {
+                    confirm_quit = false;
+                    dirty = true;
+                }
+                ui::QuitKey::None => {}
             }
         }
         ft.mark("input");
