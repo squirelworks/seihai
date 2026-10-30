@@ -86,6 +86,16 @@ Seihai does the same:
 A `.gif` body is drawn in the player's colours, as a PNG one is
 (`appearance.md`).
 
+**Running 2.00 to 2.05 against the 2.22 folder.** Seihai logs
+`player: body (none: this build reads player art as .gif only)` and draws no
+figure, as above. To get a figure, for Seihai and for the real client alike,
+give the assets folder (and the gserver's file folder) `.gif` copies of the
+player art: `body.gif`, the heads the server names, `sword1.gif` and
+`shield1.gif`. The lab's player PNGs are palette images with a transparent
+index, so a straight PNG-to-GIF conversion keeps every pixel and palette entry.
+2.00 is taken to follow the 2.05 rule (same `image_ext`); its own drawing in a
+PNG-only folder was not captured.
+
 Not checked: whether 2.05 reads `.mng` player art, and what it draws for a
 part while a download is still on its way (Seihai draws the default).
 

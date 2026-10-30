@@ -1083,10 +1083,12 @@ fn main() {
     };
     let body_path = resolver.image_in("bodies", "body.png");
     let head_path = resolver.image_in("heads", "head0.png");
+    // A GIF build finds no PNG player art; say so, as the 2.22 folder has none.
+    let missing = if gif_art { "(none: this build reads player art as .gif only)" } else { "(none)" };
     eprintln!(
         "player: body {}  head {}",
-        body_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".into()),
-        head_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".into()),
+        body_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| missing.into()),
+        head_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| missing.into()),
     );
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
