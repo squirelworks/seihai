@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 # The Torque / 3.x client line. Stage 1: the 3.x wire facts (token, the
-# 3.x-only ids, the Torque profile) and the start window. No game drawing
-# yet.
+# 3.x-only ids, the Torque profile) and the start window. Stage 2: log in,
+# keep the level and log it. No game drawing yet.
 [lib]
 name = "seihai_ato"
 path = "src/lib.rs"

@@ -10,7 +10,9 @@
 //! real client would do next: the server list and offline mode come in
 //! later stages.
 
+use crate::online::Login;
 use seihai_core::protocol::ClientVersion;
+use std::sync::{Arc, Mutex};
 
 /// A control's place inside the login panel, in the client's 640×480
 /// pixels: (x, y, width, height).
@@ -107,20 +109,54 @@ pub struct StartWindow {
     pub account: String,
     pub password: String,
     pub status: String,
+    /// The game server Start logs in to (`--online`). The real client
+    /// opens its server list here; Ato has none yet.
+    pub online: Option<String>,
+    /// Set by Start when there is a server: the form, taken before 3.153
+    /// clears the password.
+    pub started: Arc<Mutex<Option<Login>>>,
 }
 
 impl StartWindow {
     pub fn new(version: ClientVersion, nick: String, account: String, password: String) -> Self {
-        StartWindow { version, layout: layout(version), nick, language: "English".into(), account, password, status: String::new() }
+        StartWindow {
+            version,
+            layout: layout(version),
+            nick,
+            language: "English".into(),
+            account,
+            password,
+            status: String::new(),
+            online: None,
+            started: Arc::default(),
+        }
     }
 
     /// The Start button. The real client stores the fields and opens the
-    /// server list; Ato has no server list yet.
-    pub fn press_start(&mut self) {
+    /// server list; Ato has no server list yet, so with `--online` it hands
+    /// the form over for a login at that server and the window closes.
+    /// Returns true when the window should close.
+    pub fn press_start(&mut self) -> bool {
+        let login = Login {
+            account: self.account.clone(),
+            password: self.password.clone(),
+            nick: self.nick.clone(),
+            language: self.language.clone(),
+        };
         if self.layout.start_clears_password {
             self.password.clear();
         }
-        self.status = "Start: the 3.x server list is not in Ato yet.".into();
+        match &self.online {
+            Some(addr) => {
+                self.status = format!("Start: logging in at {addr}.");
+                *self.started.lock().unwrap() = Some(login);
+                true
+            }
+            None => {
+                self.status = "Start: the 3.x server list is not in Ato yet; give --online host:port.".into();
+                false
+            }
+        }
     }
 
     pub fn press_tutorial(&mut self) {
@@ -187,8 +223,8 @@ impl eframe::App for StartWindow {
             if button(ui, GET_ACCOUNT_BUTTON, t.get_account) {
                 self.press_get_account();
             }
-            if button(ui, START_BUTTON, t.start) {
-                self.press_start();
+            if button(ui, START_BUTTON, t.start) && self.press_start() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
 
             if !self.status.is_empty() {
@@ -199,14 +235,18 @@ impl eframe::App for StartWindow {
     }
 }
 
-/// Open the start window and block until it is closed.
-pub fn run(window: StartWindow) -> Result<(), String> {
+/// Open the start window and block until it is closed. Returns the form
+/// when Start closed it.
+pub fn run(window: StartWindow) -> Result<Option<Login>, String> {
+    let started = window.started.clone();
     let title = format!("Graal {} (Seihai Ato)", window.version.label());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([CANVAS.0, CANVAS.1]).with_resizable(false),
         ..Default::default()
     };
-    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(window)))).map_err(|e| e.to_string())
+    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(window)))).map_err(|e| e.to_string())?;
+    let login = started.lock().unwrap().take();
+    Ok(login)
 }
 
 #[cfg(test)]
@@ -243,6 +283,20 @@ mod tests {
         assert_eq!(w.password, "p");
         let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), "a".into(), "p".into());
         w.press_start();
+        assert_eq!(w.password, "");
+    }
+
+    #[test]
+    fn start_hands_over_the_form_only_with_a_server() {
+        let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), "a".into(), "p".into());
+        assert!(!w.press_start());
+        assert!(w.started.lock().unwrap().is_none());
+        let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), "a".into(), "p".into());
+        w.online = Some("127.0.0.1:14900".into());
+        assert!(w.press_start());
+        let login = w.started.lock().unwrap().take().unwrap();
+        // Taken before 3.153 clears the field.
+        assert_eq!((login.account.as_str(), login.password.as_str(), login.nick.as_str()), ("a", "p", "n"));
         assert_eq!(w.password, "");
     }
 }

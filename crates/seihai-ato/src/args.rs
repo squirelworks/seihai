@@ -18,12 +18,23 @@ pub struct Args {
     pub nick: Option<String>,
     /// `--print-profile`: print the wire facts and exit, no window.
     pub print_profile: bool,
+    /// The game server to log in to (`--online host:port`, `-o`,
+    /// `--server`). Without it Start only shows a note.
+    pub online: Option<String>,
+    /// An asset folder whose levels stand in for the server's board at the
+    /// server's mod time (`--assets DIR`).
+    pub assets: Option<String>,
+    /// `--no-window`: log in from the command line, without the start
+    /// window (needs `--online`).
+    pub no_window: bool,
+    /// `--first-level`: disconnect once the first level is stored.
+    pub first_level: bool,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
 /// value-taking flag Ato does not use must be listed here, or its value
 /// would be read as the next flag.
-const VALUE_FLAGS: &[&str] = &["--online", "-o", "--assets", "--server", "--level", "--listserver"];
+const VALUE_FLAGS: &[&str] = &["--level", "--listserver"];
 
 pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
     let mut a = Args::default();
@@ -35,6 +46,10 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--password-env" => a.password_env = it.next().or(a.password_env),
             "--nick" | "--nickname" => a.nick = it.next().or(a.nick),
             "--print-profile" => a.print_profile = true,
+            "--online" | "-o" | "--server" => a.online = it.next().or(a.online),
+            "--assets" => a.assets = it.next().or(a.assets),
+            "--no-window" => a.no_window = true,
+            "--first-level" => a.first_level = true,
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
             }
@@ -75,6 +90,9 @@ mod tests {
         assert_eq!(a.account.as_deref(), Some("guest"));
         assert_eq!(a.password_env.as_deref(), Some("GRAAL_PW"));
         assert_eq!(build(&a), Ok(ClientVersion::V3153));
+        assert_eq!(a.online.as_deref(), Some("127.0.0.1:14900"));
+        assert_eq!(a.assets.as_deref(), Some("dir"));
+        assert!(!a.no_window && !a.first_level);
     }
 
     #[test]
