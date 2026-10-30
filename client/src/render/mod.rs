@@ -15,7 +15,7 @@ pub mod chattext;
 mod tiles;
 
 pub use throw::{draw_sprite, draw_throw_layer};
-pub use npcs::{draw_npcs, NpcArt, NpcPass, NPC_DIR};
+pub use npcs::{draw_npcs, npc_sheets, NpcArt, NpcPass, NPC_DIR};
 pub use others::{look_images, other_pose, OTHER_STEP_MS};
 pub use tiles::{
     draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_with, ViewOptions, BUILTIN_CHEST_CLOSED, BUILTIN_CHEST_GRASS, CHEST_CLOSED_TILES, CHEST_OPEN_TILES, chest_art,

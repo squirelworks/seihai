@@ -28,5 +28,5 @@ Like the 2.05 client, Seihai runs them only offline or when the server has an NP
   - The blend formulas.
   - That lights add their colour.
   - That Seihai behaves as a client with a 3D card. The 2.05 client without one takes the effect path only for an alpha below 1.
-- **Character NPCs** (`showcharacter`, `setcharani`): the step of the animation is drawn into a picture of its own, then coloured and zoomed like an image, so the zoom is about the centre of the whole figure. That the 2.05 client applies the effects to a character this way is inferred; its 3D path for characters was not read.
+- **Character NPCs** (`showcharacter`, `setcharani`): the step of the animation is drawn into a picture of its own, then coloured and zoomed like an image, so the zoom is about the centre of the whole figure. That the 2.05 client applies the effects to a character this way is inferred; its 3D path for characters was not read. The figure is drawn with the NPC's own `setcharprop` pictures, colours and hat (`appearance.md`).
 - `changeimgvis` is in `npc-draw-order.md`.
