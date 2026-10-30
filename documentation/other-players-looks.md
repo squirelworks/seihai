@@ -23,7 +23,7 @@ Another player is drawn through a GANI when Seihai has the pose loaded:
 
 The GANI's `SWORD` and `SHIELD` sprites take the player's own sword and shield pictures, and `HEAD` and `BODY` take their own head and body. A picture is looked for in the asset folders first (`swords/`, `shields/`, `heads/`, `bodies/`), then asked of the server. Until it arrives, the default picture is used: Seihai's head, body and `sword1.png`. No shield is drawn without a shield picture. The local player's shield is `shieldN.png` for its shield power.
 
-`PoseSheets` gained `shield`, and `draw_gani_frame` draws `SHIELD` sprites. Seihai's own default GANIs have no `SHIELD` sprites. The shield shows with a data folder whose `idle.gani` and `walk.gani` have them, as the real ones do.
+`PoseSheets` gained `shield`, and `draw_gani_frame` draws `SHIELD` sprites. Seihai's own `idle`, `walk` and `sword` GANIs have `SHIELD` sprites at the stock places (`appearance.md`).
 
 ## What is confirmed and what is not
 
