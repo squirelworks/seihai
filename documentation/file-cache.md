@@ -165,46 +165,26 @@ server is asked, and no mod time is ever sent for it.**
 * For the pre-2.1 builds that give no mod time in the file reply the cache copy
   gets the download time (as before).
 
-### Base files asked for when only the built-in set has them (2026-10-30)
+### Base files are not asked for (2026-10-30)
 
-The real client ships its base files (`pics1.png`, `sprites.png`,
-`state.png`, `letters.png`, `body.png`, `head0.png`, `sword1.png`,
-`shield1.png`, the pose and motion GANIs, the step, sword and water sounds) and
-never asks a server for them. A Seihai run with no Graal folder has only its
-built-in stand-ins, and on a server with its own tiles the built-in sheet draws
-the level as the purple/black "unassigned" checker.
+Seihai briefly asked the server for the base files it has only stand-ins for
+(`pics1.png`, the player, sprite, status and sign sheets, the pose GANIs, the
+common sounds, `arrays.dat`); the real client never does, since it ships them.
+It was taken out again the same day. What the live 2.22 server at
+`2gta.home.eevul.net:14913` showed while it was in:
 
-So Seihai goes beyond the real client here, as a fallback only
-(`FileSession::request_base_files`, `BASE_FILES`):
+* It sent `pics1.png` (210 KB, as large-file packets), `body.png`,
+  `head0.png`, `sword1.png`, `shield1.png` and the GANIs, and the level then
+  drew with the server's tiles.
+* It never answered `sprites.png`, `state.png`, `letters.png` or the sounds,
+  neither with the file nor with `FILESENDFAILED`, so a name it lacks can hold
+  a `WANTFILE` slot for the whole connection.
+* GServer-v2 (`TPlayer::sendFile`) answers with the file or `FILESENDFAILED`,
+  searching only its own file system; before 2.14 it fails any file over
+  64000 bytes.
 
-* Right after login (and after a server warp), for each base file that **no
-  layer but the built-in set** has (or no layer at all), it sends `WANTFILE`
-  with the build's image extension. `pics1` goes first.
-* A base file in the user's folder or in the cache is **not asked about at
-  all**, not even with `UPDATEFILE`. With a full Graal folder the wire is the
-  same as before. A cached copy from an earlier run is used as it is.
-* The requests go out all at once, **outside** the four-at-a-time `WANTFILE`
-  window (`FileRequester::want_extra`). The live 2.22 server at
-  `2gta.home.eevul.net:14913` (2026-10-30) sent `pics1.png`, the player
-  images and the GANIs but never answered `sprites.png`, `state.png`,
-  `letters.png` or the sounds, neither with the file nor with
-  `FILESENDFAILED`. In the window those names held three of the four slots
-  for the whole connection. Each name asked is logged (`requesting base
-  files: ...`).
-* `arrays.dat` is asked for too when there is no tile table of the user's or
-  the cache. A downloaded one is found in `levels/webgifs`, and is used once
-  the server's sheet is in use.
-* What arrives is saved in the cache like any download and drawn from then on:
-  the tile sheet, player, sprite, status and sign sheets are swapped in place
-  (`reload_base_art` in `main.rs`), GANIs and sounds reload as before. A new
-  sheet drops the built-in tile types (they describe only the built-in sheet);
-  a `tiledefs.txt` or `arrays.dat` in the user's folder or the cache is used
-  instead when there is one. Without one there are no walls.
-* `FILESENDFAILED`, or no reply, leaves the built-in file in use. GServer-v2
-  (`TPlayer::sendFile`) answers every `WANTFILE` with the file or
-  `FILESENDFAILED`, searching only its own file system (the world folder and
-  `foldersconfig.txt`). Before 2.14 it fails any file over 64000 bytes (no
-  large-file packets), so a 2.05 client gets no real `pics1.png` from it.
+A server `pics1.png` already in the cache from that time is still used: the
+cache is searched before the built-in set.
 
 ### The first-step files (decision of 2026-10-25, t122u)
 

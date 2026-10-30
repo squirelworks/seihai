@@ -451,8 +451,7 @@ impl AssetResolver {
             if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["tiledefs.txt".to_string()]) {
                 return Some((p, TileTypesFile::Text));
             }
-            // `levels/webgifs` is where a downloaded `arrays.dat` is saved.
-            if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS), r.join(DOWNLOADS).join("webgifs")], &["arrays.dat".to_string()]) {
+            if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["arrays.dat".to_string()]) {
                 return Some((p, TileTypesFile::ArraysDat));
             }
         }

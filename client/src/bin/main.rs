@@ -99,117 +99,6 @@ fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
     seihai::render::Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 }
 }
 
-/// The pictures the view is drawn with that every install has: the tile
-/// sheet and the player, sprite, status and sign sheets.
-struct BaseArt {
-    sheet: Vec<u8>,
-    sw: u32,
-    sh: u32,
-    builtin_sheet: bool,
-    body: Option<(u32, Vec<u8>)>,
-    head: Option<(u32, Vec<u8>)>,
-    sprites: Option<(u32, Vec<u8>)>,
-    sword: Option<(u32, Vec<u8>)>,
-    state: Option<(u32, Vec<u8>)>,
-    letters: Option<(u32, Vec<u8>)>,
-}
-
-/// A file the server sent may be its copy of one of [`BaseArt`]'s
-/// pictures (asked for by `FileSession::request_base_files`): draw with it
-/// from now on. A new tile sheet takes the tile types that go with it, or
-/// none: the built-in table describes only the built-in sheet. Returns
-/// whether anything changed.
-fn reload_base_art(
-    name: &str,
-    files: &FileSession,
-    resolver: &AssetResolver,
-    session: &mut OfflineSession,
-    art: &std::cell::RefCell<BaseArt>,
-) -> bool {
-    use seihai::filecache::BaseKind;
-    let Some((kind, stem)) = seihai::filecache::base_file_of(name) else { return false };
-    if kind == BaseKind::TileTypes {
-        // The table goes with the server's sheet, not with ours.
-        if !art.borrow().builtin_sheet {
-            apply_sheet_tile_types(resolver, session);
-        }
-        return true;
-    }
-    if !matches!(kind, BaseKind::Image(_)) {
-        return false;
-    }
-    let Some(data) = files.store.read(name) else { return false };
-    let mut art = art.borrow_mut();
-    if stem == "pics1" {
-        match read_png_rgb(&data) {
-            Ok((w, h, px)) => {
-                (art.sw, art.sh, art.sheet, art.builtin_sheet) = (w, h, px, false);
-                eprintln!("tiles: {name} from the server");
-            }
-            Err(e) => {
-                eprintln!("{name} from the server not read: {e}");
-                return false;
-            }
-        }
-        apply_sheet_tile_types(resolver, session);
-        return true;
-    }
-    let slot = match stem {
-        "body" => &mut art.body,
-        "head0" => &mut art.head,
-        "sprites" => &mut art.sprites,
-        "sword1" => &mut art.sword,
-        "state" => &mut art.state,
-        "letters" => &mut art.letters,
-        _ => return false,
-    };
-    match read_png_rgba(&data) {
-        Ok((w, _, px)) => {
-            *slot = Some((w, px));
-            eprintln!("{name} from the server");
-            true
-        }
-        Err(e) => {
-            eprintln!("{name} from the server not read: {e}");
-            false
-        }
-    }
-}
-
-/// Ask the server for the base files we have only stand-ins for, and log
-/// each name: a server may stay silent about one it lacks, and the log is
-/// then the only sign it was asked for.
-fn base_file_msgs(files: &mut FileSession) -> Vec<Vec<u8>> {
-    let reqs = files.request_base_files();
-    if !reqs.is_empty() {
-        let names: Vec<&str> = reqs.iter().map(|r| r.name()).collect();
-        eprintln!("requesting base files: {}", names.join(" "));
-    }
-    reqs.iter().map(|r| r.message()).collect()
-}
-
-/// The tile types for a sheet that is not the built-in one: a table of the
-/// user's or the cache, else none (the built-in table describes only the
-/// built-in sheet).
-fn apply_sheet_tile_types(resolver: &AssetResolver, session: &mut OfflineSession) {
-    match resolver.tile_types().filter(|(p, _)| resolver.layer_of(p) != Some(Layer::Builtin)) {
-        Some((p, TileTypesFile::Text)) => {
-            eprintln!("tile types: {} (text)", p.display());
-            let _ = session.load_tiletypes(p);
-        }
-        Some((p, TileTypesFile::ArraysDat)) => {
-            eprintln!("tile types: {} (arrays.dat)", p.display());
-            let _ = session.load_tiletypes_arrays(p);
-        }
-        None => {
-            session.tiletypes = None;
-            session.object_tables = None;
-            session.refresh_water();
-            eprintln!("tile types: none for the server's sheet (no tiledefs.txt or arrays.dat); there are no walls");
-        }
-    }
-}
-
 /// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
 /// first layer that has it. A missing file leaves the plain idle figure.
 fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
@@ -1000,11 +889,6 @@ fn main() {
     if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
         send_file_msgs(conn.as_mut(), files.need("idle.gani"));
     }
-    // The files every install has that we have only as stand-ins: ask the
-    // server for its copies (a fallback the real client has no need of).
-    if conn.is_some() {
-        send_file_msgs(conn.as_mut(), base_file_msgs(&mut files));
-    }
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -1049,6 +933,8 @@ fn main() {
             None => "unknown",
         }
     );
+    // The open-chest art swap is for our own sheet only.
+    let view_opts = seihai::render::ViewOptions { builtin_sheet: resolver.layer_of(&sheet_path) == Some(Layer::Builtin) };
     let sheet_data = match std::fs::read(&sheet_path) {
         Ok(d) => d,
         Err(e) => {
@@ -1149,19 +1035,6 @@ fn main() {
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
-    // Replaced in place when the server sends its copy of one.
-    let base_art = std::cell::RefCell::new(BaseArt {
-        sheet,
-        sw,
-        sh,
-        builtin_sheet: sheet_layer == Some(Layer::Builtin),
-        body,
-        head,
-        sprites,
-        sword: sword_sheet,
-        state: state_sheet,
-        letters: letters_sheet,
-    });
     let draw = |session: &OfflineSession,
                 others: &[seihai::protocol::OtherPlayer],
                 my_chat: &str,
@@ -1169,12 +1042,7 @@ fn main() {
                 npc_imgs: &HashMap<String, (u32, Vec<u8>)>,
                 item: Option<&str>|
      -> Framebuffer {
-        let art = base_art.borrow();
-        let (sheet, sw, sh) = (&art.sheet, art.sw, art.sh);
-        // The open-chest art swap is for our own sheet only.
-        let view_opts = seihai::render::ViewOptions { builtin_sheet: art.builtin_sheet };
-        let (body, head, sprites, sword_sheet, state_sheet) = (&art.body, &art.head, &art.sprites, &art.sword, &art.state);
-        let mut fb = seihai::render::render_view_with(session, sheet, sw, sh, view_w, view_h, view_opts);
+        let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
@@ -1581,9 +1449,6 @@ fn main() {
                             look_not_received.clear();
                         }
                         for name in &got.written {
-                            if reload_base_art(name, &files, &resolver, &mut session, &base_art) {
-                                dirty = true;
-                            }
                             // A neighbour's file (gmap) is not the current level.
                             let is_current = net_state
                                 .current_level_name()
@@ -2712,7 +2577,6 @@ fn main() {
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
                         }
-                        send_file_msgs(Some(&mut sess.conn), base_file_msgs(&mut files));
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
@@ -3103,7 +2967,7 @@ fn main() {
             );
         }
         if let Some(text) = &session.reading {
-            match &base_art.borrow().letters {
+            match &letters_sheet {
                 Some(l) => {
                     let row = player_box_origin(&session, view_w, view_h).1 as f32 / 16.0;
                     seihai::render::signs::draw_sign(&mut frame, &pose_sheet(l), text, sign_page, row);
