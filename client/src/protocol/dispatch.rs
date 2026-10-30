@@ -699,7 +699,10 @@ impl SessionState {
             }
             9 => {
                 // PLO_PLAYERPROPS — extract classic position if present.
-                self.player_props = msg.payload.clone();
+                // The props are merged by id: a later message with one prop
+                // (stock beta4 ends the level frame with `Z` alone) must not
+                // drop the head, colours, status and images of the first.
+                self.player_props = merge_player_props(&self.player_props, &msg.payload, self.bow_prop10, self.own_prop_ids.as_ref());
                 self.apply_player_props(&msg.payload);
             }
             2 => {
@@ -1765,6 +1768,29 @@ fn parse_file_packet(payload: &[u8], has_modtime: bool) -> Option<(String, Vec<u
         data = data.strip_suffix(b"\n").unwrap_or(data);
     }
     Some((name, data.to_vec(), mod_time))
+}
+
+/// `old` with the props of `new` put in by id: a prop in `new` replaces the
+/// one of the same id, the others are kept, in id order. The real 2.22 and
+/// 2.31 answered a full `PLO_PLAYERPROPS` followed by one with `Z` alone with
+/// the head, colours and status of the first (lab, 2026-10-30, stock beta4).
+/// Only the props this build reads are kept from `old` (the parse stops at
+/// the first id it does not know). When `new` does not parse to its end, it
+/// replaces `old` whole, as before.
+pub fn merge_player_props(old: &[u8], new: &[u8], bow_prop10: bool, accepted: Option<&IdSet>) -> Vec<u8> {
+    let new_props = parse_player_props_in(new, bow_prop10, accepted);
+    if new_props.iter().map(|p| 1 + p.raw.len()).sum::<usize>() != new.len() {
+        return new.to_vec();
+    }
+    let old_props = parse_player_props_in(old, bow_prop10, accepted);
+    let mut merged: std::collections::BTreeMap<u8, Vec<u8>> = old_props.into_iter().map(|p| (p.id, p.raw)).collect();
+    merged.extend(new_props.into_iter().map(|p| (p.id, p.raw)));
+    let mut out = Vec::new();
+    for (id, raw) in merged {
+        out.push(id + 0x20);
+        out.extend(raw);
+    }
+    out
 }
 
 #[cfg(test)]
