@@ -78,19 +78,23 @@ game keys are handled by index: weapon (D), sword (S) and action (A).
 * **Action key, carrying:** throws (unless in the lay-down mode, which has
   its own action).
 * **Weapon key, carrying:** does not throw. It only acts when the carried
-  sprite is one of three (ids 239, 261, 263) and then starts a separate
-  lay-down mode. Seihai does not implement that mode; D does nothing while
-  carrying.
+  sprite is one of three (ids 239, 261, 263): that mode is hiding under the
+  object (mode 14; D again or A comes out, S throws). Seihai has it
+  (`offline/hide.rs`); with a pot or a sign D does nothing.
 
 Seihai: `start_swing` refuses while something is carried, and the same S
 press goes on to the interact, which throws. Online the throw sends
-PLI_THROWCARRIED as for A. Not done: the mode reset to idle while walking
-(Seihai's pose follows the arrow keys each frame, so a held arrow key keeps
-the walk pose after the throw; the real client may show one idle frame
-first).
+PLI_THROWCARRIED as for A. A throw (A or S) puts a walking player back to
+idle (`throw_carried`); a held arrow walks again on the next step. That the
+walk then restarts on the next step is inferred from the sword's live
+timing, not captured for a throw.
 
-Checked only in 2.05. 2.22 and 2.31 were not read and not captured; Seihai
-uses the 2.05 rule for every build until they are.
+Seen live: 2.05 rev 2 throws with S from hiding, and 2.22 throws with S
+while carrying (not hidden): `carrystill` to `idle` in the tick after the
+press, no `sword` frame (lab trace `t222`, 2026-10-30,
+Graal_analysis `client-internals/player-mannerisms-live.md`). 2.31 was not
+captured. Not captured in any build: S during the six `lift` ticks, and a
+throw with an arrow held.
 
 ## Open (not read, not invented)
 
