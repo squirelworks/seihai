@@ -139,14 +139,17 @@ fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
 /// every frame runs this pass every frame.
 fn npc_image_pass(
     level: &Level,
+    player_images: &[seihai::assets::NpcImage],
     files: &mut FileSession,
     conn: Option<&mut Connection>,
     npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
     not_received: &mut HashSet<String>,
 ) {
     let mut msgs = Vec::new();
-    // Each NPC's image and the images its script put up with showimg.
-    for name in level.npcs.iter().flat_map(|n| n.image_names()) {
+    // Each NPC's image, the images its script put up with showimg, and the
+    // ones weapon scripts put up for the player.
+    let weapons = player_images.iter().map(|i| i.file.as_str()).filter(|n| !n.is_empty());
+    for name in level.npcs.iter().flat_map(|n| n.image_names()).chain(weapons) {
         if npc_images.contains_key(name) || not_received.contains(name) {
             continue;
         }
@@ -1547,7 +1550,7 @@ fn main() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
                                     if let Some(level) = session.current_level.clone() {
-                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                                        npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                     }
                                 }
                                 eprintln!("loaded {name}");
@@ -1584,7 +1587,7 @@ fn main() {
                                 // ignores case).
                                 if let Some(level) = session.current_level.clone() {
                                     npc_images.retain(|k, _| k == name || !k.eq_ignore_ascii_case(name));
-                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                 }
                             }
                         }
@@ -1697,7 +1700,7 @@ fn main() {
                         loaded_level = Some(name.clone());
                         // Request missing NPC images.
                         if let Some(level) = session.current_level.clone() {
-                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                            npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                         }
                     }
                 }
@@ -2389,7 +2392,7 @@ fn main() {
                             if !no_scripts && scripts_serial == session.level_serial {
                                 scripts.add_npc(&mut session, i);
                             }
-                            npc_image_pass(&session.current_level.clone().unwrap(), &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                            npc_image_pass(&session.current_level.clone().unwrap(), &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                             i
                         }
                         seihai::offline::Linked::None => continue,
@@ -2414,7 +2417,7 @@ fn main() {
                 // Pictures of this level's NPCs (online they were asked for when the
                 // level arrived; a second pass asks for nothing twice).
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }
@@ -2499,7 +2502,7 @@ fn main() {
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                    npc_image_pass(&level, &session.player_images, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }

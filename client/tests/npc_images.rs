@@ -213,6 +213,100 @@ fn a_hidden_npc_keeps_its_shown_images() {
     assert_eq!(at(&fb, 8 * 16 + 1, 8 * 16 + 1), BLUE, "its image stays up");
 }
 
+// ---- showimg from a weapon ------------------------------------------------------
+
+/// Weapon NPCs act as the player: their `showimg` images go on the
+/// player's level at one over the player (Graal_analysis
+/// `npc-library/gs1-command-reference-205.md`, `showimg` and the "weapon
+/// NPCs act as the player" rule). They are not any NPC's images.
+#[test]
+fn a_weapon_showimg_is_drawn_over_the_player_and_hideimg_takes_it_down() {
+    use seihai::scripting::engine::host::WeaponScript;
+    let imgs = images();
+    let (mut s, mut sc) = session("NPC red.png 2 2
+NPCEND
+");
+    let script = "if (weaponfired) { if (this.up) { hideimg 7; this.up = 0; } else { showimg 7,blue.png,12,6; changeimgpart 7,0,0,2,2; this.up = 1; } }";
+    sc.sync_weapons(&mut s, &[WeaponScript { name: "Lamp", image: "", script }]);
+    sc.world.weapon_fired("Lamp");
+    sc.apply(&mut s);
+    assert!(sc.images_changed, "the host is told to load the picture");
+    assert!(s.current_level.as_ref().unwrap().npcs[0].images.is_empty(), "not the NPC's image");
+    assert_eq!(s.player_images.len(), 1);
+    assert_eq!(s.player_images[0].height, 1, "one over the player");
+    // drawn with the NPCs over the players, in its part only
+    let fb = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
+    assert_eq!(at(&fb, 12 * 16, 6 * 16), BLUE);
+    assert_eq!(at(&fb, 12 * 16 + 2, 6 * 16), BLACK, "the part is 2 pixels wide");
+    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 12 * 16, 6 * 16), BLACK);
+    sc.world.weapon_fired("Lamp");
+    sc.apply(&mut s);
+    assert!(s.player_images.is_empty());
+    assert_eq!(at(&draw(&s, &imgs), 12 * 16, 6 * 16), BLACK);
+}
+
+#[test]
+fn a_weapon_image_belongs_to_the_level_it_was_put_up_on() {
+    use seihai::scripting::engine::host::WeaponScript;
+    let (mut s, mut sc) = session("");
+    sc.sync_weapons(&mut s, &[WeaponScript { name: "Lamp", image: "", script: "if (weaponfired) { showimg 1,blue.png,3,3; }" }]);
+    sc.world.weapon_fired("Lamp");
+    sc.apply(&mut s);
+    assert_eq!(s.player_images.len(), 1);
+    s.current_level = Some(Level::parse("GLEVNW01\n").unwrap());
+    sc.load_level(&mut s, "b.nw");
+    assert!(s.player_images.is_empty());
+}
+
+// ---- a real NPC script ------------------------------------------------------------
+
+/// One NPC block (`NPC ...` to `NPCEND`) of a script pack in
+/// `tests/fixtures/npc-scripts`, by the name on its `// =====` line.
+fn fixture_npc(pack: &str, name: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/npc-scripts").join(pack);
+    let text = String::from_utf8_lossy(&std::fs::read(path).expect("read the pack")).into_owned();
+    let start = text.find(&format!("// ===== {name} =====")).expect("the NPC is in the pack");
+    let body = &text[start..];
+    let npc = body.find("\nNPC ").expect("an NPC line") + 1;
+    let end = body[npc..].find("\nNPCEND").expect("NPCEND") + npc;
+    format!("{}\nNPCEND\n", &body[npc..end])
+}
+
+/// The Mollusk's chest from Phoenix's boomerang quest, unchanged: on
+/// `playerenters` it `setimg`s the closed chest, on a touch it `setimg`s
+/// the open one, puts the key up over it with `showimg 300`, sleeps 3
+/// seconds and takes the key down with `hideimg 300`.
+#[test]
+fn a_real_chest_script_opens_shows_its_key_and_hides_it() {
+    let npc = fixture_npc("02_phoenix.npc.txt", "02_phoenix/PhoenixNPC_Phoenix_boomerang_quest/quest_boom2__001__31_10.npc.txt");
+    assert!(npc.starts_with("NPC personalchest.png 31 10\n"));
+    assert!(npc.contains("setimg personalchest2.png;") && npc.contains("showimg 300,") && npc.contains("hideimg 300;"));
+    let mut imgs = HashMap::new();
+    imgs.insert("personalchest.png".to_string(), solid(RED));
+    imgs.insert("personalchest2.png".to_string(), solid(BLUE));
+    imgs.insert("ph_smallkey2.png".to_string(), solid(GREEN));
+    let (mut s, mut sc) = session(&npc);
+    let draw = |s: &OfflineSession| {
+        let mut fb = Framebuffer::new(640, 320);
+        draw_both(&mut fb, s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
+        fb
+    };
+    let (chest, key) = ((31 * 16 + 1, 10 * 16 + 1), (31 * 16 + 8 + 1, 9 * 16 + 1));
+    let fb = draw(&s);
+    assert_eq!((at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)), (RED, BLACK), "closed, no key");
+    touch_npc(&mut s, &mut sc, 31.0, 10.0);
+    assert!(sc.images_changed);
+    let fb = draw(&s);
+    assert_eq!(at(&fb, chest.0, chest.1), BLUE, "setimg: the chest is open");
+    assert_eq!(at(&fb, key.0, key.1), GREEN, "showimg 300: the key is up at x+0.5, y-1");
+    for _ in 0..62 {
+        sc.tick(&mut s, 50);
+    }
+    let fb = draw(&s);
+    assert_eq!((at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)), (BLUE, BLACK), "hideimg 300 after the sleep");
+    assert!(s.current_level.as_ref().unwrap().npcs[0].images.is_empty());
+}
+
 // ---- animations: setcharani idle <-> walk -----------------------------------
 
 fn root() -> PathBuf {
