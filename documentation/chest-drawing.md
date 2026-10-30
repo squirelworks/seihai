@@ -33,6 +33,11 @@ then x and y (each plus 32). Only when not opened, item and sign index follow
 (each plus 32). The short form is how the server says the account has already
 opened that chest. Such a chest is drawn open.
 
+The record is bytes, not text. The beta4 lab gserver sends sign index -1 as
+0xFF (`20 3e 44 20 ff` for `CHEST 30 36 greenrupee -1`, to 2.00, 2.05 and 2.22
+logins, 2026-10-30). Seihai used to keep only records that were valid UTF-8, so
+it dropped that chest and drew none; it now keeps every record.
+
 A level file's chests are closed. Chests opened in play are tracked in the
 session until the level is left.
 
