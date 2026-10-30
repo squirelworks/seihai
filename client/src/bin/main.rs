@@ -489,7 +489,7 @@ fn main() {
                 println!("         --send-tampercheck  as 2.17, 2.22 and 2.31: send PLI_TAMPERCHECK (39) after");
                 println!("                             login, and again as that build does (default: off;");
                 println!("                             GServer-v2 ignores it)");
-                println!("         --send-showimg      as 2.22 and 2.31: send PLI_SHOWIMGPLAYER (24) = 9 on");
+                println!("         --send-showimg      as 2.17, 2.22 and 2.31: send PLI_SHOWIMGPLAYER (24) = 9 on");
                 println!("                             the build's period (default: off; meaning unknown)");
                 println!("         --no-serverwarp     do not follow a PLO_SERVERWARP (178); by default");
                 println!("                             Seihai reconnects to the host and port it names");
