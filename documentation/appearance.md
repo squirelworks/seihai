@@ -65,9 +65,13 @@ These are server commands, not client ones.
     the same, and the hat sits within a pixel of the real one against the
     body.
   - `#P1 hat1.png` alone: the hat is drawn on the default figure in both.
-  - The real client also draws the shield, because the stock `idle.gani`
-    has `SHIELD` sprites. Seihai's own GANIs have none, so with the
-    built-in assets a character's (and the player's) shield is not drawn.
+  - The real client also draws the shield (`#2`), from the `SHIELD`
+    sprites of the stock `idle.gani`. Seihai's own `idle`, `walk` and
+    `sword` GANIs now have them too, at the stock places against the head,
+    step by step (measured on the 2.22 GANIs; behind the body, or in front
+    facing down; to the side during the swing, none facing left or right).
+    Sit, swim, hurt, carry and dead have none, as the stock ones. The lab
+    picture of that NPC then matches the real one, shield included.
 - **Per build.** GANI attributes exist from 2.02, the build that added
   props 37 to 41 (`chain.rs`; Graal_analysis `141-217.md`). For 2.00 and
   2.01 the `ATTR` sprites draw nothing, no attribute picture is asked for,
