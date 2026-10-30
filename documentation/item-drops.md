@@ -20,7 +20,7 @@ What a cut or lifted bush and a lifted pot leave, and the items on the floor. Re
 - Life 164 ticks of 50 ms (about 8.2 s); below 0 it goes.
 - Taken once the life is below 160 when `|px + 1.5 - (x + 1)| < 2` and `|py + 2 - (y + 1)| < 2`. Not while dead. Sound `extra.wav`.
 - Offline (and online before 1.38) the pickup is applied: rupees 1, 5, 30, 100 (up to 9,999,999), five bombs or arrows (up to 99), one heart.
-- Online from 1.38 the server's RUPEESCOUNT, BOMBSCOUNT and ARROWSCOUNT props (3, 4, 5) set the counts.
+- Online from 1.38 the server's RUPEESCOUNT, ARROWSCOUNT and BOMBSCOUNT props (3, 4, 5) set the counts.
 - Blinks (not drawn on odd ticks) below life 37; bounces `|sin(life / 3)| · (life / 164)^16 · 3` tiles for the first 22 ticks.
 - Drawn under the players (inferred): shadow sprite 42 at `(x + 0.5, y + 1 + h / 2 - 0.5)`, the item centred on `(x + 1, y + 1)`.
 - A level change clears the floor. `PLO_ITEMDEL` removes the item at its position.
