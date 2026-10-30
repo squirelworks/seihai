@@ -2471,7 +2471,7 @@ mod tests {
             fn gmap_text(&self, _: &str) -> Option<String> {
                 Some("GRMAP001\nWIDTH 2\nHEIGHT 2\nLEVELNAMES\n\"gm_nw.nw\",\"gm_ne.nw\",\n\"gm_sw.nw\",\"gm_se.nw\",\nLEVELNAMESEND\n".into())
             }
-            fn level(&self, name: &str) -> Option<Level> {
+            fn level(&self, name: &str, _: Option<u32>) -> Option<Level> {
                 self.0.get(name).cloned()
             }
         }
@@ -2496,7 +2496,7 @@ mod tests {
             ["gm_nw.nw", "gm_ne.nw", "gm_sw.nw", "gm_se.nw"].iter().map(|n| (n.to_string(), open(0))).collect(),
         );
         let mut session = OfflineSession::new();
-        session.current_level = files.level("gm_nw.nw");
+        session.current_level = files.level("gm_nw.nw", None);
         session.player_x = 60.0;
         session.player_y = 10.0;
         let rules = GmapRules::for_version(v);

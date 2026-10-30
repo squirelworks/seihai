@@ -264,6 +264,19 @@ impl AssetResolver {
         None
     }
 
+    /// Online, the local copy of a level that may stand in for the
+    /// server's: only one whose last-write time is the mod time the server
+    /// gave for it (`PLO_LEVELMODTIME`, 39). The real clients draw the
+    /// server's board and keep levels only in their web-level cache, keyed
+    /// by that mod time (Graal_analysis `formats/gwebl001-cache.md`), so a
+    /// same-named file of a client install (its `new1.nw`) is not the
+    /// server's level. A download saved with the server's time
+    /// (`documentation/file-cache.md`) matches.
+    pub fn level_at_mod_time(&self, name: &str, server_mod_time: Option<u32>) -> Option<PathBuf> {
+        let want = server_mod_time?;
+        self.level(name).filter(|p| crate::filecache::mod_time_of(p) == Some(want))
+    }
+
     /// Does this version open files with this level extension (".nw")?
     pub fn opens(&self, ext: &str) -> bool {
         let l = &self.profile.levels;
@@ -645,6 +658,22 @@ mod tests {
         for bad in ["", "..", "../x", "a/../../x", "/etc/passwd", "c:/x", "c:\\x", "a\0b", "///"] {
             assert_eq!(clean_name(bad), None, "{bad:?}");
         }
+    }
+
+    #[test]
+    fn online_a_local_level_counts_only_at_the_server_mod_time() {
+        let d = tmp("level-mod-time");
+        touch(&d, "new1.nw");
+        crate::filecache::set_mod_time(&d.join("new1.nw"), 1_000).unwrap();
+        let r = resolver(&d, ClientVersion::V222);
+        // The server's time for the level: the file is its copy.
+        assert_eq!(r.level_at_mod_time("new1.nw", Some(1_000)), Some(d.join("new1.nw")));
+        assert_eq!(r.level_at_mod_time("NEW1", Some(1_000)), Some(d.join("new1.nw")));
+        // Another time, or none sent yet: the server's board wins.
+        assert_eq!(r.level_at_mod_time("new1.nw", Some(1_001)), None);
+        assert_eq!(r.level_at_mod_time("new1.nw", None), None);
+        // No file at all.
+        assert_eq!(r.level_at_mod_time("other.nw", Some(1_000)), None);
     }
 
     #[test]

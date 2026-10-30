@@ -77,8 +77,8 @@ impl WorldLoader for RootLoader<'_> {
         std::fs::read_to_string(self.0.level_path(name)).ok()
     }
 
-    fn level(&self, name: &str) -> Option<Level> {
-        Level::load(self.0.level_path(name)).ok()
+    fn level(&self, name: &str, server_mod_time: Option<u32>) -> Option<Level> {
+        Level::load(self.0.level_at_mod_time(name, server_mod_time)?).ok()
     }
 }
 
@@ -1694,13 +1694,17 @@ fn main() {
                         } else {
                             format!("{name}.nw")
                         };
+                        // The server's level: its board, below. A local
+                        // file stands in only at the server's mod time (a
+                        // same-named file of a client install is not the
+                        // server's level). The real clients ask for no
+                        // level file.
                         level_from_board = false;
-                        match session.load_level(resolver.level_path(&file)) {
-                            Ok(()) => eprintln!("level {file}"),
-                            Err(e) => {
-                                eprintln!("level {file} not loaded ({e}); requesting");
-                                session.current_level = None;
-                                send_file_msgs(conn.as_mut(), files.need(&file));
+                        session.current_level = None;
+                        if let Some(path) = resolver.level_at_mod_time(&file, net_state.server_mod_time(&file)) {
+                            match session.load_level(&path) {
+                                Ok(()) => eprintln!("level {file} (local copy at the server's mod time)"),
+                                Err(e) => eprintln!("level {file}: local copy not loaded ({e})"),
                             }
                         }
                         loaded_level = Some(name.clone());
@@ -2559,7 +2563,7 @@ fn main() {
                     }
                 }
                 if let Some(n) = &now {
-                    level_from_board = resolver.level(n).is_none();
+                    level_from_board = net_state.board_of(n).is_some() || resolver.level_at_mod_time(n, net_state.server_mod_time(n)).is_none();
                 }
                 loaded_level = now;
                 if let Some(n) = &loaded_level {
