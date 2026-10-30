@@ -129,13 +129,13 @@ Each push sent trigger, own Y, then the NPC's Y, in one frame. GServer-v2 passes
 
 So VISFLAGS is 1 for shown, 2 for `drawoverplayer` and 4 for `drawunderplayer`. The client sets 16 on every NPC it reports and keeps any other bit the server gave. With no server value it starts from 65 (64 plus shown). Props go out in prop-id order. A prop is sent only when it differs from what the server last said.
 
-**Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends IMAGE, X, Y, VISFLAGS, BLOCKFLAGS and MESSAGE when they differ from what the server last said (`offline/servernpcs.rs`). Against the stub it sent the same values as the real client for every row of both tables above (except `showcharacter`), and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
+**Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends IMAGE, X, Y, GANI, VISFLAGS, BLOCKFLAGS and MESSAGE, and for a `showcharacter` NPC also SPRITE (18, the direction), COLORS (19), NICK (20), HEAD (22), BODY (35) and GATTRIB1 to 5 (36 to 40), when they differ from what the server last said (`offline/servernpcs.rs`). A character NPC's IMAGE is `#c#`; HEAD is an index below 100 for `head<n>.png`, else 100 plus the length and the name. Against the stub it sent the same values as the real client for every row of both tables above, for twelve more `showcharacter` cases (`setcharprop` head, body, colours, nickname, attributes, `setcharani`, `dir`, and the same props from the server), and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
+
+**Drawing the message.** 2.05 draws an NPC's `message` in the chat style (white over a blue shadow, the #141 font): centred over the NPC's picture (the image part, or the whole image; the 48-pixel player box for a `showcharacter` NPC), the top of the line one tile above the NPC, so the glyphs sit just over its top edge. Checked with a 32-pixel crate, a 64-pixel image part and a character NPC on one level, in the real client and in Seihai (`render::draw_npc_messages`). Hidden NPCs show no message.
 
 ## Open
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
-* A `showcharacter` NPC's character props (IMAGE `#c#`, GANI, head, body) are not sent; Seihai draws those NPCs by animation.
-* Seihai keeps an NPC's `message` text but still shows it in its old place, not above the NPC.
 * The `pushed` / `pulled` trigger to UDP peers (id 26) is not sent.
 * Blocking on every NPC that blocks, which needs the NPC image sizes in the session.
 * A jump across a gmap edge: 2.05 shifts the jump's start point when the level changes in the air; Seihai moves into the next cell when it lands.

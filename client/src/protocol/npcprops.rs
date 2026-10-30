@@ -3,7 +3,8 @@
 //! Both ways the payload is `GINT3 id`, then props as `GCHAR prop id` and
 //! a value. The prop ids and value shapes are GServer-v2's (`TNPC.h`); the
 //! 2.05 behaviour was checked in the lab (`documentation/ledges-push-pull.md`).
-//! Only image, script, position, the two flag bytes and the message are kept; the other
+//! Image, script, position, the two flag bytes, the message and the
+//! character props are kept; the other
 //! props of the pre-2.2 table are skipped by their length, and reading stops
 //! at a prop whose length is not known.
 
@@ -20,6 +21,29 @@ pub const NPCPROP_VISFLAGS: u8 = 13;
 pub const NPCPROP_BLOCKFLAGS: u8 = 14;
 /// `NPCPROP_MESSAGE` (15): `GCHAR` length and the text of `message`.
 pub const NPCPROP_MESSAGE: u8 = 15;
+/// The character props a `showcharacter` NPC reports: GANI (12, `GCHAR`
+/// length and name, also from the 2.05 client), SPRITE (18, the
+/// direction), COLORS (19, five colour indexes), NICKNAME (20), HEAD (22,
+/// an index under 100 or `100 + length` and the name), BODY (35) and the
+/// GANI attributes 1 to 5 (36 to 40).
+pub const NPCPROP_GANI: u8 = 12;
+pub const NPCPROP_SPRITE: u8 = 18;
+pub const NPCPROP_COLORS: u8 = 19;
+pub const NPCPROP_NICKNAME: u8 = 20;
+pub const NPCPROP_HEAD: u8 = 22;
+pub const NPCPROP_BODY: u8 = 35;
+pub const NPCPROP_GATTRIB1: u8 = 36;
+/// The image a character NPC reports.
+pub const CHARACTER_IMAGE: &str = "#c#";
+/// The colours of a character NPC whose script set none (2.05, lab).
+pub const DEFAULT_NPC_COLORS: [u8; 5] = [2, 5, 18, 5, 18];
+
+/// HEAD: a numbered head (`head<n>`) or an image name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Head {
+    Index(u8),
+    Name(String),
+}
 
 /// Vis flag bits, as the 2.05 client reports them: shown 1,
 /// `drawoverplayer` 2, `drawunderplayer` 4 (`drawaslight` sets none).
@@ -51,6 +75,14 @@ pub struct NpcProps {
     pub block_flags: Option<u8>,
     /// The NPC's `message` text.
     pub message: Option<String>,
+    /// Character props (see [`NPCPROP_GANI`]).
+    pub gani: Option<String>,
+    pub sprite: Option<u8>,
+    pub colors: Option<[u8; 5]>,
+    pub nickname: Option<String>,
+    pub head: Option<Head>,
+    pub body: Option<String>,
+    pub attrs: [Option<String>; 5],
 }
 
 impl NpcProps {
@@ -64,6 +96,17 @@ impl NpcProps {
         self.vis_flags = o.vis_flags.or(self.vis_flags);
         self.block_flags = o.block_flags.or(self.block_flags);
         self.message = o.message.or(self.message.take());
+        self.gani = o.gani.or(self.gani.take());
+        self.sprite = o.sprite.or(self.sprite);
+        self.colors = o.colors.or(self.colors);
+        self.nickname = o.nickname.or(self.nickname.take());
+        self.head = o.head.or(self.head.take());
+        self.body = o.body.or(self.body.take());
+        for (a, b) in self.attrs.iter_mut().zip(o.attrs) {
+            if b.is_some() {
+                *a = b;
+            }
+        }
     }
 }
 
@@ -114,14 +157,42 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
                 p.message = Some(s);
                 i += n;
             }
-            // Power, arrows, bombs, glove and bomb power, sprite, saves,
+            18 => {
+                p.sprite = Some(gc(i)? as u8);
+                i += 1;
+            }
+            19 => {
+                let c = b.get(i..i + 5)?;
+                p.colors = Some([0, 1, 2, 3, 4].map(|k| c[k].wrapping_sub(0x20)));
+                i += 5;
+            }
+            20 => {
+                let (s, n) = text(i)?;
+                p.nickname = Some(s);
+                i += n;
+            }
+            35 => {
+                let (s, n) = text(i)?;
+                p.body = Some(s);
+                i += n;
+            }
+            36..=40 => {
+                let (s, n) = text(i)?;
+                p.attrs[prop - 36] = Some(s);
+                i += n;
+            }
+            12 if !bow_prop12 => {
+                let (s, n) = text(i)?;
+                p.gani = Some(s);
+                i += n;
+            }
+            // Power, arrows, bombs, glove and bomb power, saves,
             // alignment, gmap level x / y: one byte.
-            4 | 6..=9 | 18 | 23..=33 | 41 | 42 => i += 1,
+            4 | 6..=9 | 23..=33 | 41 | 42 => i += 1,
             // Rupees and id: GINT3.
             5 | 17 => i += 3,
-            // Hurt dx / dy: two bytes. Colours: five. Image part: six.
+            // Hurt dx / dy: two bytes. Image part: six.
             16 => i += 2,
-            19 => i += 5,
             34 => i += 6,
             // Sword: power 0..=4, or 30 + power then the image.
             10 => {
@@ -143,12 +214,18 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
                 let sp = gc(i)?;
                 i += 1 + sp.saturating_sub(10);
             }
-            // GANI, nickname, horse, body, GANI attributes 1 to 5.
-            12 | 20 | 21 | 35..=40 => i += text(i)?.1,
+            // Horse.
+            21 => i += text(i)?.1,
             // Head: an index under 100, else 100 + the name's length.
             22 => {
                 let len = gc(i)?;
-                i += 1 + len.saturating_sub(100);
+                if len < 100 {
+                    p.head = Some(Head::Index(len as u8));
+                    i += 1;
+                } else {
+                    p.head = Some(Head::Name(latin1(b.get(i + 1..i + 1 + len - 100)?)));
+                    i += 1 + len - 100;
+                }
             }
             _ => break,
         }
@@ -164,6 +241,10 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
 pub enum PropValue {
     /// One `GCHAR`.
     Byte(u8),
+    /// Several `GCHAR`s (COLORS).
+    Bytes(Vec<u8>),
+    /// HEAD.
+    Head(Head),
     /// `GCHAR` length, then the text (Latin-1, at most 223 bytes).
     Text(String),
 }
@@ -179,16 +260,28 @@ pub fn npc_props_message(id: u32, props: &[(u8, PropValue)]) -> Vec<u8> {
         m.push(prop + 0x20);
         match v {
             PropValue::Byte(b) => m.push((*b).min(223) + 0x20),
+            PropValue::Bytes(bs) => m.extend(bs.iter().map(|b| (*b).min(223) + 0x20)),
             PropValue::Text(t) => {
-                let mut bytes: Vec<u8> = t.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect();
-                bytes.truncate(223);
+                let bytes = latin1_bytes(t, 223);
                 m.push(bytes.len() as u8 + 0x20);
+                m.extend(bytes);
+            }
+            PropValue::Head(Head::Index(i)) => m.push((*i).min(99) + 0x20),
+            PropValue::Head(Head::Name(n)) => {
+                let bytes = latin1_bytes(n, 123);
+                m.push(bytes.len() as u8 + 100 + 0x20);
                 m.extend(bytes);
             }
         }
     }
     m.push(b'\n');
     m
+}
+
+fn latin1_bytes(t: &str, max: usize) -> Vec<u8> {
+    let mut bytes: Vec<u8> = t.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect();
+    bytes.truncate(max);
+    bytes
 }
 
 /// A position in tiles as the `GCHAR` half tiles of `NPCPROP_X` / `Y`.
@@ -273,6 +366,34 @@ mod tests {
         // NPC 1118 (`setimg bomb1.png;`): IMAGE, then VISFLAGS.
         let m = npc_props_message(1118, &[(NPCPROP_IMAGE, PropValue::Text("bomb1.png".into())), (NPCPROP_VISFLAGS, PropValue::Byte(81))]);
         assert_eq!(m, b"# (~ )bomb1.png-q\n");
+    }
+
+    #[test]
+    fn character_props_read_and_write_as_the_2_05_client_sent_them() {
+        // NPC 3002 (`showcharacter; setcharprop #3,head7.png; #8,body2.png`).
+        let props = [
+            (0, PropValue::Text("#c#".into())),
+            (NPCPROP_GANI, PropValue::Text("idle".into())),
+            (NPCPROP_VISFLAGS, PropValue::Byte(81)),
+            (NPCPROP_HEAD, PropValue::Head(Head::Name("head7.png".into()))),
+            (NPCPROP_BODY, PropValue::Text("body2.png".into())),
+        ];
+        let m = npc_props_message(3002, &props);
+        assert_eq!(m, b"# 7Z ##c#,$idle-q6\x8dhead7.pngC)body2.png\n");
+        let (id, p) = parse_npc_props(&m[1..m.len() - 1], false).unwrap();
+        assert_eq!(id, 3002);
+        assert_eq!((p.image.as_deref(), p.gani.as_deref(), p.body.as_deref()), (Some("#c#"), Some("idle"), Some("body2.png")));
+        assert_eq!(p.head, Some(Head::Name("head7.png".into())));
+        // NPC 3005: colours; 3001: head index 0; 3006: SPRITE 1; 3007: #P1.
+        let m = npc_props_message(1, &[(NPCPROP_COLORS, PropValue::Bytes(vec![4, 10, 18, 5, 18])), (NPCPROP_HEAD, PropValue::Head(Head::Index(0)))]);
+        assert_eq!(m, b"#  !3$*2%26 \n");
+        let mut tail = vec![gc(0), gc(0), gc(1)];
+        tail.extend_from_slice(&m[4..m.len() - 1]);
+        tail.extend([gc(18), gc(1), gc(36), gc(8)]);
+        tail.extend_from_slice(b"hat0.png");
+        let (_, p) = parse_npc_props(&tail, false).unwrap();
+        assert_eq!((p.colors, p.head, p.sprite), (Some([4, 10, 18, 5, 18]), Some(Head::Index(0)), Some(1)));
+        assert_eq!(p.attrs[0].as_deref(), Some("hat0.png"));
     }
 
     #[test]
