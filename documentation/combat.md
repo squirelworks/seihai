@@ -36,6 +36,46 @@ every other client tests whether it is in the box in front of the swing.
 Seihai does the same, on the receiving side, whenever another player's props
 arrive with a swing sprite.
 
+### Who reports a sword hit, by version
+
+| Build | The swing on the wire | Who judges the hit | Hit message for a sword |
+|---|---|---|---|
+| 2.05 rev 2 | SPRITE (17) = `dir + 4 * S`, S 6 to 10 | the victim's client | none |
+| 2.17.1, 2.22, 2.31 | GANI (10) = `sword` (`ridesword`, `spin`), SPRITE = direction only | the victim's client | none |
+
+The victim's side was read in all four builds: the sword's damage comes from
+the attacker's SWORDPOWER prop as the victim last received it, and the swing
+reaches others only as props (`decomp-findings-2026-10-24-d/01-sword-damage.md`).
+No read build sends `PLI_HURTPLAYER` (26) for a sword: in 2.05 the attacker's
+26 and the UDP id 21 come from the GS1 `hitplayer` command
+(`protocol/udp-p2p.md`), so `hurtplayer_message` stays unwired for the sword.
+The server only relays the props; GServer-v2 checks nothing about a hit. The
+one server-made hit is the spin: on GANI `spin` GServer-v2 sends four
+`PLO_HITOBJECTS` (46) around the player (`02-weapons-combat.md`).
+
+**2.1+ swings.** A GANI client sends the swing as GANI `sword` once, and its
+SPRITE holds only the direction. Seihai takes another player as swinging when
+its GANI is `sword`, `ridesword` or `spin` (`combat::is_swing_gani`), and
+judges it again on every later update of its place or animation while that
+GANI stays on (the 2.05 sprite came with every step). These three are the
+names the 2.05 client turns into S 6 to 10 (its gani-to-step rule,
+`feature-specs/11-emotes-ganis.md`). That 2.17.1 and later judge a swing by
+these names is an **inference**: their kick test reads the attacker's
+animation (`kick`, index 3 of the 31 built-in names) and not a sprite, but
+their swing test itself was not read. A server that renames the ganis (the
+2.22 run on Graal the Adventure plays `cn_sword`) is not covered. Seihai's own
+2.17, 2.22 and 3.04 swings already go out as GANI `sword` on the walk cadence
+(`protocol::walkcadence`).
+
+**Peer UDP.** Swings do not need the UDP channel. The 2.05 channel carries
+the movement (id 0, with the first letter of the GANI, `S` while swinging),
+but a client sends a level action over TCP as well whenever some player in the
+level has no UDP port (`feature-specs/07-udp-peer.md`, "Routing rule"), and
+Seihai advertises none (no UDPPORT, 31). Props always go over TCP too. So
+Seihai sees every swing as props from the server. Whether 2.17 to 2.31 use
+the channel at all is open (2.22 ships `noudp=true`; the 2.17 client in the
+2026-10-30 cross-laptop run had no UDP socket).
+
 A sword hit counts when all of these hold (`judge_sword`):
 
 | Check | Value | Reject |
@@ -108,7 +148,9 @@ The swing and hurt mode are shown with the player's own animations: the S key pl
   is a sprite broadcast. The S key starts a swing (`start_swing`: not dead,
   not swimming, a sword, no warp pending, no swing already out). Others see
   S = 6, 7, 8, 9, 10 in the walk message, then idle. Walking during a swing
-  sends the swing sprite, so it is not cut short.
+  sends the swing sprite, so it is not cut short. A 2.17, 2.22 or 3.04
+  session sends GANI `sword` and the direction instead (see "Who reports a
+  sword hit, by version").
 - **Hits that are messages.** `hurtplayer_message` is the filter for the
   messages that do name a victim. **No game-loop code calls it yet**: the
   only sources would be script commands (`hitplayer`, `hitobjects`), and
@@ -164,5 +206,8 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
 - **Swim and editor/pause.** Swimming blocks hits (mode 10). The editor/pause
   exemption has no Seihai equivalent.
 - **Distance rule.** Settled by the decompile: the squared distance between the X/Y props is at most 100, for ids 40 and 46 alike (a circle, not per axis).
-- **Lab.** No run against the real client or a server; the layouts and rules
+- **Lab.** A 2026-10-30 cross-laptop run of an older Seihai build against a
+  real 2.17 client saw no sword damage either way (thrown objects worked);
+  this file's 2.1+ swing reading is the fix for the receiving side, not yet
+  re-run. Before that, no run against the real client or a server; the layouts and rules
   are the documents' and the decompile's (2.05 rev 2, 2.17.1, 2.22, 2.31).
