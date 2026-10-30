@@ -159,6 +159,8 @@ or not the level changed (see `damage-respawn.md`, open). Seihai does not.
   yet routed through the hit rules.
 - **Editor/pause exemption.** A player in the editor or paused state cannot be
   hurt unless the level is a sparring zone (an NPC script command
-  `sparringzone` sets it). Seihai has neither state.
+  `sparringzone` sets it). Seihai pauses with P or when its window loses the
+  focus (`offline/pause.rs`) and then refuses every hit; it has no editor
+  state and no sparring zones.
 - No lab run. A capture of a real client dying (claim, status frames, respawn
   frame) would confirm the layouts and the order.

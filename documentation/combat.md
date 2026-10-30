@@ -219,8 +219,11 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
   server allowing weapons (STATUS bit 0x10), the charged spin (mode 13), and
   riding. Seihai has no horse, and the weapons bit's wire meaning is not
   traced further.
-- **Swim and editor/pause.** Swimming blocks hits (mode 10). The editor/pause
-  exemption has no Seihai equivalent.
+- **Swim and editor/pause.** Swimming blocks hits (mode 10). So does pause
+  (STATUS 0x01: the P key, or a window without the focus; `offline/pause.rs`),
+  refused as `Paused`. The real clients let a paused player be hurt in a
+  `sparringzone` level; Seihai has no sparring zones. Seihai has no editor
+  state.
 - **Distance rule.** Settled by the decompile: the squared distance between the X/Y props is at most 100, for ids 40 and 46 alike (a circle, not per axis).
 - **Lab.** A 2026-10-30 cross-laptop run of an older Seihai build against a
   real 2.17 client saw no sword damage either way (thrown objects worked);

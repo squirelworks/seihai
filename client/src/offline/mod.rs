@@ -14,9 +14,11 @@ use std::collections::{HashMap, HashSet};
 
 mod drops;
 mod hide;
+mod pause;
 mod pushpull;
 mod servernpcs;
 pub use hide::{HIDDEN_STATUS, HIDE_KINDS};
+pub use pause::{name_label, PAUSED_STATUS};
 pub use pushpull::{NpcMoved, Grab, Jump, PushPull, Trigger};
 pub use servernpcs::{block_flags, Linked, ServerNpcSync, NPC_SEND_INTERVAL};
 use pushpull::StepResult;
@@ -191,6 +193,13 @@ pub struct OfflineSession {
     pub(crate) hurt_walked: bool,
     /// Hiding under the carried object (see `offline/hide.rs`).
     pub hidden: bool,
+    /// Paused: the pause key, or the window without the focus (see
+    /// `offline/pause.rs`).
+    pub paused: bool,
+    /// The pause key's own state.
+    pub(crate) pause_key: bool,
+    /// The window has the focus.
+    pub(crate) focused: bool,
     /// Steps walked while hidden, for the hidden walk sprite.
     pub(crate) hide_steps: usize,
     /// The swim stroke was running with the player moving, last tick.
@@ -488,6 +497,9 @@ impl OfflineSession {
             pose_clock_ms: 0,
             hurt_walked: false,
             hidden: false,
+            paused: false,
+            pause_key: false,
+            focused: true,
             hide_steps: 0,
             swim_was_moving: false,
             mannerisms: crate::protocol::MANNER_205,

@@ -326,7 +326,8 @@ pub fn draw_other_labels(fb: &mut Framebuffer, font: Option<&ChatFont>, others: 
     for o in others {
         let (dx, dy) = to_screen(o.x, o.y, cam);
         if let Some(nick) = &o.nick {
-            draw_nick_text(fb, font, nick, o.ap.unwrap_or(50), dx, dy);
+            let label = crate::offline::name_label(nick, o.status);
+            draw_nick_text(fb, font, &label, o.ap.unwrap_or(50), dx, dy);
         }
         if let Some(chat) = &o.chat {
             draw_bubble(fb, font, chat, dx, dy, o.carry.is_some());
