@@ -90,13 +90,18 @@ These are server commands, not client ones.
   `#C0` … `#C4` (colours, by name or number), the same as the commands.
 - Seihai's own `body.png` was re-laid to the 2.05 palette layout, so the
   colours land on the right parts (`default-assets.md`).
+- A `.gif` body takes the colours the same way: the same palette entries of
+  the GIF's colour table are replaced before it is decoded
+  (`read_gif_rgba_recolored`). The built-in `body.gif` has the PNG's palette,
+  and both come out pixel-equal in any colours. That a real `.gif` body uses
+  the same entries is inferred: no old body GIF was in the corpus to check.
 
 ## Not done
 
 - Bodies drawn without a GANI (the plain fallback with no pose loaded) are
   not recoloured.
-- Only PNG bodies and heads are drawn; a `.gif` or `.mng` name is asked
-  for but not decoded.
+- `.mng` bodies and heads are asked for but not decoded. PNG and GIF are
+  (GIF: the first image only).
 - Attributes other than the hat are looked for where other images are;
   where 2.05 looks for them is not checked. Seihai's default GANIs have
   only the hat (`ATTR1`).
