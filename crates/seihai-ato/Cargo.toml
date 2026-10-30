@@ -4,7 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The Torque / 3.x client line. A place-holder for now: it shares the core
-# and does not draw yet.
+# The Torque / 3.x client line. Stage 1: the 3.x wire facts (token, the
+# 3.x-only ids, the Torque profile) and the start window. No game drawing
+# yet.
+[lib]
+name = "seihai_ato"
+path = "src/lib.rs"
+
+[[bin]]
+name = "seihai-ato"
+path = "src/main.rs"
+
 [dependencies]
-seihai-core = { path = "../seihai-core" }
+seihai-core = { path = "../seihai-core", default-features = false }
+# The start window. Same versions as seihai-mae.
+eframe = "0.29"
+egui = "0.29"
