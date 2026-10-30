@@ -125,6 +125,51 @@ pub fn chat_key_action(open: bool, enter: bool, talk: bool) -> ChatKeyAction {
     }
 }
 
+/// What the quit prompt does with one frame's keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuitKey {
+    /// Y or Enter: quit.
+    Quit,
+    /// N or Escape: close the prompt and play on.
+    Cancel,
+    /// Nothing for the prompt.
+    None,
+}
+
+/// The quit prompt's answer. `was_open` is whether the prompt was up before
+/// this frame: the Escape that opens it is still "pressed" when the prompt
+/// reads its keys in the same frame, and must not close it again (that left
+/// Escape doing nothing at all from 2026-10-23 until it was fixed).
+pub fn quit_key(was_open: bool, yes: bool, no: bool, escape: bool) -> QuitKey {
+    if yes {
+        QuitKey::Quit
+    } else if no || (was_open && escape) {
+        QuitKey::Cancel
+    } else {
+        QuitKey::None
+    }
+}
+
+#[cfg(test)]
+mod quit_key_tests {
+    use super::*;
+
+    /// The Escape that opens the prompt leaves it open.
+    #[test]
+    fn the_opening_escape_does_not_close_it() {
+        assert_eq!(quit_key(false, false, false, true), QuitKey::None);
+    }
+
+    /// A second Escape, N, Y or Enter answer it.
+    #[test]
+    fn later_keys_answer_it() {
+        assert_eq!(quit_key(true, false, false, true), QuitKey::Cancel);
+        assert_eq!(quit_key(true, false, true, false), QuitKey::Cancel);
+        assert_eq!(quit_key(true, true, false, false), QuitKey::Quit);
+        assert_eq!(quit_key(true, false, false, false), QuitKey::None);
+    }
+}
+
 impl Input {
     pub fn open(&mut self, mode: InputMode) {
         self.mode = Some(mode);
