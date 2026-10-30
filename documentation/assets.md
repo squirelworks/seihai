@@ -53,7 +53,7 @@ name to a file. It takes the data folder and a version profile.
 |------|-------------------------|-----------|
 | Level, gmap | `levels/` (downloads), root, `maps/` | A name with an extension must be one the profile opens (`levels.nw`, `.graal`, `.zelda`, `.gmap`). A bare name takes the profile's extensions in turn (`.nw`, `.graal`, `.zelda`, `.gmap`, those the build opens). A missing `.zelda` name is not swapped for a `.graal` one. |
 | GANI | `gani/`, `levels/ganis/`, `levels/bomys/`, `levels/`, root | `.gani` added to a bare name. None at all where the profile's `ui.ganis` is false (1.39 is one). |
-| Image | the folder hint (`bodies`, `heads`), `levels/`, root, every `levels/<category>/`, the same categories under root, `maps/` | Bare name: `files.image_ext` first (`.gif` below 2.1, `.png` after), then `.png`, `.gif`, `.mng`. A `.gif` or `.png` name falls back to the other extension (the folder ships PNG only). |
+| Image | the folder hint (`bodies`, `heads`), `levels/`, root, every `levels/<category>/`, the same categories under root, `maps/` | Bare name: `files.image_ext` first (`.gif` below 2.1, `.png` after), then `.png`, `.gif`, `.mng`. A `.gif` or `.png` name falls back to the other extension (the folder ships PNG only). Player art (`heads`, `bodies`, `swords`, `shields`) in a `.gif` build (up to 2.05) is looked for as `.gif` first in every layer, whatever the name says. The real 2.05 rev 2 reads `.gif` only and draws no body from a PNG-only folder (Graal_analysis `player-mannerisms-live.md`). Seihai then falls back to the usual names, so the player stays visible. |
 | Sound | `sounds/`, `levels/sounds/`, `levels/`, root | `.wav` added to a bare name; a leading `+` (loop) is dropped. |
 | Music | `levels/midis/`, `midis/`, `levels/`, `sounds/`, root | `.mid` added to a bare name. |
 | Tile types | root, `levels/` | `tiledefs.txt`, else `arrays.dat`. |
@@ -307,8 +307,8 @@ Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
 - **No `.graal` level ships in the 2.22 folder** (`maps/bigmap.txt` names some).
   Real files came later (see "What real files showed"). The `HEIGHTS` block of
   `GR-V1.04` is skipped, not stored: no real file has one. The two supplied
-  levels' NPCs name `.gif` art; GIF is not decoded.
-- **GIF and MNG.** Found, not decoded. The folder holds 28 `.mng` and no GIF.
+  levels' NPCs name `.gif` art.
+- **GIF and MNG.** GIF is decoded (first image, `assets/gif.rs`); MNG is found, not decoded. The folder holds 28 `.mng` and no GIF.
 - **Tiledef matching.** The files parse; how a client matches `prefix` against
   a level name and what types other than 0 and 1 mean (the folder uses 4) is
   not in the notes, so no sheet is chosen from them.
