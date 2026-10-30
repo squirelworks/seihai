@@ -890,6 +890,9 @@ fn main() {
     if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
         send_file_msgs(conn.as_mut(), files.need("idle.gani"));
     }
+    // A gen-2 build (1.33 to 1.39) sends its own props once the first level
+    // has loaded instead (see `classic_login_props_message`).
+    let mut classic_props_owed = conn.is_some() && seihai::protocol::login::sends_classic_login_props(version);
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -1650,6 +1653,15 @@ fn main() {
                         session.level_serial += 1;
                         level_from_board = true;
                         eprintln!("level from the server's board");
+                    }
+                }
+                if classic_props_owed && session.current_level.is_some() {
+                    classic_props_owed = false;
+                    let m = seihai::protocol::login::classic_login_props_message(&net_state.player_props, &account, net_state.own_prop_ids.as_ref());
+                    if let Some(c) = conn.as_mut() {
+                        if let Err(e) = c.send_messages(&[m]) {
+                            eprintln!("login props send failed: {e}");
+                        }
                     }
                 }
                 // Links can arrive a frame after the board.
@@ -2642,6 +2654,7 @@ fn main() {
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
                         }
+                        classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());

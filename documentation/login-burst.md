@@ -66,6 +66,28 @@ items bow 7 and bomb 8, the 2.22 item-name table is in the same order, and the
 real 2.22 and 2.31 logins ask `wbomb1.png` before `wbowi1.png`, as a walk over
 default weapons 8 then 7 would. No mapping is wired (`file-cache.md`).
 
+## Gen-2 builds (1.33 to 1.39)
+
+These builds have no post-login frame and no process list. Live runs of 1.33
+and 1.39 against GServer-v2 (Graal_analysis `version-profiles/1.33-1.39.md`)
+show their first `PLI_PLAYERPROPS` going out once the first level has loaded,
+with `NICKNAME` (0), `HEADGIF` (11), `COLORS` (13), `STATUS` (18), `UDPPORT`
+(31) and `ADDITFLAGS` (33). A numbered default head goes as `c(number)`.
+
+Seihai now sends that message once a connection's first level is there (from
+the file or from the server's board). It uses `classic_login_props_message`.
+Head, colours and status are copied from the server's props, and `UDPPORT`
+is left out, as for the later builds. 1.41 to 2.05 send nothing of this kind
+yet. The real 2.05 sends a login props message too (lab stub, 2026-10-30), but
+its layout is not decoded here.
+
+Not done:
+
+* The default weapon registration that goes with it: id 25 (the full weapon)
+  up to 1.37, and id 33 (`c(0)` + default weapon id) from 1.38. GServer-v2
+  beta4 kicks a client for id 25.
+* A lab run of Seihai 1.33 or 1.39 with this change.
+
 ## Tests
 
 `protocol::login::tests` pin the image order, the icon names, the process list text,
