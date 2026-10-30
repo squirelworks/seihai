@@ -96,12 +96,13 @@ uses the 2.05 rule for every build until they are.
 
 * Whether the cut also makes a sound, and the pieces' exact timing against the
   real client; a lab capture of a cut would settle both. Other cut-table
-  effects (drops) are below.
+  effects (drops): `item-drops.md`.
 
 * **Throwing** is implemented (see `throwing.md`); what a thrown object
   does to NPCs, players and baddies it hits was not read.
-* **What a cut or a lift drops** (rupees, hearts, bombs): the spawn routine
-  takes the entry index and was not read, so nothing drops.
+* **What a cut or a lift drops** (rupees, hearts, bombs): per build, see
+  `item-drops.md`. 1.33 to 1.41 roll it on the client; from 1.42 the
+  server drops, and offline nothing does.
 * **Carrying pose and what others see**: see `throwing.md`, "Carry pose
   and other players".
 * **Telling the server.** A lift or a cut sends the object's 2 x 2 tiles,

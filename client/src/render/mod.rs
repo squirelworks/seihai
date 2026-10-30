@@ -14,7 +14,7 @@ pub mod signs;
 pub mod chattext;
 mod tiles;
 
-pub use throw::{draw_sprite, draw_throw_layer};
+pub use throw::{draw_floor_items, draw_sprite, draw_throw_layer};
 pub use npcs::{draw_npc_messages, draw_npcs, npc_sheets, NpcArt, NpcPass, NPC_DIR};
 pub use others::{look_images, other_pose, OTHER_STEP_MS};
 pub use tiles::{

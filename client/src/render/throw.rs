@@ -65,6 +65,25 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
     }
 }
 
+/// The items on the floor ([`crate::items`]), as 2.05 draws them: the
+/// shadow (sprite 42) at `(x + 0.5, y + 1 + h / 2 - 0.5)` for an item `h`
+/// tiles high, then the item centred on `(x + 1, y + 1)`, raised by its
+/// bounce. On its blink's off ticks nothing is drawn.
+pub fn draw_floor_items(fb: &mut Framebuffer, session: &OfflineSession, sprites: Sheet<'_>, cam_x: i32, cam_y: i32) {
+    let tables = session.object_tables.as_ref();
+    for it in &session.floor_items {
+        if !it.visible() {
+            continue;
+        }
+        let Some(id) = it.sprite() else { continue };
+        let Some((_, _, w, h)) = t::sprite_rect(tables, id) else { continue };
+        let h_tiles = h as f32 / TILE_PX as f32;
+        draw_sprite(fb, sprites, tables, crate::items::ITEM_SHADOW_SPRITE, px(it.x + 0.5) - cam_x, px(it.y + 1.0 + h_tiles / 2.0 - 0.5) - cam_y);
+        let (cx, cy) = (px(it.x + 1.0), px(it.y + 1.0 - it.lift()));
+        draw_sprite(fb, sprites, tables, id, cx - w / 2 - cam_x, cy - h / 2 - cam_y);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

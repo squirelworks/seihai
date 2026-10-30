@@ -12,6 +12,7 @@ use crate::life::{respawn_half_hearts, Life, LifeEvent};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
+mod drops;
 mod hide;
 mod pushpull;
 mod servernpcs;
@@ -188,6 +189,15 @@ pub struct OfflineSession {
     /// How this build moves and looks (blink, pull release, swim when
     /// still): see [`crate::protocol::Mannerisms`].
     pub mannerisms: crate::protocol::Mannerisms,
+    /// Who drops bush and pot items in this build (see `offline/drops.rs`).
+    pub drops: crate::protocol::ItemDrops,
+    /// Items lying on the floor of the current level.
+    pub floor_items: Vec<crate::items::FloorItem>,
+    /// The 1.x drop roll's `Random`.
+    pub(crate) item_rng: crate::items::DelphiRandom,
+    pub(crate) item_ms: u64,
+    /// Rolls, pickups and timeouts for [`Self::take_item_messages`].
+    pub(crate) item_events: Vec<crate::items::ItemEvent>,
     /// The sword, hurt and sit animations (see [`crate::pose`]).
     pub poses: crate::pose::PoseGanis,
     /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
@@ -465,6 +475,11 @@ impl OfflineSession {
             hide_steps: 0,
             swim_was_moving: false,
             mannerisms: crate::protocol::MANNER_205,
+            drops: crate::protocol::DROPS_142,
+            floor_items: Vec::new(),
+            item_rng: crate::items::DelphiRandom::from_clock(),
+            item_ms: 0,
+            item_events: Vec::new(),
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
             screen_effect: [0.0; 4],
@@ -972,6 +987,7 @@ impl OfflineSession {
         let left = tables.lift_into.get(kind).copied()?;
         self.current_level.as_mut()?.put_object(ax, ay, &left);
         self.note_board_change(ax, ay, 2, 2);
+        self.lift_drop(kind, ax, ay);
         self.carried = Some(Carried { kind, tiles });
         self.lift_ticks = Some(0);
         Some(kind)
@@ -998,13 +1014,16 @@ impl OfflineSession {
         self.thrown.push(crate::throwing::Thrown::launch_remote(sprite, px, py, dir, thrower));
     }
 
-    /// Drop every object in flight and every effect (a level change).
+    /// Drop every object in flight, every effect and every floor item (a
+    /// level change).
     fn clear_throws(&mut self) {
         self.thrown.clear();
         self.leaps.clear();
         self.grounded.clear();
         self.landings.clear();
         self.throw_ms = 0;
+        // The items on the floor belong to the level.
+        self.floor_items.clear();
     }
 
     /// Whether a thrown object's wall probe at `(fx, fy)` ends its flight:
@@ -1170,6 +1189,7 @@ impl OfflineSession {
         // Which effect each cut entry plays is inferred, see
         // `documentation/cut-and-lift.md`.
         self.spawn_leap(crate::throwing::cut_leap_kind(kind), ax as f32, ay as f32);
+        self.cut_drop(ax, ay);
         Some(kind)
     }
 
@@ -4037,4 +4057,137 @@ mod tests {
         assert_eq!(crate::throwing::sprite_rect(Some(&t), 261), Some((0, 338, 32, 32)));
     }
 
+    // -- Bush and pot drops (`offline/drops.rs`). ---------------------------
+
+    /// The object session with this build's drop rules and a roll that
+    /// gives a green rupee (seed 0: the first `Random(100)` is 0).
+    fn drop_session(d: crate::protocol::ItemDrops) -> OfflineSession {
+        let mut s = object_session(1);
+        s.set_drops(d);
+        s.item_rng = crate::items::DelphiRandom::new(0);
+        s
+    }
+
+    fn ticks(s: &mut OfflineSession, n: usize, online: bool) {
+        for _ in 0..n {
+            s.tick_items(drops::ITEM_TICK_MS, online);
+        }
+    }
+
+    #[test]
+    fn a_1x_cut_rolls_a_rupee_onto_the_bush_and_tells_the_server_from_138() {
+        let mut s = drop_session(crate::protocol::DROPS_138);
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.try_cut(), Some(0));
+        assert_eq!(s.floor_items, vec![crate::items::FloorItem::new(crate::items::GREENRUPEE, 20.0, 20.0)], "at the bush's top-left tile");
+        // The 1.39 capture: C>S 12 x*2, y*2, item.
+        assert_eq!(s.take_item_messages(true), vec![crate::items::item_add_message(0, 20.0, 20.0)]);
+        // 1.33 to 1.37 roll the same but tell nobody over TCP.
+        let mut s = drop_session(crate::protocol::DROPS_133);
+        face_up_at(&mut s, 20, 20);
+        s.try_cut();
+        assert_eq!(s.floor_items.len(), 1);
+        assert!(s.take_item_messages(true).is_empty());
+    }
+
+    #[test]
+    fn a_roll_of_37_or_more_drops_nothing_and_2x_never_rolls() {
+        let mut s = drop_session(crate::protocol::DROPS_138);
+        s.item_rng = crate::items::DelphiRandom::new(0xffff_ffff);
+        face_up_at(&mut s, 20, 20);
+        s.try_cut();
+        assert!(s.floor_items.is_empty(), "roll 96");
+        // 1.42 on: the server drops, and offline nothing does.
+        let mut s = drop_session(crate::protocol::DROPS_142);
+        face_up_at(&mut s, 20, 20);
+        s.try_cut();
+        assert!(s.floor_items.is_empty());
+        assert_eq!(s.item_rng, crate::items::DelphiRandom::new(0), "no roll at all");
+    }
+
+    #[test]
+    fn a_lifted_bush_rolls_entry_2_leaves_a_heart_and_the_others_nothing() {
+        let mut s = drop_session(crate::protocol::DROPS_138);
+        face_up_at(&mut s, 20, 20);
+        assert_eq!(s.try_lift(), Some(0));
+        assert_eq!(s.floor_items.len(), 1, "the bush rolled");
+        s.carried = None;
+        s.floor_items.clear();
+        face_up_at(&mut s, 30, 20);
+        assert_eq!(s.try_lift(), Some(1));
+        assert!(s.floor_items.is_empty(), "entry 1 (the sign) leaves nothing");
+        s.carried = None;
+        s.item_rng = crate::items::DelphiRandom::new(0xffff_ffff);
+        face_up_at(&mut s, 40, 20);
+        assert_eq!(s.try_lift(), Some(2));
+        assert_eq!(s.floor_items, vec![crate::items::FloorItem::new(crate::items::HEART, 40.0, 20.0)], "entry 2 (the pot) always a heart");
+    }
+
+    #[test]
+    fn offline_a_pickup_is_applied_and_nothing_is_sent() {
+        let mut s = drop_session(crate::protocol::DROPS_138);
+        face_up_at(&mut s, 20, 20);
+        s.try_cut();
+        s.take_item_messages(false);
+        // Walk onto it: (19.5, 19.5) tests (21, 21.5) against its middle (21, 21).
+        s.player_y = 19.5;
+        ticks(&mut s, 4, false);
+        assert_eq!(s.rupees, 0, "not in the first four ticks");
+        ticks(&mut s, 1, false);
+        assert_eq!(s.rupees, 1);
+        assert!(s.floor_items.is_empty());
+        assert!(s.take_sound_events().iter().any(|e| e.file == "extra.wav"));
+        assert!(s.take_item_messages(false).is_empty());
+    }
+
+    #[test]
+    fn online_from_138_the_server_gives_the_pickup_and_hears_the_timeout() {
+        let mut s = drop_session(crate::protocol::DROPS_142);
+        face_up_at(&mut s, 20, 20);
+        s.player_y = 19.5;
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BLUERUPEE, 20.0, 20.0));
+        ticks(&mut s, 5, true);
+        assert_eq!(s.rupees, 0, "the server sends the rupees with props");
+        assert_eq!(s.take_item_messages(true), vec![crate::items::item_take_message(1, 20.0, 20.0)]);
+        // Out of reach it times out after 165 ticks: PLI_ITEMDEL.
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BOMBS, 50.0, 50.0));
+        ticks(&mut s, 164, true);
+        assert!(s.take_item_messages(true).is_empty());
+        ticks(&mut s, 1, true);
+        assert_eq!(s.take_item_messages(true), vec![crate::items::item_del_message(50.0, 50.0)]);
+        // PLO_ITEMDEL takes an item away; a level change clears the floor.
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BOMBS, 50.0, 50.0));
+        s.remove_server_item(50.0, 50.0);
+        assert!(s.floor_items.is_empty());
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BOMBS, 50.0, 50.0));
+        s.clear_throws();
+        assert!(s.floor_items.is_empty());
+    }
+
+    #[test]
+    fn before_138_an_online_pickup_is_applied_and_sent_as_itemdel_and_a_timeout_is_silent() {
+        let mut s = drop_session(crate::protocol::DROPS_133);
+        face_up_at(&mut s, 20, 20);
+        s.player_y = 19.5;
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BOMBS, 20.0, 20.0));
+        s.bombs = 97;
+        ticks(&mut s, 5, true);
+        assert_eq!(s.bombs, 99, "five bombs, up to 99");
+        assert_eq!(s.take_item_messages(true), vec![crate::items::item_del_message(20.0, 20.0)]);
+        s.add_server_item(crate::items::FloorItem::new(crate::items::BOMBS, 50.0, 50.0));
+        ticks(&mut s, 165, true);
+        assert!(s.floor_items.is_empty());
+        assert!(s.take_item_messages(true).is_empty());
+    }
+
+    #[test]
+    fn a_floor_heart_heals_one_heart() {
+        let mut s = OfflineSession::new();
+        s.set_hearts_half(2);
+        s.apply_pickup(crate::items::HEART);
+        assert_eq!(s.hearts_half(), 4);
+        s.apply_pickup(crate::items::REDRUPEE);
+        s.apply_pickup(19);
+        assert_eq!(s.rupees, 130);
+    }
 }

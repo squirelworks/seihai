@@ -23,6 +23,13 @@ use super::version::ClientVersion;
 use crate::chatlists::{BubbleTimer, ChatFilter, Identity};
 use std::collections::HashMap;
 
+/// An item the server put down or took away on the current level.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ServerItem {
+    Add(crate::items::FloorItem),
+    Del(f32, f32),
+}
+
 /// A single logical message after frame decompression.
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -356,7 +363,9 @@ pub struct SessionState {
     pub server_npcs: std::collections::BTreeMap<u32, (Option<String>, NpcProps)>,
     /// `PLO_NPCPROPS` updates in arrival order, taken by the game loop.
     pub npc_changes: Vec<(u32, NpcProps)>,
-    pub items: Vec<String>,
+    /// `PLO_ITEMADD` (22) and `PLO_ITEMDEL` (23) in arrival order, drained
+    /// by the game loop onto the floor (see [`crate::items`]).
+    pub items: Vec<ServerItem>,
     pub warps: Vec<String>,
     pub player_props: Vec<u8>,
     /// Player position extracted from `PLO_PLAYERPROPS` (classic scale).
@@ -390,6 +399,12 @@ pub struct SessionState {
     pub own_cur_power: Option<u8>,
     /// GLOVEPOWER (prop 6) the server last gave for the player.
     pub own_glove_power: Option<u8>,
+    /// RUPEESCOUNT (3), BOMBSCOUNT (4) and ARROWSCOUNT (5) the server last
+    /// gave, taken by the game loop: the login values, and what a pickup
+    /// sent as `PLI_ITEMTAKE` gives.
+    pub own_rupees: Option<u32>,
+    pub own_bombs: Option<u8>,
+    pub own_darts: Option<u8>,
     pub own_status: Option<u8>,
     pub own_alignment: Option<u8>,
     /// Own head (11), body (35) and colours (13) from `PLO_PLAYERPROPS`,
@@ -721,15 +736,16 @@ impl SessionState {
                 }
             }
             22 => {
-                // PLO_ITEMADD
-                if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.items.push(s);
+                // PLO_ITEMADD: x*2, y*2, item. Only floor items are put down,
+                // as the 2.05 handler does.
+                if let Some(it) = crate::items::parse_item_add(&msg.payload) {
+                    self.items.push(ServerItem::Add(it));
                 }
             }
             23 => {
-                // PLO_ITEMDEL — record as a removal marker
-                if let Ok(s) = String::from_utf8(msg.payload.clone()) {
-                    self.items.push(format!("DEL:{s}"));
+                // PLO_ITEMDEL: x*2, y*2.
+                if let Some((x, y)) = crate::items::parse_item_del(&msg.payload) {
+                    self.items.push(ServerItem::Del(x, y));
                 }
             }
             56 => {
@@ -1473,6 +1489,9 @@ impl SessionState {
                 (1, Some(v)) => self.own_max_power = Some(v),
                 (2, Some(v)) => self.own_cur_power = Some(v),
                 (6, Some(v)) => self.own_glove_power = Some(v),
+                (3, _) => self.own_rupees = read_gint3(&prop.raw).map(|v| v as u32),
+                (4, Some(v)) => self.own_bombs = Some(v),
+                (5, Some(v)) => self.own_darts = Some(v),
                 (18, Some(v)) => self.own_status = Some(v),
                 (32, Some(v)) => self.own_alignment = Some(v),
                 (0, _) => self.nickname = Some(latin1(prop.raw.get(1..).unwrap_or(&[]))),
@@ -2181,6 +2200,11 @@ mod tests {
         // GLOVEPOWER (6).
         st.apply_body(&[9 + 0x20, 6 + 0x20, 3 + 0x20, b'\n']);
         assert_eq!(st.own_glove_power, Some(3));
+        // RUPEESCOUNT 1 after a 1.39 pickup (lab capture S>C 9 `#  !`),
+        // then BOMBSCOUNT 15 and ARROWSCOUNT 7.
+        st.apply_body(b")#  !\n");
+        st.apply_body(&[9 + 0x20, 4 + 0x20, 15 + 0x20, 5 + 0x20, 7 + 0x20, b'\n']);
+        assert_eq!((st.own_rupees, st.own_bombs, st.own_darts), (Some(1), Some(15), Some(7)));
     }
 
     #[test]
