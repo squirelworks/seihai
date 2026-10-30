@@ -57,14 +57,20 @@ pub struct LoginInfo {
     /// in one plain zlib frame (3.04: `bigmap.txt` and `minimap.txt`, which
     /// its install ships in `maps/`). Empty: the login line goes alone.
     pub first_frame_files: &'static [&'static str],
+    /// The login line, `PLI_LANGUAGE` and (when sent) `PLI_TAMPERCHECK` go
+    /// in one frame, as the real 2.17.1 sends them (lab, 2026-10-30,
+    /// `documentation/difftest-217.md` item 5). The messages after the login
+    /// line carry the gen-3 insertion already. A build with
+    /// `first_frame_files` bundles as well.
+    pub bundle_login: bool,
 }
 
-pub const LOGIN_217: LoginInfo = LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
-pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
-pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[] };
+pub const LOGIN_217: LoginInfo = LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: true };
+pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: false };
+pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], bundle_login: false };
 /// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
 pub const LOGIN_304: LoginInfo =
-    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"] };
+    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"], bundle_login: true };
 /// 3.153 (Mac OS X), never run: 3.04's frame with `OSTYPE` `mac`, the value
 /// its binary writes (Graal_analysis `version-profiles/3.04-3.153.toml`). The
 /// code page and the rest of the frame are 3.04's; the notes have no 3.153

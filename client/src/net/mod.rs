@@ -544,17 +544,20 @@ pub fn login_gserver_with(
 ) -> Result<GserverSession, LoginFailure> {
     let mut conn =
         Connection::connect(addr).map_err(|error| LoginFailure { connect: true, error })?;
-    let first_files = version.profile().protocol.login.map_or(&[][..], |l| l.first_frame_files);
+    let login = version.profile().protocol.login;
+    let first_files = login.map_or(&[][..], |l| l.first_frame_files);
+    let bundle = login.is_some_and(|l| l.bundle_login) || !first_files.is_empty();
     let mut warnings = Vec::new();
     let tamper = if send_tampercheck { TamperSender::for_version(version) } else { None };
     let tamper_unavailable = send_tampercheck && tamper.is_none();
-    if first_files.is_empty() {
+    if !bundle {
         conn.login_versioned(version, key, account, password)
             .map_err(|error| LoginFailure { connect: false, error })?;
         if let Err(e) = conn.send_post_login_with(version, "English", tamper.as_ref()) {
             warnings.push(format!("post-login send failed: {e}"));
         }
     } else {
+        // The real 2.17.1: login line, language and tamper check in one frame.
         // The real 3.04: login line, language and the file checks in one plain frame.
         let mut then = conn.post_login_messages(version, "English", tamper.as_ref());
         then.extend(first_files.iter().map(|n| check(n)));
@@ -696,9 +699,11 @@ impl Connection {
         self.login_versioned_with(version, key, account, password, &[])
     }
 
-    /// As [`Self::login_versioned`], with `then` in the same plain frame
-    /// after the login line (the real 3.04 sends its language and two file
-    /// checks there).
+    /// As [`Self::login_versioned`], with `then` in the same frame after the
+    /// login line (the real 3.04 sends its language and two file checks
+    /// there; the real 2.17.1 its language and tamper check). On a gen-3 link
+    /// each of `then` gets its insertion, from the first iterator step: the
+    /// real 2.17.1 frame decodes that way (lab, 2026-10-30).
     pub fn login_versioned_with(
         &mut self,
         version: ClientVersion,
@@ -710,14 +715,18 @@ impl Connection {
         let mut line = Vec::new();
         write_login(&mut line, version, key, account, password)?;
         line.push(b'\n');
+        let mut gen3 = (version.encryption() == EncryptionGen::Gen3).then(|| Gen3::new(key));
         for m in then {
-            line.extend_from_slice(m);
+            match gen3.as_mut() {
+                Some(g) => line.extend(g.encode(m)),
+                None => line.extend_from_slice(m),
+            }
         }
         self.send_raw(&write_zlib_frame(&line)?)?;
         self.pli = Some(version.profile().protocol.pli);
         self.take_flags();
         match version.encryption() {
-            EncryptionGen::Gen3 => self.gen3 = Some(Gen3::new(key)),
+            EncryptionGen::Gen3 => self.gen3 = gen3,
             EncryptionGen::Gen5 => {
                 self.gen5 = Some(Gen5::new(key));
                 self.gen5_in = Some(Gen5::new(key));
@@ -2770,6 +2779,38 @@ mod tests {
         // A build with no tamper constant (2.3) says so.
         let s = login_gserver(&addr, ClientVersion::V230, 0x33, "ab", "cd", true).unwrap();
         assert!(s.tamper.is_none() && s.tamper_unavailable);
+    }
+
+    /// The real 2.17.1 (lab, 2026-10-30): the login line, the language and
+    /// the tamper check in one frame, the last two with their gen-3
+    /// insertion from the first iterator step; the next frame carries on
+    /// from the third step.
+    #[test]
+    fn login_gserver_217_bundles_language_and_tampercheck_with_the_login() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut s = login_gserver(&addr, ClientVersion::V217, 0x31, "ab", "cd", true).unwrap();
+        assert!(s.warnings.is_empty() && s.tamper.is_some());
+        let (mut srv, _) = listener.accept().unwrap();
+        let frame = read_frame(&mut srv);
+        let at = frame.iter().position(|&b| b == b'\n').unwrap() + 1;
+        assert_eq!(&frame[..2], &[0x20, 0x31 + 0x20]);
+        assert_eq!(&frame[2..10], b"GNW22122");
+        let mut g = Gen3::new(0x31);
+        let msgs: Vec<Vec<u8>> = frame[at..].split_inclusive(|&b| b == b'\n').map(|m| g.decode(m).unwrap()).collect();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0], lang_msg());
+        assert_eq!(&msgs[1][..11], &[39 + 0x20, 0x2a, 0x7b, 0xad, 0x19, 0x5e, 0x23, 0x12, 0x43, 0xd8, 0x2c]);
+        s.conn.send_messages(&[lang_msg()]).unwrap();
+        let next = read_frame(&mut srv);
+        assert_eq!(g.decode(&next).unwrap(), lang_msg());
+
+        // Without the tamper check: the login line and the language.
+        let _s = login_gserver(&addr, ClientVersion::V217, 0x32, "ab", "cd", false).unwrap();
+        let (mut srv, _) = listener.accept().unwrap();
+        let frame = read_frame(&mut srv);
+        let at = frame.iter().position(|&b| b == b'\n').unwrap() + 1;
+        assert_eq!(Gen3::new(0x32).decode(&frame[at..]).unwrap(), lang_msg());
     }
 
     /// A connection that cannot be made is a connect failure.

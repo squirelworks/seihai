@@ -1113,7 +1113,7 @@ fn login_text(l: &Option<LoginInfo>) -> String {
     match l {
         None => "none".into(),
         Some(l) => format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             if l.full { "files, process list, props" } else { "head and default-weapon files, props without head or colours" },
             match l.os_props {
                 Some((os, cp)) => format!(" with OS {os} and code page {cp}"),
@@ -1121,6 +1121,7 @@ fn login_text(l: &Option<LoginInfo>) -> String {
             },
             if l.idle_gani { ", idle.gani at once" } else { "" },
             if l.status_icons { ", status icons" } else { "" },
+            if l.bundle_login && l.first_frame_files.is_empty() { ", language and tamper check in the login frame" } else { "" },
         ),
     }
 }
