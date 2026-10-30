@@ -115,6 +115,8 @@ pub enum Reject {
     AlreadyHurt,
     /// The victim is swimming (mode 10).
     Swimming,
+    /// The victim hides under a carried object (mode 14).
+    Hidden,
     /// Packet hit from farther than the profile's range.
     TooFar,
     /// The hit came from an NPC. Its position is not known to Seihai.
@@ -143,6 +145,8 @@ pub enum Vulnerability {
     Dead,
     Hurt,
     Swimming,
+    /// Hiding under a carried object (2.05 mode 14).
+    Hidden,
 }
 
 impl Vulnerability {
@@ -152,6 +156,7 @@ impl Vulnerability {
             Vulnerability::Dead => Err(Reject::Dead),
             Vulnerability::Hurt => Err(Reject::AlreadyHurt),
             Vulnerability::Swimming => Err(Reject::Swimming),
+            Vulnerability::Hidden => Err(Reject::Hidden),
         }
     }
 }
@@ -531,6 +536,9 @@ pub struct CombatState {
     spin: Option<(u64, u16)>,
     /// The has-spin status (STATUS bit 0x40) is set.
     has_spin: bool,
+    /// Knockback steps per hit when the build differs from
+    /// [`KNOCKBACK_TICKS`] (1.39: 4).
+    knockback_ticks: Option<u16>,
 }
 
 /// The STATUS (18) bit that allows the spin attack.
@@ -551,11 +559,18 @@ impl CombatState {
         self.rules.as_ref()
     }
 
+    /// Knockback steps per hit, the build's own (`Mannerisms`).
+    pub fn set_knockback_ticks(&mut self, n: u16) {
+        self.knockback_ticks = Some(n);
+    }
+
     /// Take the rules of another build. Ends a swing and a hurt in progress.
     pub fn set_rules(&mut self, rules: Option<CombatRules>) {
         let has_spin = self.has_spin;
+        let k = self.knockback_ticks;
         *self = CombatState::new(rules);
         self.has_spin = has_spin;
+        self.knockback_ticks = k;
     }
 
     pub fn is_hurt(&self) -> bool {
@@ -678,7 +693,7 @@ impl CombatState {
                 }
                 self.hurt_left -= 1;
                 if let Some(k) = self.knock {
-                    if self.hurt_left + KNOCKBACK_TICKS >= r.hurt_ticks {
+                    if self.hurt_left + self.knockback_ticks.unwrap_or(KNOCKBACK_TICKS) >= r.hurt_ticks {
                         self.knock_steps.push(k);
                     } else {
                         self.knock = None;
@@ -716,6 +731,8 @@ impl OfflineSession {
             Vulnerability::Hurt
         } else if self.in_water {
             Vulnerability::Swimming
+        } else if self.hidden {
+            Vulnerability::Hidden
         } else {
             Vulnerability::Hurtable
         };
@@ -919,6 +936,10 @@ impl OfflineSession {
     /// The SPRITE (17) value for the player's own walk and swing messages.
     pub fn sprite_value(&self) -> u8 {
         let s = self.combat.sprite(self.player_dir);
+        // Hidden: `hiddenstill` (18) or the `hidden` walk.
+        if let Some(h) = self.hidden_sprite_s().filter(|_| s == self.player_dir % 4) {
+            return (self.player_dir % 4) + 4 * h;
+        }
         // Holding an object (no swing can be out then): the carrystill
         // sprite, S = 18 (2.05 step 24). Hurt mode keeps its own sprite.
         if self.carried.is_some() && s == self.player_dir % 4 {

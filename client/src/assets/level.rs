@@ -80,6 +80,8 @@ pub struct Npc {
     pub server_id: Option<u32>,
     /// The text of the NPC's last `message` (empty for none).
     pub message: String,
+    /// The script's `dir` (0 up, 1 left, 2 down, 3 right).
+    pub dir: u8,
 }
 
 /// The drawing height of an NPC. The 2.05 client keeps it as one number
@@ -170,7 +172,7 @@ impl Npc {
     pub fn new(image: String, x: f32, y: f32, script: String) -> Npc {
         Npc { image, x, y, script, visible: true, image_part: None, ani: None, ani_frame: 0, ani_ms: 0, images: Vec::new(),
             head: None, body: None, shield: None, props: std::collections::HashMap::new(), blocks: true, pushable: false, pullable: false, shape: None, layer: DrawLayer::Player, effect: ImageEffect::default(), server_id: None,
-            message: String::new() }
+            message: String::new(), dir: 2 }
     }
 
     /// Every image file the NPC draws now: its own and its `showimg` ones.

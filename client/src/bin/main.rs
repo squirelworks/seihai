@@ -915,7 +915,7 @@ fn main() {
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
     for name in [
         "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
-        "lift.gani", "spin.gani",
+        "lift.gani", "spin.gani", "hiddenstill.gani", "hidden.gani",
     ] {
         load_pose_gani(&resolver, &mut session, name);
     }
@@ -1003,6 +1003,7 @@ fn main() {
     // The death sequence of this build (none for builds before 2.05).
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
+    session.set_mannerisms(profile.mannerisms);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -1155,10 +1156,17 @@ fn main() {
                     shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
                     attrs: pose.filter(|_| gani_attrs).map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs)).unwrap_or_default(),
                 };
+                // The hurt blink: on its off ticks only the shadow (the
+                // SPRITES sheet's placements) is drawn.
+                let shadow_only = seihai::render::PoseSheets { sprites: sheets.sprites, ..Default::default() };
+                let sheets = if session.blink_off() { &shadow_only } else { &sheets };
                 if let Some(p) = pose {
-                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
+                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, sheets, dx, dy);
                 }
             }
+            // The hurt blink without GANIs: nothing on the off ticks. Hidden
+            // under the carried object without its GANIs: only the object.
+            (Some(_), Some(_)) if session.blink_off() || session.figure_hidden() => {}
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
                 b,
@@ -1181,6 +1189,7 @@ fn main() {
             seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
+        seihai::render::draw_npc_messages(&mut fb, session, &npc_art, chat_font.as_ref(), cam_x, cam_y);
         ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
         if let Some(nick) = my_nick {
@@ -1236,6 +1245,8 @@ fn main() {
     // The weapon list and the selected weapon (the HUD's D slot), and whether
     // a file arrived that may be its image.
     let mut weapon_bar = seihai::weaponbar::WeaponBar::default();
+    // The looks last sent to the server (none yet on this connection).
+    let mut looks_sent: Option<seihai::looks::Looks> = None;
     let mut weapon_asked: HashSet<String> = HashSet::new();
     let mut weapon_recheck = true;
     // Our own nickname shows for 60 frames after the start, a change of our
@@ -1367,6 +1378,8 @@ fn main() {
     let mut last_step = Instant::now();
     // STATUS (prop 18) as the server last gave it; the dead bit is toggled on it.
     let mut status_base = 0u8;
+    // STATUS bit 0x02 last sent (hiding under a carried object).
+    let mut last_hide_status = 0u8;
     let mut life_clock = Instant::now();
     let mut combat_clock = Instant::now();
     // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
@@ -1740,6 +1753,7 @@ fn main() {
                                 | seihai::combat::Reject::Dead
                                 | seihai::combat::Reject::AlreadyHurt
                                 | seihai::combat::Reject::Swimming
+                                | seihai::combat::Reject::Hidden
                                 | seihai::combat::Reject::NpcSource
                                 | seihai::combat::Reject::UnknownPower
                                 | seihai::combat::Reject::NoPkZone
@@ -2002,6 +2016,8 @@ fn main() {
             dirty |= session.tick_poses(dt);
             // The spin attack's pose changes every tick.
             dirty |= session.combat.spin_elapsed_ms().is_some();
+            // The hurt blink changes the picture every tick of hurt mode.
+            dirty |= session.combat.is_hurt();
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
             if pp_sprite != last_pp_sprite {
@@ -2043,6 +2059,32 @@ fn main() {
                 false,
                 keymap.pressed(&window, Action::Attack),
             );
+        // D while carrying hides under the object (or comes out); A comes out
+        // too. Others see STATUS bit 0x02 and the hidden sprites.
+        let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
+        let unhide_key = session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
+        let interact = interact && !unhide_key;
+        let hide_changed = if unhide_key {
+            session.leave_hiding();
+            true
+        } else {
+            hide_key && session.toggle_hide()
+        };
+        dirty |= hide_changed;
+        // The hidden bit goes out whenever it changes (D, A, or a throw
+        // from hiding, which is seen one frame later).
+        if session.hide_status() != last_hide_status {
+            last_hide_status = session.hide_status();
+            if let Some(c) = conn.as_mut() {
+                let sent = c
+                    .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])
+                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                if let Err(e) = sent {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
+            }
+        }
         if interact {
             sign_page = 0;
             match session.interact() {
@@ -2574,6 +2616,7 @@ fn main() {
                         gmap_asked.clear();
                         // The request lists belong to one connection.
                         files.new_connection();
+                        looks_sent = None;
                         // The new server has its own cache folder, searched first.
                         let warp_cache = cache_for(&a, Some(&w.display_name()));
                         let warp_game_cache = game_cache_for(&a);
@@ -2825,6 +2868,8 @@ fn main() {
                 profile.files.image_ext,
             );
             let now = weapon_bar.current_image().map(str::to_string);
+            // `#w` in scripts: the selected weapon's name.
+            scripts.world.core.player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
             if now != before {
                 dirty = true;
                 weapon_recheck = true;
@@ -2847,10 +2892,13 @@ fn main() {
         }
         // A script changed our looks (`sethead`, `setcoatcolor` …): the
         // server and the other players see it from our props.
-        if std::mem::take(&mut session.looks_changed) {
+        // Only a real change is sent: a script that sets the same head every
+        // frame must not send PLAYERPROPS every frame.
+        if std::mem::take(&mut session.looks_changed) && looks_sent.as_ref() != Some(&session.looks) {
             if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks, &profile.props.own)) {
                 eprintln!("looks send failed: {e}");
             }
+            looks_sent = Some(session.looks.clone());
             dirty = true;
         }
         // Server NPCs a push, a pull or a script changed: the 2.05 client

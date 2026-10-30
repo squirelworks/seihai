@@ -24,7 +24,7 @@
 use super::profile::{
     Basis, BuiltIn, ChatFace, ChatText, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
-    VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
+    Mannerisms, VersionProfile, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
@@ -150,6 +150,8 @@ pub struct Delta {
     pub ghost_mode: Option<bool>,
     pub server_in_title: Option<bool>,
     pub gs1_commands: Option<u16>,
+    // How the player moves and looks.
+    pub mannerisms: Option<Mannerisms>,
 }
 
 impl Delta {
@@ -199,6 +201,7 @@ impl Delta {
         ghost_mode: None,
         server_in_title: None,
         gs1_commands: None,
+        mannerisms: None,
     };
 }
 
@@ -297,6 +300,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.ui.server_in_title = pick(p.ui.server_in_title, d.server_in_title);
     p.ui.chat_text = pick(p.ui.chat_text, d.chat_text);
     p.ui.gs1_commands = pick(p.ui.gs1_commands, d.gs1_commands);
+    p.mannerisms = pick(p.mannerisms, d.mannerisms);
     p
 }
 
@@ -365,6 +369,8 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         chat_text: ChatText { face: ChatFace::Dialog, height: 28 },
         gs1_commands: 88,
     },
+    // Read in 1.39; 1.33 to 1.38 were not run and take its row.
+    mannerisms: MANNER_139,
 };
 
 // -- The chain. -------------------------------------------------------------
@@ -512,6 +518,7 @@ pub const CHAIN: &[Step] = &[
             ganis: Some(true),
             chat_text: Some(ChatText { face: ChatFace::TempusSans, height: 24 }),
             gs1_commands: Some(134),
+            mannerisms: Some(MANNER_141),
             ..Delta::NONE
         },
         source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, chat font Tempus Sans ITC 24, GS1 126 to 134",
@@ -641,6 +648,7 @@ pub const CHAIN: &[Step] = &[
             combat: Some(Some(COMBAT_205)),
             server_in_title: Some(true),
             gs1_commands: Some(161),
+            mannerisms: Some(MANNER_205),
             ..Delta::NONE
         },
         source: "binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death and combat rules traced here",
@@ -800,6 +808,7 @@ pub const CHAIN: &[Step] = &[
             link_boxes: Some(true),
             udp_off_by_default: Some(true),
             server_list: Some(ServerList::Tabs(3)),
+            mannerisms: Some(MANNER_222),
             ..Delta::NONE
         },
         source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props, links tested with a per-direction probe box",
@@ -1110,7 +1119,18 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "ui", "server_in_title", &ua.server_in_title, &ub.server_in_title, yes_no);
     value_change(&mut o, "ui", "chat_text", &ua.chat_text, &ub.chat_text, dbg);
     value_change(&mut o, "ui", "gs1_commands", &ua.gs1_commands, &ub.gs1_commands, dbg);
+    value_change(&mut o, "mannerisms", "mannerisms", &a.mannerisms, &b.mannerisms, manner_text);
     o
+}
+
+fn manner_text(m: &Mannerisms) -> String {
+    match *m {
+        MANNER_139 => "1.39 (blink after the hurt pose, hide keeps the carry poses, 4-tile knockback)".into(),
+        MANNER_141 => "NewMain 1.41 (pull lets go to grab, swim freezes when still, hide keeps the carry poses)".into(),
+        MANNER_205 => "2.05 (hidden ganis, pull stays, swim runs on)".into(),
+        MANNER_222 => "2.22 (as 2.05, swim restarts at the stop)".into(),
+        _ => format!("{m:?}"),
+    }
 }
 
 /// The changes of step `i` against step `i - 1`; empty for the origin.
@@ -1244,6 +1264,11 @@ mod tests {
             let got = strip_field(&got, ", link_boxes: ", " }");
             // So did the chat font (`chat_text`).
             let got = strip_field(&got, ", chat_text: ", ", gs1_commands");
+            // And the mannerisms, the last field.
+            let got = match got.find(", mannerisms: ") {
+                Some(i) => format!("{} }}", &got[..i]),
+                None => got,
+            };
             // The login shape and its basis (`Listserver::shape`) came later too.
             let got = if got.contains(", shape: ") { strip_field(&got, ", shape: ", " }") } else { got };
             if got != want {
