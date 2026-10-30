@@ -82,6 +82,8 @@ When no block is there, the push routine looks for an NPC with `canbepushed` at 
 
 **Running in place.** For the first 17 blocked steps against a wall, a block or a ledge the player is not drawn standing. 2.05 sets the walk gani on every walk tick whether the step moved or not, so the legs keep running until the push pose (or the jump) takes over. Footsteps do not play then: 2.05 plays them only in the normal and swimming modes, and a refused step puts the player in the pushing mode. Seihai steps the walk gani once per refused step and drops its sound cues.
 
+On a GANI client (2.1+) the push and pull sprites keep their first number while the pose lasts: those clients play the pose from their own GANI and send SPRITE only when it changes. Stepping the 2.05 numbers sent a walk update about six times a second while the player pushed a wall (lab, westocean_k-16, 2026-10-30); now the push sends one, plus the `pushed` trigger once a second.
+
 Seihai draws the push, grab and pull poses only when the gani is loaded; the default asset set has none of the three, so without a data folder that has them the player stands. The sprite numbers come from the 2.05 animation step table (push steps 14 to 18, grab 19, pull 20 to 22).
 
 ## 2.22 and 2.31

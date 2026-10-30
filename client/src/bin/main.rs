@@ -123,17 +123,21 @@ fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
 
 /// For each NPC image of a level: ask the server for a missing file or, if
 /// the file is there, check it (the file-cache rules decide which), and
-/// load the image we have.
+/// load the image we have. A name that could not be loaded goes into
+/// `not_received` and is not looked for again until a file arrives: each
+/// look searches the folders of every layer, and a script that sets an image
+/// every frame runs this pass every frame.
 fn npc_image_pass(
     level: &Level,
     files: &mut FileSession,
     conn: Option<&mut Connection>,
     npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
+    not_received: &mut HashSet<String>,
 ) {
     let mut msgs = Vec::new();
     // Each NPC's image and the images its script put up with showimg.
     for name in level.npcs.iter().flat_map(|n| n.image_names()) {
-        if npc_images.contains_key(name) {
+        if npc_images.contains_key(name) || not_received.contains(name) {
             continue;
         }
         let m = files.need(name);
@@ -141,9 +145,12 @@ fn npc_image_pass(
             eprintln!("requesting {name}");
         }
         msgs.extend(m);
-        if let Some(data) = files.store.read(name) {
-            if let Ok((w, _, px)) = read_png_rgba(&data) {
+        match files.store.read(name).and_then(|data| read_png_rgba(&data).ok()) {
+            Some((w, _, px)) => {
                 npc_images.insert(name.to_string(), (w, px));
+            }
+            None => {
+                not_received.insert(name.to_string());
             }
         }
     }
@@ -183,7 +190,12 @@ fn look_image_pass(
         if tried.insert(name.clone()) {
             got = resolver.image_in(dir, name).and_then(|p| std::fs::read(p).ok()).and_then(read);
         }
-        if got.is_none() && !not_received.contains(name) {
+        // Asked for already and nothing arrived since: asking again would
+        // search the folders again for nothing.
+        if got.is_none() && not_received.contains(name) {
+            continue;
+        }
+        if got.is_none() {
             got = files.store.read(name).and_then(read);
         }
         match got {
@@ -1400,7 +1412,9 @@ fn main() {
     let mut last_pp_sprite: Option<u8> = None;
     let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
     let run_clock = Instant::now();
+    let mut slow_log = SlowFrameLog::default();
     while window.is_open() {
+        let mut ft = FrameTimes::start();
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open() {
             char_repeat.clear();
@@ -1456,6 +1470,7 @@ fn main() {
                 dirty = true;
             }
         }
+        ft.mark("input");
         // Online: apply every frame that has arrived, without blocking.
         if let Some(rx) = &frames {
             let mut changed = false;
@@ -1490,7 +1505,7 @@ fn main() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
                                     if let Some(level) = session.current_level.clone() {
-                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                     }
                                 }
                                 eprintln!("loaded {name}");
@@ -1517,7 +1532,7 @@ fn main() {
                                 // ignores case).
                                 if let Some(level) = session.current_level.clone() {
                                     npc_images.retain(|k, _| k == name || !k.eq_ignore_ascii_case(name));
-                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                 }
                             }
                         }
@@ -1630,7 +1645,7 @@ fn main() {
                         loaded_level = Some(name.clone());
                         // Request missing NPC images.
                         if let Some(level) = session.current_level.clone() {
-                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                         }
                     }
                 }
@@ -1786,7 +1801,7 @@ fn main() {
                             // one, hurt mode still shows in the sprite.
                             if !send_power_report(&mut conn, &mut session, version) {
                                 if let Some(c) = conn.as_mut() {
-                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                                         eprintln!("send failed: {e}");
                                         conn = None;
                                     }
@@ -2047,7 +2062,7 @@ fn main() {
             if sprite_changed {
                 dirty = true;
                 if let Some(c) = conn.as_mut() {
-                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                         eprintln!("send failed: {e}");
                         conn = None;
                     }
@@ -2092,7 +2107,7 @@ fn main() {
             if let Some(c) = conn.as_mut() {
                 let sent = c
                     .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])
-                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                 if let Err(e) = sent {
                     eprintln!("send failed: {e}");
                     conn = None;
@@ -2119,7 +2134,7 @@ fn main() {
                     if let Some(c) = conn.as_mut() {
                         let sent = c
                             .send_carry_sprite(seihai::throwing::carry_sprite(kind))
-                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                         if let Err(e) = sent {
                             eprintln!("send failed: {e}");
                             conn = None;
@@ -2134,7 +2149,7 @@ fn main() {
                                 eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
                                 let sent = c
                                     .send_carry_sprite(None)
-                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                                 if let Err(e) = sent {
                                     eprintln!("send failed: {e}");
                                     conn = None;
@@ -2289,7 +2304,7 @@ fn main() {
                             if !no_scripts && scripts_serial == session.level_serial {
                                 scripts.add_npc(&mut session, i);
                             }
-                            npc_image_pass(&session.current_level.clone().unwrap(), &mut files, conn.as_mut(), &mut npc_images);
+                            npc_image_pass(&session.current_level.clone().unwrap(), &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                             i
                         }
                         seihai::offline::Linked::None => continue,
@@ -2314,16 +2329,18 @@ fn main() {
                 // Pictures of this level's NPCs (online they were asked for when the
                 // level arrived; a second pass asks for nothing twice).
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }
             if moved {
                 scripts.touch(&mut session);
             }
+            ft.mark("network and game");
             let dt = scripts_clock.elapsed().as_millis() as u64;
             scripts_clock = Instant::now();
             scripts.tick(&mut session, dt);
+            ft.mark("scripts");
             // A script asked for a level change (setlevel / setlevel2).
             if let Some((dest, x, y)) = session.pending_link.take() {
                 if let Some(c) = conn.as_mut() {
@@ -2397,7 +2414,7 @@ fn main() {
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }
@@ -2449,7 +2466,7 @@ fn main() {
                 send_world_requests(conn.as_mut(), req, &mut files);
             } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
-                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                     eprintln!("send failed: {e}");
                     conn = None;
                 }
@@ -2940,6 +2957,7 @@ fn main() {
                 }
             }
         }
+        ft.mark("after scripts");
         // The pictures other players and our own shield are drawn with.
         {
             let mut wanted: Vec<(&str, String)> =
@@ -2997,12 +3015,14 @@ fn main() {
                 dirty = true;
             }
         }
+        ft.mark("look images");
         if dirty {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
             let own_failed = (files.requests.has_failed(session.looks.body_name()), files.requests.has_failed(session.looks.head_name()));
             scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image(), own_failed);
             dirty = false;
         }
+        ft.mark("draw");
         let mut frame = scene.clone();
         if item_list.open {
             let entries = item_list_entries(&session, &net_state);
@@ -3074,7 +3094,10 @@ fn main() {
                 .chunks(3)
                 .map(|c| ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | (c[2] as u32)),
         );
+        ft.mark("overlays");
         let _ = window.update_with_buffer(&buffer, fb.width as usize, fb.height as usize);
+        ft.mark("present");
+        slow_log.report(&ft);
 
         fps_count += 1;
         if fps_since.elapsed() >= Duration::from_secs(1) {
@@ -3082,6 +3105,73 @@ fn main() {
             fps_count = 0;
             fps_since = Instant::now();
         }
+    }
+}
+
+/// How long each part of one pass of the main loop took.
+struct FrameTimes {
+    last: Instant,
+    began: Instant,
+    parts: Vec<(&'static str, Duration)>,
+}
+
+impl FrameTimes {
+    fn start() -> Self {
+        let now = Instant::now();
+        Self { last: now, began: now, parts: Vec::new() }
+    }
+
+    /// The time since the previous mark goes to `part`.
+    fn mark(&mut self, part: &'static str) {
+        let now = Instant::now();
+        self.parts.push((part, now - self.last));
+        self.last = now;
+    }
+}
+
+/// Logs a pass of the main loop that took over [`SlowFrameLog::SLOW`], with
+/// the time of each part, at most once every two seconds: the way to find
+/// what keeps the frame rate low on a given server.
+#[derive(Default)]
+struct SlowFrameLog {
+    last: Option<Instant>,
+    /// With `SEIHAI_FRAME_LOG` set, every pass's parts are summed and their
+    /// averages logged every five seconds.
+    sums: Vec<(&'static str, Duration)>,
+    passes: u32,
+    since: Option<Instant>,
+}
+
+impl SlowFrameLog {
+    const SLOW: Duration = Duration::from_millis(100);
+
+    fn report(&mut self, ft: &FrameTimes) {
+        let total = ft.began.elapsed();
+        if std::env::var_os("SEIHAI_FRAME_LOG").is_some() {
+            self.passes += 1;
+            for (i, (n, d)) in ft.parts.iter().enumerate() {
+                match self.sums.get_mut(i) {
+                    Some(s) => s.1 += *d,
+                    None => self.sums.push((n, *d)),
+                }
+            }
+            let since = *self.since.get_or_insert_with(Instant::now);
+            if since.elapsed() >= Duration::from_secs(5) {
+                let secs = since.elapsed().as_secs_f64();
+                let parts: Vec<String> =
+                    self.sums.iter().map(|(n, d)| format!("{n} {:.1}", d.as_secs_f64() * 1000.0 / self.passes as f64)).collect();
+                eprintln!("frames: {:.1} fps, average ms ({})", self.passes as f64 / secs, parts.join(", "));
+                self.sums.clear();
+                self.passes = 0;
+                self.since = Some(Instant::now());
+            }
+        }
+        if total < Self::SLOW || self.last.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return;
+        }
+        self.last = Some(Instant::now());
+        let parts: Vec<String> = ft.parts.iter().map(|(n, d)| format!("{n} {}", d.as_millis())).collect();
+        eprintln!("slow frame: {} ms ({})", total.as_millis(), parts.join(", "));
     }
 }
 

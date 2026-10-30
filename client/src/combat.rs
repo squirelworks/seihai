@@ -935,6 +935,16 @@ impl OfflineSession {
 
     /// The SPRITE (17) value for the player's own walk and swing messages.
     pub fn sprite_value(&self) -> u8 {
+        self.sprite_value_for(false)
+    }
+
+    /// [`Self::sprite_value`] as the client sends it. A GANI client
+    /// (`gani_client`, 2.1+) plays the push and pull poses from its own
+    /// GANIs and sends SPRITE only when it changes
+    /// (`documentation/difftest-leftovers.md`), so the pose keeps its first
+    /// number: stepping the 2.05 numbers sent a walk update about six times
+    /// a second while the player pushed against a wall.
+    pub fn sprite_value_for(&self, gani_client: bool) -> u8 {
         let s = self.combat.sprite(self.player_dir);
         // Hidden: `hiddenstill` (18) or the `hidden` walk.
         if let Some(h) = self.hidden_sprite_s().filter(|_| s == self.player_dir % 4) {
@@ -947,7 +957,7 @@ impl OfflineSession {
         }
         // Pushing, grabbing, pulling: their own sprite numbers.
         if s == self.player_dir % 4 {
-            if let Some(ps) = self.pushpull_sprite_s() {
+            if let Some(ps) = self.pushpull_sprite_s_stepped(!gani_client) {
                 return (self.player_dir % 4) + 4 * ps;
             }
         }

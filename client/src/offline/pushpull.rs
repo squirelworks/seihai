@@ -623,7 +623,13 @@ impl OfflineSession {
 
     /// The sprite number S of the push, grab or pull pose, if one is on.
     pub fn pushpull_sprite_s(&self) -> Option<u8> {
-        let frame = |g: &Option<crate::assets::Gani>, t: usize| g.as_ref().map_or(0, |g| g.frame_at_tick(t, true));
+        self.pushpull_sprite_s_stepped(true)
+    }
+
+    /// As [`Self::pushpull_sprite_s`]; with `stepped` false the push and
+    /// pull poses keep their first frame's number.
+    pub fn pushpull_sprite_s_stepped(&self, stepped: bool) -> Option<u8> {
+        let frame = |g: &Option<crate::assets::Gani>, t: usize| if stepped { g.as_ref().map_or(0, |g| g.frame_at_tick(t, true)) } else { 0 };
         if self.pushpull.pull_pose() {
             return Some(PULL_SPRITE_S[frame(&self.poses.pull, self.pushpull.pull_ticks as usize).min(2)]);
         }
@@ -832,6 +838,26 @@ mod tests {
         assert_eq!(push[20], 0, "the count wraps from 38 to 18: frame 0 again");
         // The sprite the others see follows the same frame.
         assert_eq!(s.pushpull_sprite_s(), Some(PUSH_SPRITE_S[push[22]]));
+    }
+
+    #[test]
+    fn a_gani_client_sends_one_push_sprite_while_it_pushes() {
+        let mut s = session(|_, y| if y == 14 { WALL } else { FLOOR });
+        let step = "1 0 0\n1 0 0\n1 0 0\n1 0 0\nWAIT 3\n\n";
+        s.poses.push = Some(crate::assets::Gani::parse(&format!("LOOP\nANI\n{}ANIEND\n", step.repeat(5))).unwrap());
+        s.player_x = 20.5;
+        s.player_y = 14.0;
+        let mut gani = Vec::new();
+        let mut stepped = Vec::new();
+        for _ in 0..40 {
+            s.try_move(0.0, -0.5);
+            gani.push(s.sprite_value_for(true));
+            stepped.push(s.sprite_value_for(false));
+        }
+        gani.dedup();
+        stepped.dedup();
+        assert_eq!(gani, [DIR_NORTH, DIR_NORTH + 4 * PUSH_SPRITE_S[0]], "walk, then the push sprite once");
+        assert!(stepped.len() > 2, "the 2.05 numbers step with the frame");
     }
 
     #[test]
