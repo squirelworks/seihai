@@ -28,8 +28,12 @@ Then the status icons: one `WANTFILE plisticon<status>.png` per
 They go out four at a time, as the request queue of `documentation/file-cache.md`
 says: the first four are in flight and the rest follow as replies arrive.
 
-2.17 and 2.22 also send `WANTFILE idle.gani` in the first frame after the login
-line, before the burst arrives. 2.31 does not.
+2.17 and 2.22 also check `idle.gani`; 2.31 does not. The 2026-10-30 Windows lab
+(stock beta4, decoded message by message) put the 2.22 `WANTFILE idle.gani` first
+in the post-login frame, about 240 ms after the level; Seihai now sends it there,
+or alone at that time when the frame is not due (`difftest-leftovers.md`, section
+7). The earlier reading, "in the first frame after the login line, before the
+burst arrives", came from the patched lab and is replaced.
 
 ## What Seihai does now
 

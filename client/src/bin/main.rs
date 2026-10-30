@@ -927,11 +927,12 @@ fn main() {
         level_name = Some("new1.nw".to_string());
     }
     // The frame a real client sends once the server's login burst is in
-    // (image checks, process list, props), and the GANI it asks for at once.
+    // (the idle.gani check where the build asks, image checks, process
+    // list, props).
     let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
-    if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
-        send_file_msgs(conn.as_mut(), files.need("idle.gani"));
-    }
+    // When the first level of this connection arrived: idle.gani goes alone
+    // a while after it if the post-login frame is not due by then.
+    let mut first_level_at: Option<Instant> = None;
     // A gen-2 build (1.33 to 1.39) sends its own props once the first level
     // has loaded instead (see `classic_login_props_message`).
     let mut classic_props_owed = conn.is_some() && seihai::protocol::login::sends_classic_login_props(version);
@@ -1672,6 +1673,7 @@ fn main() {
                 if let Some(name) = &net_state.current_level_name() {
                     if loaded_level.as_deref().map_or(true, |l| !l.eq_ignore_ascii_case(name)) {
                         entered = true;
+                        first_level_at.get_or_insert_with(Instant::now);
                         // The first level after login is not a "level change":
                         // the login send already covers it.
                         // A new level (not the first after login) owes a
@@ -2288,9 +2290,10 @@ fn main() {
                 }
                 moved = true;
                 // The first steps of a connection: the files the real client
-                // asks for then, if Seihai has no copy of them.
-                if conn.is_some() && (session.player_x, session.player_y) != before {
-                    send_file_msgs(conn.as_mut(), files.on_step());
+                // asks for then, if Seihai has no copy of them. They ride in
+                // the frame of the step's props, as the real client sends them.
+                if let Some(c) = conn.as_mut().filter(|_| (session.player_x, session.player_y) != before) {
+                    c.queue_files(files.on_step());
                 }
                 last_step = seihai::offline::next_step_clock(last_step, Instant::now(), session.step_interval());
             }
@@ -2627,9 +2630,24 @@ fn main() {
                 }
             }
         }
+        // A server that sends no PLO_LISTPROCESSES: the idle.gani check goes
+        // alone when the real client's frame would have gone.
+        if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
+            let msgs = lb.take_idle_gani_late(first_level_at.map(|t| t.elapsed()), |n| files.need(n));
+            if !msgs.is_empty() {
+                if let Err(e) = c.send_messages(&msgs) {
+                    eprintln!("send failed: {e}");
+                }
+            }
+        }
         if !login_burst.as_ref().is_some_and(|lb| lb.pending()) {
             if let Some(c) = conn.as_mut() {
                 if let Err(e) = c.send_stale_flags(Duration::from_millis(60)) {
+                    eprintln!("send failed: {e}");
+                }
+                // A step's file requests whose props never went out (the
+                // step was taken back, or the cadence sent nothing).
+                if let Err(e) = c.send_stale_files(Duration::from_millis(150)) {
                     eprintln!("send failed: {e}");
                 }
             }
@@ -2762,9 +2780,7 @@ fn main() {
                         files.store.set_caches(warp_game_cache, warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
                         sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
-                        if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
-                            send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
-                        }
+                        first_level_at = None;
                         classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
                         walk_cadence = seihai::protocol::walkcadence::WalkCadence::for_version(version);
                         tamper = sess.tamper.take();
