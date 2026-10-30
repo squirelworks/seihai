@@ -22,6 +22,7 @@ mod profile;
 mod props;
 pub mod showimg;
 pub mod tampercheck;
+pub mod walkcadence;
 mod version;
 
 pub use board::BoardModify;

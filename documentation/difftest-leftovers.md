@@ -46,7 +46,30 @@ Decoded from the real traces (`gmap_cross`, `door_warp`):
 |---|---|---|---|---|
 | 2.22 | `GANI=walk, X (or Y), SPRITE` | `X` (or `Y`) alone, one tile further each message | `GANI=idle` | one message per 100 ms (every second 50 ms step); the `gr` flags go per step |
 | 2.31 | `GANI=walk, SPRITE, X2` (or `Y2`) | `X2` (or `Y2`) alone, half a tile | `GANI=idle` | one message per 50 ms |
-| Seihai | `X, Y, SPRITE` | `X, Y, SPRITE` | nothing | one message per step (50 ms after `walk-pace.md`) |
+| Seihai 2.22 | as the real 2.22 | as the real 2.22 | the last position, then `GANI=idle` | as the real 2.22 (`protocol/walkcadence.rs`) |
+| Seihai, other builds | `X, Y, SPRITE` | `X, Y, SPRITE` | nothing | one message per step (50 ms after `walk-pace.md`) |
+
+2.22 is now done. Lab, 2026-10-30, on the lab GServer-v2: the real 2.22 walked
+right, swung the sword, and walked left, and Seihai 2.22 then ran the same steps
+with a fresh account each time. Seihai's props matched message for message. They
+had the same fields, the same positions (30.5, 31.5 ... 35.5 and 35, 34 ... 30),
+one message every second 50 ms tick, `GANI idle` two ticks after the last step,
+and `GANI sword` with no `SPRITE`. The Graal the Adventure capture (Graal_analysis
+`live-runs/2gta-222-2026-10-30/`) settled the stop on an odd half-step: that
+position goes in the next slot, and `idle` goes in the one after.
+
+What is still different:
+
+* Seihai's `gr` flags come from its script timer, which is not on the 50 ms tick.
+  Some frames carry two flags and some props go without one. The real client puts
+  one flag in each tick's frame.
+* The sword: `idle` followed `sword` after 287 ms in Seihai and 241 ms in the real
+  client. The swing now lasts the 5-step `sword.gani` (`set_swing_ticks`), and
+  the rest is the tick grid.
+* The bush cut goes in the sword's frame (the tick frame takes the tile changes),
+  as in the Graal the Adventure capture. The lab walk hit no bush, so this was not
+  seen on the wire from Seihai.
+* A turn or a diagonal step was not captured.
 
 The props are in ascending id order in every message. Not decided by the captures: what a stop on an odd
 half-step sends for 2.22 (the idle message carries only `GANI`), how a turn or a diagonal step is split, and
