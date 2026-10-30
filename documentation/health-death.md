@@ -54,7 +54,29 @@ rev 2, 2.03, 2.04) the same instructions were found in the machine code: the
 in 2.00 to 2.03, +0xe0 in 2.00 rev 3, +0x110 in 2.04); the constants do not.
 The name-group entry save is in all of them too (Graal_analysis
 `decomp-findings-2026-10-24-d/02-respawn-entry-save.md`). So 2.00 to 2.04 use
-`DEATH_205`. No real 2.00 to 2.04 death has been captured yet.
+`DEATH_205`.
+
+### Lab: a real 2.00 dying (2026-10-30, LAN)
+
+A real 2.00 was killed by Seihai's sword (decode `lan-200d-death.txt` on the
+lab machine). What it sent:
+
+- Each hit: `PLAYERPROPS` CURPOWER (4, 3, 2, 1); the server echoed GANI
+  `hurt`. The knockback went out as X steps of 2 tiles every 100 ms, which
+  fits 1 tile per 50 ms tick.
+- The death, in one frame: `UPDATEFILE dead.gani`, `PLI_CLAIMPKER` with the
+  killer's id (`20 26`, id 6), then `PLAYERPROPS` CURPOWER 0, GANI `dead`.
+  (The server answered `FILESENDFAILED dead.gani`. Seihai does not send the
+  UPDATEFILE.)
+- STATUS with `0x08` set (0x1C) 1.35 s later, within a frame of tick 28.
+- Respawn on a key press, in one frame: `PLI_LEVELWARP` to the level start
+  (x 30, y 32, the saved entry), then `PLAYERPROPS` CURPOWER 6 (full hearts,
+  high AP), GANI `idle`, X, Y, SPRITE 2 and STATUS 0x14 (bit cleared).
+- The server cut the rupee, arrow and bomb counts and dropped five items
+  (`ITEMADD`) round the body.
+- The screen: everything but the HUD and the sprites goes black, and a
+  parchment scroll in the middle reads "End". It has no timer; it stays until
+  a key. Seihai does not draw this yet.
 
 ## Wire
 
