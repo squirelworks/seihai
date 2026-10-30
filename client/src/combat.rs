@@ -539,6 +539,7 @@ pub struct CombatState {
     /// Knockback steps per hit when the build differs from
     /// [`KNOCKBACK_TICKS`] (1.39: 4).
     knockback_ticks: Option<u16>,
+    swing_ticks: Option<u16>,
 }
 
 /// The STATUS (18) bit that allows the spin attack.
@@ -562,6 +563,14 @@ impl CombatState {
     /// Knockback steps per hit, the build's own (`Mannerisms`).
     pub fn set_knockback_ticks(&mut self, n: u16) {
         self.knockback_ticks = Some(n);
+    }
+
+    /// The swing lasts `ticks` of 50 ms in all, spread over its animation
+    /// steps: the length of the sword GANI, where the build plays one. The
+    /// real 2.22 sent `GANI idle` 250 ms after `GANI sword` with a five-step
+    /// `sword.gani` (lab, 2026-10-30). Without it, `swing_step_ticks`.
+    pub fn set_swing_ticks(&mut self, ticks: Option<u16>) {
+        self.swing_ticks = ticks;
     }
 
     /// Take the rules of another build. Ends a swing and a hurt in progress.
@@ -676,8 +685,11 @@ impl CombatState {
         }
         if let Some((i, acc)) = self.swing {
             let acc = acc + ms;
-            let per = u64::from(r.swing_step_ticks.max(1)) * TICK_MS;
             let frames = r.swing_sprite_last - r.swing_sprite_first + 1;
+            let per = match self.swing_ticks {
+                Some(t) => (u64::from(t) * TICK_MS / u64::from(frames)).max(1),
+                None => u64::from(r.swing_step_ticks.max(1)) * TICK_MS,
+            };
             let step = (acc / per) as u8;
             self.swing = if i + step >= frames { None } else { Some((i + step, acc % per)) };
         }
@@ -900,6 +912,8 @@ impl OfflineSession {
         if self.combat.start_spin(spin_len) {
             return true;
         }
+        let sword_ticks = self.poses.sword.as_ref().map(|g| g.total_ticks().max(1) as u16);
+        self.combat.set_swing_ticks(sword_ticks.filter(|_| self.gani_swing));
         let started = self.combat.start_swing();
         if started {
             self.queue_sword_cues(0);

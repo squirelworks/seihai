@@ -905,6 +905,12 @@ fn main() {
     // A gen-2 build (1.33 to 1.39) sends its own props once the first level
     // has loaded instead (see `classic_login_props_message`).
     let mut classic_props_owed = conn.is_some() && seihai::protocol::login::sends_classic_login_props(version);
+    // 2.22 sends its own walk and sword props on a 100 ms cadence, once a
+    // tick, with the tile changes of the tick (see `protocol::walkcadence`).
+    let mut walk_cadence = conn.as_ref().and_then(|_| seihai::protocol::walkcadence::WalkCadence::for_version(version));
+    let mut cadence_clock = Instant::now();
+    session.gani_swing = version == ClientVersion::V222;
+    let mut held_boards: Vec<Vec<u8>> = Vec::new();
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -2073,7 +2079,7 @@ fn main() {
             send_power_report(&mut conn, &mut session, version);
             if sprite_changed {
                 dirty = true;
-                if let Some(c) = conn.as_mut() {
+                if let (Some(c), None) = (conn.as_mut(), &walk_cadence) {
                     if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                         eprintln!("send failed: {e}");
                         conn = None;
@@ -2476,7 +2482,7 @@ fn main() {
                 }
                 let req = sync_world(&mut session, &mut net_state, &gmap_rules, &RootLoader(&resolver), &mut gmap_asked);
                 send_world_requests(conn.as_mut(), req, &mut files);
-            } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
+            } else if let (Some(c), false, None) = (conn.as_mut(), script_warp_sent, &walk_cadence) {
                 // Online: send the new position as PLI_PLAYERPROPS.
                 if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                     eprintln!("send failed: {e}");
@@ -2672,6 +2678,7 @@ fn main() {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
                         }
                         classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
+                        walk_cadence = seihai::protocol::walkcadence::WalkCadence::for_version(version);
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
@@ -2961,12 +2968,46 @@ fn main() {
         }
         // Tiles the player changed this frame (a lift, a cut, a moved stone
         // block): the server writes them into the level for the others.
+        let mut boards = Vec::new();
         for b in session.take_board_changes() {
             dirty = true;
-            if let Some(c) = conn.as_mut() {
-                if let Err(e) = c.send_board_modify(b.x as u8, b.y as u8, b.width as u8, b.height as u8, &b.tiles) {
+            boards.push(seihai::net::board_modify_message(b.x as u8, b.y as u8, b.width as u8, b.height as u8, &b.tiles));
+        }
+        // A build with a walk cadence sends on its 50 ms tick only: the tile
+        // changes, the flags and that tick's walk props in one frame, as the
+        // real 2.22 sends a bush cut with its sword GANI.
+        let cadence_tick = walk_cadence.is_some() && cadence_clock.elapsed() >= Duration::from_millis(50);
+        if cadence_tick {
+            cadence_clock += Duration::from_millis(50);
+            if cadence_clock.elapsed() >= Duration::from_millis(50) {
+                cadence_clock = Instant::now();
+            }
+        }
+        if walk_cadence.is_some() && !cadence_tick {
+            held_boards.extend(boards);
+        } else if let (Some(c), Some(wc)) = (conn.as_mut(), walk_cadence.as_mut()) {
+            use seihai::pose::PoseKind;
+            let gani = session.current_pose().and_then(|p| match p.kind {
+                PoseKind::Walk => Some("walk"),
+                PoseKind::Idle => Some("idle"),
+                PoseKind::Sword => Some("sword"),
+                _ => None,
+            });
+            let sprite = if gani == Some("sword") { session.player_dir % 4 } else { session.sprite_value_for(true) };
+            let upd = session.player_update();
+            let props = if script_warp_sent { None } else { wc.tick(seihai::protocol::walkcadence::WalkState::new(upd.x, upd.y, sprite, gani)) };
+            let mut all = std::mem::take(&mut held_boards);
+            all.extend(boards);
+            if let Err(e) = c.send_tick_frame(all, props) {
+                eprintln!("send failed: {e}");
+                conn = None;
+            }
+        } else if let Some(c) = conn.as_mut() {
+            for m in boards {
+                if let Err(e) = c.send_messages(&[m]) {
                     eprintln!("send failed: {e}");
                     conn = None;
+                    break;
                 }
             }
         }

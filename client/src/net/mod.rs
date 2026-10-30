@@ -1066,6 +1066,21 @@ impl Connection {
         self.send_raw(&buf)
     }
 
+    /// One tick's frame for a build with a [`WalkCadence`]: the queued flags,
+    /// the tile changes, then the props message, if any. Nothing when all
+    /// three are empty.
+    ///
+    /// [`WalkCadence`]: crate::protocol::walkcadence::WalkCadence
+    pub fn send_tick_frame(&mut self, boards: Vec<Vec<u8>>, props: Option<Vec<u8>>) -> io::Result<()> {
+        let mut msgs = self.take_flags();
+        msgs.extend(boards);
+        msgs.extend(props);
+        if msgs.is_empty() {
+            return Ok(());
+        }
+        self.send_messages(&msgs)
+    }
+
     /// Send a walk update for the given position (see [`Self::send_position`]).
     pub fn send_walk(&mut self, upd: &PlayerUpdate) -> io::Result<()> {
         self.send_position(upd.x, upd.y, upd.dir)

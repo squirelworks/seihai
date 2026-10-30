@@ -161,6 +161,9 @@ pub struct OfflineSession {
     pub player_dir: u8,
     /// True when the player is standing on a water tile (type == 11).
     pub in_water: bool,
+    /// The swing lasts the sword GANI (see `CombatState::set_swing_ticks`):
+    /// set for 2.22, the build that was checked.
+    pub gani_swing: bool,
     /// Optional walk animation.
     pub walk_gani: Option<GaniPlayer>,
     /// Optional swim animation, shown instead of the walk one while the
@@ -451,6 +454,7 @@ impl OfflineSession {
             player_y: 30.0,
             player_dir: DIR_SOUTH,
             in_water: false,
+            gani_swing: false,
             walk_gani: None,
             swim_gani: None,
             swim_ticks: 0,
