@@ -1,0 +1,16 @@
+[package]
+name = "seihai-launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The `seihai` command. It reads the version-profile table and starts
+# `seihai-mae` (1.x and 2.x builds) or `seihai-ato` (the Torque / 3.x
+# builds). It has no window, no renderer and no Torque code of its own, and
+# neither client depends on it.
+[[bin]]
+name = "seihai"
+path = "src/main.rs"
+
+[dependencies]
+seihai-core = { path = "../seihai-core", default-features = false }
