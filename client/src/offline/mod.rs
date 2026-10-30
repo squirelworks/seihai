@@ -13,7 +13,9 @@ use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
 mod pushpull;
+mod servernpcs;
 pub use pushpull::{NpcMoved, Grab, Jump, PushPull, Trigger};
+pub use servernpcs::{block_flags, Linked, ServerNpcSync};
 use pushpull::StepResult;
 
 /// Facing, in Graal order (ganis and the 2.05 wire): 0 up, 1 left,

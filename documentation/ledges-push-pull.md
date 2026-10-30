@@ -57,7 +57,7 @@ When no block is there, the push routine looks for an NPC with `canbepushed` at 
 * `actionpushed` / `actionpulled` always fires first.
 * **Edge.** Every point along the edge the NPC moves into, one per tile from its left or top, must be free of walls, chests and other NPCs (water does not stop it). Pushing up that is `(t, y - 1)` for `t` from `x` while `t < x + w`; left `(x - 1, t)`, down `(t, y + h)`, right `(x + w, t)`. A pull checks the side facing the player, and first the two cells behind the player: from the grab cell, up `(0,3) (1,3)`, left `(3,0) (3,1)`, down `(0,-3) (1,-3)`, right `(-3,0) (-3,1)`.
 * **Size.** A character NPC counts as 3 x 3 tiles for the edge and is hit in `x + 0.5 .. x + 2.5`, `y + 1 .. y + 3`; otherwise its `setshape` size, else the image part it shows. Seihai counts an NPC whose image size it does not know as 2 x 2.
-* **Move.** The NPC moves one tile (towards the player for a pull), the player one tile the same way, the block's sound plays, and the NPC's script gets `waspushed` / `waspulled`. 2.05 sends nothing to the server for the NPC.
+* **Move.** The NPC moves one tile (towards the player for a pull), the player one tile the same way, the block's sound plays, and the NPC's script gets `waspushed` / `waspulled`. The push routine itself sends nothing for the NPC; the NPC's new position goes out with the client's NPC prop sync (see *Online* below).
 * **Blocking.** 2.05 stops the player at every NPC that blocks. Seihai stops the player only at pushable and pullable NPCs (they are what a push needs), and lets A grab them. Other NPCs are still walked through.
 * 2.22 is the same, except that the NPC lookup also searches the neighbouring map parts on a gmap.
 
@@ -88,10 +88,34 @@ Seihai draws the push, grab and pull poses only when the gani is loaded; the def
 
 The same in both, with the same numbers, except: any blocking NPC can be grabbed (2.05 skips some, most likely character NPCs); the two server full-stop flags stop walking, ledges and the A key; and the jump, stone and pull sounds play only while a built-in gani is showing. Seihai follows 2.05, which matches all of this for tiles.
 
+## Online (lab, 2026-10-30)
+
+Checked with the real 2.05 rev 2 client and Seihai against the lab stub (`graal-decompile/live-trace`), on `onlinestartlocal.nw` with a push block at 33,31 and a pull block at 25,31, then a cleared copy with an NPC the stub sent as `PLO_NPCPROPS`.
+
+**Stone blocks.** Each push or pull that moves a block sends, in one frame, `PLI_TRIGGERACTION` (`pushed,<dir>` or `pulled,<dir>`), then `PLI_BOARDMODIFY` with the 4 x 4 area from the block's old top-left minus one, then the player's new X or Y. A try that moves nothing sends the trigger only. Seihai's board modifies were byte for byte the real client's for four pushes right and four pulls right; it now also sends the trigger first, in the same frame. GServer-v2 accepts a 4 x 4 board modify holding a push or pull block (`clientsidepushpull`, on by default) and passes it to the level.
+
+**NPCs.** The server's NPC arrives as `PLO_NPCPROPS` (`GINT3 id`, then props; image 0, script 1 as `GSHORT` length with `§` line breaks, X 2 and Y 3 in half tiles). The 2.05 client runs the script and sends back, as `PLI_NPCPROPS` (`GINT3 id` and props), every prop the script changed:
+
+| what the script did | what 2.05 sent |
+|---|---|
+| `canbepushed` | BLOCKFLAGS (14) = 8 |
+| `canbepulled` | BLOCKFLAGS = 4 |
+| both | BLOCKFLAGS = 12 |
+| `dontblock` | BLOCKFLAGS = 1 |
+| nothing | (VISFLAGS only) |
+| a push up (`waspushed` with `message was pushed`) | Y (3) = the new half-tile row, MESSAGE (15) |
+| `x = x + 1` on a 1 s timeout | X (2), once a second |
+
+Each push sent trigger, own Y, then the NPC's Y, in one frame. GServer-v2 passes `PLI_NPCPROPS` on to the other players in the level, so they see the NPC where it was pushed.
+
+The client also sent VISFLAGS (13) with every first reply: 81 when the server gave none, 16 when the server gave 0. Those bits are not understood yet.
+
+**Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends X, Y and BLOCKFLAGS when they differ from what the server last said (`offline/servernpcs.rs`): the same bytes as the real client for the BLOCKFLAGS after `canbepushed; canbepulled;` and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
+
 ## Open
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
-* Online sends: the board modify for a moved block and the `pushed` / `pulled` trigger action.
+* VISFLAGS and MESSAGE in the NPC prop sync: Seihai sends neither yet.
+* The `pushed` / `pulled` trigger to UDP peers (id 26) is not sent.
 * Blocking on every NPC that blocks, which needs the NPC image sizes in the session.
-* Moving `canbepushed` / `canbepulled` NPCs.
 * A jump across a gmap edge: 2.05 shifts the jump's start point when the level changes in the air; Seihai moves into the next cell when it lands.
