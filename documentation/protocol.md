@@ -76,9 +76,10 @@ each was checked against the captured payload shapes (four gservers).
 | 180 | STATUSLIST | comma list of status names | `status_list` |
 | 182 | LISTPROCESSES | empty | `process_list_requests` |
 
-Deliberately not done: Seihai does not answer 182 with a process list (the
-real client sends `PLI_PROCESSLIST`; Seihai never reports the user's
-processes). A version only acts on an id its profile lists, so 2.05 still drops
+Seihai answers 182 with `PLI_PROCESSLIST` (44) holding only `"seihai"`, as
+the real client answers it (`login.rs`, `login-burst.md`; seen on public
+servers on 2026-10-30, `public-gserver-2026-10-30.md`). It never reports the
+user's processes. A version only acts on an id its profile lists, so 2.05 still drops
 171 and 172.
 
 Seen on the wire but not in the 2.22 client's server set, so they stay
@@ -114,9 +115,9 @@ versions handle an id is the profile's `plo` set; the tests compare every
 | 185 | BOARDHEIGHTS | GCHAR mapX, mapY, blockX, blockY, w-1, h-1, then w*h cells of 2 bytes: `(b0-0x20-50) + (b1-0x20)/128` | 2.17+ | `board_heights` |
 | 186 | BOARDMODIFY2 | GCHAR mapX, mapY, x, y, w, h, then w*h GSHORT tiles, then an unread trailer (ignored; a payload one byte short of `6+2*w*h` is dropped silently; a block past column 63 is clipped) | 2.22+ | `board_modify2` |
 
-Ids Seihai answers or sends only on request: none of the above. Seihai still
-does not answer 182 or 183 (process list and "is X running"), and takes no
-screenshot on 184.
+Ids Seihai answers or sends only on request: none of the above. Seihai does
+not answer 183 ("is X running"), and takes no screenshot on 184. (182 is
+answered with a process list of `"seihai"` only; see above.)
 
 ## Tamper check (client to server id 39)
 
