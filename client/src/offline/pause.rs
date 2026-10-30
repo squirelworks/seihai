@@ -14,6 +14,9 @@
 //!   Seihai has no sparring zones, so a paused player is never hurt.
 //! * Other players' names get ` (paused)` when their STATUS has the bit
 //!   (the 2.00 name label, 0x4ebd1a).
+//! * The STATUS the server gives back is kept without bit 0x01. The lab
+//!   accounts' template has STATUS 21 (0x15), so copying the bit would show
+//!   the player as paused to everyone; only P and the focus set it.
 //!
 //! Not read yet: whatever else pause stops in the real client (walking,
 //! timers). Seihai only marks the state and applies the hit gate.
@@ -45,6 +48,12 @@ impl OfflineSession {
             0
         }
     }
+}
+
+/// The server's STATUS for our own player, without the paused bit: pause
+/// is ours to set (P or the focus), never taken from the account.
+pub fn server_status_base(status: u8) -> u8 {
+    status & !PAUSED_STATUS
 }
 
 /// The name label of another player: `unknown` for an empty name, with
@@ -95,6 +104,13 @@ mod tests {
         assert_eq!(s.victim().state, Vulnerability::Paused);
         s.toggle_pause();
         assert_eq!(s.victim().state, Vulnerability::Hurtable);
+    }
+
+    #[test]
+    fn the_accounts_status_does_not_pause_us() {
+        // STATUS 21 from the lab accounts' template.
+        assert_eq!(server_status_base(21), 0x14);
+        assert_eq!(server_status_base(0x02), 0x02);
     }
 
     #[test]

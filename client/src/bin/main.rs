@@ -1831,7 +1831,7 @@ fn main() {
                 }
                 // Hearts, AP and STATUS the server gave.
                 if let Some(st) = net_state.own_status.take() {
-                    status_base = st;
+                    status_base = seihai::offline::server_status_base(st);
                     session.combat.set_has_spin(st & seihai::combat::HAS_SPIN_STATUS != 0);
                 }
                 if let Some(g) = net_state.own_glove_power.take() {
