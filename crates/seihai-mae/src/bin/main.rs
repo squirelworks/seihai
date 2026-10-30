@@ -2327,6 +2327,8 @@ fn main() {
             send_power_report(&mut conn, &mut session, version);
             // 2.00 to 2.05: the swing goes out as `sword` in prop 10 when
             // it starts, and `idle` when it ends, as the real ones send it.
+            // Lifting, carrying and hiding name their poses there too, or a
+            // real watcher draws no carried object.
             let bow_anim = session.bow_slot_anim();
             if seihai::combat::swing_in_bow_slot(version) && bow_anim != last_bow_anim {
                 last_bow_anim = bow_anim;
