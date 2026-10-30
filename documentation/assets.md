@@ -53,11 +53,38 @@ name to a file. It takes the data folder and a version profile.
 |------|-------------------------|-----------|
 | Level, gmap | `levels/` (downloads), root, `maps/` | A name with an extension must be one the profile opens (`levels.nw`, `.graal`, `.zelda`, `.gmap`). A bare name takes the profile's extensions in turn (`.nw`, `.graal`, `.zelda`, `.gmap`, those the build opens). A missing `.zelda` name is not swapped for a `.graal` one. |
 | GANI | `gani/`, `levels/ganis/`, `levels/bomys/`, `levels/`, root | `.gani` added to a bare name. None at all where the profile's `ui.ganis` is false (1.39 is one). |
-| Image | the folder hint (`bodies`, `heads`), `levels/`, root, every `levels/<category>/`, the same categories under root, `maps/` | Bare name: `files.image_ext` first (`.gif` below 2.1, `.png` after), then `.png`, `.gif`, `.mng`. A `.gif` or `.png` name falls back to the other extension (the folder ships PNG only). Player art (`heads`, `bodies`, `swords`, `shields`) in a `.gif` build (up to 2.05) is looked for as `.gif` first in every layer, whatever the name says. The real 2.05 rev 2 reads `.gif` only and draws no body from a PNG-only folder (Graal_analysis `player-mannerisms-live.md`). Seihai then falls back to the usual names, so the player stays visible. |
+| Image | the folder hint (`bodies`, `heads`), `levels/`, root, every `levels/<category>/`, the same categories under root, `maps/` | Bare name: `files.image_ext` first (`.gif` below 2.1, `.png` after), then `.png`, `.gif`, `.mng`. A `.gif` or `.png` name falls back to the other extension (the folder ships PNG only). Player art (`heads`, `bodies`, `swords`, `shields`) in a `.gif` build (up to 2.05) is looked for as `.gif` only, whatever the name says, with no PNG fallback (see "Player art in a GIF build"). |
 | Sound | `sounds/`, `levels/sounds/`, `levels/`, root | `.wav` added to a bare name; a leading `+` (loop) is dropped. |
 | Music | `levels/midis/`, `midis/`, `levels/`, `sounds/`, root | `.mid` added to a bare name. |
 | Tile types | root, `levels/` | `tiledefs.txt`, else `arrays.dat`. |
 | Tiledefs | `levels/tiledefs/`, `tiledefs/` | `image,prefix,type[,x,y]` lines. |
+
+### Player art in a GIF build
+
+Builds up to 2.05 (`files.image_ext` is `.gif`) read heads, bodies, swords and
+shields as `.gif` only. Lab check, 2026-10-30: the real 2.05 rev 2 logged into
+the lab stub in the 2.22 folder (PNG only), with the server naming `body.png`
+and `head26`, both missing as `.gif`, and the server refusing both files.
+
+* No body, no head and no shadow were drawn.
+* The own name tag showed, at the usual place, and the chat text showed over
+  where the head would be.
+* Offline, in the same folder, one part of the figure was drawn without a
+  body and without a shadow. Where that picture came from was not found.
+
+Seihai does the same:
+
+* `image_in` looks for `<name>.gif` only, in every layer.
+* The built-in set has `.gif` copies of its player art. It stands in for a
+  2.05 install's own pictures, so it is used only when the assets folder has
+  no `bodies` (or `heads`, ...) folder of its own. With the 2.22 folder,
+  Seihai 2.05 draws no figure, as the real client does.
+* With a part missing, the rest of the figure is drawn and no marker is. With
+  no body there is no shadow. A picture the server could not send is not
+  replaced by the default one. The name tag and chat are drawn as usual.
+
+Not checked: whether 2.05 reads `.mng` player art, and what it draws for a
+part while a download is still on its way (Seihai draws the default).
 
 ### Layers (item 20)
 
