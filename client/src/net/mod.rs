@@ -642,6 +642,11 @@ pub struct Connection {
     flags_out: Vec<Vec<u8>>,
     /// When the oldest queued flag was queued.
     flags_since: Option<Instant>,
+    /// File requests that ride in the frame of the next walk update
+    /// ([`Self::queue_files`]).
+    files_out: Vec<Vec<u8>>,
+    /// When the oldest queued file request was queued.
+    files_since: Option<Instant>,
     /// The last walk update sent ([`Self::send_walk_sprite`]): the same
     /// X, Y and SPRITE again is not re-sent (the real client sends props
     /// only when they change).
@@ -659,7 +664,7 @@ impl Connection {
         let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
         let stream = connect_any(&addrs, CONNECT_TIMEOUT)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None, last_walk: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None, files_out: Vec::new(), files_since: None, last_walk: None })
     }
 
     /// Close the connection in both directions. A reader thread from
@@ -958,6 +963,7 @@ impl Connection {
         }
         // The flags ride ahead of the props, which come last in the frame.
         let props = msgs.pop();
+        msgs.extend(self.take_files());
         msgs.extend(self.take_flags());
         msgs.extend(props);
         let with_46 = msgs.iter().any(|m| m.first() == Some(&(PLI_ENTERLEVEL + 0x20)));
@@ -997,6 +1003,34 @@ impl Connection {
     pub fn take_flags(&mut self) -> Vec<Vec<u8>> {
         self.flags_since = None;
         std::mem::take(&mut self.flags_out)
+    }
+
+    /// Queue file requests (`WANTFILE`) for the frame of the next walk
+    /// update: the real 2.22 and 2.31 clients put the first-step requests
+    /// in the frame that carries the step's props (lab, 2026-10-30,
+    /// `documentation/difftest-leftovers.md` section 7).
+    pub fn queue_files(&mut self, msgs: Vec<Vec<u8>>) {
+        if msgs.is_empty() {
+            return;
+        }
+        self.files_since.get_or_insert_with(Instant::now);
+        self.files_out.extend(msgs);
+    }
+
+    /// The queued file requests, for a frame that carries them.
+    fn take_files(&mut self) -> Vec<Vec<u8>> {
+        self.files_since = None;
+        std::mem::take(&mut self.files_out)
+    }
+
+    /// Send the queued file requests on their own once the oldest has
+    /// waited `max_age` for a walk update to carry it. Nothing otherwise.
+    pub fn send_stale_files(&mut self, max_age: Duration) -> io::Result<()> {
+        if !self.files_since.is_some_and(|t| t.elapsed() >= max_age) {
+            return Ok(());
+        }
+        let msgs = self.take_files();
+        self.send_messages(&msgs)
     }
 
     /// Send the queued flags on their own once the oldest has waited
@@ -1126,7 +1160,10 @@ impl Connection {
     ///
     /// [`WalkCadence`]: crate::protocol::walkcadence::WalkCadence
     pub fn send_tick_frame(&mut self, boards: Vec<Vec<u8>>, props: Option<Vec<u8>>) -> io::Result<()> {
-        let mut msgs = self.take_flags();
+        // Queued file requests go in the next tick's frame, with or without
+        // props: the real 2.22 sent `steps2.wav` alone in its tick.
+        let mut msgs = self.take_files();
+        msgs.extend(self.take_flags());
         msgs.extend(boards);
         msgs.extend(props);
         if msgs.is_empty() {
@@ -1143,9 +1180,12 @@ impl Connection {
     /// A walk update with an explicit SPRITE value (`dir + 4 * S`): the
     /// sword swing and hurt mode ([`crate::combat::CombatState::sprite`]).
     pub fn send_walk_sprite(&mut self, upd: &PlayerUpdate, sprite: u8) -> io::Result<()> {
-        let mut msgs = self.take_flags();
         let walk = position_message_sprite(upd.x, upd.y, sprite);
-        if self.last_walk.as_ref() != Some(&walk) {
+        let changed = self.last_walk.as_ref() != Some(&walk);
+        // Queued file requests ride with a walk update only.
+        let mut msgs = if changed { self.take_files() } else { Vec::new() };
+        msgs.extend(self.take_flags());
+        if changed {
             self.last_walk = Some(walk.clone());
             msgs.push(walk);
         }
@@ -1370,6 +1410,7 @@ pub fn parse_server_list(reply: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filecache::FileRequest;
     use crate::protocol::{parse_player_props, zlib_decompress};
     use std::io::Read;
     use std::net::TcpListener;
@@ -1427,6 +1468,46 @@ mod tests {
         assert_eq!(second[1], b"\x33door\n");
         assert_eq!(second[2][0], 2 + 0x20);
         assert!(conn.take_flags().is_empty());
+    }
+
+    /// Queued file requests go first in the frame of the next walk update
+    /// that changes something, ahead of the flags and the props, as the real
+    /// 2.22 and 2.31 put the first-step requests; a tick frame takes them
+    /// with or without props.
+    #[test]
+    fn queued_file_requests_lead_the_next_walk_frame() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut conn = Connection::connect(&addr).unwrap();
+        let (mut srv, _) = listener.accept().unwrap();
+        conn.login_versioned(ClientVersion::V205, 0x42, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let mut g = Gen3::new(0x42);
+        let mut decode = |srv: &mut TcpStream| {
+            let body = read_frame(srv);
+            body.split_inclusive(|b| *b == b'\n').map(|l| g.decode(l).unwrap()).collect::<Vec<_>>()
+        };
+        let want = |n: &str| FileRequest::Want(n.into()).message();
+
+        let here = PlayerUpdate { x: 30.0, y: 30.5, dir: 3 };
+        conn.send_walk_sprite(&here, 3).unwrap();
+        assert_eq!(decode(&mut srv).len(), 1);
+        conn.queue_files(vec![want("steps.wav"), want("walk.gani")]);
+        // An unchanged update sends nothing and keeps the requests.
+        conn.send_walk_sprite(&here, 3).unwrap();
+        conn.queue_flag("gr.x", Some("30.5"));
+        conn.send_walk_sprite(&PlayerUpdate { x: 30.5, ..here }, 3).unwrap();
+        let f = decode(&mut srv);
+        assert_eq!(f.len(), 4);
+        assert_eq!(f[0], want("steps.wav"));
+        assert_eq!(f[1], want("walk.gani"));
+        assert_eq!(f[2], b"\x32gr.x=30.5\n");
+        assert_eq!(f[3][0], 2 + 0x20);
+
+        conn.queue_files(vec![want("steps2.wav")]);
+        conn.send_tick_frame(Vec::new(), None).unwrap();
+        assert_eq!(decode(&mut srv), vec![want("steps2.wav")], "a tick without props");
+        assert!(conn.take_files().is_empty());
     }
 
     /// The same X, Y and SPRITE again is not re-sent; a change is.

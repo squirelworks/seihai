@@ -40,8 +40,10 @@ pub struct LoginInfo {
     /// (`mac`, the code page carried from 3.04). The 2.17
     /// message stops at `PLANGUAGE`.
     pub os_props: Option<(&'static str, u32)>,
-    /// `WANTFILE idle.gani` goes out at once with the first frame after the
-    /// login line (2.17 and 2.22; 2.31 does not ask).
+    /// The build checks `idle.gani` (2.17 and 2.22; 2.31 does not ask). The
+    /// real 2.22 puts it first in the post-login frame, ahead of the file
+    /// checks and the props (lab, 2026-10-30, stock beta4: +250 ms, about
+    /// 240 ms after the level), not at once after the login line.
     pub idle_gani: bool,
     /// The status icons are asked for after the burst.
     pub status_icons: bool,
@@ -301,7 +303,15 @@ pub fn sends_classic_login_props(version: super::ClientVersion) -> bool {
 pub struct LoginBurst {
     info: LoginInfo,
     sent: bool,
+    /// `idle.gani` is still to be checked ([`LoginInfo::idle_gani`]).
+    idle_owed: bool,
 }
+
+/// How long after the level the real 2.22 and 2.31 sent their post-login
+/// frame when the server sent no `PLO_LISTPROCESSES` (lab, 2026-10-30, stock
+/// GServer beta4: about 240 ms in every run). Seihai sends `idle.gani` alone
+/// then if its frame is not due ([`LoginBurst::take_idle_gani_late`]).
+pub const IDLE_GANI_AFTER_LEVEL: std::time::Duration = std::time::Duration::from_millis(240);
 
 impl LoginBurst {
     /// `None` for a profile without a recorded post-login frame.
@@ -309,7 +319,7 @@ impl LoginBurst {
         let p = version.profile();
         let info = p.protocol.login?;
         let can = p.protocol.pli.contains(PLI_PLAYERPROPS) && (!info.full || p.protocol.pli.contains(PLI_PROCESSLIST));
-        can.then_some(Self { info, sent: false })
+        can.then_some(Self { info, sent: false, idle_owed: info.idle_gani })
     }
 
     pub fn info(&self) -> LoginInfo {
@@ -320,6 +330,17 @@ impl LoginBurst {
     /// The frame has not gone out yet.
     pub fn pending(&self) -> bool {
         !self.sent
+    }
+
+    /// The `idle.gani` check on its own, once the level has been in for
+    /// [`IDLE_GANI_AFTER_LEVEL`] and the frame that would carry it is still
+    /// not due (a server that sends no `PLO_LISTPROCESSES`). Once.
+    pub fn take_idle_gani_late(&mut self, level_age: Option<std::time::Duration>, mut check: impl FnMut(&str) -> Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+        if !self.idle_owed || self.sent || !level_age.is_some_and(|a| a >= IDLE_GANI_AFTER_LEVEL) {
+            return Vec::new();
+        }
+        self.idle_owed = false;
+        check("idle.gani")
     }
 
     /// The 2.x builds answer the burst's end (`PLO_LISTPROCESSES`); 3.04,
@@ -351,6 +372,9 @@ impl LoginBurst {
         }
         self.sent = true;
         let mut out = Vec::new();
+        if std::mem::take(&mut self.idle_owed) {
+            out.extend(check("idle.gani"));
+        }
         let mut names = if self.info.full {
             let mut n = wear_images(&state.player_props, state.own_prop_ids.as_ref());
             n.extend(weapon_images(&state.weapons));
@@ -653,10 +677,10 @@ mod tests {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
         }, || vec![b"enter".to_vec()], || vec![b"flag".to_vec()]);
-        // images in order, then the icons, the login 46, the flags, the process list and the props
+        // idle.gani first (2.22), the images in order, then the icons, the login 46, the flags, the process list and the props
         assert_eq!(
             asked,
-            ["sword1.png", "shield1.png", "head0.png", "body.png", "wbomb1.png", "wbowi1.png", "plisticononline.png", "plisticonno pms.png"]
+            ["idle.gani", "sword1.png", "shield1.png", "head0.png", "body.png", "wbomb1.png", "wbowi1.png", "plisticononline.png", "plisticonno pms.png"]
         );
         assert_eq!(out.len(), asked.len() + 4);
         assert_eq!(out[asked.len()], b"enter");
@@ -666,6 +690,32 @@ mod tests {
         assert!(!b.pending(), "sent");
         assert!(!b.due(&st), "once");
         assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
+    }
+
+    /// The 2.22 `idle.gani` check: in the frame when it goes; alone, once,
+    /// when the level has been in for 240 ms and the frame is not due; never
+    /// for 2.31.
+    #[test]
+    fn idle_gani_goes_with_the_frame_or_late_alone() {
+        use std::time::Duration;
+        let check = |n: &str| vec![n.as_bytes().to_vec()];
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
+        assert!(b.take_idle_gani_late(None, check).is_empty(), "no level yet");
+        assert!(b.take_idle_gani_late(Some(Duration::from_millis(239)), check).is_empty());
+        assert_eq!(b.take_idle_gani_late(Some(IDLE_GANI_AFTER_LEVEL), check), [b"idle.gani".to_vec()]);
+        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty(), "once");
+        let mut st = burst_state();
+        st.process_list_requests = 1;
+        let out = b.take(&st, "acct", check, Vec::new, Vec::new);
+        assert_ne!(out[0], b"idle.gani", "not again in the frame");
+
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
+        assert_eq!(b.take(&st, "acct", check, Vec::new, Vec::new)[0], b"idle.gani");
+        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty(), "the frame took it");
+
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V231).unwrap();
+        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty());
+        assert!(!b.take(&st, "acct", check, Vec::new, Vec::new).iter().any(|m| m == b"idle.gani"));
     }
 
     #[test]
