@@ -221,7 +221,11 @@ bombs, blasts and shots"):
 **Inferred or not done:**
 - The explosion's sound names are taken to be a bomb's (inferred).
 - The way a shot knocks the player is not legible in the decompile. Seihai
-  pushes along the flight (inferred).
+  pushes along the flight, 5 ticks of 1 tile. A real 2.00 hit by Seihai's
+  arrow flying west (lab, 2026-10-30) did the same: half a heart, GANI
+  `hurt`, then about 5 tiles west over 5 ticks (4 on the second hit, when
+  it ran into something), back to `idle` 1.55 s later. So for 2.00 it is
+  lab-checked; 2.05 and later are taken as the same.
 - A shield stopping or sending back a shot is not done.
 - Flag 4 (remove a shot flying the other way) is not done.
 - Whether arrows stop at walls is still open. Seihai's arrows do not stop.
