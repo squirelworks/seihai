@@ -103,7 +103,7 @@ the same in every build read; this keeps `profiles_golden.txt` unchanged.
 | Per-player field compared in packet 40 | documented and skipped: most likely a level or area marker (see "Packet 40 through the lab server"), earlier read as an owner link. Inferred, not seen on a wire. Capture that would settle it: a real 2.22 client hit by a 40 whose attacker id is a player that owns something (a horse or similar); none is available offline |
 | Guild test in the packet path | settled: it applies (implemented) |
 | Id 46 | settled and implemented |
-| Bomb, arrow, baddy powers | documented and skipped: the hurt routine's callers use 0.5 hearts by default and 1 for certain object types, but which object kind maps to bomb, arrow or baddy was not resolved, and Seihai has no bomb, arrow or baddy objects to send them. Capture: a real client hit by a server-side bomb and by an arrow, read the power byte |
+| Bomb, arrow, baddy powers | bombs, explosions and shots settled and implemented (`combat.md`, "Bombs, explosions and shots"; Graal_analysis `client-internals/damage-sources.md`). Baddies are still open: Seihai has no baddy objects |
 | End-of-respawn save | needs capture: respawn the real client twice online (first with the server's level-warp reply delayed) and see whether the next respawn point is the death spot |
 | CURPOWER on damage | settled and implemented: the 2.05 and 2.22 clients send CURPOWER + GANI `hurt` + SPRITE on a hit (`health-death.md`, "Hearts report") |
 

@@ -181,7 +181,47 @@ The swing and hurt mode are shown with the player's own animations: the S key pl
   messages that do name a victim. **No game-loop code calls it yet**: the
   only sources would be script commands (`hitplayer`, `hitobjects`), and
   their argument meanings are not in the notes, so they stay "not applied"
-  effects as before. A bomb or arrow sender is likewise not built.
+  effects as before. Bombs and arrows are sent by the built-in weapons
+  (`bombs.rs`, `arrows.rs`).
+
+## Bombs, explosions and shots
+
+Other players' bombs (`PLO_BOMBADD` 11, `PLO_BOMBDEL` 12), explosions
+(`PLO_EXPLOSION` 36) and shots (`PLO_ARROWADD` 19) are read into
+`SessionState.level_objects`. The game loop moves them into our gmap cell by the
+sender's cell and hands them to the session. The rules come from the 2.05 rev 2
+program (Graal_analysis `client-internals/damage-sources.md`, "Other players'
+bombs, blasts and shots"):
+
+- **A received bomb** goes through `putbomb` without a send, so it splashes in
+  water, and it burns the fuse it carries. A received explosion is one cross of
+  its reach and type, power read as 1 to 3. `PLO_BOMBDEL` removes the bomb at
+  exactly its point.
+- **A received shot** flies a tile a tick like our own (sprite and type as
+  sent). It hits once its sprite's box (`w/32` by `h/32` tiles from the sprite
+  table) overlaps `x + 0.5 .. x + 2.5`, `y + 1 .. y + 3` of the player.
+  - With no sprite table loaded, a shot never hits the player.
+  - It takes half a heart, or a whole one for a fireball or nuke.
+  - It is then gone, and a fireblast or nuke leaves a reach-2 blast of type 1.
+  - Received on a `noplayerkilling` level, it never hits the player. Our own
+    weapon's arrows never hit us either.
+- **Owner.** With bit 8 (flag 8 for a shot), the sender owns every piece or
+  the shot. The owner counts only while the sender is still in the player list
+  (`OfflineSession.present_players`, refreshed each frame online).
+  - A player's piece or shot does not hurt on a `noplayerkilling` level.
+  - When its hit takes the last heart, the owner is the killer for
+    `PLI_CLAIMPKER`.
+  - A piece or shot of nobody's, or of a player who left, always hurts.
+
+**Inferred or not done:**
+- The explosion's sound names are taken to be a bomb's (inferred).
+- The way a shot knocks the player is not legible in the decompile. Seihai
+  pushes along the flight (inferred).
+- A shield stopping or sending back a shot is not done.
+- Flag 4 (remove a shot flying the other way) is not done.
+- Whether arrows stop at walls is still open. Seihai's arrows do not stop.
+
+**Not tested:** none of this was run in the lab.
 
 ## 2.00 to 2.04
 
@@ -250,8 +290,8 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
   when one of 12 body-box probes is blocked (`damage-respawn.md`). Tile
   `Blocking` and chests block; a walk-through (wallhack) session skips the
   probes. A push across a gmap cell edge crosses it like a walk step.
-- **Explosions** (`PLO_EXPLOSION` 36, within 1 tile on both axes) and arrows,
-  and the `playerhurt` script event, are not done.
+- **Other players' bombs, explosions and shots** are applied (see "Bombs,
+  explosions and shots" below). The `playerhurt` script event is not done.
 - **Preconditions of a swing** the notes list and Seihai skips: the level or
   server allowing weapons (STATUS bit 0x10), the charged spin (mode 13), and
   riding. Seihai has no horse, and the weapons bit's wire meaning is not
