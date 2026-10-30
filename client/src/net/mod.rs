@@ -1192,7 +1192,8 @@ impl Connection {
     /// [`WalkCadence`]: crate::protocol::walkcadence::WalkCadence
     pub fn send_tick_frame(&mut self, boards: Vec<Vec<u8>>, props: Option<Vec<u8>>) -> io::Result<()> {
         // Queued file requests go in the next tick's frame, with or without
-        // props: the real 2.22 sent `steps2.wav` alone in its tick.
+        // props. (2.22's later-step requests do not wait for a tick: the
+        // main loop sends them at once.)
         let mut msgs = self.take_files();
         msgs.extend(self.take_flags());
         msgs.extend(boards);

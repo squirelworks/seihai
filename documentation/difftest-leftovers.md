@@ -57,7 +57,12 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
     `steps2.wav` goes at step 2 it leads that step's props frame). Real 2.22 sent `steps2.wav` alone in a
     tick frame with no props. **Fixed:** `Connection::queue_files` holds them for the next walk update
     that changes something (2.31) or the next tick frame (2.22), ahead of the flags and the props;
-    unsent after 150 ms they go alone.
+    unsent after 150 ms they go alone. That still left 2.22's `steps2.wav` to a race: queued about
+    50 ms after step 1, right on the +50 ms tick, it went alone when it beat the tick and with the
+    +100 ms props when it missed it (Mirae reruns of 2026-10-30 on `845ee78`: alone at +51/+51 in two
+    runs, with the props at +95/+99 in two others; no slow loop frames). Real 2.22 sent it alone at
+    +68/+69, off the 50 ms grid. **Fixed:** on 2.22, a step's file requests once `walk` has been sent
+    go out at once in their own frame; the first step's still lead its props frame.
   * Real 2.22 `idle.gani` is the **first** message of the post-login frame: `WANTFILE idle.gani`, the
     icon checks, the login `PLAYERPROPS`, `SHOWIMGPLAYER`. That frame went at +250 ms, about 240 ms
     after the level (stock beta4 sends no `PLO_LISTPROCESSES`; 2.31's frame had the same gap). Seihai

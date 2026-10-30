@@ -2298,8 +2298,20 @@ fn main() {
                 // The first steps of a connection: the files the real client
                 // asks for then, if Seihai has no copy of them. They ride in
                 // the frame of the step's props, as the real client sends them.
+                // 2.22 asks for a later step's file once the walk is under
+                // way at once and on its own: `steps2.wav` went alone at
+                // +68 ms, off its 50 ms tick, with the step's props in a later
+                // tick (lab, 2026-10-30, `difftest-leftovers.md` section 7).
                 if let Some(c) = conn.as_mut().filter(|_| (session.player_x, session.player_y) != before) {
-                    c.queue_files(files.on_step());
+                    let wants = files.on_step();
+                    let walking = walk_cadence.as_ref().is_some_and(|wc| wc.walk_sent());
+                    if version == ClientVersion::V222 && walking && !wants.is_empty() {
+                        if let Err(e) = c.send_messages(&wants) {
+                            eprintln!("send failed: {e}");
+                        }
+                    } else {
+                        c.queue_files(wants);
+                    }
                 }
                 last_step = seihai::offline::next_step_clock(last_step, Instant::now(), session.step_interval());
             }
