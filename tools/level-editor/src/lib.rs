@@ -1,5 +1,6 @@
-//! The first slice of the Seihai level editor: open a `GLEVNW01` text level,
-//! look at its tiles, paint a rectangle, save. No GUI.
+//! The Seihai level editor: open a `GLEVNW01` text level, look at its tiles,
+//! paint a rectangle, save. The window (`gui`) is a tile palette and
+//! click-to-paint on top of the same `Document`.
 //!
 //! The rules come from the 2.22 editor notes (see `documentation/level-editor.md`):
 //! the board is one 64 x 64 grid of 12-bit tile ids; a `BOARD` row is placed by
@@ -13,6 +14,8 @@
 //! the 2.22 writer's shape) at the place of the first old `BOARD` row, and
 //! every other line (links, signs, chests, baddies, NPC scripts, `HEIGHTS`,
 //! comments) is written back as it was.
+
+pub mod gui;
 
 use std::fmt;
 use std::fs;

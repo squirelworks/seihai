@@ -44,7 +44,7 @@ Single code path. Versions are profile rows, not branches.
 ## Remaining
 
 - Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.
-- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist and the first CLI slice (open, list, paint, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
+- Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist, the first CLI slice (open, list, paint, save) and a minimal window (palette, click-to-paint, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
 - Public-server checks: list checks done from the user's machine (2026-10-25); game-server checks still to do. Results and checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
 - Walking collision: the real six-probe body-box routine is documented in `documentation/walking-collision-note.md` (cross-link). The earlier SDL single-point test is superseded.

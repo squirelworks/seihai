@@ -1,6 +1,6 @@
 # Level editor (item 24)
 
-Seihai will get a level editor that follows the classic one by version, the way the client follows its version chain: **2.22 first**, other versions as small differences on top. This page is the tracking list (copied from the analysis notes in Graal_analysis `tools/level-editor/`, in Seihai's own words and order) and the notes for the part that exists: a command-line tool in `tools/level-editor/` that opens a `.nw` text level, lists its tiles, paints a rectangle, and saves. There is no GUI.
+Seihai will get a level editor that follows the classic one by version, the way the client follows its version chain: **2.22 first**, other versions as small differences on top. This page is the tracking list (copied from the analysis notes in Graal_analysis `tools/level-editor/`, in Seihai's own words and order) and the notes for the part that exists: a command-line tool in `tools/level-editor/` that opens a `.nw` text level, lists its tiles, paints a rectangle, and saves, and a minimal window on top of it (`level-editor gui`): a tile palette, click-to-paint, save.
 
 The notes in Graal_analysis are derived facts about the editor's behaviour (no code); nothing from a decompile is repeated here. Tags in the status column: **done** in this slice, **next** is the natural following step, **later** is not started.
 
@@ -10,6 +10,7 @@ The notes in Graal_analysis are derived facts about the editor's behaviour (no c
 level-editor [--version V] list  FILE.nw [--rows]
 level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
 level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
+level-editor [--version V] [--sheet PNG] gui [FILE.nw]
 level-editor versions
 ```
 
@@ -20,6 +21,18 @@ level-editor versions
 - `--version` defaults to 2.22. 2.17.1 is accepted as the same profile (the notes found no difference). Every other version stops with "not yet supported" and says why: 2.05 has no `HEIGHTS` block, no predefined NPCs and a different open filter; builds before 2.05 have no text level format at all; 2.31 has no built-in editor. Binary levels (`GR-V1`, `Z3-V1`) say "not yet" too.
 
 The old tool printed an ASCII preview and had `--export`; its export rebuilt the file from Seihai's parsed level and lost everything the parser drops (comments, `HEIGHTS`, line endings), so it was replaced by a save that keeps the file's own lines.
+
+### The window
+
+`level-editor gui [FILE.nw]` opens a window (egui, the toolkit the client's launcher already uses; no new dependency for the build). It is the minimal window of the plan, item 10: no new format work, everything it writes goes through the same `Document` as the command line.
+
+- **Board.** The 64 x 64 board drawn with the tile sheet, 16 px per tile, scrollable, zoom 1x or 2x, an optional grid. The status bar shows the cell and tile id under the mouse.
+- **Tile palette.** The whole sheet (`pics1.png` layout, 2048 x 512) below the board; a left click selects the tile under the mouse and a yellow box marks the selection. The tile id can also be typed in the status bar (0 to 4095). The sheet is the built-in `pics1.png` unless `--sheet PNG` names another.
+- **Click to paint.** The left button paints the selected tile on one cell; dragging paints a stroke (cells skipped between two frames are filled in along a straight line). The right button picks the tile under the mouse. A paint is `Document::paint` with a 1 x 1 rectangle.
+- **Save.** *Save* (or Ctrl+S) writes to the file that was opened; *Save as* writes to the path in the box next to it, which then becomes the Save target. Both write through a temporary file and a rename and keep the round-trip rules below (an unchanged level is written back byte for byte). *Open* takes a path typed in the box (there is no file dialog). Opening another level or closing the window with unsaved changes asks Save / Discard / Cancel; the title starts with `*` while there are unsaved changes.
+- **Version selector.** Defaults to 2.22 (or the `--version` given); it lists the versions the command line accepts, 2.22 and 2.17.1, which are one profile. Other versions are not offered (they stop with "not yet" on the command line).
+
+Not in the window (later items of the list below): undo, selection and copy/paste, rectangle and flood fill, blocking or tile-type overlays, links, signs, chests, baddies, NPCs, tabs, New, binary levels.
 
 ### How the text file is read and written
 
@@ -37,6 +50,8 @@ Not what the 2.22 writer does: it rebuilds the whole file from its own model and
 
 `tools/level-editor/tests/editor.rs` (18 tests): the starter levels `new1.nw` and `new2.nw` and a synthetic level (comments, a `BOARD`-looking script line, `HEIGHTS`, partial, short and out-of-range rows, a layer-1 row, links, signs, chests, baddies) round trip byte for byte in LF, CRLF and no-final-newline forms; the row rules; a paint changes only the rectangle and keeps every other line; Seihai's own `Level` parser reads what the editor saved; every id from 0 to 4095 survives a save and read; bounds and id range; version selector; and the command line (list, row dump, paint to a new file or in place with no temp file left, save, error messages and exit codes). No corpus level is used.
 
+`tools/level-editor/tests/gui.rs` (9 tests): the sheet mapping covers every id 0 to 4095 on its own cell and inverts; drag strokes have no gaps; the editor state paints, picks, refuses bad cells and ids, saves and saves as (painting the old tile back gives the starter's bytes); a failed open keeps the current level; the board image matches the sheet. The real window code is also driven headless (an egui context with synthetic mouse and key events, no display): a palette click then a board click paints, Ctrl+S saves to disk, a drag paints a stroke, a right click picks, a close with unsaved changes is held for the prompt, and no board is drawn without a level.
+
 ## Tracking list: the 2.22 feature list in implementation order
 
 | # | Feature (what the 2.22 editor does) | Status |
@@ -44,17 +59,17 @@ Not what the 2.22 writer does: it rebuilds the whole file from its own model and
 | 1 | **Level model and tile sheet.** A 64 x 64 board of tile ids, plus links, signs, chests, NPCs and baddies. Id to sheet: `col = (id % 16) + (id / 512) * 16`, `row = (id / 16) % 32` | board **done** (read, paint, write); the other lists are only counted and kept as text |
 | 2 | **Read and write GLEVNW01 text**, including `LINK`, `SIGN`, `CHEST`, `NPC`, `BADDY` and the 9 x 9 `HEIGHTS` block, with a round-trip test | **done** for the board; other records round trip verbatim; editing them is **next** |
 | 3 | **Read the binary levels** (`GR-V1.00` to `1.03`, `Z3-V1.03/04`) and **write `GR-V1.03`**, picking the format by file extension (`.nw` text, anything else binary) | **later** (the client has a binary reader; the editor says "not yet") |
-| 4 | **Board view**: scrolling, 16 px tiles, overlays for blocking, foreground and terrain tiles, a status bar | **later** (`list --rows` is the text stand-in) |
+| 4 | **Board view**: scrolling, 16 px tiles, overlays for blocking, foreground and terrain tiles, a status bar | scrolling, 16 px tiles, zoom, grid, status bar with cell and id **done** in the window; overlays **later** |
 | 5 | **Selection, copy, cut, paste, delete, floating paste** | **later** (`paint` is the single-tile fill) |
 | 6 | **Undo** of board writes: per tab, 128 records, rectangle snapshots | **later** |
-| 7 | **Tile palette**: one tile or a block, the background tile, draw mode, flood fill on the right button | **later** (`paint` is a rectangle of one tile) |
+| 7 | **Tile palette**: one tile or a block, the background tile, draw mode, flood fill on the right button | one-tile palette, click and drag to paint, right-click pick **done** in the window; block selection, background tile, flood fill **later** |
 | 8 | **Stamps**: load `GOBJSET01` sets, place, add the selection to a set, save the set | **later** |
 | 9 | **Link tools**: list and dialog, *turn selection into a warp field* (`playerx` / `playery` defaults, the edge rules), open the destination in a new tab | **later** |
 | 10 | **Sign tools**: list, x/y, text in the sign alphabet, signs at (0, 0) | **later** |
 | 11 | **Chest tool**: the 25 items, sign index with -1 for none | **later** |
 | 12 | **Baddy tool**: ten types, three verses, types 4 to 6 without verses | **later** |
 | 13 | **NPC tool**: image, script with test and find, clone, predefined NPCs (`defnpc*.txt`) | **later** |
-| 14 | **Tabs, Save (save-all), Save as, Close with a prompt, New.** Write to a temporary file and rename, not delete-then-write | save through temp file and rename **done**; the rest **later** (a new level can be made from `assets/default/levels/new1.nw` by `save --out`) |
+| 14 | **Tabs, Save (save-all), Save as, Close with a prompt, New.** Write to a temporary file and rename, not delete-then-write | save through temp file and rename, Save and Save as, a Save / Discard / Cancel prompt on open and close **done** (one level, no tabs); the rest **later** (a new level can be made from `assets/default/levels/new1.nw` by `save --out`) |
 | 15 | **Keys**: the key map of the editor, `F10` border toggle, optional `Ctrl+Q` batch re-save | **later** |
 | 16 | **Maps**: several levels at once, the level cache, gmap generation | **later** |
 | 17 | **Tile definitions**: `tiledefs` lines, types 0 and 1; type 4 once its meaning is traced | **later** (the client already reads `tiledefs`) |

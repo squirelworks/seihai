@@ -1,13 +1,14 @@
-//! Seihai level editor, first slice: command line only.
+//! Seihai level editor: the command line, and a minimal window (`gui`).
 //!
 //!   level-editor [--version V] list  FILE.nw [--rows]
 //!   level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
 //!   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
+//!   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
 //!   level-editor versions
 //!
 //! `level-editor FILE.nw` is `list FILE.nw`. See documentation/level-editor.md.
 
-use level_editor::{Document, EditError, Version, SIZE};
+use level_editor::{gui, Document, EditError, Version, SIZE};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -16,6 +17,7 @@ Usage:
   level-editor [--version V] list  FILE.nw [--rows]
   level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
+  level-editor [--version V] [--sheet PNG] gui [FILE.nw]
   level-editor versions
 
   list    summary and the most used tile ids; --rows dumps the board, one row per line,
@@ -23,6 +25,9 @@ Usage:
   paint   fill the rectangle (X, Y, W, H in tiles, 0 to 63) with tile id TILE (0 to 4095,
           decimal or 0x hex)
   save    open and write again (the same bytes when the level was not changed)
+  gui     open the window: tile palette, click to paint (right click picks the tile
+          under the mouse), Save / Save as; --sheet sets the tile sheet (default: the
+          built-in pics1.png)
   --version V   editor version to follow: 2.22 (default) or 2.17.1; others say \"not yet\"";
 
 fn fail(msg: impl std::fmt::Display) -> ! {
@@ -35,11 +40,12 @@ struct Args {
     out: Option<PathBuf>,
     in_place: bool,
     rows: bool,
+    sheet: Option<PathBuf>,
     positional: Vec<String>,
 }
 
 fn parse_args(raw: Vec<String>) -> Args {
-    let mut a = Args { version: Version::V222, out: None, in_place: false, rows: false, positional: Vec::new() };
+    let mut a = Args { version: Version::V222, out: None, in_place: false, rows: false, sheet: None, positional: Vec::new() };
     let mut it = raw.into_iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| -> String {
@@ -54,6 +60,8 @@ fn parse_args(raw: Vec<String>) -> Args {
             a.version = Version::parse(&v).unwrap_or_else(|e| fail(e));
         } else if arg == "--out" || arg.starts_with("--out=") {
             a.out = Some(PathBuf::from(value("--out")));
+        } else if arg == "--sheet" || arg.starts_with("--sheet=") {
+            a.sheet = Some(PathBuf::from(value("--sheet")));
         } else if arg == "--in-place" {
             a.in_place = true;
         } else if arg == "--rows" {
@@ -147,6 +155,17 @@ fn main() {
                 w * h,
                 out.display()
             );
+        }
+        Some("gui") => {
+            let file = pos.next().map(PathBuf::from);
+            let sheet = match &a.sheet {
+                Some(p) => {
+                    let data = std::fs::read(p).unwrap_or_else(|e| fail(format!("cannot read {}: {e}", p.display())));
+                    gui::Sheet::from_png(&data).unwrap_or_else(|e| fail(e))
+                }
+                None => gui::Sheet::builtin(),
+            };
+            gui::run(a.version, sheet, file.as_deref()).unwrap_or_else(|e| fail(format!("cannot open the window: {e}")));
         }
         Some("save") => {
             let file = pos.next().unwrap_or_else(|| fail("save needs a FILE.nw"));
