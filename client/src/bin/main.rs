@@ -1657,7 +1657,7 @@ fn main() {
                 }
                 if classic_props_owed && session.current_level.is_some() {
                     classic_props_owed = false;
-                    let m = seihai::protocol::login::classic_login_props_message(&net_state.player_props, &account, net_state.own_prop_ids.as_ref());
+                    let m = seihai::protocol::login::classic_login_props_message(version, &net_state.player_props, &account, net_state.own_prop_ids.as_ref());
                     if let Some(c) = conn.as_mut() {
                         if let Err(e) = c.send_messages(&[m]) {
                             eprintln!("login props send failed: {e}");
