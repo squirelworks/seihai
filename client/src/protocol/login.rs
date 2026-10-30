@@ -58,6 +58,12 @@ pub struct LoginInfo {
     /// in one plain zlib frame (3.04: `bigmap.txt` and `minimap.txt`, which
     /// its install ships in `maps/`). Empty: the login line goes alone.
     pub first_frame_files: &'static [&'static str],
+    /// The login line, `PLI_LANGUAGE` and (when sent) `PLI_TAMPERCHECK` go
+    /// in one frame, as the real 2.17.1 sends them (lab, 2026-10-30,
+    /// `documentation/difftest-217.md` item 5). The messages after the login
+    /// line carry the gen-3 insertion already. A build with
+    /// `first_frame_files` bundles as well.
+    pub bundle_login: bool,
     /// How long after the level a 2.x frame goes when no 182 came first.
     /// `None`: [`FRAME_AFTER_LEVEL`] (2.22, 2.31). The real 2.17.1 sent its
     /// frame 96 to 112 ms after the board on both lab servers, with or without
@@ -72,13 +78,23 @@ pub const LOGIN_217: LoginInfo = LoginInfo {
     status_icons: true,
     full: true,
     first_frame_files: &[],
+    bundle_login: true,
     frame_after_level: Some(Duration::from_millis(96)),
 };
-pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], frame_after_level: None };
-pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], frame_after_level: None };
+pub const LOGIN_222: LoginInfo =
+    LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: false, frame_after_level: None };
+pub const LOGIN_231: LoginInfo =
+    LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], bundle_login: false, frame_after_level: None };
 /// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
-pub const LOGIN_304: LoginInfo =
-    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"], frame_after_level: None };
+pub const LOGIN_304: LoginInfo = LoginInfo {
+    os_props: Some(("linux", 1250)),
+    idle_gani: false,
+    status_icons: true,
+    full: false,
+    first_frame_files: &["bigmap.txt", "minimap.txt"],
+    bundle_login: true,
+    frame_after_level: None,
+};
 /// 3.153 (Mac OS X), never run: 3.04's frame with `OSTYPE` `mac`, the value
 /// its binary writes (Graal_analysis `version-profiles/3.04-3.153.toml`). The
 /// code page and the rest of the frame are 3.04's; the notes have no 3.153

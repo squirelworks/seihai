@@ -90,6 +90,9 @@ What matched:
    * Real 2.17 sends `LOGIN`, `LANGUAGE` and `TAMPERCHECK` in one TCP frame.
    * Seihai sends `LOGIN` alone, then `LANGUAGE` (and `TAMPERCHECK`) in a second frame.
    * The beta4 lab patch 1 exists because of the real client's bundling.
+   * Fixed: `LOGIN_217.bundle_login` puts `LANGUAGE` and `TAMPERCHECK` in the login frame. Each carries
+     its gen-3 insertion from the first iterator step, which is how the real frame decodes. Like the real
+     client, Seihai 2.17 now needs a server that reads the rest of the login frame (on beta4, lab patch 1).
 
 ## Known divergences seen again in 2.17
 
