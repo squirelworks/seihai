@@ -68,25 +68,47 @@ default weapons 8 then 7 would. No mapping is wired (`file-cache.md`).
 
 ## Gen-2 builds (1.33 to 1.39)
 
-These builds have no post-login frame and no process list. Live runs of 1.33
-and 1.39 against GServer-v2 (Graal_analysis `version-profiles/1.33-1.39.md`)
-show their first `PLI_PLAYERPROPS` going out once the first level has loaded,
-with `NICKNAME` (0), `HEADGIF` (11), `COLORS` (13), `STATUS` (18), `UDPPORT`
-(31) and `ADDITFLAGS` (33). A numbered default head goes as `c(number)`.
+These builds have no post-login frame and no process list. Their first
+`PLI_PLAYERPROPS` goes out once the first level has loaded, with `NICKNAME`
+(0), `HEADGIF` (11), `COLORS` (13), `STATUS` (18), `UDPPORT` (31) and
+`ADDITFLAGS` (33) (Graal_analysis `version-profiles/1.33-1.39.md`).
 
-Seihai now sends that message once a connection's first level is there (from
-the file or from the server's board). It uses `classic_login_props_message`.
-Head, colours and status are copied from the server's props, and `UDPPORT`
-is left out, as for the later builds. 1.41 to 2.05 send nothing of this kind
-yet. The real 2.05 sends a login props message too (lab stub, 2026-10-30), but
-its layout is not decoded here.
+Lab check, 2026-10-30. The real 1.33 and 1.39 logged into a gen-2 stub 13
+times (zlib frames, the server's props, the level and its board, file requests
+answered with `FILESENDFAILED`). Each run changed the server's head or status:
+
+| server sent | real 1.39 sent | real 1.33 sent |
+|---|---|---|
+| nick `stubnick` | `stubnick` (the server's, not the account) | the same |
+| head `head3.png` | `head3.png` | `c(0)` |
+| head `head1.gif`, `head5.gif` | `c(1)` | `c(0)` |
+| head `c(5)` | `c(5)` | `c(5)` |
+| colours | as sent | as sent |
+| status 0, 1, 2, 4, 8, 32 | 0 | 0 (status 0 tried) |
+| status 16, 20 | 16 | 16 (status 16, 20 tried) |
+| status 64 | 64 | not tried |
+| then | `UDPPORT` (a new port each run), `ADDITFLAGS` 0 | the same |
+
+Seihai builds the message in `classic_login_props_message` with those rules.
+The test `classic_login_props_match_the_real_1_33_and_1_39` holds the real
+bytes of nine of the runs. Against the same stub, Seihai 1.33 and 1.39 sent the
+real clients' bytes exactly, apart from `UDPPORT`: Seihai binds no UDP socket,
+so it leaves that prop out, as for the later builds.
+
+Still different in those runs (not changed here):
+
+* Seihai asks for the level file (`WANTFILE onlinestartlocal.nw`) before the
+  props. The real clients do not.
+* The real 1.39 asks for the head (`head3.png`) twice, before the props.
+  Seihai asks once, after them. The real 1.33 asks for `head1` for
+  `head1.gif`.
 
 Not done:
 
-* The default weapon registration that goes with it: id 25 (the full weapon)
-  up to 1.37, and id 33 (`c(0)` + default weapon id) from 1.38. GServer-v2
-  beta4 kicks a client for id 25.
-* A lab run of Seihai 1.33 or 1.39 with this change.
+* The default weapon registration: id 25 (the full weapon) up to 1.37, and
+  id 33 (`c(0)` + default weapon id) from 1.38. The stub sent no weapons, and
+  neither client sent either id.
+* 1.34 to 1.38 are taken to behave as 1.33. They were not run.
 
 ## Tests
 
