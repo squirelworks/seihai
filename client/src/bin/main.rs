@@ -424,8 +424,9 @@ fn main() {
                 println!("                             from the built-in default set; with no folder the");
                 println!("                             built-in set is all there is, and offline starts in");
                 println!("                             new1.nw");
-                println!("         --cache-dir <dir>   where per-server download caches live (default:");
-                println!("                             <settings dir>/cache; settings file: cache_dir=)");
+                println!("         --cache-dir <dir>   also keep a copy of each download here (downloads go to");
+                println!("                             _cache/ next to the program; without this the old");
+                println!("                             <settings dir>/cache is only read; settings file: cache_dir=)");
                 println!("                             search order: server cache, --assets, built-in set");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
@@ -835,10 +836,18 @@ fn main() {
         .with_builtin_levels(online.is_none());
     // What to ask the server for, and where downloads are saved (the cache).
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
+    // Downloads go to the Seihai folder's `_cache`. The settings' cache is
+    // still searched (what older runs saved there); it gets a copy only when
+    // the user named it, and takes the download when `_cache` is unavailable.
+    let settings_copy = cli_cache_dir.is_some() || settings_now.cache_dir.is_some();
+    files.store.set_settings_copy(settings_copy);
     if let Some(a) = online.as_deref() {
         files.store.set_cache_meta(Some(seihai::servercache::meta_text(a, server_name(a).as_deref())));
-        for d in game_cache_dir.iter().chain(cache_dir.iter()) {
-            eprintln!("download cache: {}", d.display());
+        match (&game_cache_dir, &cache_dir) {
+            (Some(g), Some(c)) if settings_copy => eprintln!("download cache: {} (copy in {})", g.display(), c.display()),
+            (Some(g), _) => eprintln!("download cache: {}", g.display()),
+            (None, Some(c)) => eprintln!("download cache: {}", c.display()),
+            (None, None) => {}
         }
     }
     // A fresh install with no folder of its own starts offline in the built-in level.
@@ -1289,8 +1298,9 @@ fn main() {
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
     let mut hearts_repair_sent = false;
-    // Where a cached level link (PLI 30) lands the player; see the link send.
-    let mut link_arrival: Option<(f32, f32)> = None;
+    // Where our own link request lands the player, held by the destination's
+    // name until the server names that level (see `LinkArrival`).
+    let mut link_arrival: Option<seihai::net::LinkArrival> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -1580,7 +1590,14 @@ fn main() {
                 // A cached link gets no PLO_PLAYERWARP, and GServer-v2 sends
                 // none for a plain level either (only the level). The
                 // server's, if it did send one, wins.
-                if let Some((x, y)) = link_arrival.take_if(|_| entered) {
+                // The level may arrive after the warp was given up (a level
+                // the server sends in full can be slow): the arrival is held
+                // by name, not by the pending warp.
+                let arrival = match (entered, net_state.current_level_name()) {
+                    (true, Some(n)) => seihai::net::LinkArrival::take_for(&mut link_arrival, &n),
+                    _ => None,
+                };
+                if let Some((x, y)) = arrival {
                     net_state.player_x.get_or_insert(x);
                     net_state.player_y.get_or_insert(y);
                 }
@@ -2157,7 +2174,7 @@ fn main() {
                     ) {
                         Ok(Some(started)) => {
                             warp_since = Some(Instant::now());
-                            link_arrival = started.arrival;
+                            link_arrival = started.arrival.map(|a| seihai::net::LinkArrival::new(&dest, a));
                             script_warp_sent = true;
                         }
                         // Another warp is pending: nothing more to do.
@@ -2288,7 +2305,7 @@ fn main() {
                         ) {
                             Ok(Some(started)) => {
                                 warp_since = Some(Instant::now());
-                                link_arrival = started.arrival;
+                                link_arrival = started.arrival.map(|a| seihai::net::LinkArrival::new(&dest, a));
                             }
                             Ok(None) => {}
                             Err(_) => conn = None,
@@ -2351,11 +2368,12 @@ fn main() {
                 }
             }
         }
-        // A warp the server never answers is given up after a few seconds.
+        // A warp the server never answers is given up after a few seconds:
+        // the player may walk again. The link's arrival stays held, so a
+        // level that still comes lands the player where the link said.
         if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
             warp_since = None;
             session.cancel_warp();
-            link_arrival = None;
             net_state.cancel_cached_request();
             eprintln!("warp not answered");
         }

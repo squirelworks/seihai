@@ -350,13 +350,16 @@ pub struct DownloadStore {
     memory: HashMap<String, MemoryFile>,
     /// The text of `server.txt`, written once into a new cache folder.
     cache_meta: Option<String>,
+    /// With the Seihai folder's cache too: also write each download to the
+    /// settings' cache (the user named one with `--cache-dir` / `cache_dir=`).
+    settings_copy: bool,
 }
 
 impl DownloadStore {
     /// `save_to_disk` is the real clients' `saveimages` setting (on unless
     /// a user turns it off).
     pub fn new(resolver: AssetResolver, save_to_disk: bool) -> Self {
-        Self { resolver, save_to_disk, memory: HashMap::new(), cache_meta: None }
+        Self { resolver, save_to_disk, memory: HashMap::new(), cache_meta: None, settings_copy: false }
     }
 
     pub fn resolver(&self) -> &AssetResolver {
@@ -380,6 +383,13 @@ impl DownloadStore {
 
     pub fn set_cache_meta(&mut self, meta: Option<String>) {
         self.cache_meta = meta;
+    }
+
+    /// Keep a copy of every download in the settings' cache as well as in
+    /// the Seihai folder's (off unless the user named a cache folder). The
+    /// settings' cache is searched either way.
+    pub fn set_settings_copy(&mut self, on: bool) {
+        self.settings_copy = on;
     }
 
     /// The file the client already has under this name, and the layer it is
@@ -463,23 +473,28 @@ impl DownloadStore {
         let Some(dl) = self.resolver.download_root().cloned() else {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, "no download folder (only the read-only built-in set)"));
         };
-        // With both caches, the settings' cache keeps a copy too. Either one
-        // failing (a Seihai folder that cannot be written) leaves the other.
+        // With both caches, the download goes to the Seihai folder's. The
+        // settings' cache is written only when the user named it (a copy),
+        // or when the Seihai folder cannot be written (instead).
         let second = self.resolver.cache_root().filter(|c| c.root != dl.root).cloned();
         let first = self.write_into(&dl, &rel, name, data, mod_time);
         let Some(second) = second else { return first.map(Stored::Disk) };
-        let other = self.write_into(&second, &rel, name, data, mod_time);
-        match (first, other) {
-            (Ok(t), Err(e)) => {
-                eprintln!("settings cache copy of {name} not written: {e}");
+        match first {
+            Ok(t) => {
+                if self.settings_copy {
+                    if let Err(e) = self.write_into(&second, &rel, name, data, mod_time) {
+                        eprintln!("settings cache copy of {name} not written: {e}");
+                    }
+                }
                 Ok(Stored::Disk(t))
             }
-            (Ok(t), Ok(_)) => Ok(Stored::Disk(t)),
-            (Err(e), Ok(t)) => {
-                eprintln!("Seihai folder cache copy of {name} not written: {e}");
-                Ok(Stored::Disk(t))
-            }
-            (Err(e), Err(_)) => Err(e),
+            Err(e) => match self.write_into(&second, &rel, name, data, mod_time) {
+                Ok(t) => {
+                    eprintln!("Seihai folder cache copy of {name} not written ({e}); saved in the settings cache");
+                    Ok(Stored::Disk(t))
+                }
+                Err(_) => Err(e),
+            },
         }
     }
 
