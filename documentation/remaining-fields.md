@@ -72,9 +72,13 @@ the text. An unknown tag skips its one data byte.
   that finds the test false is lost, the next one is a period later.
   `ShowImgSender` follows this now (it used to hold the clock while alone and
   send the moment someone arrived).
-- 2.17.1 has the same sender and the same test as 2.22. The 90 s solo 2.17
-  capture saw no id 24, which that test predicts. The period of 2.17.1's
-  timer is not observed, so Seihai still sends nothing for 2.17.
+- 2.17.1 has the same sender as 2.22, and the binary reading gave it the
+  same test. The 90 s solo 2.17 capture of 2026-10-25 saw no id 24, which
+  that test predicts. The 2026-10-30 captures disagree: in all five solo runs,
+  on both lab servers, 2.17.1 sent id 24 in its post-login frame and then
+  every 5.07 to 5.11 s while idle (`difftest-217.md` item 3). Seihai follows
+  the newer captures (`SHOWIMG_217`: 5.1 s, no other player needed). Why the
+  two captures differ is not known.
 
 **What Seihai does now.**
 
