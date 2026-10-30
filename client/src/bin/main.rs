@@ -1452,7 +1452,8 @@ fn main() {
     let mut last_step = Instant::now();
     // STATUS (prop 18) as the server last gave it; the dead bit is toggled on it.
     let mut status_base = 0u8;
-    // STATUS bit 0x02 last sent (hiding under a carried object).
+    // STATUS bits 0x02 (hiding under a carried object) and 0x01 (paused)
+    // last sent.
     let mut last_hide_status = 0u8;
     let mut life_clock = Instant::now();
     let mut combat_clock = Instant::now();
@@ -1888,6 +1889,7 @@ fn main() {
                                 | seihai::combat::Reject::AlreadyHurt
                                 | seihai::combat::Reject::Swimming
                                 | seihai::combat::Reject::Hidden
+                                | seihai::combat::Reject::Paused
                                 | seihai::combat::Reject::NpcSource
                                 | seihai::combat::Reject::UnknownPower
                                 | seihai::combat::Reject::NoPkZone
@@ -2227,10 +2229,17 @@ fn main() {
             hide_key && session.toggle_hide()
         };
         dirty |= hide_changed;
-        // The hidden bit goes out whenever it changes (D, A, or a throw
-        // from hiding, which is seen one frame later).
-        if session.hide_status() != last_hide_status {
-            last_hide_status = session.hide_status();
+        // P pauses (a sign turns its page with it instead), and a window
+        // without the focus is paused too. Others see STATUS bit 0x01 and
+        // "(paused)"; a paused player cannot be hurt.
+        if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Pause) {
+            session.toggle_pause();
+        }
+        session.set_focused(window.is_active());
+        // The hidden and paused bits go out whenever they change (D, A, a
+        // throw from hiding, which is seen one frame later, P, or focus).
+        if session.hide_status() | session.pause_status() != last_hide_status {
+            last_hide_status = session.hide_status() | session.pause_status();
             if let Some(c) = conn.as_mut() {
                 let sent = c
                     .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])

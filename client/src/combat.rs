@@ -119,6 +119,10 @@ pub enum Reject {
     Swimming,
     /// The victim hides under a carried object (mode 14).
     Hidden,
+    /// The victim is paused (STATUS 0x01): the P key, or its window lost
+    /// the focus. Real clients let a paused player be hurt only in a
+    /// `sparringzone` level, which Seihai does not have.
+    Paused,
     /// Packet hit from farther than the profile's range.
     TooFar,
     /// The hit came from an NPC. Its position is not known to Seihai.
@@ -149,6 +153,8 @@ pub enum Vulnerability {
     Swimming,
     /// Hiding under a carried object (2.05 mode 14).
     Hidden,
+    /// Paused (STATUS 0x01).
+    Paused,
 }
 
 impl Vulnerability {
@@ -159,6 +165,7 @@ impl Vulnerability {
             Vulnerability::Hurt => Err(Reject::AlreadyHurt),
             Vulnerability::Swimming => Err(Reject::Swimming),
             Vulnerability::Hidden => Err(Reject::Hidden),
+            Vulnerability::Paused => Err(Reject::Paused),
         }
     }
 }
@@ -771,6 +778,8 @@ impl OfflineSession {
             Vulnerability::Swimming
         } else if self.hidden {
             Vulnerability::Hidden
+        } else if self.paused {
+            Vulnerability::Paused
         } else {
             Vulnerability::Hurtable
         };

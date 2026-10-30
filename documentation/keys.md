@@ -16,7 +16,7 @@ Seihai uses them for every version:
 | `map` | M | closes a sign (there is no map screen yet) |
 | `itemlist` | Q | opens or closes the item list |
 | `switchtochat` | Tab | opens the chat bar |
-| `pause` | P | not read yet |
+| `pause` | P | pause or go on (`offline/pause.rs`): STATUS bit 0x01 goes out, other players see `(paused)` after the name, and a paused player cannot be hurt. A window without the focus is paused too. A sign turns its page with P instead |
 
 Two of these changed from what Seihai did before. Space was a second
 action key and is now a sword key, as the readmes say. Tab opened the

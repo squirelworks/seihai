@@ -43,6 +43,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("F2", &["F2"], "private message to the nearest player"),
     k("Q", &["Q"], "open or close the item list; arrows pick a weapon, Esc/D/S/A/Enter close it"),
     k("D", &["D"], "weapon key: closes the item list (firing weapons is not done yet)"),
+    k("P", &["P"], "pause or go on; others see \"(paused)\" and cannot hurt you (also while the window has no focus)"),
     k("keyset_...", &[], "settings file: rebind the game keys above (1.38 and later)"),
     k("F7", &["F7"], "show or hide the player list"),
     k("/ignore /buddy /mute", &[], "chat bar: add a name (/unignore ... removes); /lists shows"),
