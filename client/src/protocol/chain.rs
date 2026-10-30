@@ -27,7 +27,7 @@ use super::profile::{
     ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
-use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304};
+use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304, LOGIN_3153};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
 use super::version::{ClientVersion, EncryptionGen};
@@ -929,6 +929,12 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             plo: IdDelta::plus_minus(&[67, 74, 82, 104, 131, 132, 133, 134, 187, 189], &[44]),
             pli: IdDelta::plus(&[46, 50, 93, 96, 97, 98, 152, 154, 155, 156, 157, 158]),
+            // Same G3D30123 login as 3.04, but this build was never run: shape D is 3.04's.
+            listserver: Some(Some(
+                Listserver::new(ListKind::Supported, PortStatus::Assumed, Some(BuiltIn { host: "listserver.graalonline.com", port: 14922 }), Some("G3D30123"))
+                    .shape(LoginShape::Gen5OneFrame, ShapeBasis::Inferred),
+            )),
+            login: Some(Some(LOGIN_3153)),
             udp_off_by_default: Some(true),
             own_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
@@ -936,10 +942,12 @@ pub const CHAIN: &[Step] = &[
             precise_pos: Some(true),
             ..Delta::NONE
         },
-        source: "binary (Mac OS X PPC Mach-O), not run: PLO 67, 74, 82, 104, 131-134, 187 and MOVE2 (189) in, 44 out; RC file browser, script upload and text request ids; X2/Y2/Z2; UDP off in the shipped prefs",
+        source: "binary (Mac OS X PPC Mach-O), not run: OSTYPE mac; PLO 67, 74, 82, 104, 131-134, 187 and MOVE2 (189) in, 44 out; RC file browser, script upload and text request ids; X2/Y2/Z2; UDP off in the shipped prefs",
         unknown: &[
             Unknown { area: "pli", what: "2, 3, 15, 24, 29 and 80 are taken from 3.04; the PPC scan did not resolve those call sites" },
             Unknown { area: "live", what: "never run" },
+            Unknown { area: "listserver", what: "shape D (id 7 and id 1 in one plain zlib frame at 78 9C) is 3.04's capture; the binary has the same G3D30123 token and gen-5 cipher" },
+            Unknown { area: "login", what: "OSTYPE mac is from the binary; the code page (1250), the files in the first frame (bigmap.txt, minimap.txt) and the head and default-weapon checks are 3.04's" },
             Unknown { area: "3d", what: "the 3D mode (Torque GameConnection on port 28000) is not modelled" },
         ],
     },
