@@ -2274,7 +2274,7 @@ fn main() {
         // D while carrying hides under the object (or comes out); A comes out
         // too. Others see STATUS bit 0x02 and the hidden sprites.
         let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
-        let unhide_key = session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
+        let unhide_key = !sign_was_open && session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
         let interact = interact && !unhide_key;
         // D with nothing carried fires the selected weapon: its script
         // gets `weaponfired`. Carrying, D hides instead (above).
