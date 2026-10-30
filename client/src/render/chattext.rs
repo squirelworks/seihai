@@ -262,27 +262,21 @@ pub fn line_left(cx: i32, w: i32, view_w: i32) -> i32 {
     x.max(0)
 }
 
-/// Draw `text` over the player whose 48×48 box has its top-left at
-/// (`dx`, `dy`). `carrying` lifts it one more tile. `font` is `None` when no
-/// TrueType font was found: the built-in bitmap font is used.
-pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, dx: i32, dy: i32, carrying: bool) {
-    if text.is_empty() {
-        return;
-    }
-    let tile = super::TILE_PX as i32;
-    let cx = dx + tile * 3 / 2;
-    let bottom_top = dy - tile * if carrying { 2 } else { 1 };
+/// Draw `text` centred on `cx` with the top of its last line at `top`, in
+/// `rgb` over its shadow: the client's one routine for text over sprites
+/// (chat, nicknames). Lines that do not fit the view wrap upward.
+fn draw_label(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, rgb: [u8; 3], cx: i32, top: i32) {
     let view_w = fb.width as i32;
-    let shadow = shadow_of(CHAT_RGB);
+    let shadow = shadow_of(rgb);
     match font {
         Some(f) => {
             let lines = wrap(text, view_w, |s| f.width(s));
             let lh = f.line_height();
-            let mut y = bottom_top - (lines.len() as i32 - 1) * lh;
+            let mut y = top - (lines.len() as i32 - 1) * lh;
             for l in &lines {
                 let x = line_left(cx, f.width(l), view_w);
                 f.draw_line(fb, x + 1, y + 1, l, shadow);
-                f.draw_line(fb, x, y, l, CHAT_RGB);
+                f.draw_line(fb, x, y, l, rgb);
                 y += lh;
             }
         }
@@ -292,15 +286,71 @@ pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str,
             // The bitmap font is shorter than the real one: sit its last
             // line on the real text's baseline (about 18 pixels down the
             // 24-pixel cell; the glyphs are 7 high).
-            let mut y = bottom_top + 18 - 7 - (lines.len() as i32 - 1) * lh;
+            let mut y = top + 18 - 7 - (lines.len() as i32 - 1) * lh;
             for l in &lines {
                 let x = line_left(cx, font::text_width(l), view_w);
                 fb.draw_text(x + 1, y + 1, l, shadow);
-                fb.draw_text(x, y, l, CHAT_RGB);
+                fb.draw_text(x, y, l, rgb);
                 y += lh;
             }
         }
     }
+}
+
+/// Draw `text` over the player whose 48×48 box has its top-left at
+/// (`dx`, `dy`). `carrying` lifts it one more tile. `font` is `None` when no
+/// TrueType font was found: the built-in bitmap font is used.
+pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, dx: i32, dy: i32, carrying: bool) {
+    if text.is_empty() {
+        return;
+    }
+    let tile = super::TILE_PX as i32;
+    let top = dy - tile * if carrying { 2 } else { 1 };
+    draw_label(fb, font, text, CHAT_RGB, dx + tile * 3 / 2, top);
+}
+
+/// The nickname colour for a player with `ap` alignment points, the ramp
+/// every build from 1.31 to 2.31 uses (and 6.x, per the v6 notes). Read
+/// from 2.05 rev 2 and checked live for AP 0, 20, 40, 50, 58, 65, 85, 100.
+/// Each step is `floor(n * k / d)`.
+pub fn ap_colour(ap: u8) -> [u8; 3] {
+    let f = |n: i32, k: i32, d: i32| (n * k / d) as u8;
+    let a = i32::from(ap);
+    match a {
+        0 => [0x40, 0, 0],
+        // Dark red to red.
+        1..=26 => {
+            let d = 0x40 - f(a - 1, 64, 25);
+            [0x80 + f(a - 1, 127, 25), d, d]
+        }
+        // Red to pale pink.
+        27..=49 => {
+            let v = f(a - 26, 255, 24);
+            [0xFF, v, v]
+        }
+        50..=55 => [0xFF, 0xFF, 0xFF],
+        // White to light green.
+        56..=60 => {
+            let v = 0xFF - f(a - 55, 127, 5);
+            [v, 0xFF, v]
+        }
+        // Light green to cyan.
+        61..=70 => [0x80 - f(a - 61, 128, 10), 0xFF, 0x80 + f(a - 61, 127, 10)],
+        // Cyan to blue.
+        71..=99 => [0, 0xFF - f(a - 70, 255, 29), 0xFF],
+        100 => [0xE0, 0xC4, 0],
+        _ => [0xFF, 0, 0],
+    }
+}
+
+/// Draw a nickname under the player box at (`dx`, `dy`): the top of its
+/// cell 2.5 tiles below the box's top, in the AP colour.
+pub fn draw_nick_text(fb: &mut Framebuffer, font: Option<&ChatFont>, nick: &str, ap: u8, dx: i32, dy: i32) {
+    if nick.is_empty() {
+        return;
+    }
+    let tile = super::TILE_PX as i32;
+    draw_label(fb, font, nick, ap_colour(ap), dx + tile * 3 / 2, dy + tile * 5 / 2);
 }
 
 #[cfg(test)]
@@ -317,6 +367,33 @@ mod tests {
         assert_eq!(shadow_of([0, 0, 0]), [255, 255, 0]);
         assert_eq!(shadow_of([0xE0, 0xE0, 7]), [255, 255, 7]);
         assert_eq!(shadow_of([0xE1, 0, 9]), [0, 0, 9]);
+    }
+
+    #[test]
+    fn nickname_colour_follows_ap() {
+        // The colours read off the real 2.05 rev 2 screen in the lab.
+        assert_eq!(ap_colour(0), [64, 0, 0]);
+        assert_eq!(ap_colour(20), [224, 16, 16]);
+        assert_eq!(ap_colour(40), [255, 148, 148]);
+        assert_eq!(ap_colour(50), [255, 255, 255]);
+        assert_eq!(ap_colour(58), [179, 255, 179]);
+        assert_eq!(ap_colour(65), [77, 255, 178]);
+        assert_eq!(ap_colour(85), [0, 124, 255]);
+        assert_eq!(ap_colour(100), [224, 196, 0]);
+        // Ends of the ramps.
+        assert_eq!(ap_colour(1), [128, 64, 64]);
+        assert_eq!(ap_colour(26), [255, 0, 0]);
+        assert_eq!(ap_colour(99), [0, 0, 255]);
+    }
+
+    #[test]
+    fn nickname_sits_under_the_box() {
+        let mut fb = Framebuffer::new(320, 240);
+        draw_nick_text(&mut fb, None, "bob", 100, 100, 60);
+        let gold: Vec<(usize, usize)> =
+            (0..240).flat_map(|y| (0..320).map(move |x| (x, y))).filter(|&(x, y)| fb.pixels[(y * 320 + x) * 3..][..3] == [224, 196, 0]).collect();
+        assert!(!gold.is_empty());
+        assert!(gold.iter().all(|p| p.1 >= 100 && p.1 < 124), "within the cell 40 px below the box top");
     }
 
     #[test]
