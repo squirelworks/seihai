@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use seihai::assets::{read_png_rgba, Gani};
 use seihai::combat::HurtPlayer;
 use seihai::offline::OfflineSession;
-use seihai::pose::{PoseKind, HURT_POSE_MS};
+use seihai::pose::PoseKind;
 use seihai::protocol::COMBAT_205;
 use seihai::render::{draw_gani_frame, draw_player_sprites, Framebuffer, PoseSheets, Sheet};
 
@@ -122,10 +122,11 @@ fn a_hit_plays_the_hurt_pose_through_the_existing_hurt_path() {
     assert_eq!(pose(&s), Some((PoseKind::Hurt, 0)));
     // the sprite others see is still the hurt sprite (S = 32) for the whole hurt mode
     assert_eq!(s.sprite_value(), s.player_dir + 4 * 32);
-    // the pose is shown for HURT_POSE_MS, hurt mode goes on for its 2 s
-    s.tick_combat(HURT_POSE_MS - 50);
+    // the default hurt.gani holds its step 31 ticks (WAIT 30, as the stock
+    // file), hurt mode goes on for its 2 s
+    s.tick_combat(30 * 50);
     assert_eq!(pose(&s), Some((PoseKind::Hurt, 0)));
-    s.tick_combat(100);
+    s.tick_combat(50);
     assert_eq!(pose(&s), None);
     assert!(s.combat.is_hurt());
     s.tick_combat(2_000);
@@ -415,7 +416,7 @@ fn hurt_gani_steps_and_a_looping_one_lasts_the_hurt_mode() {
     s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
     s.tick_combat(150);
     assert_eq!(pose(&s), Some((PoseKind::Hurt, 3)));
-    // 12 steps are 600 ms, longer than HURT_POSE_MS: shown to the end.
+    // 12 steps of one tick: shown to the end, then idle.
     s.tick_combat(400);
     assert_eq!(pose(&s), Some((PoseKind::Hurt, 11)));
     s.tick_combat(100);
@@ -425,4 +426,28 @@ fn hurt_gani_steps_and_a_looping_one_lasts_the_hurt_mode() {
     l.receive_hurtplayer(&hurt_packet(1), Some((l.player_x + 2.0, l.player_y)));
     l.tick_combat(1_550);
     assert_eq!(pose(&l), Some((PoseKind::Hurt, 1)));
+}
+
+#[test]
+fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
+    let mut s = walker();
+    s.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
+    // The stock lift.gani: one step of WAIT 5 (6 ticks).
+    s.set_pose_gani(PoseKind::Lift, Gani::parse("SINGLEDIRECTION\nANI\n1 0 0\nWAIT 5\nANIEND\n").unwrap());
+    s.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    s.lift_ticks = Some(0);
+    let mut seen = Vec::new();
+    for _ in 0..7 {
+        seen.push(pose(&s).unwrap().0);
+        s.tick_poses(50);
+    }
+    assert_eq!(seen[..6], [PoseKind::Lift; 6]);
+    assert_eq!(seen[6], PoseKind::CarryStill, "carrystill on the 7th tick");
+    assert_eq!(s.lift_ticks, None);
+    // Without lift.gani the carry poses come at once.
+    let mut n = walker();
+    n.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
+    n.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    n.lift_ticks = Some(0);
+    assert_eq!(pose(&n).map(|p| p.0), Some(PoseKind::CarryStill));
 }

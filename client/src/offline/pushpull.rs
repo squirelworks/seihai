@@ -25,8 +25,9 @@
 //!   the client tries a pull: it fires `pulled` at [`PULL_TRIGGER`], then
 //!   looks for the pullable block (array 16, entry 1). A wall or a heavy
 //!   rock does not move; the pull pose just goes on (the "futile pull").
-//!   Letting go of the arrow returns to the grab pose, letting go of A ends
-//!   the grab.
+//!   Letting go of the arrow stops the pull cycle and letting go of A ends
+//!   the grab, but the pull pose stays, looping, until the player moves
+//!   (read live in 2.05 rev 2: Graal_analysis `player-mannerisms-live.md`).
 //!
 //! * **NPCs.** When no block is there, the same two routines look for an
 //!   NPC with `canbepushed` (at the probe point) or `canbepulled` (at the
@@ -196,6 +197,8 @@ pub struct PushPull {
     pub grab: Option<Grab>,
     /// Ticks the pull pose has been shown, for its frame.
     pub pull_ticks: u32,
+    /// The pull pose is on: from the first pull until the player moves.
+    pub pull_shown: bool,
     clock_ms: u64,
     triggers: Vec<Trigger>,
     npc_moves: Vec<NpcMoved>,
@@ -217,6 +220,13 @@ fn tile_of(v: f32) -> i32 {
     walk_floor(f64::from(v)) as i32
 }
 
+impl PushPull {
+    /// The pull pose is on: pulling now, or a pull since the last move.
+    pub fn pull_pose(&self) -> bool {
+        self.pull_shown || self.grab.is_some_and(|g| g.pulling())
+    }
+}
+
 impl OfflineSession {
     /// Count one walk step in facing `dir` and act on the count: the ledge
     /// test and the push. Returns the position to go on from (a push moves
@@ -225,6 +235,7 @@ impl OfflineSession {
         let (mut x, mut y) = (x, y);
         match res {
             StepResult::Free => {
+                self.pushpull.pull_shown = false;
                 self.pushpull.pushing = false;
                 self.pushpull.blocked_steps = 0;
             }
@@ -256,6 +267,12 @@ impl OfflineSession {
         self.pushpull.pushing && self.pushpull.blocked_steps > PUSH_POSE_AFTER && self.pushpull.jump.is_none()
     }
 
+    /// Ticks the push pose has been on: 0 on the 18th blocked step, back to
+    /// 0 each time the count wraps from 38 to 18.
+    pub fn push_tick(&self) -> Option<usize> {
+        self.push_pose().then(|| (self.pushpull.blocked_steps - PUSH_POSE_AFTER - 1) as usize)
+    }
+
     /// The ledge test: the probe tile is a ledge for this facing, and the
     /// landing point is free.
     fn ledge_ahead(&self, dir: u8, x: f32, y: f32) -> bool {
@@ -277,6 +294,7 @@ impl OfflineSession {
         self.player_dir = dir;
         self.pushpull.pushing = false;
         self.pushpull.blocked_steps = 0;
+        self.pushpull.pull_shown = false;
         self.pushpull.jump = Some(Jump { dir, x0: x, y0: y, shown: 0 });
         self.sound_events.push(SoundEvent { file: "jump.wav".into(), x: x + 1.5, y: y + 2.0 });
         // 2.05 shows the first step of the flight in the tick the jump starts.
@@ -506,6 +524,7 @@ impl OfflineSession {
         if wall {
             self.pushpull.grab = Some(Grab { count: 1 });
             self.pushpull.pull_ticks = 0;
+            self.pushpull.pull_shown = false;
             self.pushpull.pushing = false;
         }
         wall
@@ -516,8 +535,8 @@ impl OfflineSession {
         self.pushpull.grab.take().is_some()
     }
 
-    /// An arrow key was let go: a push ends, and a pull goes back to just
-    /// holding. True if the pose changed.
+    /// An arrow key was let go: a push ends, and a pull stops its cycle (the
+    /// pull pose stays). True if a push or a pull cycle ended.
     pub fn arrow_released(&mut self) -> bool {
         let was_pushing = self.push_pose();
         self.pushpull.pushing = false;
@@ -545,17 +564,25 @@ impl OfflineSession {
         }
         if g.count == 1 {
             g.count = 2;
-            self.pushpull.pull_ticks = 0;
+            if !self.pushpull.pull_shown {
+                self.pushpull.pull_ticks = 0;
+            }
+            self.pushpull.pull_shown = true;
         } else if g.count == PULL_AT {
             // A pulled block moves the player, and the grab goes on.
             self.try_pull();
         }
     }
 
-    /// Advance the jump and the pull cycle by `ms` on the 50 ms tick.
-    /// Returns true if the player moved (the caller sends the position).
+    /// Advance the jump, the pull cycle and the pull pose by `ms` on the
+    /// 50 ms tick. Returns true if the player moved (the caller sends the
+    /// position).
     pub fn tick_pushpull(&mut self, ms: u64) -> bool {
-        if self.pushpull.jump.is_none() && !self.pushpull.grab.is_some_and(|g| g.pulling()) {
+        // A swing, a hit or a lift sets its own gani: the stale pull is gone.
+        if self.combat.swing_frame().is_some() || self.combat.is_hurt() || self.carried.is_some() || self.life.is_dead() {
+            self.pushpull.pull_shown = false;
+        }
+        if self.pushpull.jump.is_none() && !self.pushpull.pull_pose() {
             self.pushpull.clock_ms = 0;
             return std::mem::take(&mut self.pushpull.moved);
         }
@@ -568,8 +595,10 @@ impl OfflineSession {
             if let Some(g) = self.pushpull.grab.as_mut() {
                 if g.count > 1 {
                     g.count = (g.count - 1) % PULL_CYCLE + 2;
-                    self.pushpull.pull_ticks += 1;
                 }
+            }
+            if self.pushpull.pull_pose() {
+                self.pushpull.pull_ticks += 1;
             }
         }
         std::mem::take(&mut self.pushpull.moved)
@@ -577,15 +606,14 @@ impl OfflineSession {
 
     /// The sprite number S of the push, grab or pull pose, if one is on.
     pub fn pushpull_sprite_s(&self) -> Option<u8> {
-        let frame = |g: &Option<crate::assets::Gani>, i: usize| g.as_ref().map_or(0, |g| i % g.frame_count().max(1));
-        if let Some(g) = self.pushpull.grab {
-            return Some(if g.pulling() {
-                PULL_SPRITE_S[frame(&self.poses.pull, self.pushpull.pull_ticks as usize).min(2)]
-            } else {
-                GRAB_SPRITE_S
-            });
+        let frame = |g: &Option<crate::assets::Gani>, t: usize| g.as_ref().map_or(0, |g| g.frame_at_tick(t, true));
+        if self.pushpull.pull_pose() {
+            return Some(PULL_SPRITE_S[frame(&self.poses.pull, self.pushpull.pull_ticks as usize).min(2)]);
         }
-        self.push_pose().then(|| PUSH_SPRITE_S[frame(&self.poses.push, self.pushpull.blocked_steps as usize).min(4)])
+        if self.pushpull.grab.is_some() {
+            return Some(GRAB_SPRITE_S);
+        }
+        self.push_tick().map(|t| PUSH_SPRITE_S[frame(&self.poses.push, t).min(4)])
     }
 
     /// The NPCs pushes and pulls moved since the last call.
@@ -767,6 +795,29 @@ mod tests {
     }
 
     #[test]
+    fn the_push_pose_holds_each_step_for_its_wait_and_restarts_at_the_wrap() {
+        let mut s = session(|_, y| if y == 14 { WALL } else { FLOOR });
+        // The stock push.gani: five steps of WAIT 3 (4 ticks), looping.
+        let step = "1 0 0\n1 0 0\n1 0 0\n1 0 0\nWAIT 3\n\n";
+        s.poses.push = Some(crate::assets::Gani::parse(&format!("LOOP\nANI\n{}ANIEND\n", step.repeat(5))).unwrap());
+        s.player_x = 20.5;
+        s.player_y = 14.0;
+        let mut seen = Vec::new();
+        for _ in 0..40 {
+            s.try_move(0.0, -0.5);
+            seen.push(s.current_pose().map(|p| (p.kind, p.frame)));
+        }
+        use crate::pose::PoseKind::{Push, Walk};
+        // Steps 1..17 run in place (no walk gani here: the idle fallback).
+        assert!(seen[..17].iter().all(|p| p.map_or(true, |p| p.0 != Push && p.0 != Walk)));
+        let push: Vec<usize> = seen[17..].iter().map(|p| p.unwrap().1).collect();
+        assert_eq!(&push[..9], [0, 0, 0, 0, 1, 1, 1, 1, 2]);
+        assert_eq!(push[20], 0, "the count wraps from 38 to 18: frame 0 again");
+        // The sprite the others see follows the same frame.
+        assert_eq!(s.pushpull_sprite_s(), Some(PUSH_SPRITE_S[push[22]]));
+    }
+
+    #[test]
     fn a_left_ledge_jumps_out_and_down() {
         let mut s = session(|x, _| if x == 16 { LEDGE_LEFT } else { FLOOR });
         s.player_x = 16.5;
@@ -855,11 +906,21 @@ mod tests {
         assert_eq!(pulls, 2, "one pull try every 18 ticks");
         assert_eq!((s.player_x, s.player_y), (19.5, 10.0), "nothing moved");
         assert!(s.take_board_changes().is_empty());
-        // Letting go of the arrow: back to holding. Letting go of A: done.
+        // Letting go of the arrow: the cycle stops, the pull pose goes on.
+        // Letting go of A ends the grab; the pull pose still goes on, and
+        // keeps its frame clock, until the player moves.
         assert!(s.arrow_released());
         assert_eq!(s.pushpull.grab, Some(Grab { count: 1 }));
+        assert!(s.pushpull.pull_pose());
         assert!(s.release_grab());
+        let t = s.pushpull.pull_ticks;
+        s.tick_pushpull(100);
+        assert_eq!(s.pushpull.pull_ticks, t + 2);
+        assert!(s.pushpull.pull_pose());
+        assert_eq!(s.pushpull_sprite_s().map(|v| PULL_SPRITE_S.contains(&v)), Some(true));
         assert!(s.try_move(0.0, 0.5).is_some(), "walks again");
+        assert!(!s.pushpull.pull_pose());
+        assert_eq!(s.pushpull_sprite_s(), None);
     }
 
     #[test]

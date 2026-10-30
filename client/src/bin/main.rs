@@ -1022,14 +1022,17 @@ fn main() {
     } else {
         SoundEngine::off()
     };
-    // walk.gani and swim.gani are stepped once per step taken: their PLAYSOUND
+    // walk.gani is stepped once per step taken and swim.gani once per tick: their PLAYSOUND
     // cues are the footsteps and the water, and their frames are what is
     // drawn, so they load whether or not sound is on.
     for name in ["walk.gani", "swim.gani"] {
         load_motion_gani(&resolver, &mut session, name);
     }
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
-    for name in ["idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani"] {
+    for name in [
+        "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
+        "lift.gani",
+    ] {
         load_pose_gani(&resolver, &mut session, name);
     }
     let mut sound_serial = session.level_serial;
@@ -2126,9 +2129,11 @@ fn main() {
             // A ledge jump in the air, or a pull that brought a block along:
             // the position goes out the same way.
             sprite_changed |= session.tick_pushpull(dt);
-            if session.pushpull.grab.is_some_and(|g| g.pulling()) {
+            if session.pushpull.pull_pose() || session.push_pose() {
                 dirty = true;
             }
+            // The swim stroke and the lift run on the tick, moving or not.
+            dirty |= session.tick_poses(dt);
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
             if pp_sprite != last_pp_sprite {

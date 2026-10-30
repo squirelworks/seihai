@@ -1104,7 +1104,7 @@ HURT_HEAD = [(1, 2), (2, 2), (-1, 2), (-2, 2)]
 
 
 def hurt_gani():
-    L = gani_header("hurt.gani: the pose Seihai shows for the first moments of hurt mode (1 step)")
+    L = gani_header("hurt.gani: the pose Seihai shows for the first moments of hurt mode (1 step, 31 ticks)")
     L += ["// The name and the use are Seihai's convention, not a documented real-client one.",
           "DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
     L += gani_sprites([POSE_HURT]) + ["", "ANI"]
@@ -1112,7 +1112,9 @@ def hurt_gani():
         (sx, sy), (bx, by), (hx, hy) = OFFSETS[dr]
         hdx, hdy = HURT_HEAD[dr]
         L.append(f"0 {sx} {sy}, {200 + 4 * POSE_HURT + dr} {bx} {by}, {100 + dr} {hx + hdx} {hy + hdy}")
-    L += ["ANIEND", ""]
+    # Held 31 ticks, as long as the stock hurt.gani (Graal_analysis
+    # player-mannerisms-live.md: the 2.05 client honours WAIT).
+    L += ["WAIT 30", "ANIEND", ""]
     return "\n".join(L)
 
 
