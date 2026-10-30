@@ -1,7 +1,7 @@
 //! Seihai level editor: the command line, and a minimal window (`gui`).
 //!
 //!   level-editor [--version V] list  FILE.nw [--rows]
-//!   level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
+//!   level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
 //!   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
 //!   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
 //!   level-editor versions
@@ -15,7 +15,7 @@ use std::process;
 const USAGE: &str = "\
 Usage:
   level-editor [--version V] list  FILE.nw [--rows]
-  level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
+  level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
   level-editor versions
@@ -23,7 +23,7 @@ Usage:
   list    summary and the most used tile ids; --rows dumps the board, one row per line,
           each tile as three hex digits
   paint   fill the rectangle (X, Y, W, H in tiles, 0 to 63) with tile id TILE (0 to 4095,
-          decimal or 0x hex)
+          decimal or 0x hex); --layer 1 paints layer 1 instead of layer 0
   save    open and write again (the same bytes when the level was not changed)
   gui     open the window: tile palette, click to paint (right click picks the tile
           under the mouse), Save / Save as; --sheet sets the tile sheet (default: the
@@ -40,12 +40,13 @@ struct Args {
     out: Option<PathBuf>,
     in_place: bool,
     rows: bool,
+    layer: usize,
     sheet: Option<PathBuf>,
     positional: Vec<String>,
 }
 
 fn parse_args(raw: Vec<String>) -> Args {
-    let mut a = Args { version: Version::V222, out: None, in_place: false, rows: false, sheet: None, positional: Vec::new() };
+    let mut a = Args { version: Version::V222, out: None, in_place: false, rows: false, layer: 0, sheet: None, positional: Vec::new() };
     let mut it = raw.into_iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| -> String {
@@ -62,6 +63,13 @@ fn parse_args(raw: Vec<String>) -> Args {
             a.out = Some(PathBuf::from(value("--out")));
         } else if arg == "--sheet" || arg.starts_with("--sheet=") {
             a.sheet = Some(PathBuf::from(value("--sheet")));
+        } else if arg == "--layer" || arg.starts_with("--layer=") {
+            let v = value("--layer");
+            a.layer = match v.trim() {
+                "0" => 0,
+                "1" => 1,
+                _ => fail(format!("--layer must be 0 or 1, got \"{v}\"")),
+            };
         } else if arg == "--in-place" {
             a.in_place = true;
         } else if arg == "--rows" {
@@ -96,6 +104,7 @@ fn list(path: &str, rows: bool, version: Version) {
     let s = doc.summary();
     println!("Level:   {path} (GLEVNW01 text, editor version {})", version.name());
     println!("Board:   {SIZE} x {SIZE}; BOARD rows placed {}, skipped {}, with a layer other than 0 {} (the layer is not read)", s.rows_placed, s.rows_skipped, s.rows_other_layer);
+    println!("Layers:  layer 1 cells filled {}; rows of other layers kept as they are {}", doc.layer1_count(), s.rows_other_layers_kept);
     println!("Objects: links {}, signs {}, chests {}, baddies {}, NPCs {}, HEIGHTS block {}", s.links, s.signs, s.chests, s.baddies, s.npcs, if s.heights { "yes" } else { "no" });
     let hist = doc.histogram();
     println!("Tiles:   {} distinct ids; most used:", hist.len());
@@ -148,10 +157,11 @@ fn main() {
             let out = target(&a, file);
             let mut doc = open(file);
             let (x, y, w, h, tile) = (nums[0] as usize, nums[1] as usize, nums[2] as usize, nums[3] as usize, nums[4]);
-            let changed = doc.paint(x, y, w, h, tile).unwrap_or_else(|e| fail(e));
+            let changed = doc.paint_layer(a.layer, x, y, w, h, Some(tile)).unwrap_or_else(|e| fail(e));
             doc.save(&out).unwrap_or_else(|e| fail(e));
             println!(
-                "painted {w} x {h} at ({x}, {y}) with tile {tile}: {changed} of {} tiles changed; wrote {}",
+                "painted {w} x {h} at ({x}, {y}) on layer {} with tile {tile}: {changed} of {} tiles changed; wrote {}",
+                a.layer,
                 w * h,
                 out.display()
             );

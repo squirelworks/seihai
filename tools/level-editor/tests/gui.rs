@@ -110,7 +110,7 @@ fn board_image_uses_the_sheet() {
     let sheet = Sheet::builtin();
     assert_eq!((sheet.width, sheet.height), (2048, 512));
     let doc = Document::open(&starter("new1.nw")).unwrap();
-    let fb = board_image(&doc, &sheet);
+    let fb = board_image(&doc, &sheet, [true, true]);
     assert_eq!((fb.width, fb.height), (1024, 1024));
     // the top-left pixel of the board is the top-left pixel of tile (0, 0) on the sheet
     let (c, r) = sheet_cell(doc.tile(0, 0).unwrap());
