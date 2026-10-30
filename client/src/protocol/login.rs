@@ -227,9 +227,10 @@ impl LoginBurst {
     /// `PLI_WANTFILE`, or nothing when the name is queued or settled).
     /// `enter_level` gives the login `PLI_ENTERLEVEL` (46) when one is owed
     /// (2.31): the real client sends it right after the file checks.
-    /// `flags` gives the `gr.x`/`gr.y` flag messages (see
-    /// [`super::grflags`]), which go between the file checks and the process
-    /// list; it runs only when the frame is built.
+    /// `flags` gives the flag messages scripts have queued so far (see
+    /// [`super::flagset`]), which go between the file checks and the process
+    /// list, where the real 2.22 put the `-gr_movement` weapon's first
+    /// `gr.x`/`gr.y`; it runs only when the frame is built.
     pub fn take(
         &mut self,
         state: &SessionState,

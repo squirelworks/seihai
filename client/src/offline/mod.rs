@@ -209,6 +209,11 @@ pub struct OfflineSession {
     /// Set when a script or chat line changed `looks`, so the game loop
     /// can tell the server; cleared by the loop.
     pub looks_changed: bool,
+    /// Player flags a script set (`Some(value)`, empty for a plain `set`) or
+    /// cleared (`None`) whose value changed, for the server: online they go
+    /// out as `PLI_FLAGSET` (18) and `PLI_FLAGDEL` (19). Taken by the game
+    /// loop.
+    pub flags_out: Vec<(String, Option<String>)>,
     /// Whether the glove is held, and its power.
     pub glove_power: u8,
     /// Ledge jumps, pushing, and the A key's grab and pull (see
@@ -447,6 +452,7 @@ impl OfflineSession {
             shield_power: 1,
             looks: crate::looks::Looks::default(),
             looks_changed: false,
+            flags_out: Vec::new(),
             // 2.05 starts every player at glove 1 (enough for a pot), as
             // GServer's default account does (`GLOVEP 1`).
             glove_power: 1,

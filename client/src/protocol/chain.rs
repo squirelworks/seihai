@@ -27,7 +27,6 @@ use super::profile::{
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
-use super::grflags::GrFlagsMode;
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
@@ -112,7 +111,6 @@ pub struct Delta {
     pub tamper: Option<Option<TamperInfo>>,
     pub showimg: Option<Option<ShowImgInfo>>,
     pub login: Option<Option<LoginInfo>>,
-    pub gr_flags: Option<Option<GrFlagsMode>>,
     pub udp: Option<bool>,
     pub udp_off_by_default: Option<bool>,
     // Props.
@@ -166,7 +164,6 @@ impl Delta {
         tamper: None,
         showimg: None,
         login: None,
-        gr_flags: None,
         udp: None,
         udp_off_by_default: None,
         own_props: IdDelta::NONE,
@@ -259,7 +256,6 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.protocol.tamper = pick(p.protocol.tamper, d.tamper);
     p.protocol.showimg = pick(p.protocol.showimg, d.showimg);
     p.protocol.login = pick(p.protocol.login, d.login);
-    p.protocol.gr_flags = pick(p.protocol.gr_flags, d.gr_flags);
     p.protocol.udp = pick(p.protocol.udp, d.udp);
     p.protocol.udp_off_by_default = pick(p.protocol.udp_off_by_default, d.udp_off_by_default);
 
@@ -323,7 +319,6 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         tamper: None,
         showimg: None,
         login: None,
-        gr_flags: None,
         udp: true,
         udp_off_by_default: false,
     },
@@ -768,12 +763,11 @@ pub const CHAIN: &[Step] = &[
             tampercheck: Some(true),
             tamper: Some(Some(TAMPER_217)),
             login: Some(Some(LOGIN_217)),
-            gr_flags: Some(Some(GrFlagsMode::LoginOnly)),
             npc_max: Some(73),
             heights: Some(true),
             ..Delta::NONE
         },
-        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language, the gr.x and gr.y flags once)",
+        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language)",
         unknown: &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
@@ -797,13 +791,12 @@ pub const CHAIN: &[Step] = &[
             tamper: Some(Some(TAMPER_222)),
             showimg: Some(Some(SHOWIMG_222)),
             login: Some(Some(LOGIN_222)),
-            gr_flags: Some(Some(GrFlagsMode::Tracking)),
             link_boxes: Some(true),
             udp_off_by_default: Some(true),
             server_list: Some(ServerList::Tabs(3)),
             ..Delta::NONE
         },
-        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props, gr.x and gr.y flags kept up to date on every tick, links tested with a per-direction probe box",
+        source: "binary and lab and public servers: client type 5 and gen 5 framing, listserver id 7 with GNW30123, PLO 186, PLI 36, 45 and 81 not sent, id 24 about every 5.1 s, post-login frame with OS and code page props, links tested with a per-direction probe box",
         unknown: &[
             Unknown { area: "pli", what: "send sites of ids 36, 42 and 45 were not matched in the binary, so 36 and 45 are not sent" },
             Unknown { area: "framing", what: "a client-originated bz2 frame (0x1000 and over) was never seen" },
@@ -826,7 +819,6 @@ pub const CHAIN: &[Step] = &[
             tamper: Some(Some(TAMPER_230)),
             showimg: Some(None),
             login: Some(None),
-            gr_flags: Some(None),
             own_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             other_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
             npc_max: Some(77),
@@ -1034,14 +1026,6 @@ fn login_text(l: &Option<LoginInfo>) -> String {
     }
 }
 
-fn gr_flags_text(m: &Option<GrFlagsMode>) -> String {
-    match m {
-        None => "none".into(),
-        Some(GrFlagsMode::LoginOnly) => "gr.x and gr.y once, at login".into(),
-        Some(GrFlagsMode::Tracking) => "gr.x and gr.y at login and on every position change".into(),
-    }
-}
-
 fn death_text(d: &Option<DeathRules>) -> String {
     match d {
         None => "none".into(),
@@ -1082,7 +1066,6 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "protocol", "tamper", &pa.tamper, &pb.tamper, tamper_text);
     value_change(&mut o, "protocol", "showimg (id 24)", &pa.showimg, &pb.showimg, showimg_text);
     value_change(&mut o, "protocol", "login frame", &pa.login, &pb.login, login_text);
-    value_change(&mut o, "protocol", "gr flags", &pa.gr_flags, &pb.gr_flags, gr_flags_text);
     value_change(&mut o, "protocol", "udp", &pa.udp, &pb.udp, yes_no);
     value_change(&mut o, "protocol", "udp_off_by_default", &pa.udp_off_by_default, &pb.udp_off_by_default, yes_no);
     let (ra, rb) = (&a.props, &b.props);

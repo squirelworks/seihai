@@ -1,57 +1,75 @@
-# The `gr.x` and `gr.y` flags
+# The `gr.x` and `gr.y` flags, and script flags in general
 
-Queue item 15(c), from the differential testing (`documentation/difftest.md`,
-divergence 5: "2.22: `PLI_FLAGSET` with `gr.x` / `gr.y` is missing").
+## Where the flags come from
 
-## What the real clients send
+The lab captures of real 2.17 and 2.22 clients showed `PLI_FLAGSET` (18) messages
+with `gr.x` and `gr.y`. These hold the player's position as text. Seihai used to send them as
+a per-version client habit, through the profile switch `protocol.gr_flags`: once
+at login for 2.17, and on every position change for 2.22. That model was wrong.
 
-Real clients keep the player's position in two client flags, `gr.x` and `gr.y`, and
-send them to the server as `PLI_FLAGSET` (18) with `name=value` text, so server
-scripts can read the position. Evidence: the private lab, real clients on a
-loopback server (2.22: `login`, `gmap_cross`, `chat`, `door_warp` runs of
-2026-10-24 and 2026-10-25; 2.17: the early login capture of 2026-10-24). Nothing
-here comes from a public server.
+* GServer-v2 ships a weapon, `-gr_movement`, and its `defaultaccount.txt` gives it
+  to every new account. The lab runs that server, so the lab accounts had the weapon
+  (Graal_analysis `client-internals/reference-reimplementations/README.md`).
+* The weapon is a clientside GS1 script. On `playerenters` and on every `timeout`,
+  it runs `setstring gr.x,#v(int((playerx+0.25)*2)/2)` (and the same for `gr.y`),
+  then sets `timeout=0.05`.
+* The client sends `PLI_FLAGSET` because a script changed a player flag.
 
-| build | when | what the captures show |
-|---|---|---|
-| 2.17 | once, in the post-login frame | `gr.x=4.5` and `gr.y=30` between the file checks and the process list. No walk was captured, so nothing more is claimed. |
-| 2.22 | login, then every 50 ms tick in which the position changed | at login `gr.x=58`, `gr.y=30.5` (both, `gr.x` first), between the file checks and the process list. Then one flag per step, only the axis that moved: a walk east from 58 shows `gr.x=58.5`, `59`, `59.5` ... one message per 50 ms, in the same frame as the walk props and ahead of them. |
-| 2.31 | never | no `gr` flag in any 2.31 run |
+Lab check, 2026-10-30:
 
-The value is the position in tiles as text: a whole number has no decimals (`30`), a
-half has `.5` (`30.5`). On a gmap it is the position in the whole map
-(`cell * 64 + local`), so it runs on across a crossing: in the 2.22 `gmap_cross`
-capture it reads `63.5`, `64`, `64.5`, `65` while the walk props go from `X=63.5` to
-`X=0.5`.
+* Setup: real 2.22 (`Graal_222.exe`), stock GServer-v2 on loopback, the same walk
+  (right, then down).
+* Account with the weapon (the stock default account): 52 `FLAGSET` messages,
+  `gr.x=30`, `gr.y=30.5`, then one per half-tile step.
+* Account without the weapon (the `WEAPON -gr_movement` line removed from
+  `defaultaccount.txt`, and the weapon file deleted): **no `FLAGSET` at all**.
+  The client still sent 28 `PLAYERPROPS`, so it did walk.
 
-## What Seihai does
+On a server without that weapon, which includes the 2001-era official servers, a
+real 2.05 or 2.22 client sends no `gr` flags.
 
-The profile (`protocol.gr_flags`, set on the 2.17 and 2.22 steps of the version chain)
-says which builds send them: `LoginOnly` for 2.17, `Tracking` for 2.22, none otherwise.
+## What Seihai does now
 
-* The post-login frame holds both flags, between the file checks and the process list
-  (`protocol/login.rs`).
-* A tracking build puts the flags that changed ahead of each walk update, in the same
-  frame (`Connection::send_walk_sprite`, and the crossing frame, where they come before
-  the props message that is last).
-* On a gmap the connection knows the player's cell, so the flags hold the whole-map
-  position.
-* `protocol/grflags.rs` keeps what was last sent and returns only the differences.
+Seihai has no position-flag rule of its own any more. When a script changes a player
+flag, the flag goes to the server, as the real clients do:
 
-## Before and after (lab, 2.22, real client against Seihai)
+* `set name`, `setstring name,value` and the other string commands queue
+  `PLI_FLAGSET` with `name` or `name=value`.
+* `unset name` (and a `setstring` to an empty value) queues `PLI_FLAGDEL` (19).
+* A flag is queued only when its value changes. The `-gr_movement` weapon sets
+  both flags every 50 ms, yet only the axis that moved goes out, which is what the
+  captures show.
+* Flags that start with `local.` (2.02 and later; Graal_analysis
+  `protocol/packet-layouts.md`) or `this.` stay in the client.
+* Queued flags ride ahead of the next walk update, in the same frame. If no walk
+  update takes them within a tick, they go out on their own. The ones queued
+  before the post-login frame go in that frame, between the file checks and the
+  process list.
+* A version that cannot send id 18 or 19 sends nothing. The connection refuses
+  ids outside the version's send set.
 
-| run | `FLAGSET` real | Seihai before | Seihai after |
-|---|---|---|---|
-| `login` | 2 | 0 | 2 (`gr.x=...`, `gr.y=...`, same text) |
-| `gmap_cross` | 448 | 0 | 348 |
+Lab check of Seihai 2.22, same server, same walk, 2026-10-30:
 
-The `gmap_cross` count differs because Seihai walks slower (divergence 9, about 7.8
-tiles per second against 10), so it takes fewer steps in the same time; the flag per
-step matches. The ranked report no longer lists `FLAGSET` as a missing id for 2.22.
+* With the weapon, Seihai sent `gr.x=30` and `gr.y=30.5` after login, then one
+  flag per changed axis.
+* Without the weapon, it sent no `FLAGSET`, against 55 `PLAYERPROPS`.
 
-## Not known
+The profile field `protocol.gr_flags`, `protocol/grflags.rs` and its per-tick
+tracker are gone. The flag messages are built in `protocol/flagset.rs`.
 
-* After a server warp or a level warp the 2.22 client's next tick sets the axes that
-  moved. That is how Seihai behaves, from the per-step rule; a warp was not examined
-  flag by flag.
-* A 2.17 walk was not captured; Seihai sets 2.17's flags only at login.
+## Still different from the real client
+
+* **One tick late.** The real 2.22 runs the weapon's timeout before it sends that
+  tick's walk props, so `gr.x=30.5` rides with `X=30.5`. Seihai runs scripts after
+  the walk send, so the flag goes one tick later, with the next update.
+* **First flags.** The real client put the first `gr.x`/`gr.y` in the post-login
+  frame. In the lab run, Seihai sent them a few frames later, because the weapon
+  had not run yet when that frame was built.
+* **Gmaps.** On a gmap, the real 2.22's flags ran on across a crossing (`63.5`,
+  `64`, `64.5`), so that client's `playerx` in a weapon script is the whole-map
+  position. Seihai's scripts see the position in the current cell. This was not
+  changed here.
+* **2.31** sent no `gr` flags with the weapon on its account, and the reason was
+  not looked into. Seihai 2.31 runs the weapon like any other.
+* **Before 2.02**, `local.` flags may have been sent. Seihai keeps them in the
+  client for every version.

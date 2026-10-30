@@ -8,7 +8,7 @@ accounts, run 2026-10-25). Numbers are from the ranked report (`difftest diff`),
 |---|---|---|---|
 | 1 | rectangle links never fire | fixed | `link-geometry.md` |
 | 2-4, 10 (login part) | login props, `UPDATEFILE`, `PROCESSLIST`, login frame bundling | fixed | `login-burst.md` |
-| 5 | 2.22 `gr.x`/`gr.y` flags | fixed | `gr-flags.md` |
+| 5 | 2.22 `gr.x`/`gr.y` flags | fixed (the flags come from the server's `-gr_movement` weapon; Seihai sends script flags) | `gr-flags.md` |
 | 6 | 2.31 early and duplicate `ENTERLEVEL` | fixed (cause found: not the 46) | `early-enter-level.md` |
 | 9 | walk speed | fixed | `walk-pace.md` |
 | 11, 12 | `ADJACENTLEVEL` order, 2.22 crossing props | fixed | `gmap-order.md` |

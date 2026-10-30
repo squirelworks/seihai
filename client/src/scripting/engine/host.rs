@@ -14,6 +14,13 @@ pub struct WeaponScript<'a> {
     pub script: &'a str,
 }
 
+/// Whether a player flag a script changed goes to the server. `local.`
+/// flags stay in the client (2.02 and later, Graal_analysis
+/// `packet-layouts.md`), and `this.` flags belong to the NPC.
+fn sent_to_server(name: &str) -> bool {
+    !name.starts_with("local.") && !name.starts_with("this.")
+}
+
 /// Scripts for one running session.
 pub struct SessionScripts {
     pub world: ScriptWorld,
@@ -365,14 +372,26 @@ impl SessionScripts {
                     _ => {}
                 },
                 Effect::SetFlag { name, value } => {
+                    let value = value.unwrap_or_default();
+                    let was_set = s.flags.get(&name) == Some(&true);
+                    let changed = !was_set || s.strings.get(&name).map_or("", String::as_str) != value;
                     s.flags.insert(name.clone(), true);
-                    if let Some(v) = value.filter(|v| !v.is_empty()) {
-                        s.strings.insert(name, v);
+                    if value.is_empty() {
+                        s.strings.remove(&name);
+                    } else {
+                        s.strings.insert(name.clone(), value.clone());
+                    }
+                    if changed && sent_to_server(&name) {
+                        s.flags_out.push((name, Some(value)));
                     }
                 }
                 Effect::UnsetFlag { name } => {
+                    let was_set = s.flags.get(&name) == Some(&true);
                     s.flags.insert(name.clone(), false);
                     s.strings.remove(&name);
+                    if was_set && sent_to_server(&name) {
+                        s.flags_out.push((name, None));
+                    }
                 }
                 Effect::SetPlayerProp { code, value } => {
                     // The looks codes change the player as the looks commands
@@ -758,6 +777,37 @@ mod tests {
         sc.world.weapon_fired("Bow");
         sc.apply(&mut s);
         assert_eq!(s.last_message.as_deref(), Some("pew"));
+    }
+
+    /// GServer-v2's `-gr_movement` weapon: the `gr.x`/`gr.y` flags the
+    /// real 2.22 sends come from it, so they leave only when it runs, and
+    /// only the axis that changed.
+    #[test]
+    fn the_gr_movement_weapon_sets_the_flags_that_go_to_the_server() {
+        const GR: &str = "if (playerenters || timeout) {\n  if (!gr.off) {\n    if (!gr.x.off) setstring gr.x,#v(int((playerx+0.25)*2)/2);\n    if (!gr.y.off) setstring gr.y,#v(int((playery+0.25)*2)/2);\n  }\n  timeout=0.05;\n}\n";
+        let mut s = session("GLEVNW01\n");
+        s.player_x = 30.0;
+        s.player_y = 30.5;
+        let mut sc = SessionScripts::new(ClientVersion::V222);
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "-gr_movement", image: "", script: GR }]);
+        sc.load_level(&mut s, "a.nw");
+        let sent = |s: &mut OfflineSession| std::mem::take(&mut s.flags_out);
+        let set = |n: &str, v: &str| (n.to_string(), Some(v.to_string()));
+        assert_eq!(sent(&mut s), [set("gr.x", "30"), set("gr.y", "30.5")]);
+        sc.tick(&mut s, 50);
+        assert!(sent(&mut s).is_empty(), "no change, nothing sent");
+        s.player_x = 30.5;
+        sc.tick(&mut s, 50);
+        assert_eq!(sent(&mut s), [set("gr.x", "30.5")]);
+    }
+
+    #[test]
+    fn local_flags_stay_in_the_client() {
+        let mut s = session("GLEVNW01\nNPC - 1 1\nif (created) { set local.a; set b; unset b; setstring c,x; }\nNPCEND\n");
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        sc.load_level(&mut s, "a.nw");
+        let names: Vec<_> = s.flags_out.iter().map(|(n, v)| (n.as_str(), v.as_deref())).collect();
+        assert_eq!(names, [("b", Some("")), ("b", None), ("c", Some("x"))]);
     }
 
     #[test]

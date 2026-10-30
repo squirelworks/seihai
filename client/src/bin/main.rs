@@ -1448,14 +1448,12 @@ fn main() {
             // a real client answers with.
             if changed {
                 if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
-                    let (lx, ly) = (net_state.player_x.unwrap_or(session.player_x), net_state.player_y.unwrap_or(session.player_y));
-                    c.set_gmap_cell(net_state.gmap.as_ref().map(|g| g.cell));
                     let mut msgs = lb.take(
                         &net_state,
                         &account,
                         |n| files.need(n),
                         || enter_level.as_mut().map(|el| el.take_login()).unwrap_or_default(),
-                        || c.first_gr_flags(lx, ly),
+                        || c.take_flags(),
                     );
                     // The real 2.31 client's first id 24 rides at the end of this frame.
                     if !msgs.is_empty() {
@@ -2239,7 +2237,6 @@ fn main() {
                 let now = net_state.current_level_name();
                 eprintln!("gmap crossing {:?} -> {:?} at {} {}", cx.from, cx.to, cx.local_x, cx.local_y);
                 if let Some(c) = conn.as_mut() {
-                    c.set_gmap_cell(Some(cx.to));
                     match c.send_gmap_crossing(version, &cx, tamper.as_mut()) {
                         Ok(sent46) => {
                             if let (Some(el), Some(n)) = (enter_level.as_mut(), now.as_deref()) {
@@ -2310,12 +2307,18 @@ fn main() {
             }
         }
 
-        // The gr.x/gr.y flags follow the player's position on every tick,
-        // also when the server moved the player (a warp or an arrival).
-        if session.warp_pending.is_none() {
+        // Player flags scripts changed go to the server (PLI 18 / 19). They
+        // ride ahead of the next walk update; ones no walk took within a
+        // tick go out on their own, but not before the post-login frame,
+        // which carries the first ones.
+        for (name, value) in std::mem::take(&mut session.flags_out) {
             if let Some(c) = conn.as_mut() {
-                c.set_gmap_cell(session.gmap.as_ref().map(|g| g.cell));
-                if let Err(e) = c.send_gr_flags(session.player_x, session.player_y) {
+                c.queue_flag(&name, value.as_deref());
+            }
+        }
+        if !login_burst.as_ref().is_some_and(|lb| lb.pending()) {
+            if let Some(c) = conn.as_mut() {
+                if let Err(e) = c.send_stale_flags(Duration::from_millis(60)) {
                     eprintln!("send failed: {e}");
                 }
             }
