@@ -84,6 +84,13 @@ server's older stored records). `ServerNpcSync::switch_level` parks what the ser
 level's NPCs and brings it back on re-entry, and the stored records are not replayed into a level whose
 NPCs are still linked. Test: `walking_back_into_a_gmap_level_sends_nothing_again`.
 
+The second live rerun still showed `GANI idle` (and `BODY`) for the two character NPCs of `minipw_1_1`
+before every crossing, in every direction. Their records come with that level's data when it is sent
+as a neighbour, but `SessionState` filed them under the player's level and the game loop added them to
+it, running their `created`. A record now belongs to the level being sent (the last `PLO_LEVELNAME`),
+and only the player's level takes updates as they come; a neighbour's wait in `server_npcs` until it is
+entered. Test: `a_neighbours_npcs_are_kept_for_the_neighbour`.
+
 Still open: on the **first** entry of a level the 2.22 build sends `VISFLAGS` for each NPC and the props
 its `created` sets (`BODY`), the 2.05 rule (`documentation/ledges-push-pull.md`). The real 2.22 sent no NPC
 props at all on the same walk. Which props 2.22 sends, if any, is not captured, so this is not changed here.
