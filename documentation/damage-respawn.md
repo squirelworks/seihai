@@ -125,10 +125,10 @@ the same in every build read; this keeps `profiles_golden.txt` unchanged.
   more after it asks for the warp. Online, the level change may complete
   later, so the saved point could become the death spot. Not modelled; it
   needs a lab run.
-- **2.00 to 2.04 and the 2.1 test builds.** The entry rule was read in 2.05 and
-  2.17.1/2.22/2.31. Before 2.05 there are no death rules in the profile; 2.1
-  test 2 and 3 are taken as having no group test because the delimiter set is
-  not in their binaries.
+- **The 2.1 test builds.** The entry rule was read in 2.00 to 2.05 (with the
+  group test) and 2.17.1/2.22/2.31 (without). 2.00 to 2.04 now have death
+  rules (`health-death.md`, "2.00 to 2.04"). 2.1 test 2 and 3 are taken as
+  having no group test because the delimiter set is not in their binaries.
 - **Offline default start.** `tutorial_b-4.graal` is the default entry when
   nothing is saved offline, but the coordinates' axis order is not settled, so it
   is not used. A `sparringzone` NPC script command (which also lets a paused or

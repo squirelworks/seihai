@@ -14,9 +14,10 @@ documents, the timings from the decompile.
   (`claim_message`, `status_message`), `respawn_half_hearts` and
   `messages_for`, which turns an event into the messages for a version.
 - `VersionProfile.life.death` (`DeathRules`, `DEATH_205` in `profile.rs`): the
-  numbers. Rows for 2.05 and every later build have it (later builds are an
-  inference, as for cached links); 1.33 to 2.04 have `None` because their
-  handler was not traced. With `None`, hearts at 0 do nothing and nothing is
+  numbers. Rows for 2.00 and every later build have it (builds after 2.05
+  are an inference, as for cached links); 1.33 to 1.42 have `None` because
+  their handler was not traced. 2.00 to 2.04 take `DEATH_205` as read: see
+  "2.00 to 2.04" below. With `None`, hearts at 0 do nothing and nothing is
   sent. `ClientVersion::sends_claim()` also needs id 14 in the build's send set.
 - `OfflineSession`: `life`, `alignment` (AP), `entry` (the saved entry point),
   `damage_half`, `tick_life`, `respawn`, `note_entry` (the save rule), `no_pk`. The game loop in
@@ -26,7 +27,7 @@ documents, the timings from the decompile.
 
 | Tick | What happens |
 |---|---|
-| 0 | Hearts reached 0 (or below): the player is dead, faces down, the `playerdies` script event fires. The victim sends `PLI_CLAIMPKER` now, if a hit by another player did it. |
+| 0 | Hearts reached 0 (or below): the player is dead, faces down, the `playerdies` script event fires (2.01 and later; 2.00 has no such event). The victim sends `PLI_CLAIMPKER` now, if a hit by another player did it. |
 | 0 to 27 | Controls ignored (movement, interact). The timer counts up and stops at 30 (1.5 s). |
 | 28 | The dead bit (`0x08`) goes out in `PLI_PLAYERPROPS` with `PLPROP_STATUS` (18). Controls work again. |
 | after 27 | A direction key, the action key or the sword key (by default arrows, I/J/K/L, A, S or Space) respawns. |
@@ -35,6 +36,47 @@ A hit that leaves hearts at 0 starts the death once; a per-frame check keeps
 the player dead while hearts are 0 or below. Hearts going back above 0 does not
 revive: only a key press does. A player who is dead cannot be hurt (script
 `hurt` and `damage_half` do nothing).
+
+## 2.00 to 2.04
+
+The 2.00 r0 death path was read in its own decompile (Ghidra, from the
+2.0 release, MD5 c93e659e...): the damage routine sets life state 2 and the
+death timer to 0 at 0 hearts, the tick raises the timer to 30, keys respawn
+once it is past 27, the STATUS byte gets `0x08` from 28, and the respawn gives
+hearts by AP with the same steps (20 and 40, 3 and min(5, max)) and the same
+x 30.5, y 30.0 default. One difference: 2.00 fires no `playerdies` event (the
+string is not in the 2.00 builds; it is in 2.01 and later).
+
+For the other ten builds (2.00 rev 1 to 3, 2.01 and rev 1, 2.02 and rev 1 and
+rev 2, 2.03, 2.04) the same instructions were found in the machine code: the
+`cmp [timer], 0x1c / jl / add 8` that sets the dead bit, the compares with
+0x1c and 0x1e, and the AP steps in the respawn. The timer field moves (+0xdc
+in 2.00 to 2.03, +0xe0 in 2.00 rev 3, +0x110 in 2.04); the constants do not.
+The name-group entry save is in all of them too (Graal_analysis
+`decomp-findings-2026-10-24-d/02-respawn-entry-save.md`). So 2.00 to 2.04 use
+`DEATH_205`.
+
+### Lab: a real 2.00 dying (2026-10-30, LAN)
+
+A real 2.00 was killed by Seihai's sword (decode `lan-200d-death.txt` on the
+lab machine). What it sent:
+
+- Each hit: `PLAYERPROPS` CURPOWER (4, 3, 2, 1); the server echoed GANI
+  `hurt`. The knockback went out as X steps of 2 tiles every 100 ms, which
+  fits 1 tile per 50 ms tick.
+- The death, in one frame: `UPDATEFILE dead.gani`, `PLI_CLAIMPKER` with the
+  killer's id (`20 26`, id 6), then `PLAYERPROPS` CURPOWER 0, GANI `dead`.
+  (The server answered `FILESENDFAILED dead.gani`. Seihai does not send the
+  UPDATEFILE.)
+- STATUS with `0x08` set (0x1C) 1.35 s later, within a frame of tick 28.
+- Respawn on a key press, in one frame: `PLI_LEVELWARP` to the level start
+  (x 30, y 32, the saved entry), then `PLAYERPROPS` CURPOWER 6 (full hearts,
+  high AP), GANI `idle`, X, Y, SPRITE 2 and STATUS 0x14 (bit cleared).
+- The server cut the rupee, arrow and bomb counts and dropped five items
+  (`ITEMADD`) round the body.
+- The screen: everything but the HUD and the sprites goes black, and a
+  parchment scroll in the middle reads "End". It has no timer; it stays until
+  a key. Seihai does not draw this yet.
 
 ## Wire
 

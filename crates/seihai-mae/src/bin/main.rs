@@ -302,19 +302,28 @@ const DEV_REPAIR_HEARTS: u8 = 3;
 /// the death rules, the ones whose health handling was traced. Returns true
 /// when a message went out. A failed send drops the connection.
 fn send_power_report(conn: &mut Option<Connection>, session: &mut OfflineSession, version: ClientVersion) -> bool {
-    let Some(report) = session.take_power_report() else { return false };
-    if version.death_rules().is_none() {
-        return false;
-    }
-    let Some(msg) = report.message(version.profile().ui.ganis) else { return false };
+    let Some(msg) = power_report_message(session, version) else { return false };
     let Some(c) = conn.as_mut() else { return false };
-    eprintln!("hearts report: {report:?}");
     if let Err(e) = c.send_messages(&[msg]) {
         eprintln!("send failed: {e}");
         *conn = None;
         return false;
     }
     true
+}
+
+/// The hearts report as a message, if one is due. A killing hit's report
+/// waits for the death itself ([`OfflineSession::death_pending`]): the real
+/// 2.00 sends the claim, CURPOWER 0 and GANI `dead` in one frame (lab,
+/// 2026-10-30).
+fn power_report_message(session: &mut OfflineSession, version: ClientVersion) -> Option<Vec<u8>> {
+    if version.death_rules().is_none() || session.death_pending() {
+        return None;
+    }
+    let report = session.take_power_report()?;
+    let msg = report.message(version.profile().ui.ganis)?;
+    eprintln!("hearts report: {report:?}");
+    Some(msg)
 }
 
 /// Send what [`sync_world`] asked for: the `.gmap` file (or a check of the
@@ -1952,7 +1961,7 @@ fn main() {
                             // GANI `hurt` and the hurt sprite, as the real
                             // client sends it in the tick of the hit. Without
                             // one, hurt mode still shows in the sprite.
-                            if !send_power_report(&mut conn, &mut session, version) {
+                            if !send_power_report(&mut conn, &mut session, version) && !session.death_pending() {
                                 if let Some(c) = conn.as_mut() {
                                     if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
                                         eprintln!("send failed: {e}");
@@ -2184,6 +2193,7 @@ fn main() {
                     dirty = true;
                 }
             }
+            let mut life_msgs = Vec::new();
             for ev in events {
                 match ev {
                     seihai::life::LifeEvent::Died { attacker } => {
@@ -2196,16 +2206,18 @@ fn main() {
                     seihai::life::LifeEvent::StatusDead => eprintln!("dead bit sent"),
                     seihai::life::LifeEvent::Respawned { .. } => {}
                 }
-                let msgs = seihai::life::messages_for(ev, version, status_base);
-                if let (false, Some(c)) = (msgs.is_empty(), conn.as_mut()) {
-                    if let Err(e) = c.send_messages(&msgs) {
-                        eprintln!("send failed: {e}");
-                    }
+                life_msgs.extend(seihai::life::messages_for(ev, version, status_base));
+            }
+            // A death (the claim, then CURPOWER 0 and GANI `dead`), a respawn
+            // (the hearts by AP, after the warp and the status clear), a lava
+            // burn, a heart: one frame, as the real 2.00 sends a death.
+            life_msgs.extend(power_report_message(&mut session, version));
+            if let (false, Some(c)) = (life_msgs.is_empty(), conn.as_mut()) {
+                if let Err(e) = c.send_messages(&life_msgs) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
                 }
             }
-            // A death (CURPOWER 0, GANI `dead`), a respawn (the hearts by AP,
-            // after the warp and the status clear), a lava burn, a heart.
-            send_power_report(&mut conn, &mut session, version);
         }
         // Combat: S swings the sword (others judge the hit from the sprite
         // we send), and the swing and hurt mode run on the 50 ms clock.
