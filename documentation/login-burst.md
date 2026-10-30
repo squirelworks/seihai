@@ -21,7 +21,13 @@ client sends one frame:
 | 2 | `PLI_PROCESSLIST` (44) | the answer to 182. The text is the client's list of running programs, gtokenized, one per line; GServer-v2 parses it with `guntokenize` and splits on newlines. |
 | 3 | `PLI_PLAYERPROPS` (2) | `NICKNAME`, `HEADGIF`, `COLORS`, `STATUS`, `UDPPORT`, `ADDITFLAGS`, `PLANGUAGE`, and in 2.22 and 2.31 `OSTYPE` and `TEXTCODEPAGE`. Head, colours and status are the values the server gave. |
 
-2.17 sends the same three parts; its props stop at `PLANGUAGE`.
+2.17 sends the same three parts; its props stop at `PLANGUAGE`. It does not
+wait for 182, though: the real 2.17.1 sent its frame 96 to 112 ms after the
+board on both lab servers (2026-10-30, `difftest-217.md` item 2). On beta4,
+which sends no 182, the frame had no image checks and no process list: the
+status icons, the `gr` flags, the props and `SHOWIMGPLAYER`. Seihai 2.17 sends
+its frame 96 ms after the first level and adds the image checks and the
+process list only when 182 has come (`LoginInfo::after_level`).
 
 Then the status icons: one `WANTFILE plisticon<status>.png` per
 `PLO_STATUSLIST` (180) entry, lower-cased (`No PMs` is `plisticonno pms.png`).

@@ -1612,7 +1612,7 @@ fn main() {
             // The burst has ended: the file checks, process list and props
             // a real client answers with.
             if changed {
-                if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| lb.info().full), conn.as_mut()) {
+                if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| lb.info().full && lb.info().after_level.is_none()), conn.as_mut()) {
                     let mut msgs = lb.take(
                         &net_state,
                         &account,
@@ -2621,9 +2621,18 @@ fn main() {
         }
         // The 3.04 frame goes once the board is in, after the scripts of the
         // level's first tick, so it carries their first flags as the real
-        // client's did.
-        if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| !lb.info().full), conn.as_mut()) {
-            let msgs = lb.take(&net_state, &account, |n| files.need(n), Vec::new, || c.take_flags());
+        // client's did. The 2.17 frame goes a fixed time after the level.
+        if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| !lb.info().full || lb.info().after_level.is_some()), conn.as_mut()) {
+            lb.level_age(first_level_at.map(|t| t.elapsed()));
+            let mut msgs = lb.take(&net_state, &account, |n| files.need(n), Vec::new, || c.take_flags());
+            // The real 2.17.1's first id 24 ends this frame.
+            if !msgs.is_empty() {
+                if let Some(t) = showimg.as_mut() {
+                    if t.advance(Duration::ZERO, !net_state.others.is_empty()) {
+                        msgs.push(showimg_message());
+                    }
+                }
+            }
             if !msgs.is_empty() {
                 if let Err(e) = c.send_messages(&msgs) {
                     eprintln!("login frame send failed: {e}");

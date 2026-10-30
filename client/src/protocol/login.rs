@@ -57,14 +57,24 @@ pub struct LoginInfo {
     /// in one plain zlib frame (3.04: `bigmap.txt` and `minimap.txt`, which
     /// its install ships in `maps/`). Empty: the login line goes alone.
     pub first_frame_files: &'static [&'static str],
+    /// The frame goes this long after the first level, whether or not the
+    /// server sent `PLO_LISTPROCESSES` (182). The image checks and the
+    /// process list go only when 182 came. The real 2.17.1 sent its frame
+    /// 96 to 112 ms after the board on both lab servers (2026-10-30,
+    /// `documentation/difftest-217.md` item 2): with the file checks and the
+    /// process list on efb5b90, which sends 182, and without them on beta4,
+    /// which does not. `None`: the frame answers 182 (2.22, 2.31) or the
+    /// board (3.04).
+    pub after_level: Option<std::time::Duration>,
 }
 
-pub const LOGIN_217: LoginInfo = LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
-pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
-pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[] };
+pub const LOGIN_217: LoginInfo =
+    LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[], after_level: Some(std::time::Duration::from_millis(96)) };
+pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], after_level: None };
+pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], after_level: None };
 /// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
 pub const LOGIN_304: LoginInfo =
-    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"] };
+    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"], after_level: None };
 /// 3.153 (Mac OS X), never run: 3.04's frame with `OSTYPE` `mac`, the value
 /// its binary writes (Graal_analysis `version-profiles/3.04-3.153.toml`). The
 /// code page and the rest of the frame are 3.04's; the notes have no 3.153
@@ -305,6 +315,8 @@ pub struct LoginBurst {
     sent: bool,
     /// `idle.gani` is still to be checked ([`LoginInfo::idle_gani`]).
     idle_owed: bool,
+    /// The first level has been in for [`LoginInfo::after_level`].
+    level_aged: bool,
 }
 
 /// How long after the level the real 2.22 and 2.31 sent their post-login
@@ -319,7 +331,7 @@ impl LoginBurst {
         let p = version.profile();
         let info = p.protocol.login?;
         let can = p.protocol.pli.contains(PLI_PLAYERPROPS) && (!info.full || p.protocol.pli.contains(PLI_PROCESSLIST));
-        can.then_some(Self { info, sent: false, idle_owed: info.idle_gani })
+        can.then_some(Self { info, sent: false, idle_owed: info.idle_gani, level_aged: false })
     }
 
     pub fn info(&self) -> LoginInfo {
@@ -343,11 +355,25 @@ impl LoginBurst {
         check("idle.gani")
     }
 
-    /// The 2.x builds answer the burst's end (`PLO_LISTPROCESSES`); 3.04,
+    /// How long the first level has been in (`None` before it). Only a
+    /// build with [`LoginInfo::after_level`] uses it.
+    pub fn level_age(&mut self, age: Option<std::time::Duration>) {
+        if let (Some(after), Some(age)) = (self.info.after_level, age) {
+            self.level_aged |= age >= after;
+        }
+    }
+
+    /// 2.22 and 2.31 answer the burst's end (`PLO_LISTPROCESSES`); 3.04,
     /// which has no handler for 182, sent its frame once the first board
-    /// was in (lab, 2026-10-30).
+    /// was in (lab, 2026-10-30); 2.17.1 sent it a fixed time after the
+    /// level ([`LoginInfo::after_level`]).
     pub fn due(&self, state: &SessionState) -> bool {
-        !self.sent && if self.info.full { state.process_list_requests > 0 } else { state.board.is_some() }
+        !self.sent
+            && match self.info.after_level {
+                Some(_) => self.level_aged,
+                None if self.info.full => state.process_list_requests > 0,
+                None => state.board.is_some(),
+            }
     }
 
     /// Build the frame's messages (once). `check` turns an image name into
@@ -371,28 +397,33 @@ impl LoginBurst {
             return Vec::new();
         }
         self.sent = true;
+        // The image checks and the process list answer 182: without it the
+        // real 2.17.1 sent neither (beta4, lab 2026-10-30).
+        let answered = self.info.full && (self.info.after_level.is_none() || state.process_list_requests > 0);
         let mut out = Vec::new();
         if std::mem::take(&mut self.idle_owed) {
             out.extend(check("idle.gani"));
         }
-        let mut names = if self.info.full {
-            let mut n = wear_images(&state.player_props, state.own_prop_ids.as_ref());
-            n.extend(weapon_images(&state.weapons));
-            n
-        } else {
+        let mut names = if !self.info.full {
             // 3.04 checks the head image alone of the worn ones, then the
             // bomb image: the real 2.22 asks `wbomb1.png` whatever default
             // weapons it was sent, and the real 3.04 asked it in the same
             // place (lab, 2026-10-30).
             let [_, _, head, _] = worn_images(&state.player_props, state.own_prop_ids.as_ref());
             head.into_iter().chain([BOMB_IMAGE.to_string()]).collect()
+        } else if answered {
+            let mut n = wear_images(&state.player_props, state.own_prop_ids.as_ref());
+            n.extend(weapon_images(&state.weapons));
+            n
+        } else {
+            Vec::new()
         };
         // Default weapons the server sent, in arrival order: the real client
         // asks for their images too (2.31: ids 8 then 7 gave `wbomb1.png`
         // then `wbowi1.png`).
+        let defaults = if self.info.full && !answered { &[][..] } else { &state.default_weapons[..] };
         names.extend(
-            state
-                .default_weapons
+            defaults
                 .iter()
                 .filter_map(|&id| default_weapon_image(id))
                 .map(str::to_string)
@@ -415,7 +446,7 @@ impl LoginBurst {
                 out.extend(check(n));
             }
         }
-        if self.info.full {
+        if answered {
             out.push(process_list_message(&["seihai"]));
         }
         out.push(login_props_message(&self.info, &state.player_props, account, state.own_prop_ids.as_ref()));
@@ -690,6 +721,61 @@ mod tests {
         assert!(!b.pending(), "sent");
         assert!(!b.due(&st), "once");
         assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
+    }
+
+    /// The real 2.17.1 (lab, 2026-10-30): the frame goes 96 to 112 ms after
+    /// the board whether or not 182 came. Without 182 (beta4) it held the
+    /// status icons, the flags and the props; with 182 (efb5b90) the image
+    /// checks and the process list as well.
+    #[test]
+    fn the_217_frame_goes_after_the_level_and_answers_182_only_when_sent() {
+        use std::time::Duration;
+        let v = super::super::ClientVersion::V217;
+        let take = |b: &mut LoginBurst, st: &SessionState| {
+            let mut asked = Vec::new();
+            let out = b.take(st, "acct", |n| {
+                asked.push(n.to_string());
+                vec![n.as_bytes().to_vec()]
+            }, Vec::new, || vec![b"flag".to_vec()]);
+            (asked, out)
+        };
+        let mut st = burst_state();
+        st.default_weapons = vec![8, 7];
+
+        // beta4: no 182.
+        let mut b = LoginBurst::for_version(v).unwrap();
+        b.level_age(None);
+        b.level_age(Some(Duration::from_millis(95)));
+        assert!(!b.due(&st), "not before 96 ms");
+        b.level_age(Some(Duration::from_millis(96)));
+        assert!(b.due(&st));
+        let (asked, out) = take(&mut b, &st);
+        assert_eq!(asked, ["idle.gani", "plisticononline.png", "plisticonno pms.png"]);
+        assert_eq!(out.len(), asked.len() + 2);
+        assert_eq!(out[asked.len()], b"flag");
+        assert_eq!(out[asked.len() + 1][0], PLI_PLAYERPROPS + 0x20);
+        assert!(!b.due(&st), "once");
+
+        // efb5b90: 182 came, and the frame still waits for the level's age.
+        let mut b = LoginBurst::for_version(v).unwrap();
+        st.process_list_requests = 1;
+        assert!(!b.due(&st), "182 alone does not send it");
+        b.level_age(Some(Duration::from_millis(112)));
+        let (asked, out) = take(&mut b, &st);
+        assert_eq!(
+            asked,
+            ["idle.gani", "sword1.png", "shield1.png", "head0.png", "body.png", "wbomb1.png", "wbowi1.png", "plisticononline.png", "plisticonno pms.png"]
+        );
+        assert_eq!(out.len(), asked.len() + 3);
+        assert_eq!(out[asked.len()], b"flag");
+        assert_eq!(out[asked.len() + 1][0], PLI_PROCESSLIST + 0x20);
+        assert_eq!(out[asked.len() + 2][0], PLI_PLAYERPROPS + 0x20);
+
+        // The other builds ignore the level's age.
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
+        st.process_list_requests = 0;
+        b.level_age(Some(Duration::from_secs(1)));
+        assert!(!b.due(&st));
     }
 
     /// The 2.22 `idle.gani` check: in the frame when it goes; alone, once,
