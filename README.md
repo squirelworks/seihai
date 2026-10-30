@@ -118,7 +118,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | Flag | Meaning |
 |------|---------|
 | `--assets`, `-a` | Your own asset folder (optional). A file it lacks comes from the built-in default set; with no folder the built-in set is all there is |
-| `--cache-dir` | Root of the per-server download caches (default `<settings dir>/cache`; settings file `cache_dir=`). Search order: the server's cache, `--assets`, the built-in set |
+| `--cache-dir` | Downloads go to `_cache/<host>_<port>/` next to the program. This names a second cache root that also gets a copy of each download (default `<settings dir>/cache`, which is then only read; settings file `cache_dir=`). Search order: the server's caches, `--assets`, the built-in set |
 | `--level`, `-l` | Level file to load offline |
 | `--online`, `-o` | `host:port` of a listserver or gserver |
 | `--account` | Account name |

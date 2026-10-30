@@ -74,13 +74,23 @@ written into the user's asset folder and never into the built-in set.
 ### The cache in the Seihai folder (laundry list P2, 2026-10-29)
 
 A second cache sits next to the program: `<Seihai folder>/_cache/<host>_<port>/`,
-where the Seihai folder is the folder the program file is in. It is named by
-the key only (no `~name`) and has the same inside layout as the settings'
-cache. It is searched **before** the settings' cache, and every download is
-written to **both**, so a fresh run from the same folder finds what the last
-one received. The settings' cache stays as the second copy. When one of the two
-cannot be written (a Seihai folder without write access), the other copy is
-kept and the download does not fail. A server warp switches both.
+where the Seihai folder is the folder the program file is in (for a
+`cargo build --release`, `target/release/`). It is named by the key only (no
+`~name`) and has the same inside layout as the settings' cache. It is searched
+**before** the settings' cache, and it is **where downloads go**, so a fresh
+run from the same folder finds what the last one received.
+
+The settings' cache (`<settings dir>/cache`) is still searched, so what older
+runs saved there is found and offered to the server with its time, but it is
+no longer written by default (laundry 2026-10-30, item 7: downloads kept
+landing in `~/.config/seihai/cache`). It is written only
+
+* as a **copy**, when the user named a cache folder (`--cache-dir` or
+  `cache_dir=`): then every download goes to both, as before, or
+* **instead**, when the Seihai folder's cache cannot be written (no write
+  access, or the program's folder is unknown).
+
+A server warp switches both.
 
 Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): the first run saved
 `onlinestartlocal.nw` and `server.txt` in both caches. With the settings' cache

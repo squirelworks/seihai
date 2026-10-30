@@ -65,7 +65,8 @@ pub enum Layer {
 /// 1. the **per-server cache**, what the server sent: first the one in the
 ///    Seihai folder (`_cache/<host>_<port>/`), then the one with the
 ///    settings (`<settings dir>/cache/<host>_<port>~<name>/`). Downloads are
-///    written to both and nowhere else,
+///    written to the first (the second only as a fallback, or as a copy when
+///    the user named it) and nowhere else,
 /// 2. the user's **asset folder** (`--assets`),
 /// 3. the **built-in default set** (read-only, never a download target).
 ///
@@ -184,8 +185,8 @@ impl AssetResolver {
     /// Where a download is written first: the Seihai folder's cache, else
     /// the settings' cache, else the user's folder (a resolver made by
     /// [`new`](Self::new), as before). Never the built-in set; `None` when
-    /// only the built-in set exists. A download also goes to the settings'
-    /// cache when both caches are set (see `DownloadStore::store`).
+    /// only the built-in set exists. With both caches the settings' one is
+    /// written only as a fallback or a copy (see `DownloadStore::store`).
     pub fn download_root(&self) -> Option<&AssetRoot> {
         self.game_cache.as_ref().or(self.cache.as_ref()).or(self.user.as_ref())
     }

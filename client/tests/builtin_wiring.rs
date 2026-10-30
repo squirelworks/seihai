@@ -521,10 +521,11 @@ fn a_downloaded_image_is_found_where_it_was_saved() {
 // ---- the Seihai folder's cache (laundry list P2, 2026-10-29) ---------------------
 
 /// `_cache/<host>_<port>/` in the Seihai folder is searched before the
-/// settings' cache, and a download goes to both. A Seihai folder that cannot
-/// be written leaves the settings' copy.
+/// settings' cache, and a download goes there only. The settings' cache gets
+/// a copy when the user named it, and the download when the Seihai folder
+/// cannot be written.
 #[test]
-fn the_seihai_folder_cache_is_searched_first_and_downloads_go_to_both() {
+fn the_seihai_folder_cache_is_searched_first_and_takes_the_downloads() {
     let game = tmp("game-cache");
     let cache = tmp("game-cache-settings");
     let r = AssetResolver::empty(ClientVersion::V222.profile())
@@ -543,10 +544,19 @@ fn the_seihai_folder_cache_is_searched_first_and_downloads_go_to_both() {
     store.set_cache_meta(Some("host=h\nport=1\n".into()));
     let got = store.store("body13.png", b"server", Some(1_700_000_000)).unwrap();
     assert_eq!(got, Stored::Disk(game.join("levels/bodies/body13.png")));
-    assert_eq!(fs::read(cache.join("levels/bodies/body13.png")).unwrap(), b"server");
-    assert!(game.join("server.txt").exists() && cache.join("server.txt").exists());
+    assert!(!cache.join("levels/bodies/body13.png").exists(), "no copy in the settings' cache by default");
+    assert!(game.join("server.txt").exists() && !cache.join("server.txt").exists());
     assert_eq!(r.image("body13.png"), Some(game.join("levels/bodies/body13.png")));
     assert_eq!(store.local_path("BODY13.PNG"), Some(game.join("levels/bodies/body13.png")));
+    // A replaced file in the settings' cache only lands in the Seihai folder.
+    let got = store.store("head927.png", b"newer", None).unwrap();
+    assert_eq!(got, Stored::Disk(new.clone()));
+    assert_eq!(fs::read(cache.join("levels/heads/head927.png")).unwrap(), b"old");
+    // A cache folder the user named keeps a copy.
+    store.set_settings_copy(true);
+    store.store("body14.png", b"server", None).unwrap();
+    assert_eq!(fs::read(cache.join("levels/bodies/body14.png")).unwrap(), b"server");
+    assert_eq!(fs::read(game.join("levels/bodies/body14.png")).unwrap(), b"server");
 
     // The Seihai folder's cache cannot be made (a file is in the way).
     let blocked = tmp("game-cache-blocked").join("file");

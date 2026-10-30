@@ -41,7 +41,7 @@ pub fn seihai_dir() -> Option<PathBuf> {
 
 /// The cache of the server at `addr` in the Seihai folder `dir`:
 /// `<dir>/_cache/<host>_<port>`, the key only (no server name). Checked
-/// before the settings' cache, and written by every download.
+/// before the settings' cache, and where every download is written.
 pub fn game_cache_dir_for(dir: &Path, addr: &str) -> Option<PathBuf> {
     let (host, port) = split_addr(addr)?;
     Some(dir.join("_cache").join(server_key(&host, port)))
