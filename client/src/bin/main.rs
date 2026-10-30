@@ -1676,12 +1676,23 @@ fn main() {
                 // True when this batch put the player in a new level.
                 let mut entered = false;
                 if !no_scripts {
+                    // The built-in bomb weapons run their own scripts, under
+                    // the names the weapon bar gives them.
+                    let builtin: Vec<(&str, String, String)> = net_state
+                        .default_weapons
+                        .iter()
+                        .filter_map(|&id| {
+                            let d = seihai::weaponbar::default_weapon(id)?;
+                            Some((d.name, format!("{}{}", d.image, profile.files.image_ext), seihai::bombs::builtin_script(id)?))
+                        })
+                        .collect();
                     let ws: Vec<WeaponScript> = net_state
                         .weapons
                         .iter()
                         .filter_map(|w| {
                             w.script.as_deref().map(|script| WeaponScript { name: &w.name, image: w.image.as_deref().unwrap_or(""), script })
                         })
+                        .chain(builtin.iter().map(|(name, image, script)| WeaponScript { name, image, script }))
                         .collect();
                     scripts.sync_weapons(&mut session, &ws);
                     // Debug: keep each weapon's script text, so a parse error
@@ -2143,6 +2154,20 @@ fn main() {
             // probe point; the NPC gets `waspelt`.
             if session.tick_throw_with(dt, &|x, y| scripts.world.npc_at(f64::from(x), f64::from(y))) {
                 dirty = true;
+            }
+            // Bomb fuses and explosions, on the same clock.
+            if session.tick_bombs(dt) {
+                dirty = true;
+            }
+            let bomb_sends = session.take_bomb_sends();
+            if !bomb_sends.is_empty() {
+                eprintln!("bomb put: {} PLI_BOMBADD", bomb_sends.len());
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_messages(&bomb_sends) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
             }
             // The items on the floor: bounce, blink, pickup and timeout.
             if !session.floor_items.is_empty() {

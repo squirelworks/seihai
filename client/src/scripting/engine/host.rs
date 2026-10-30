@@ -476,6 +476,11 @@ impl SessionScripts {
                 }
                 // `noplayerkilling`: other players' hits do nothing in this level.
                 Effect::Command { ref name, .. } if name == "noplayerkilling" => s.no_pk = true,
+                Effect::Command { obj, ref name, ref args } if name == "putbomb" => {
+                    let n = |i: usize| args.get(i).map_or(0.0, |v| v.num());
+                    let from_weapon = self.world.obj(obj).is_some_and(|o| o.kind == ObjKind::Weapon);
+                    s.put_bomb(n(0).clamp(0.0, 7.0) as u8, n(1) as f32, n(2) as f32, from_weapon);
+                }
                 // `setsword power`: the player's sword strength.
                 Effect::Command { ref name, ref args, .. } if name == "setsword" => {
                     if let Some(p) = args.get(1).map(|v| v.num()) {
@@ -825,6 +830,37 @@ mod tests {
         assert!(!s.current_level.as_ref().unwrap().npcs[0].visible);
         sc.tick(&mut s, 50);
         assert!(s.current_level.as_ref().unwrap().npcs[0].visible);
+    }
+
+    #[test]
+    fn the_builtin_bomb_puts_a_bomb_in_front_and_takes_one() {
+        let mut s = session("GLEVNW01\n");
+        s.player_x = 30.0;
+        s.player_y = 30.0;
+        s.player_dir = 2;
+        s.bombs = 5;
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        let script = crate::bombs::builtin_script(8).unwrap();
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "Bomb", image: "wbomb1.png", script: &script }]);
+        sc.sync_player(&s);
+        sc.world.weapon_fired("Bomb");
+        sc.apply(&mut s);
+        assert_eq!(s.bombs, 4);
+        assert_eq!(s.placed_bombs.len(), 1);
+        assert_eq!((s.placed_bombs[0].x, s.placed_bombs[0].y, s.placed_bombs[0].power), (30.5, 32.5, 1));
+        // a weapon's bomb: power 1 + 8, the fuse 55
+        assert_eq!(s.take_bomb_sends(), vec![vec![0x24, 61 + 0x20, 65 + 0x20, 0x29, 0x57, b'\n']]);
+        // no bombs, no bomb
+        s.bombs = 0;
+        sc.sync_player(&s);
+        sc.world.weapon_fired("Bomb");
+        sc.apply(&mut s);
+        assert_eq!(s.placed_bombs.len(), 1);
+        // the fuse burns 61 ticks, then the cross is out and the bomb gone
+        s.tick_bombs(61 * 50);
+        assert!(s.placed_bombs.is_empty());
+        assert_eq!(s.blast.len(), 9);
+        assert!(s.take_sound_events().iter().any(|e| e.file == "bomb.wav"));
     }
 
     #[test]

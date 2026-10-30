@@ -153,6 +153,13 @@ pub struct OfflineSession {
     pub thrown: Vec<crate::throwing::Thrown>,
     pub leaps: Vec<crate::throwing::Leap>,
     pub grounded: Vec<crate::throwing::Grounded>,
+    /// Bombs on the ground and explosion pieces (see [`crate::bombs`]).
+    pub placed_bombs: Vec<crate::bombs::Bomb>,
+    pub blast: Vec<crate::bombs::Piece>,
+    /// Milliseconds carried over between bomb ticks.
+    bomb_ms: u64,
+    /// `PLI_BOMBADD` messages since the last [`Self::take_bomb_sends`].
+    bomb_sends: Vec<Vec<u8>>,
     /// Landings since the last [`Self::take_landings`].
     landings: Vec<Landing>,
     /// Milliseconds carried over between flight ticks.
@@ -471,6 +478,10 @@ impl OfflineSession {
             thrown: Vec::new(),
             leaps: Vec::new(),
             grounded: Vec::new(),
+            placed_bombs: Vec::new(),
+            blast: Vec::new(),
+            bomb_ms: 0,
+            bomb_sends: Vec::new(),
             landings: Vec::new(),
             throw_ms: 0,
             pelts: Vec::new(),
@@ -1040,6 +1051,9 @@ impl OfflineSession {
         self.grounded.clear();
         self.landings.clear();
         self.throw_ms = 0;
+        self.placed_bombs.clear();
+        self.blast.clear();
+        self.bomb_ms = 0;
         // The items on the floor belong to the level.
         self.floor_items.clear();
     }
@@ -1190,6 +1204,66 @@ impl OfflineSession {
     /// The landings since the last call.
     pub fn take_landings(&mut self) -> Vec<Landing> {
         std::mem::take(&mut self.landings)
+    }
+
+    /// `putbomb power,x,y`: a bomb with a 60-tick fuse at `(x, y)`, or the
+    /// splash when water is under `(x + 1, y + 1)`. Either way a
+    /// `PLI_BOMBADD` is queued; `from_weapon` marks a weapon's bomb.
+    pub fn put_bomb(&mut self, power: u8, x: f32, y: f32, from_weapon: bool) {
+        use crate::bombs as b;
+        if self.throw_in_water(x + 1.0, y + 1.0) {
+            self.spawn_leap(crate::throwing::LEAP_SPLASH, x, y);
+        } else {
+            self.placed_bombs.push(b::Bomb::new(x, y, power, b::FUSE_TICKS));
+        }
+        self.bomb_sends.push(b::bomb_add_message(x, y, power, from_weapon, b::FUSE_TICKS - b::SEND_LEAD));
+    }
+
+    /// The `PLI_BOMBADD` messages since the last call.
+    pub fn take_bomb_sends(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.bomb_sends)
+    }
+
+    /// Advance fuses and explosions by `ms` on their 50 ms tick. Returns
+    /// true if anything changed (the scene needs a redraw).
+    pub fn tick_bombs(&mut self, ms: u64) -> bool {
+        if self.placed_bombs.is_empty() && self.blast.is_empty() {
+            self.bomb_ms = 0;
+            return false;
+        }
+        self.bomb_ms += ms;
+        let mut changed = false;
+        while self.bomb_ms >= crate::throwing::TICK_MS {
+            self.bomb_ms -= crate::throwing::TICK_MS;
+            self.bomb_tick();
+            changed = true;
+        }
+        changed
+    }
+
+    /// One tick: the pieces hit and age, then the fuses burn; a bomb that
+    /// goes off plays its sound and leaves its pieces.
+    fn bomb_tick(&mut self) {
+        for p in std::mem::take(&mut self.blast) {
+            let mut p = p;
+            if self.victim().state == crate::combat::Vulnerability::Hurtable && p.hits_player(self.player_x, self.player_y) {
+                self.damage_half(p.damage_half(), None);
+                self.combat.start_hurt_knock(Some(crate::throwing::throw_knock(p.knock_dir())));
+                self.throw_hurt = true;
+            }
+            if p.tick() {
+                self.blast.push(p);
+            }
+        }
+        for mut bomb in std::mem::take(&mut self.placed_bombs) {
+            if !bomb.tick() {
+                self.placed_bombs.push(bomb);
+                continue;
+            }
+            self.sound_events.push(SoundEvent { file: bomb.sound().into(), x: bomb.x + 1.0, y: bomb.y + 1.0 });
+            let room = crate::bombs::MAX_PIECES.saturating_sub(self.blast.len());
+            self.blast.extend(bomb.pieces().into_iter().take(room));
+        }
     }
 
     /// The sword's cut: the cuttable object in front of the player (the same
