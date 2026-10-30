@@ -618,6 +618,10 @@ pub struct Connection {
     flags_out: Vec<Vec<u8>>,
     /// When the oldest queued flag was queued.
     flags_since: Option<Instant>,
+    /// The last walk update sent ([`Self::send_walk_sprite`]): the same
+    /// X, Y and SPRITE again is not re-sent (the real client sends props
+    /// only when they change).
+    last_walk: Option<Vec<u8>>,
 }
 
 impl Connection {
@@ -631,7 +635,7 @@ impl Connection {
         let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
         let stream = connect_any(&addrs, CONNECT_TIMEOUT)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None })
+        Ok(Self { stream, gen3: None, gen5: None, gen5_in: None, pli: None, flags_out: Vec::new(), flags_since: None, last_walk: None })
     }
 
     /// Close the connection in both directions. A reader thread from
@@ -956,6 +960,7 @@ impl Connection {
     /// This is the 2.05 "walk" message: X/Y in half-tiles, SPRITE with
     /// the direction in its low two bits.
     pub fn send_position(&mut self, x: f32, y: f32, dir: u8) -> io::Result<()> {
+        self.last_walk = None;
         self.send_messages(&[position_message(x, y, dir)])
     }
 
@@ -1070,7 +1075,14 @@ impl Connection {
     /// sword swing and hurt mode ([`crate::combat::CombatState::sprite`]).
     pub fn send_walk_sprite(&mut self, upd: &PlayerUpdate, sprite: u8) -> io::Result<()> {
         let mut msgs = self.take_flags();
-        msgs.push(position_message_sprite(upd.x, upd.y, sprite));
+        let walk = position_message_sprite(upd.x, upd.y, sprite);
+        if self.last_walk.as_ref() != Some(&walk) {
+            self.last_walk = Some(walk.clone());
+            msgs.push(walk);
+        }
+        if msgs.is_empty() {
+            return Ok(());
+        }
         self.send_messages(&msgs)
     }
 
@@ -1346,6 +1358,31 @@ mod tests {
         assert_eq!(second[1], b"\x33door\n");
         assert_eq!(second[2][0], 2 + 0x20);
         assert!(conn.take_flags().is_empty());
+    }
+
+    /// The same X, Y and SPRITE again is not re-sent; a change is.
+    #[test]
+    fn an_unchanged_walk_update_is_not_sent_again() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let mut conn = Connection::connect(&addr).unwrap();
+        let (mut srv, _) = listener.accept().unwrap();
+        conn.login_versioned(ClientVersion::V205, 0x42, "ab", "cd").unwrap();
+        let _ = read_frame(&mut srv);
+        let here = PlayerUpdate { x: 30.0, y: 30.5, dir: 1 };
+        for _ in 0..5 {
+            conn.send_walk_sprite(&here, 47).unwrap();
+        }
+        conn.send_walk_sprite(&here, 51).unwrap();
+        let mut g = Gen3::new(0x42);
+        let mut decode = |srv: &mut TcpStream| {
+            let body = read_frame(srv);
+            body.split_inclusive(|b| *b == b'\n').map(|l| g.decode(l).unwrap()).collect::<Vec<_>>()
+        };
+        assert_eq!(decode(&mut srv).len(), 1, "the first one");
+        // The next frame on the wire is the SPRITE change, not a repeat.
+        let next = decode(&mut srv);
+        assert_eq!(next, vec![position_message_sprite(30.0, 30.5, 51)]);
     }
 
     #[test]

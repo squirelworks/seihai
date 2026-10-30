@@ -1386,7 +1386,9 @@ fn main() {
     let mut last_pp_sprite: Option<u8> = None;
     let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
     let run_clock = Instant::now();
+    let mut slow_log = SlowFrameLog::default();
     while window.is_open() {
+        let mut ft = FrameTimes::start();
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open() {
             char_repeat.clear();
@@ -1442,6 +1444,7 @@ fn main() {
                 dirty = true;
             }
         }
+        ft.mark("input");
         // Online: apply every frame that has arrived, without blocking.
         if let Some(rx) = &frames {
             let mut changed = false;
@@ -2304,9 +2307,11 @@ fn main() {
             if moved {
                 scripts.touch(&mut session);
             }
+            ft.mark("network and game");
             let dt = scripts_clock.elapsed().as_millis() as u64;
             scripts_clock = Instant::now();
             scripts.tick(&mut session, dt);
+            ft.mark("scripts");
             // A script asked for a level change (setlevel / setlevel2).
             if let Some((dest, x, y)) = session.pending_link.take() {
                 if let Some(c) = conn.as_mut() {
@@ -2920,6 +2925,7 @@ fn main() {
                 }
             }
         }
+        ft.mark("after scripts");
         // The pictures other players and our own shield are drawn with.
         {
             let mut wanted: Vec<(&str, String)> =
@@ -2977,11 +2983,13 @@ fn main() {
                 dirty = true;
             }
         }
+        ft.mark("look images");
         if dirty {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
             scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image());
             dirty = false;
         }
+        ft.mark("draw");
         let mut frame = scene.clone();
         if item_list.open {
             let entries = item_list_entries(&session, &net_state);
@@ -3053,7 +3061,10 @@ fn main() {
                 .chunks(3)
                 .map(|c| ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | (c[2] as u32)),
         );
+        ft.mark("overlays");
         let _ = window.update_with_buffer(&buffer, fb.width as usize, fb.height as usize);
+        ft.mark("present");
+        slow_log.report(&ft);
 
         fps_count += 1;
         if fps_since.elapsed() >= Duration::from_secs(1) {
@@ -3061,6 +3072,49 @@ fn main() {
             fps_count = 0;
             fps_since = Instant::now();
         }
+    }
+}
+
+/// How long each part of one pass of the main loop took.
+struct FrameTimes {
+    last: Instant,
+    began: Instant,
+    parts: Vec<(&'static str, Duration)>,
+}
+
+impl FrameTimes {
+    fn start() -> Self {
+        let now = Instant::now();
+        Self { last: now, began: now, parts: Vec::new() }
+    }
+
+    /// The time since the previous mark goes to `part`.
+    fn mark(&mut self, part: &'static str) {
+        let now = Instant::now();
+        self.parts.push((part, now - self.last));
+        self.last = now;
+    }
+}
+
+/// Logs a pass of the main loop that took over [`SlowFrameLog::SLOW`], with
+/// the time of each part, at most once every two seconds: the way to find
+/// what keeps the frame rate low on a given server.
+#[derive(Default)]
+struct SlowFrameLog {
+    last: Option<Instant>,
+}
+
+impl SlowFrameLog {
+    const SLOW: Duration = Duration::from_millis(100);
+
+    fn report(&mut self, ft: &FrameTimes) {
+        let total = ft.began.elapsed();
+        if total < Self::SLOW || self.last.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return;
+        }
+        self.last = Some(Instant::now());
+        let parts: Vec<String> = ft.parts.iter().map(|(n, d)| format!("{n} {}", d.as_millis())).collect();
+        eprintln!("slow frame: {} ms ({})", total.as_millis(), parts.join(", "));
     }
 }
 
