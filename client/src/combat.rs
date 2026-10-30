@@ -12,7 +12,9 @@
 //! client broadcasts its position, direction and sprite as it swings (the
 //! sprite is `dir + 4 * S` with S 6 to 10 while the sword is out), and every
 //! other client tests whether *it* is in the box in front of that swing.
-//! [`judge_sword`] is that test, run on the receiving side. Packet hits
+//! [`judge_sword`] is that test, run on the receiving side. A 2.1+ client
+//! shows the swing in its GANI prop (`sword`) instead of in the sprite, and
+//! [`is_swing_gani`] reads it from there. Packet hits
 //! (`PLO_HURTPLAYER` 40, `PLO_HITOBJECTS` 46) carry their own power and are
 //! judged by [`judge_hurtplayer`].
 
@@ -179,6 +181,10 @@ pub struct Swinger {
     pub pose: Pose,
     /// SPRITE (17) as received: `dir + 4 * S`.
     pub sprite: u8,
+    /// The attacker's GANI (10, 2.1+) is a swing ([`is_swing_gani`]). A
+    /// GANI client sends the direction alone in SPRITE, so this is how its
+    /// swing is seen.
+    pub swing_gani: bool,
     /// SWORDPOWER (8) as last received, if ever: -20 to 20, negative heals.
     pub sword_power: Option<i8>,
     /// STATUS (18) as last received, if ever.
@@ -252,6 +258,25 @@ pub fn is_swing_sprite(rules: &CombatRules, sprite: u8) -> bool {
     s >= rules.swing_sprite_first && s <= rules.swing_sprite_last
 }
 
+/// The GANI names that are a swing: the ones the 2.05 client turns into
+/// the swing steps 9 to 13 (S 6 to 10), by its gani-to-step rule
+/// (Graal_analysis `feature-specs/11-emotes-ganis.md`). That a 2.1+ client
+/// judges a swing by these names is inferred from that rule and from its
+/// kick test, which reads the attacker's animation (`kick` is index 3 of the
+/// built-in names) instead of a sprite; the 2.1+ swing test was not read.
+pub const SWING_GANIS: [&str; 3] = ["sword", "ridesword", "spin"];
+
+/// True when another player's GANI prop (10, 2.1+) names a swing.
+pub fn is_swing_gani(gani: &str) -> bool {
+    let name = gani.strip_suffix(".gani").unwrap_or(gani);
+    SWING_GANIS.contains(&name)
+}
+
+/// The attacker is on a swing: a swing sprite (2.05), or a swing GANI (2.1+).
+pub fn is_swinging(rules: &CombatRules, s: &Swinger) -> bool {
+    s.swing_gani || is_swing_sprite(rules, s.sprite)
+}
+
 /// Half hearts a sword hit takes: the attacker's sword power, limited to the
 /// profile's plus or minus 20. Negative heals (see [`CombatRules::
 /// heal_min_ap`]); 0 only starts hurt mode.
@@ -266,7 +291,7 @@ pub fn sword_half_hearts(rules: &CombatRules, power: i8) -> i32 {
 /// level, the attacker not hidden and not on the victim's guild, and the
 /// victim in the box in front of the attacker.
 pub fn judge_sword(rules: &CombatRules, s: &Swinger, v: &Victim) -> Result<i32, Reject> {
-    if !is_swing_sprite(rules, s.sprite) {
+    if !is_swinging(rules, s) {
         return Err(Reject::NotSwinging);
     }
     v.state.check()?;
@@ -785,7 +810,7 @@ impl OfflineSession {
                 // The client stamps the attacker once the swing, the
                 // victim's state, AP and level have passed, before the
                 // guild and box tests.
-                let reaches = is_swing_sprite(&r, s.sprite) && v.state == Vulnerability::Hurtable && v.ap != r.immune_ap && !v.no_pk;
+                let reaches = is_swinging(&r, &s) && v.state == Vulnerability::Hurtable && v.ap != r.immune_ap && !v.no_pk;
                 if let (true, true, Some(id)) = (r.judge_throttle, reaches, id) {
                     s.repeat = self.judged_at.insert(id, second) == Some(second);
                 }
@@ -870,12 +895,16 @@ impl OfflineSession {
         let mut out = Vec::new();
         for id in swings {
             let Some(o) = others.iter().find(|o| o.id == *id) else { continue };
-            let Some(sprite) = o.sprite else { continue };
+            let swing_gani = o.looks.gani.as_deref().is_some_and(is_swing_gani);
+            // A GANI client may never have sent SPRITE: its direction is all
+            // the sprite would hold.
+            let Some(sprite) = o.sprite.or(swing_gani.then_some(o.dir % 4)) else { continue };
             let (x, y) = o.position_from(own_cell);
             let friendly = matches!((o.nick.as_deref(), own_nick), (Some(a), Some(v)) if same_guild(a, v));
             let s = Swinger {
                 pose: Pose { x, y, dir: o.dir },
                 sprite,
+                swing_gani,
                 sword_power: o.sword_power,
                 status: o.status,
                 friendly,
@@ -1001,7 +1030,7 @@ mod tests {
     }
 
     fn swinger(dir: u8, sprite: u8) -> Swinger {
-        Swinger { pose: at(20.0, 20.0, dir), sprite, sword_power: Some(1), status: None, friendly: false, repeat: false }
+        Swinger { pose: at(20.0, 20.0, dir), sprite, swing_gani: false, sword_power: Some(1), status: None, friendly: false, repeat: false }
     }
 
     // ---- the box: reach 0..=4 ahead, under 2 to the side ----
@@ -1649,6 +1678,84 @@ mod tests {
         assert!(st.swings.is_empty());
         assert_eq!(st.others[0].sword_power, Some(2));
         assert_eq!(st.others[0].sprite, Some(3));
+    }
+
+    // ---- 2.1+ swings: the GANI prop ----
+
+    #[test]
+    fn the_swing_ganis_are_sword_ridesword_and_spin() {
+        for g in ["sword", "ridesword", "spin", "sword.gani"] {
+            assert!(is_swing_gani(g), "{g}");
+        }
+        for g in ["idle", "walk", "kick", "hurt", "swordx", "Sword", ""] {
+            assert!(!is_swing_gani(g), "{g}");
+        }
+    }
+
+    #[test]
+    fn a_swing_gani_is_a_swing_whatever_the_sprite() {
+        // A GANI client's SPRITE is the direction alone (3, east).
+        let s = Swinger { swing_gani: true, ..swinger(3, 3) };
+        assert_eq!(judge_sword(&R, &s, &victim(22.0, 20.0)), Ok(1));
+        assert_eq!(judge_sword(&R, &swinger(3, 3), &victim(22.0, 20.0)), Err(Reject::NotSwinging));
+        // The direction still comes from the sprite: facing west, the victim is behind.
+        let west = Swinger { swing_gani: true, ..swinger(1, 1) };
+        assert_eq!(judge_sword(&R, &west, &victim(22.0, 20.0)), Err(Reject::OutOfReach));
+    }
+
+    /// GANI (10) as a 2.1+ string prop.
+    fn gani_prop(name: &str) -> Vec<u8> {
+        let mut p = vec![10 + 0x20, 0x20 + name.len() as u8];
+        p.extend_from_slice(name.as_bytes());
+        p
+    }
+
+    #[test]
+    fn a_gani_clients_sword_gani_is_a_swing() {
+        for v in [ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
+            let mut st = SessionState::for_version(v);
+            // SWORDPOWER 1, X 40, Y 40 (20 tiles), SPRITE 3 (east), GANI sword.
+            let mut props = vec![8 + 0x20, 0x20 + 1, 15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + 3];
+            props.extend(gani_prop("sword"));
+            st.apply_body(&plo8(300, &props));
+            assert_eq!(st.others[0].looks.gani.as_deref(), Some("sword"), "{}", v.label());
+            assert_eq!(st.swings, vec![300], "{}", v.label());
+            // A step while the GANI is still sword is judged again.
+            st.swings.clear();
+            st.apply_body(&plo8(300, &[15 + 0x20, 0x20 + 41]));
+            assert_eq!(st.swings, vec![300], "{}: a step during the swing", v.label());
+            // Back to idle: no swing.
+            st.swings.clear();
+            st.apply_body(&plo8(300, &gani_prop("idle")));
+            st.apply_body(&plo8(300, &[15 + 0x20, 0x20 + 42]));
+            assert!(st.swings.is_empty(), "{}", v.label());
+            // A GANI that is not a swing is none either.
+            st.apply_body(&plo8(300, &gani_prop("walk")));
+            assert!(st.swings.is_empty(), "{}", v.label());
+        }
+    }
+
+    #[test]
+    fn a_sword_gani_from_the_wire_hurts_through_receive_all() {
+        let mut st = SessionState::for_version(ClientVersion::V222);
+        let mut props = vec![8 + 0x20, 0x20 + 2, 15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + 3];
+        props.extend(gani_prop("sword"));
+        st.apply_body(&plo8(300, &props));
+        let swings = std::mem::take(&mut st.swings);
+        let mut s = session();
+        let out = s.receive_all(&st.others, None, None, 0, &swings, &[]);
+        assert_eq!(out.len(), 1);
+        assert_eq!((out[0].kind, out[0].attacker, out[0].outcome), (HitKind::Sword, Some(300), Ok(2)));
+    }
+
+    #[test]
+    fn a_sword_gani_with_no_sprite_ever_sent_faces_the_players_direction() {
+        let mut s = session();
+        let mut o = other(10, 20.0, 20.0, 3, 0, Some(1));
+        o.sprite = None;
+        assert!(s.receive_all(&[o.clone()], None, None, 0, &[10], &[]).is_empty(), "no sprite, no swing GANI: nothing to judge");
+        o.looks.gani = Some("sword".into());
+        assert_eq!(s.receive_all(&[o], None, None, 0, &[10], &[])[0].outcome, Ok(1));
     }
 
     #[test]

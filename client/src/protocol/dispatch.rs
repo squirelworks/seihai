@@ -1412,8 +1412,14 @@ impl SessionState {
         if let Some(c) = u.carry {
             o.carry = c;
         }
+        let moved = u.x.is_some() || u.y.is_some() || u.dir.is_some() || u.sprite.is_some() || u.looks.gani.is_some();
         o.looks.update(std::mem::take(&mut u.looks));
-        let swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
+        // A 2.05 swing is a swing sprite in the update. A 2.1+ client sends
+        // GANI `sword` once and then only what changes, so any update of
+        // its place or animation while that GANI is on is judged again.
+        let gani_swing = moved && o.looks.gani.as_deref().is_some_and(combat::is_swing_gani);
+        let sprite_swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
+        let swing = self.combat.is_some() && (sprite_swing || gani_swing);
         if swing {
             self.swings.push(u.id);
         }
