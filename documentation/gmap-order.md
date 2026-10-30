@@ -40,3 +40,29 @@ sends. That belongs to the walk cadence (see `documentation/difftest-leftovers.m
 | server `LEVELNAME` order (low divergence "field level") | gm_sw first | gm_ne first | gm_sw first (divergence gone) |
 
 The ranked report's "props values differ" row for 2.22 no longer lists the crossing props.
+
+## Crossing props on the 100 ms walk cadence (laundry item 8, 2026-10-31)
+
+Seihai sent the whole crossing frame (39, flags, cell prop and coordinate) at the step that crossed,
+even on builds that send their own props only every 100 ms (2.17, 2.22, 3.04,
+`protocol/walkcadence.rs`). That gave a second props message inside one 100 ms slot. The real 2.22
+captures fit one rule instead:
+
+* the step that crosses sends the tamper check (39) and the `gr` flag in its own frame;
+* the cell prop (43 or 44) goes with the next props message the cadence sends, next to the wrapped
+  coordinate of its axis, ids ascending (`X, GMAPLEVELX`).
+
+| real 2.22 capture | where the crossing step fell | props message |
+|---|---|---|
+| lab 2026-10-24, east | on a send slot | `X=0, 43=1`, same frame as the 39 |
+| lab 2026-10-24, south | between slots | `Y=0.5, 44=1`, the frame after |
+| lab 2026-10-24, west | between slots (39 at 63.5) | `X=63, 43=0`, the next one |
+| `gmap_cross` difftest, east | between slots | `X=0.5, 43=1` |
+
+Seihai now does the same: on a cadence build the main loop holds `gmap::crossing_lead` (the 39) for the
+step's tick frame and calls `WalkCadence::cross`, which puts the cell prop and its axis coordinate in the
+next message it sends. 2.31 (no cadence) is unchanged: 46 and the props in one frame at the step.
+
+Confirmed: the four 2.22 rows above (tests in `protocol/walkcadence.rs` and `net/mod.rs`). Inferred: 2.17
+and 3.04 cross the same way (their cadence matches 2.22's, but no crossing was captured). Not run yet: a lab walk of the 2x2 gmap with
+Seihai 2.22 against the real client after this change.
