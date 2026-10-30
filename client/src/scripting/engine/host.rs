@@ -136,6 +136,13 @@ impl SessionScripts {
         n
     }
 
+    /// An arrow hit NPC `id`: `wasshot` there.
+    pub fn shot(&mut self, session: &mut OfflineSession, id: ObjId) {
+        self.sync_player(session);
+        self.world.fire(id, "wasshot", &[]);
+        self.apply(session);
+    }
+
     /// A thrown object hit the NPC `id`: `waspelt` on it.
     pub fn pelt(&mut self, session: &mut OfflineSession, id: ObjId) {
         self.sync_player(session);
@@ -480,6 +487,21 @@ impl SessionScripts {
                     let n = |i: usize| args.get(i).map_or(0.0, |v| v.num());
                     let from_weapon = self.world.obj(obj).is_some_and(|o| o.kind == ObjKind::Weapon);
                     s.put_bomb(n(0).clamp(0.0, 7.0) as u8, n(1) as f32, n(2) as f32, from_weapon);
+                }
+                Effect::Command { obj, ref name, ref args } if name == "shootarrow" => {
+                    let dir = args.first().map_or(0.0, |v| v.num()).rem_euclid(4.0) as u8;
+                    match self.world.obj(obj) {
+                        // A weapon shoots from the player.
+                        Some(o) if o.kind == ObjKind::Weapon => {
+                            let (x, y) = (s.player_x, s.player_y);
+                            s.shoot_arrow(x, y, crate::arrows::SHOOTER_W, crate::arrows::SHOOTER_H, dir, true);
+                        }
+                        Some(o) => {
+                            let (x, y, w, h) = o.rect();
+                            s.shoot_arrow(x as f32, y as f32, w as f32, h as f32, dir, false);
+                        }
+                        None => {}
+                    }
                 }
                 // `setsword power`: the player's sword strength.
                 Effect::Command { ref name, ref args, .. } if name == "setsword" => {
@@ -861,6 +883,39 @@ mod tests {
         assert!(s.placed_bombs.is_empty());
         assert_eq!(s.blast.len(), 9);
         assert!(s.take_sound_events().iter().any(|e| e.file == "bomb.wav"));
+    }
+
+    #[test]
+    fn the_builtin_bow_shoots_after_its_timeout_and_takes_an_arrow() {
+        let mut s = session("GLEVNW01\n");
+        s.player_x = 30.0;
+        s.player_y = 30.0;
+        s.player_dir = 3;
+        s.darts = 5;
+        let mut sc = SessionScripts::new(ClientVersion::V205);
+        let script = crate::arrows::builtin_script(7).unwrap();
+        sc.sync_weapons(&mut s, &[WeaponScript { name: "Bow", image: "wbowi1.png", script }]);
+        sc.sync_player(&s);
+        sc.world.weapon_fired("Bow");
+        sc.apply(&mut s);
+        assert!(s.arrows.is_empty());
+        sc.tick(&mut s, 300);
+        assert_eq!(s.darts, 4);
+        assert_eq!(s.arrows.len(), 1);
+        assert_eq!(s.arrows[0].sprite, 110);
+        // facing right, a weapon's arrow (3 + 8), power 0
+        let sent = s.take_arrow_sends();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(&sent[0][..1], &[9 + 0x20]);
+        assert_eq!(&sent[0][3..7], &[11 + 0x20, 110 + 0x20, 0x21, b'\n']);
+        assert!(s.take_sound_events().iter().any(|e| e.file == "arrow.wav"));
+        // no arrows, no shot
+        s.darts = 0;
+        sc.sync_player(&s);
+        sc.world.weapon_fired("Bow");
+        sc.apply(&mut s);
+        sc.tick(&mut s, 300);
+        assert_eq!(s.arrows.len(), 1);
     }
 
     #[test]

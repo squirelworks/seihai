@@ -162,6 +162,14 @@ pub struct OfflineSession {
     bomb_ms: u64,
     /// `PLI_BOMBADD` messages since the last [`Self::take_bomb_sends`].
     bomb_sends: Vec<Vec<u8>>,
+    /// Arrows in flight (see [`crate::arrows`]).
+    pub arrows: Vec<crate::arrows::Arrow>,
+    /// Milliseconds carried over between arrow ticks.
+    arrow_ms: u64,
+    /// `PLI_ARROWADD` messages since the last [`Self::take_arrow_sends`].
+    arrow_sends: Vec<Vec<u8>>,
+    /// NPCs an arrow hit since the last [`Self::take_shots`].
+    shots: Vec<usize>,
     /// Landings since the last [`Self::take_landings`].
     landings: Vec<Landing>,
     /// Milliseconds carried over between flight ticks.
@@ -491,6 +499,10 @@ impl OfflineSession {
             blast: Vec::new(),
             bomb_ms: 0,
             bomb_sends: Vec::new(),
+            arrows: Vec::new(),
+            arrow_ms: 0,
+            arrow_sends: Vec::new(),
+            shots: Vec::new(),
             landings: Vec::new(),
             throw_ms: 0,
             pelts: Vec::new(),
@@ -1066,6 +1078,8 @@ impl OfflineSession {
         self.placed_bombs.clear();
         self.blast.clear();
         self.bomb_ms = 0;
+        self.arrows.clear();
+        self.arrow_ms = 0;
         // The items on the floor belong to the level.
         self.floor_items.clear();
     }
@@ -1276,6 +1290,63 @@ impl OfflineSession {
             let room = crate::bombs::MAX_PIECES.saturating_sub(self.blast.len());
             self.blast.extend(bomb.pieces().into_iter().take(room));
         }
+    }
+
+    /// `shootarrow dir` from a shooter `w` x `h` tiles at `(x, y)`: the
+    /// arrow, `arrow.wav`, and a queued `PLI_ARROWADD`. `from_weapon`
+    /// marks a weapon's arrow.
+    pub fn shoot_arrow(&mut self, x: f32, y: f32, w: f32, h: f32, dir: u8, from_weapon: bool) {
+        use crate::arrows as a;
+        let (sx, sy) = a::start(x, y, w, h, dir);
+        let arrow = a::Arrow::new(sx, sy, dir);
+        self.sound_events.push(SoundEvent { file: "arrow.wav".into(), x: sx + 0.5, y: sy + 0.5 });
+        self.arrow_sends.push(a::arrow_add_message(sx, sy, dir, from_weapon, arrow.sprite, 0));
+        self.arrows.push(arrow);
+    }
+
+    /// The `PLI_ARROWADD` messages since the last call.
+    pub fn take_arrow_sends(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.arrow_sends)
+    }
+
+    /// The NPCs an arrow hit since the last call (they get `wasshot`).
+    pub fn take_shots(&mut self) -> Vec<usize> {
+        std::mem::take(&mut self.shots)
+    }
+
+    /// Advance arrows by `ms` on their 50 ms tick. An arrow whose middle
+    /// is on an NPC (`npc_at`) shoots it and turns round. Returns true if
+    /// anything moved.
+    pub fn tick_arrows(&mut self, ms: u64, npc_at: &dyn Fn(f32, f32) -> Option<usize>) -> bool {
+        use crate::arrows::Step;
+        if self.arrows.is_empty() {
+            self.arrow_ms = 0;
+            return false;
+        }
+        self.arrow_ms += ms;
+        let mut moved = false;
+        while self.arrow_ms >= crate::throwing::TICK_MS {
+            self.arrow_ms -= crate::throwing::TICK_MS;
+            moved = true;
+            let tables = self.object_tables.as_ref();
+            let mut kept = Vec::new();
+            for mut a in std::mem::take(&mut self.arrows) {
+                if a.step() == Step::Gone {
+                    continue;
+                }
+                if a.reflect < 0 {
+                    let (w, h) = crate::throwing::sprite_rect(tables, a.sprite).map_or((16, 16), |(_, _, w, h)| (w, h));
+                    let (mx, my) = (a.x + w as f32 / 32.0, a.y + h as f32 / 32.0);
+                    if let Some(npc) = npc_at(mx, my) {
+                        self.shots.push(npc);
+                        a.bounce();
+                    }
+                }
+                kept.push(a);
+            }
+            self.arrows = kept;
+        }
+        moved
     }
 
     /// The sword's cut: the cuttable object in front of the player (the same

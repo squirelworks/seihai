@@ -1680,14 +1680,15 @@ fn main() {
                 // True when this batch put the player in a new level.
                 let mut entered = false;
                 if !no_scripts {
-                    // The built-in bomb weapons run their own scripts, under
-                    // the names the weapon bar gives them.
+                    // The built-in bomb weapons and the Bow run their own
+                    // scripts, under the names the weapon bar gives them.
                     let builtin: Vec<(&str, String, String)> = net_state
                         .default_weapons
                         .iter()
                         .filter_map(|&id| {
                             let d = seihai::weaponbar::default_weapon(id)?;
-                            Some((d.name, format!("{}{}", d.image, profile.files.image_ext), seihai::bombs::builtin_script(id)?))
+                            let script = seihai::bombs::builtin_script(id).or_else(|| seihai::arrows::builtin_script(id).map(str::to_string))?;
+                            Some((d.name, format!("{}{}", d.image, profile.files.image_ext), script))
                         })
                         .collect();
                     let ws: Vec<WeaponScript> = net_state
@@ -2174,6 +2175,24 @@ fn main() {
                 eprintln!("bomb put: {} PLI_BOMBADD", bomb_sends.len());
                 if let Some(c) = conn.as_mut() {
                     if let Err(e) = c.send_messages(&bomb_sends) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
+            }
+            // Arrows, on the same clock. One that hits an NPC gives it
+            // `wasshot`.
+            if session.tick_arrows(dt, &|x, y| scripts.world.npc_at(f64::from(x), f64::from(y))) {
+                dirty = true;
+            }
+            for id in session.take_shots() {
+                scripts.shot(&mut session, id);
+            }
+            let arrow_sends = session.take_arrow_sends();
+            if !arrow_sends.is_empty() {
+                eprintln!("arrow shot: {} PLI_ARROWADD", arrow_sends.len());
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_messages(&arrow_sends) {
                         eprintln!("send failed: {e}");
                         conn = None;
                     }
