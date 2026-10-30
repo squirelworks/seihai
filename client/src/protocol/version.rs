@@ -75,6 +75,10 @@ pub enum ClientVersion {
     V230,
     /// Graal 2.31 (`GNW28015`). Gen 5.
     V231,
+    /// Graal 3.04 (`G3D03014`), the Linux build. Gen 5. The 3.x twin of 2.22.
+    V304,
+    /// Graal 3.153 (`G3D28015`), the Mac OS X build. Gen 5. The 3.x twin of 2.31.
+    V3153,
 }
 
 impl ClientVersion {
@@ -212,7 +216,7 @@ impl ClientVersion {
             Self::V141, Self::V142, Self::V200, Self::V201, Self::V202, Self::V202R2, Self::V203,
             Self::V204, Self::V205, Self::V210,
             Self::V212, Self::V213, Self::V214, Self::V215, Self::V216, Self::V217, Self::V222,
-            Self::V230, Self::V231,
+            Self::V230, Self::V231, Self::V304, Self::V3153,
         ]
     }
 }

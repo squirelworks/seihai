@@ -813,7 +813,8 @@ mod tests {
     fn tokens_and_labels() {
         for p in PROFILES {
             assert_eq!(p.token.len(), 8, "{}", p.label);
-            assert!(p.token.starts_with("GNW"), "{}", p.label);
+            // GNW for the 2D builds, G3D for the 3.x ones.
+            assert!(p.token.starts_with("GNW") || p.token.starts_with("G3D"), "{}", p.label);
         }
         let mut labels: Vec<_> = PROFILES.iter().map(|p| p.label).collect();
         labels.dedup();
@@ -1107,7 +1108,7 @@ mod tests {
             "1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.05", "2.1", "2.12", "2.13", "2.14",
             "2.15", "2.16", "2.17",
         ];
-        let gen5 = ["2.22", "2.3", "2.31"];
+        let gen5 = ["2.22", "2.3", "2.31", "3.04", "3.153"];
         let mut seen = 0;
         for p in PROFILES {
             match p.protocol.listserver {
