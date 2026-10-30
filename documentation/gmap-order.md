@@ -66,3 +66,14 @@ next message it sends. 2.31 (no cadence) is unchanged: 46 and the props in one f
 Confirmed: the four 2.22 rows above (tests in `protocol/walkcadence.rs` and `net/mod.rs`). Inferred: 2.17
 and 3.04 cross the same way (their cadence matches 2.22's, but no crossing was captured). Not run yet: a lab walk of the 2x2 gmap with
 Seihai 2.22 against the real client after this change.
+
+## Walking back into a gmap level (lab item 6, 2026-10-30)
+
+Lab, 2.22 walk around a 2x2 gmap: Seihai sent `PLI_NPCPROPS` again on every crossing back into a level
+(`GANI idle` for a shopkeeper, `GANI idle` and `BODY body.png` for a warp NPC), because the level's
+scripts were loaded afresh and `created` re-ran `setcharani`. The real 2.22 sent no NPC props on the
+same walk. Now a level that is still loaded as a neighbour keeps its scripts: leaving it parks its NPC
+objects and `level.` variables (`ScriptWorld::park_level`), and walking back in resumes them without
+`created`. A level dropped from the neighbourhood, or any level after leaving the gmap, starts afresh.
+`playerenters` still fires on each entry (not captured either way). Timeouts due while parked fire once
+on return. Test: `re_entering_a_loaded_gmap_level_resumes_its_scripts`.
