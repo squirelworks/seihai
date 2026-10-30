@@ -11,7 +11,7 @@ The listserver login differs by client **generation**, in four shapes. Inside a 
 | C | 2.22, 2.31 | A plain zlib frame: id 7, key byte, `GNW30123`, `newmain`, LF. Then a gen-5 frame with id 1 (account, password), XOR-ciphered with the key. |
 | D | 3.04 | One plain zlib frame at the default level (`78 9C`): id 7, key byte, `G3D30123`, `newmain`, LF, then id 1 (account, password), LF. The replies are gen 5, as for C. |
 
-The real clients compress at zlib's best level (`78 DA`). Seihai now does the same for the listserver login frames. Game-server frames keep the default level (`78 9C`): the comparison with real frames was made on listserver frames only. Decompression is unchanged.
+The real clients compress at zlib's best level (`78 DA`). Seihai now does the same for the listserver login frames. On the game server, the gen-2 builds (1.33 to 1.39) compress every frame at the best level too, the login and each later one: the real 1.28 beta 2 to 1.39 all did in the lab (2026-10-30), and Seihai 1.33 and 1.39 now match them. Gen 3 and the gen-5 login frame keep the default level (`78 9C`); the real 3.04 sent its game login at that level. Decompression is unchanged.
 
 ## What each Seihai profile sends
 

@@ -83,6 +83,9 @@ Seihai does the same:
   no body there is no shadow. A picture the server could not send is not
   replaced by the default one. The name tag and chat are drawn as usual.
 
+A `.gif` body is drawn in the player's colours, as a PNG one is
+(`appearance.md`).
+
 Not checked: whether 2.05 reads `.mng` player art, and what it draws for a
 part while a download is still on its way (Seihai draws the default).
 
@@ -335,7 +338,12 @@ Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
   Real files came later (see "What real files showed"). The `HEIGHTS` block of
   `GR-V1.04` is skipped, not stored: no real file has one. The two supplied
   levels' NPCs name `.gif` art.
-- **GIF and MNG.** GIF is decoded (first image, `assets/gif.rs`); MNG is found, not decoded. The folder holds 28 `.mng` and no GIF.
+- **GIF and MNG.** GIF is decoded (first image, `assets/gif.rs`), and the
+  coverage report decodes it too and gives its size. The reader was checked
+  against Pillow's first frame on 738 real GIFs (all of the 1.21 build, and
+  the GIFs of the 5th and 15th Graal builds: heads, swords, shields, weapon
+  icons, tile sheets, level art); every one was pixel-equal. MNG is found,
+  not decoded. The folder holds 28 `.mng` and no GIF.
 - **Tiledef matching.** The files parse; how a client matches `prefix` against
   a level name and what types other than 0 and 1 mean (the folder uses 4) is
   not in the notes, so no sheet is chosen from them.

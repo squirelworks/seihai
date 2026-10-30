@@ -101,7 +101,7 @@ keeps the frame above. Real 2.17.1 was captured on beta4 later the same day
 `SHOWIMGPLAYER`, no process list), but 96 to 112 ms after the board rather than
 240 ms, so 2.17 waits 96 ms (`LoginInfo::frame_after_level`).
 
-## Gen-2 builds (1.33 to 1.39)
+## Gen-2 builds (1.21 to 1.39)
 
 These builds have no post-login frame and no process list. Their first
 `PLI_PLAYERPROPS` goes out once the first level has loaded, with `NICKNAME`
@@ -144,6 +144,37 @@ Not done:
   id 33 (`c(0)` + default weapon id) from 1.38. The stub sent no weapons, and
   neither client sent either id.
 * 1.34 to 1.38 are taken to behave as 1.33. They were not run.
+
+### 1.21 to 1.32
+
+Lab check, 2026-10-30. The real 1.28 beta 2 (`graal128b2/Graal.exe`), 1.3 test
+(`graal13b/Graal13.exe`), 1.31 and 1.32 logged in to the same gen-2 stub under
+Wine (server head `head3.png`, status 20). Each one's login line is the 1.33
+one with its own `GSERV` token. Each asked `WANTFILE head3`, then sent its props
+once the level was in:
+
+| build | props after the nickname, head `c(0)` and colours |
+|---|---|
+| 1.28 beta 2 | `UDPPORT` only: no `STATUS`, no `ADDITFLAGS` |
+| 1.3 test | the same |
+| 1.31 | `STATUS` 16, `UDPPORT` |
+| 1.32 | `STATUS` 16, `UDPPORT`, `ADDITFLAGS` 0 (as 1.33) |
+
+`classic_login_props_message` sends `STATUS` from 1.31 and `ADDITFLAGS` where
+the build's own props reach 33 (1.32 on). Against the stub, Seihai 1.28 beta 2,
+1.3 test, 1.31 and 1.32 sent each real client's login line (account and
+password masked) and props byte for byte, apart from `UDPPORT`. The test
+`classic_login_props_match_the_real_1_28_to_1_32` holds those bytes.
+
+* **1.31 and the burst order.** The real 1.31 stalled at "Loading account from
+  server (1/5)" when the level name came before the board. With GServer13's order
+  (props, warp, raw-data size; the board frame; level name, level mod time,
+  leader) it went in. 1.32 to 1.39 take either order.
+* **1.21** was not run: its archive holds only an InstallShield setup. It takes
+  1.28 beta 2's props, without `UDPPORT` (it has no UDP).
+* **zlib level.** Every real build from 1.28 beta 2 to 1.39 compresses its frames
+  at zlib's best level (`78 DA`); Seihai's gen-2 frames use the default (`78 9C`).
+  Not changed here.
 
 ## 3.04 (Linux)
 
