@@ -4,8 +4,8 @@
 //! prop (17) stands for. See `documentation/other-players-looks.md`.
 
 use crate::assets::Gani;
-use crate::offline::OfflineSession;
-use crate::protocol::OtherPlayer;
+use crate::offline::{OfflineSession, HIDDEN_STATUS};
+use crate::protocol::{HidePose, OtherPlayer};
 
 /// Milliseconds a step of a looping GANI is shown when the step comes from
 /// the clock rather than from the sprite prop.
@@ -18,6 +18,20 @@ pub const STATUS_DEAD: u8 = 0x08;
 /// The walk step the 2.05 client sends for walk frames 0 to 7 as the sprite
 /// number S (1 to 5); its inverse picks the frame for an S.
 const WALK_S: [u8; 8] = [4, 5, 4, 3, 2, 1, 2, 3];
+
+/// The GANI prop (10) of another player, lower case, without `.gani`.
+fn gani_name(o: &OtherPlayer) -> Option<String> {
+    o.looks.gani.as_deref().map(|n| n.to_ascii_lowercase().trim_end_matches(".gani").to_string())
+}
+
+/// Another player is hidden under what they carry, and only the object is
+/// drawn, where they stand. The GANI prop says so (`hiddenstill` /
+/// `hidden`, as 2.22 sends), or the STATUS hidden bit (0x02) is set on a
+/// build that draws the hidden player that way ([`HidePose::Hidden`]).
+pub fn other_hidden(session: &OfflineSession, o: &OtherPlayer) -> bool {
+    matches!(gani_name(o).as_deref(), Some("hidden" | "hiddenstill"))
+        || (o.status.is_some_and(|s| s & HIDDEN_STATUS != 0) && session.mannerisms.hide == HidePose::Hidden)
+}
 
 /// The GANI and step to draw another player with, if Seihai has that pose
 /// loaded. `clock_ms` steps the GANIs prop 10 names.
@@ -34,8 +48,17 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
             return Some(dead);
         }
     }
-    if let Some(name) = o.looks.gani.as_deref() {
-        let named = match name.to_ascii_lowercase().trim_end_matches(".gani") {
+    // Hidden: `hidden` while the GANI prop walks, else `hiddenstill`. The
+    // stock files draw only the shadow; without them none, and the caller
+    // draws nothing of the figure (see `other_hidden`).
+    if other_hidden(session, o) {
+        return match gani_name(o).as_deref() {
+            Some("hidden") => looped(p.hidden.as_ref()),
+            _ => first(p.hiddenstill.as_ref(), 0),
+        };
+    }
+    if let Some(name) = gani_name(o) {
+        let named = match name.as_str() {
             "idle" => first(p.idle.as_ref(), 0),
             "walk" => looped(walk),
             "sword" => looped(p.sword.as_ref()),
@@ -43,6 +66,9 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
             "sit" => first(p.sit.as_ref(), 0),
             "sleep" => first(p.sleep.as_ref(), 0),
             "carrystill" => first(p.carrystill.as_ref(), 0),
+            // Picking up: without `lift.gani`, the carry pose it gives way
+            // to, as for the local player.
+            "lift" => looped(p.lift.as_ref()).or_else(|| first(p.carrystill.as_ref(), 0)),
             "carry" => looped(p.carry.as_ref()),
             "dead" => first(p.dead.as_ref(), usize::MAX),
             _ => None,
@@ -164,5 +190,73 @@ mod tests {
         o.status = Some(STATUS_DEAD);
         let plain = session();
         assert!(is(other_pose(&plain, &o, 0), plain.poses.idle.as_ref().unwrap(), 0));
+    }
+
+    #[test]
+    fn lift_plays_lift_or_falls_back_to_carrystill() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::CarryStill, gani(1));
+        assert!(is(other_pose(&s, &other(2, Some("lift")), 0), s.poses.carrystill.as_ref().unwrap(), 0), "no lift.gani: carrystill");
+        s.set_pose_gani(PoseKind::Lift, gani(3));
+        assert!(is(other_pose(&s, &other(2, Some("lift.gani")), 2 * OTHER_STEP_MS), s.poses.lift.as_ref().unwrap(), 2));
+    }
+
+    #[test]
+    fn a_hidden_player_draws_the_hidden_poses() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::CarryStill, gani(1));
+        s.set_pose_gani(PoseKind::Carry, gani(2));
+        s.set_pose_gani(PoseKind::HiddenStill, gani(1));
+        s.set_pose_gani(PoseKind::Hidden, gani(4));
+        // What 2.22 sends: hiddenstill with STATUS 22, S 18 (carry still).
+        let mut o = other(2 + 4 * 18, Some("hiddenstill"));
+        o.status = Some(22);
+        assert!(other_hidden(&s, &o));
+        assert!(is(other_pose(&s, &o, 0), s.poses.hiddenstill.as_ref().unwrap(), 0));
+        // Walking hidden: S 19, the hidden walk on the clock.
+        let mut o = other(2 + 4 * 19, Some("hidden"));
+        o.status = Some(22);
+        assert!(is(other_pose(&s, &o, 3 * OTHER_STEP_MS), s.poses.hidden.as_ref().unwrap(), 3));
+        // The bit alone, with a carry pose named: still hidden.
+        let mut o = other(2 + 4 * 18, Some("carrystill"));
+        o.status = Some(HIDDEN_STATUS);
+        assert!(is(other_pose(&s, &o, 0), s.poses.hiddenstill.as_ref().unwrap(), 0));
+        // Out again: the bit is clear, the carry pose is back.
+        o.status = Some(0x10);
+        assert!(!other_hidden(&s, &o));
+        assert!(is(other_pose(&s, &o, 0), s.poses.carrystill.as_ref().unwrap(), 0));
+    }
+
+    #[test]
+    fn hidden_without_its_ganis_draws_no_figure() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::CarryStill, gani(1));
+        let mut o = other(2 + 4 * 18, Some("hiddenstill"));
+        o.status = Some(22);
+        assert!(other_hidden(&s, &o));
+        assert!(other_pose(&s, &o, 0).is_none(), "not carrystill, not idle");
+    }
+
+    #[test]
+    fn the_bit_alone_follows_the_builds_hide_pose() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::CarryStill, gani(1));
+        let mut o = other(2 + 4 * 18, None);
+        o.status = Some(HIDDEN_STATUS);
+        s.set_mannerisms(crate::protocol::MANNER_139);
+        assert!(!other_hidden(&s, &o), "1.39 keeps the carry poses");
+        assert!(is(other_pose(&s, &o, 0), s.poses.carrystill.as_ref().unwrap(), 0));
+        s.set_mannerisms(crate::protocol::MANNER_222);
+        assert!(other_hidden(&s, &o));
+    }
+
+    #[test]
+    fn the_dead_bit_wins_over_hiding() {
+        let mut s = session();
+        s.set_pose_gani(PoseKind::Dead, gani(3));
+        s.set_pose_gani(PoseKind::HiddenStill, gani(1));
+        let mut o = other(2, Some("hiddenstill"));
+        o.status = Some(STATUS_DEAD | HIDDEN_STATUS);
+        assert!(is(other_pose(&s, &o, 0), s.poses.dead.as_ref().unwrap(), 2));
     }
 }

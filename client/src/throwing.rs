@@ -113,6 +113,12 @@ pub fn carry_origin(px: f32, py: f32) -> (f32, f32) {
     (px + 0.5, py - 1.375)
 }
 
+/// Where the object is drawn while its carrier hides under it (2.05 on):
+/// where the player stands.
+pub fn hide_origin(px: f32, py: f32) -> (f32, f32) {
+    (px + 0.5, py + 1.0)
+}
+
 /// The sprite carried for a lift-table entry, if the table has one for it.
 pub fn carry_sprite(kind: usize) -> Option<u16> {
     CARRY_SPRITES.get(kind).copied()

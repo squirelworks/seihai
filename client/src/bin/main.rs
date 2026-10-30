@@ -1172,6 +1172,11 @@ fn main() {
                     seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
                     continue;
                 }
+                // Hidden under the carried object without its GANIs: only
+                // the object, as for the local player.
+                if seihai::render::other_hidden(session, other) {
+                    continue;
+                }
                 let (Some((bw, b)), Some((hw, h))) = (&body, &head) else { continue };
                 draw_other_player(
                     &mut fb,
@@ -1191,11 +1196,13 @@ fn main() {
             }
         }
         // What other players hold over their heads (CARRYSPRITE), at the
-        // same place as our own carried object.
+        // same place as our own carried object; hidden under it, where they
+        // stand.
         if let Some(sp) = &sprites {
             for other in others {
                 if let Some(id) = other.carry {
-                    let (x, y) = seihai::throwing::carry_origin(other.x, other.y);
+                    let at_feet = seihai::render::other_hidden(session, other);
+                    let (x, y) = if at_feet { seihai::throwing::hide_origin(other.x, other.y) } else { seihai::throwing::carry_origin(other.x, other.y) };
                     let at = |v: f32| (v * 16.0).round() as i32;
                     seihai::render::draw_sprite(&mut fb, pose_sheet(sp), session.object_tables.as_ref(), id, at(x) - cam_x, at(y) - cam_y);
                 }
