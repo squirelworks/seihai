@@ -224,6 +224,9 @@ impl<'a> Lexer<'a> {
         let mut brace = 0i32;
         let start = self.pos;
         let mut depth = 0i32;
+        // Plain parentheses in text: a comma inside them does not end the
+        // argument (`@font@#s(a) (#v(x), #v(y))`). [inferred]
+        let mut paren = 0i32;
         let mut i = self.pos;
         // A whole argument in quotes may hold commas and semicolons.
         if self.b.get(i) == Some(&b'"') {
@@ -249,8 +252,13 @@ impl<'a> Lexer<'a> {
                 i += 1;
                 continue;
             }
-            if depth == 0 && brace == 0 && stops.contains(&c) {
+            if depth == 0 && brace == 0 && stops.contains(&c) && !(paren > 0 && matches!(c, b',' | b')')) {
                 break;
+            }
+            if depth == 0 && c == b'(' {
+                paren += 1;
+            } else if depth == 0 && c == b')' && paren > 0 {
+                paren -= 1;
             }
             if c == b'\n' {
                 self.line += 1;
