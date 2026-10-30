@@ -3281,6 +3281,17 @@ fn main() {
             looks_sent = Some(session.looks.clone());
             dirty = true;
         }
+        // A script set our chat (`setplayerprop #c,...` from a timeout and so
+        // on): it goes to the server as CURCHAT, as typed chat does, so the
+        // other players see it.
+        if let Some(t) = session.chat_out.take() {
+            if ui::script_say(&t, &mut my_chat, &mut my_chat_timer) {
+                if let Some(Err(e)) = conn.as_mut().map(|c| c.send_chat(&t)) {
+                    eprintln!("script chat send failed: {e}");
+                }
+            }
+            dirty = true;
+        }
         // Server NPCs a push, a pull or a script changed: the 2.05 client
         // sends the new X, Y and BLOCKFLAGS, at most every 100 ms, and the
         // server passes them on.

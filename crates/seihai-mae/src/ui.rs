@@ -351,6 +351,18 @@ pub fn own_say(state: &mut crate::protocol::SessionState, who: &str, text: &str,
     true
 }
 
+/// What a script setting the player's chat (`setplayerprop #c,...`) does on
+/// our side: the text becomes our bubble with a running clock, with no
+/// history entry, as the real client shows it. Returns whether it should go
+/// to the server as CURCHAT: only a change does, so a script that sets the
+/// same text every second does not send it every second.
+pub fn script_say(text: &str, bubble: &mut String, timer: &mut crate::chatlists::BubbleTimer) -> bool {
+    let changed = bubble != text;
+    *bubble = text.to_string();
+    *timer = if text.is_empty() { crate::chatlists::BubbleTimer::default() } else { crate::chatlists::BubbleTimer::start() };
+    changed
+}
+
 /// Screen position of a level point, given the camera origin in pixels.
 fn to_screen(x: f32, y: f32, cam: (i32, i32)) -> (i32, i32) {
     (
@@ -904,6 +916,21 @@ mod tests {
         let mut fb = Framebuffer::new(200, 80);
         draw_chat_overlay(&mut fb, &log, late, 1, &Input::default());
         assert!(lit(&fb, say), "scrolled back shows them too");
+    }
+
+    #[test]
+    fn script_chat_is_the_bubble_and_is_sent_once_per_change() {
+        let mut bubble = String::new();
+        let mut timer = crate::chatlists::BubbleTimer::default();
+        assert!(script_say("px 30 py 31", &mut bubble, &mut timer));
+        assert_eq!(bubble, "px 30 py 31");
+        // The clock runs: a script line is not held like a typed one.
+        assert!(timer.active() && !timer.is_held());
+        // The same text a second later is not sent again.
+        assert!(!script_say("px 30 py 31", &mut bubble, &mut timer));
+        assert!(script_say("px 32 py 31", &mut bubble, &mut timer));
+        assert!(script_say("", &mut bubble, &mut timer));
+        assert!(bubble.is_empty() && !timer.active());
     }
 
     #[test]
