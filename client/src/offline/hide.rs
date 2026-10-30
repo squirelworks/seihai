@@ -86,7 +86,7 @@ mod tests {
     fn carrying(kind: usize) -> OfflineSession {
         let mut s = OfflineSession::new();
         s.current_level = Some(crate::assets::Level::from_board(&[0u16; 64 * 64]));
-        s.tiletypes = Some(crate::assets::TileTypes { types: [0; 4096] });
+        s.tiletypes = Some(crate::assets::TileTypes::from_types([0; 4096]));
         s.player_x = 30.0;
         s.player_y = 30.0;
         s.carried = Some(Carried { kind, tiles: [[0, 0], [0, 0]] });

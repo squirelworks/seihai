@@ -671,7 +671,7 @@ mod tests {
     const FLOOR2: u16 = 7;
 
     fn types() -> TileTypes {
-        let mut t = TileTypes { types: [0; 4096] };
+        let mut t = TileTypes::from_types([0; 4096]);
         for id in [WALL, LEDGE_UP, LEDGE_LEFT] {
             t.types[id as usize] = 22;
         }
@@ -1089,7 +1089,7 @@ mod tests {
         let mut t = ObjectTables::default();
         t.ledges = [vec![190, 191, 4045, 4046], vec![212, 228, 563, 579, 4028, 4044], vec![185, 186, 4061, 4062], vec![273, 289, 4031, 4047]];
         t.blocks = vec![PUSH_BLOCK, PULL_BLOCK];
-        let mut types = TileTypes { types: [0; 4096] };
+        let mut types = TileTypes::from_types([0; 4096]);
         for id in t.ledges.iter().flatten().copied().chain(t.blocks.iter().flatten().flatten().copied()) {
             types.types[usize::from(id)] = 22;
         }

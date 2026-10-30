@@ -38,6 +38,7 @@ pub const FILES: &[(&str, &[u8])] = &[
     ("gani/hurt.gani", include_bytes!("../../../assets/default/gani/hurt.gani")),
     ("gani/idle.gani", include_bytes!("../../../assets/default/gani/idle.gani")),
     ("gani/sit.gani", include_bytes!("../../../assets/default/gani/sit.gani")),
+    ("gani/sleep.gani", include_bytes!("../../../assets/default/gani/sleep.gani")),
     ("gani/swim.gani", include_bytes!("../../../assets/default/gani/swim.gani")),
     ("gani/sword.gani", include_bytes!("../../../assets/default/gani/sword.gani")),
     ("gani/walk.gani", include_bytes!("../../../assets/default/gani/walk.gani")),

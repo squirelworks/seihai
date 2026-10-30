@@ -1100,6 +1100,20 @@ def sit_gani():
     return "\n".join(L)
 
 
+def sleep_gani():
+    # In bed the bed tile is the blanket: only the head is drawn, on the
+    # pillow (the player's y is the bed top row). No shadow and no body.
+    L = gani_header("sleep.gani: lying in bed, the head only (1 step)")
+    L += ["DEFAULTHEAD head0.png", ""]
+    L += [f"SPRITE {100 + dr} HEAD 0 {32 * dr} 32 32 head {n}" for dr, n in enumerate(("up", "left", "down", "right"))]
+    L += ["", "ANI"]
+    for dr in range(DIRS):
+        _, _, (hx, hy) = OFFSETS[dr]
+        L.append(f"{100 + dr} {hx} {hy}")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
 def carrystill_gani():
     L = gani_header("carrystill.gani: standing with an object held over the head (1 step)")
     L += ["DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
@@ -1394,7 +1408,7 @@ def write_all(out):
     save_png(im, p, os.path.join(out, "state.png"), 4, 16, True)
 
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
-                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
+                       ("sword", sword_gani()), ("sit", sit_gani()), ("sleep", sleep_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
                        ("carrystill", carrystill_gani()), ("carry", carry_gani())):
         open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(with_shields(with_hats(text), SHIELDS[name]) if name in SHIELDS else with_hats(text))
 

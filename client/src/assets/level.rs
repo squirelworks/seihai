@@ -467,9 +467,18 @@ pub enum TileKind {
 #[derive(Debug, Clone)]
 pub struct TileTypes {
     pub types: [u8; 4096],
+    /// Bed tops (`arrays.dat` array 5), sorted. Kept apart from `types`
+    /// because the bed top is also a wall there, and the client asks each
+    /// list on its own; a tile with type byte 4 is a bed top as well.
+    pub bed_tops: Vec<u16>,
 }
 
 impl TileTypes {
+    /// A table with these type bytes and no extra bed tops.
+    pub fn from_types(types: [u8; 4096]) -> Self {
+        TileTypes { types, bed_tops: Vec::new() }
+    }
+
     /// Load a text tiledefs file.
     /// Accepts either a flat comma-separated list or
     /// `index,x,y,type,name` rows.
@@ -512,7 +521,7 @@ impl TileTypes {
         if i < 4096 {
             return Err(format!("tiledefs short: {i} values"));
         }
-        Ok(TileTypes { types })
+        Ok(TileTypes::from_types(types))
     }
 
     /// Load a Graal `arrays.dat`. See [`Self::parse_arrays`].
@@ -607,13 +616,23 @@ impl TileTypes {
                 types[id] = TYPE_LAVA_FLOOR;
             }
         }
-        Ok(TileTypes { types })
+        let mut bed_tops: Vec<u16> = arrays.get(5).into_iter().flatten().filter(|&&id| id < 4096).map(|&id| id as u16).collect();
+        bed_tops.sort_unstable();
+        bed_tops.dedup();
+        Ok(TileTypes { types, bed_tops })
     }
 
     /// True if `id` is a chair tile (type 3): standing on it draws the sit
     /// pose.
     pub fn is_chair(&self, id: u16) -> bool {
         self.raw(id) == Some(TYPE_CHAIR)
+    }
+
+    /// True if `id` is the top half of a bed (type 4): the head on it with
+    /// both probes draws the sleep pose. The bottom half (type 5) is never
+    /// tested for that.
+    pub fn is_bed_top(&self, id: u16) -> bool {
+        self.raw(id) == Some(TYPE_BED_TOP) || self.bed_tops.binary_search(&id).is_ok()
     }
 
     /// The raw type byte for `id`, if the id is on the table.
@@ -689,6 +708,11 @@ mod tiletypes_tests {
         assert!(!t.is_chair(0) && !t.is_chair(9));
         assert_eq!([9, 10, 41].map(|id| t.raw(id)), [Some(TYPE_BED_TOP), Some(TYPE_BED_BOTTOM), Some(TYPE_HARD_WALL)]);
         assert_eq!(t.kind(9), TileKind::Open, "a bed is walkable");
+        // A bed top that is not passable (as in the 2.22 file) stays a wall
+        // and is still a bed top.
+        let t = TileTypes::parse_arrays(&arrays_blob(&[&[0], &[], &[], &[], &[], &[9], &[10]])).unwrap();
+        assert!(t.is_wall(9) && t.is_bed_top(9));
+        assert!(!t.is_bed_top(10) && !t.is_bed_top(0));
         // a file with fewer arrays has no chairs
         let t = TileTypes::parse_arrays(&arrays_blob(&[&[0, 8]])).unwrap();
         assert!(!t.is_chair(8));
@@ -781,7 +805,7 @@ mod tiletypes_tests {
 
     #[test]
     fn kind_follows_the_type_byte() {
-        let mut t = TileTypes { types: [0; 4096] };
+        let mut t = TileTypes::from_types([0; 4096]);
         t.types[1] = TYPE_WATER;
         t.types[2] = TYPE_LAVA;
         t.types[3] = 19;
