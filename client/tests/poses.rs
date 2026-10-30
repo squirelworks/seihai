@@ -452,6 +452,32 @@ fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
     assert_eq!(pose(&n).map(|p| p.0), Some(PoseKind::CarryStill));
 }
 
+#[test]
+fn s_again_during_a_swing_spins_with_the_has_spin_status() {
+    let mut s = session();
+    s.set_pose_gani(PoseKind::Spin, Gani::parse(&format!("SINGLEDIRECTION\nANI\n{}ANIEND\n", "1 0 0\n\n".repeat(13))).unwrap());
+    // Without the status a second press does nothing.
+    assert!(s.start_swing());
+    assert!(!s.start_swing());
+    assert_eq!(s.combat.spin_elapsed_ms(), None);
+    s.tick_combat(1000);
+    // With it: the swing is cut off and the spin plays its 13 ticks.
+    s.combat.set_has_spin(true);
+    assert!(s.start_swing());
+    s.tick_combat(50);
+    assert!(s.start_swing(), "the second press spins");
+    assert_eq!(s.combat.swing_frame(), None, "the swing is cut off");
+    assert_eq!(pose(&s), Some((PoseKind::Spin, 0)));
+    assert!(!s.start_swing(), "a press during the spin is ignored");
+    s.tick_combat(12 * 50);
+    assert_eq!(pose(&s), Some((PoseKind::Spin, 12)));
+    s.tick_combat(50);
+    assert_ne!(pose(&s).map(|p| p.0), Some(PoseKind::Spin));
+    // A press once the swing is over starts a plain swing.
+    assert!(s.start_swing());
+    assert!(s.combat.swing_frame().is_some());
+}
+
 // ---- per-build mannerisms ----------------------------------------------------
 
 #[test]

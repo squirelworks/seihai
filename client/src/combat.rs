@@ -531,10 +531,21 @@ pub struct CombatState {
     /// Knockback steps that came due in the ticks just run; the session
     /// takes them with [`CombatState::take_knock_steps`].
     knock_steps: Vec<(f32, f32)>,
+    /// The spin attack (mode 13) in progress: milliseconds in, and its
+    /// length in ticks.
+    spin: Option<(u64, u16)>,
+    /// The has-spin status (STATUS bit 0x40) is set.
+    has_spin: bool,
     /// Knockback steps per hit when the build differs from
     /// [`KNOCKBACK_TICKS`] (1.39: 4).
     knockback_ticks: Option<u16>,
 }
+
+/// The STATUS (18) bit that allows the spin attack.
+pub const HAS_SPIN_STATUS: u8 = 0x40;
+/// Ticks the spin lasts when no `spin.gani` gives its length (the stock
+/// file: 13 steps of one tick).
+pub const SPIN_TICKS: u16 = 13;
 
 /// One client tick, in milliseconds.
 const TICK_MS: u64 = crate::life::TICK_MS;
@@ -555,8 +566,10 @@ impl CombatState {
 
     /// Take the rules of another build. Ends a swing and a hurt in progress.
     pub fn set_rules(&mut self, rules: Option<CombatRules>) {
+        let has_spin = self.has_spin;
         let k = self.knockback_ticks;
         *self = CombatState::new(rules);
+        self.has_spin = has_spin;
         self.knockback_ticks = k;
     }
 
@@ -579,14 +592,38 @@ impl CombatState {
         (self.hurt_left > 0).then(|| u64::from(r.hurt_ticks - self.hurt_left.min(r.hurt_ticks)) * TICK_MS + self.hurt_acc_ms)
     }
 
-    /// Start the swing. False if the build has no combat rules or a swing
-    /// is already out.
+    /// Start the swing. False if the build has no combat rules, a swing is
+    /// already out or a spin is on.
     pub fn start_swing(&mut self) -> bool {
-        if self.rules.is_none() || self.swing.is_some() {
+        if self.rules.is_none() || self.swing.is_some() || self.spin.is_some() {
             return false;
         }
         self.swing = Some((0, 0));
         true
+    }
+
+    /// The server's STATUS has the has-spin bit (0x40), or not.
+    pub fn set_has_spin(&mut self, on: bool) {
+        self.has_spin = on;
+    }
+
+    /// A second S press during a swing, with the has-spin status: the swing
+    /// is cut off and the spin (mode 13) runs for `ticks`. Read live in
+    /// 2.05 rev 2 online (Graal_analysis `player-mannerisms-live.md`,
+    /// "Spin attack"): a press during the spin, or with no swing out, does
+    /// not start one.
+    pub fn start_spin(&mut self, ticks: u16) -> bool {
+        if !self.has_spin || self.swing.is_none() || self.spin.is_some() {
+            return false;
+        }
+        self.swing = None;
+        self.spin = Some((0, ticks.max(1)));
+        true
+    }
+
+    /// Milliseconds into the spin, or `None` when there is none.
+    pub fn spin_elapsed_ms(&self) -> Option<u64> {
+        self.spin.map(|(ms, _)| ms)
     }
 
     pub fn cancel_swing(&mut self) -> bool {
@@ -633,6 +670,10 @@ impl CombatState {
     pub fn tick(&mut self, ms: u64) -> bool {
         let Some(r) = self.rules else { return false };
         let before = self.sprite(0);
+        if let Some((ms0, len)) = self.spin {
+            let ms1 = ms0 + ms;
+            self.spin = (ms1 < u64::from(len) * TICK_MS).then_some((ms1, len));
+        }
         if let Some((i, acc)) = self.swing {
             let acc = acc + ms;
             let per = u64::from(r.swing_step_ticks.max(1)) * TICK_MS;
@@ -853,6 +894,11 @@ impl OfflineSession {
     pub fn start_swing(&mut self) -> bool {
         if self.life.is_dead() || self.in_water || self.sword_power == 0 || self.warp_pending.is_some() || self.carried.is_some() {
             return false;
+        }
+        // S again during a swing: the spin attack, if the status allows it.
+        let spin_len = self.poses.spin.as_ref().map_or(SPIN_TICKS, |g| g.total_ticks().max(1) as u16);
+        if self.combat.start_spin(spin_len) {
+            return true;
         }
         let started = self.combat.start_swing();
         if started {

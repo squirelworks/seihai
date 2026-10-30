@@ -915,7 +915,7 @@ fn main() {
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
     for name in [
         "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
-        "lift.gani", "hiddenstill.gani", "hidden.gani",
+        "lift.gani", "spin.gani", "hiddenstill.gani", "hidden.gani",
     ] {
         load_pose_gani(&resolver, &mut session, name);
     }
@@ -1708,6 +1708,7 @@ fn main() {
                 // Hearts, AP and STATUS the server gave.
                 if let Some(st) = net_state.own_status.take() {
                     status_base = st;
+                    session.combat.set_has_spin(st & seihai::combat::HAS_SPIN_STATUS != 0);
                 }
                 if let Some(g) = net_state.own_glove_power.take() {
                     session.glove_power = g;
@@ -2013,6 +2014,8 @@ fn main() {
             }
             // The swim stroke and the lift run on the tick, moving or not.
             dirty |= session.tick_poses(dt);
+            // The spin attack's pose changes every tick.
+            dirty |= session.combat.spin_elapsed_ms().is_some();
             // The hurt blink changes the picture every tick of hurt mode.
             dirty |= session.combat.is_hurt();
             // Push, grab and pull have their own sprite numbers.
