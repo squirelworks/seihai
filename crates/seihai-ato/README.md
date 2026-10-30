@@ -53,10 +53,25 @@ logged in at 127.0.0.1:14900 as lab (3.04)
 level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the server, 0 in the file)
 ```
 
+## Stage 3
+
+- `render`: the flat 2D fallback. It draws the level's tiles as
+  `seihai-mae` does (16-pixel tiles from `pics1.png`, from the asset
+  folder or the built-in sheet; the camera centred on the player's box;
+  chests from their records) and the player as a plain marker. The tile
+  maths is copied from mae, not shared, so the two lines stay apart.
+- `game`: after Start, the 640x480 window shows the level the server sent.
+  The arrow keys walk it with core's `OfflineSession::try_move`, which
+  gives the same pace, walls and water as mae.
+
+The walk is local: Ato does not send its position, because what a 3.x
+client sends while walking has not been captured. A link the player walks
+into is noted on the status bar and dropped.
+
 ## Not in yet
 
 The server list, offline mode, the post-login frame the real 3.x client
 sends once the board is in (file checks and props, which carry the
-nickname and language), walking, any level drawing, and the Torque UDP
-side. The clients' background images are not shipped,
+nickname and language), sending the walk, level changes, NPCs, other
+players, GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

@@ -134,8 +134,7 @@ impl StartWindow {
 
     /// The Start button. The real client stores the fields and opens the
     /// server list; Ato has no server list yet, so with `--online` it hands
-    /// the form over for a login at that server and the window closes.
-    /// Returns true when the window should close.
+    /// the form over for a login at that server. True when it did.
     pub fn press_start(&mut self) -> bool {
         let login = Login {
             account: self.account.clone(),
@@ -180,8 +179,11 @@ fn place(origin: egui::Pos2, r: Rect4) -> egui::Rect {
     egui::Rect::from_min_size(origin + egui::vec2(r.0, r.1), egui::vec2(r.2, r.3))
 }
 
-impl eframe::App for StartWindow {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+impl StartWindow {
+    /// Draw the window and take its input. True when Start handed the form
+    /// over (see [`Self::press_start`]).
+    pub fn show(&mut self, ctx: &egui::Context) -> bool {
+        let mut started = false;
         egui::CentralPanel::default().frame(egui::Frame::none().fill(egui::Color32::BLACK)).show(ctx, |ui| {
             let canvas = ui.max_rect().min;
             let origin = canvas + egui::vec2(PANEL.0, PANEL.1);
@@ -224,7 +226,7 @@ impl eframe::App for StartWindow {
                 self.press_get_account();
             }
             if button(ui, START_BUTTON, t.start) && self.press_start() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                started = true;
             }
 
             if !self.status.is_empty() {
@@ -232,21 +234,8 @@ impl eframe::App for StartWindow {
                 ui.put(place(origin, r), egui::Label::new(egui::RichText::new(&self.status).color(rgb(LABEL_FONT))));
             }
         });
+        started
     }
-}
-
-/// Open the start window and block until it is closed. Returns the form
-/// when Start closed it.
-pub fn run(window: StartWindow) -> Result<Option<Login>, String> {
-    let started = window.started.clone();
-    let title = format!("Graal {} (Seihai Ato)", window.version.label());
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([CANVAS.0, CANVAS.1]).with_resizable(false),
-        ..Default::default()
-    };
-    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(window)))).map_err(|e| e.to_string())?;
-    let login = started.lock().unwrap().take();
-    Ok(login)
 }
 
 #[cfg(test)]

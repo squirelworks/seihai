@@ -100,7 +100,7 @@ fn main() {
     let (line, profile) = pick(&args);
     if line == Line::Ato {
         let label = profile.map_or("3.x", |p| p.label);
-        eprintln!("seihai: {label} is a Torque / 3.x build; the 3.x path is not yet drawn");
+        eprintln!("seihai: {label} is a Torque / 3.x build; seihai-ato draws it with the flat 2D fallback (no Torque 3D yet)");
     }
     let bin = find_binary(line);
     if dry_run {
