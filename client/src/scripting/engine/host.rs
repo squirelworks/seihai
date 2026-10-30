@@ -232,7 +232,12 @@ impl SessionScripts {
     pub fn apply(&mut self, s: &mut OfflineSession) {
         for e in self.world.take_effects() {
             match e {
-                Effect::Message { text, .. } => s.last_message = Some(text),
+                Effect::Message { obj, text } => {
+                    if let Some(n) = self.level_npc(s, obj) {
+                        n.message = text.clone();
+                    }
+                    s.last_message = Some(text);
+                }
                 Effect::Say2 { text } => {
                     if s.reading.is_none() {
                         s.reading = Some(text);
