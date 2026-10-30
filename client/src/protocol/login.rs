@@ -191,6 +191,37 @@ pub fn login_props_message(info: &LoginInfo, own_props: &[u8], account: &str, ac
     m
 }
 
+/// The first `PLI_PLAYERPROPS` of a gen-2 build (1.33 to 1.39), sent once
+/// the first level has loaded: `NICKNAME` (0), `HEADGIF` (11), `COLORS`
+/// (13), `STATUS` (18), `ADDITFLAGS` (33). Live runs of 1.33 and 1.39
+/// (Graal_analysis `version-profiles/1.33-1.39.md`). Head, colours and
+/// status are copied from the server's own props as they came, so a
+/// numbered default head goes back as `c(number)`. The real clients also
+/// send `UDPPORT` (31) before `ADDITFLAGS`; as in
+/// [`login_props_message`], Seihai binds no UDP socket and leaves it out.
+pub fn classic_login_props_message(own_props: &[u8], account: &str, accepted: Option<&IdSet>) -> Vec<u8> {
+    let props = parse_player_props_in(own_props, false, accepted);
+    let mut m = vec![PLI_PLAYERPROPS + 0x20];
+    m.push(0x20);
+    gstring(&mut m, account);
+    for id in [11u8, 13, 18] {
+        if let Some(p) = props.iter().find(|p| p.id == id) {
+            m.push(id + 0x20);
+            m.extend(&p.raw);
+        }
+    }
+    m.extend([33 + 0x20, 0x20]);
+    m.push(b'\n');
+    m
+}
+
+/// Whether `version` sends [`classic_login_props_message`] once its first
+/// level has loaded: the gen-2 builds that can send `PLI_PLAYERPROPS`.
+pub fn sends_classic_login_props(version: super::ClientVersion) -> bool {
+    let p = version.profile();
+    p.protocol.encryption == super::EncryptionGen::Gen2 && p.protocol.pli.contains(PLI_PLAYERPROPS)
+}
+
 /// Decides when the post-login frame goes out: once, when the server's
 /// burst has ended (`PLO_LISTPROCESSES` seen). A build with no
 /// [`LoginInfo`], or one that cannot send ids 34 and 44, never sends it.
@@ -337,6 +368,22 @@ mod tests {
         assert_eq!(m, want);
         // TEXTCODEPAGE 1252 reads back as the capture's three bytes.
         assert_eq!(&m[m.len() - 4..m.len() - 1], &[0x20, 0x29, 0x84]);
+    }
+
+    #[test]
+    fn classic_login_props_are_nick_head_colours_status_additflags() {
+        use crate::protocol::ClientVersion;
+        let v = ClientVersion::V139;
+        let ids = v.profile().props.own.clone();
+        // A numbered default head (c(0+32)): it goes back as it came.
+        let own = [11 + 0x20, 0x20, 13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32, 18 + 0x20, 0x21];
+        let m = classic_login_props_message(&own, "acct", Some(&ids));
+        let mut want = vec![PLI_PLAYERPROPS + 0x20, 0x20, 0x24];
+        want.extend(b"acct");
+        want.extend([11 + 0x20, 0x20, 13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32, 18 + 0x20, 0x21, 33 + 0x20, 0x20, b'\n']);
+        assert_eq!(m, want);
+        assert!(sends_classic_login_props(ClientVersion::V133) && sends_classic_login_props(v));
+        assert!(!sends_classic_login_props(ClientVersion::V141) && !sends_classic_login_props(ClientVersion::V205));
     }
 
     #[test]
