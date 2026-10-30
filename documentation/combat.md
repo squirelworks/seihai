@@ -19,9 +19,10 @@ derived in item 7; `damage-respawn.md` has what is known and open.
   state (`CombatState`) and the session methods (`receive_all`,
   `receive_sword`, `receive_hurtplayer`, `start_swing`, `tick_combat`).
 - `VersionProfile.life.combat` (`CombatRules`, `COMBAT_205` in `profile.rs`):
-  the numbers. 2.05 and every later build have the row (later builds are an
-  inference, as for death); 1.33 to 2.04 have `None`. With `None` nothing is
-  decoded, judged or sent, and ids 40 and 46 count as unhandled.
+  the numbers. 2.00 to 2.05 have a row read in their own binaries (see
+  "2.00 to 2.04" below); later builds take the 2.05 row as an inference, as for
+  death. 1.33 to 1.42 have `None`: with `None` nothing is decoded, judged or
+  sent, and ids 40 and 46 count as unhandled.
 - `SessionState` notes each other player's SPRITE, STATUS, ALIGNMENT and
   SWORDPOWER (`OtherPlayer.sprite/status/ap/sword_power`), lists players
   whose props showed a swing (`swings`), and decodes ids 40 and 46 (`hits`).
@@ -181,6 +182,33 @@ The swing and hurt mode are shown with the player's own animations: the S key pl
   only sources would be script commands (`hitplayer`, `hitobjects`), and
   their argument meanings are not in the notes, so they stay "not applied"
   effects as before. A bomb or arrow sender is likewise not built.
+
+## 2.00 to 2.04
+
+Read in the 2.00, 2.01, 2.02, 2.03 and 2.04 binaries and compared with 2.05
+rev 2 (Graal_analysis `client-internals/combat-200-204.md`). Every one has the
+same swing frames, reach box, damage source (the attacker's SWORDPOWER in half
+hearts), prop 8 wire form and 40-tick hurt mode. The rows:
+
+| Build | Row | What differs from 2.05 |
+|---|---|---|
+| 2.03, 2.04 | `COMBAT_205` | nothing Seihai checks (2.03 keeps the no-kill flag on the player, and lacks 2.04's untraced per-player field test) |
+| 2.01, 2.02 | `COMBAT_201` | `sword_power_store: Raw6Bit`: the power is kept as is in 6 bits, so it reads 0 to 63 and a negative one wraps (63 for -1) instead of healing. The wrap is inferred from the store's mask |
+| 2.00 | `COMBAT_200` | as 2.01, plus `packet_victim_gates: false` (id 40 skips the AP 100 and no-kill tests) and `judge_throttle: false` (no once-a-second stamp anywhere); 2.00 has no id 46 |
+
+Not modelled, because Seihai does not check them for any build: 2.00 has no
+kick test and no `playerhurt` event; its sword judge needs a play state of
+exactly 0 (no sparring-zone exception).
+
+**No death row yet.** 2.00 to 2.04 still have `death: None`: their death
+sequence was not traced. A hit that takes the last heart leaves the player at 0
+hearts, refused by further hits (hearts 0 counts as dead), with no death, claim
+or respawn.
+
+**The once-a-second stamp.** The same read found the per-attacker stamp only
+on the hurt packet path, in every build up to 2.05 rev 2; it was not found in
+the sword judge. Seihai still applies `judge_throttle` to swords in 2.01 and
+later (unchanged here; open).
 
 ## Placeholders and open points
 
