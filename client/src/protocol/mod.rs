@@ -37,7 +37,7 @@ pub use props::{
     decode_pos_precise, encode_pos_classic, encode_pos_precise, parse_player_props, parse_player_props_in, parse_player_props_with, PlayerProp,
 };
 pub use profile::{
-    by_label, profile, Basis, BuiltIn, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol,
+    by_label, profile, Basis, BuiltIn, ChatFace, ChatText, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol,
     ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
     PROFILES, SUPPORTED_LIST_PORT,
 };

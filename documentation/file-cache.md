@@ -74,13 +74,23 @@ written into the user's asset folder and never into the built-in set.
 ### The cache in the Seihai folder (laundry list P2, 2026-10-29)
 
 A second cache sits next to the program: `<Seihai folder>/_cache/<host>_<port>/`,
-where the Seihai folder is the folder the program file is in. It is named by
-the key only (no `~name`) and has the same inside layout as the settings'
-cache. It is searched **before** the settings' cache, and every download is
-written to **both**, so a fresh run from the same folder finds what the last
-one received. The settings' cache stays as the second copy. When one of the two
-cannot be written (a Seihai folder without write access), the other copy is
-kept and the download does not fail. A server warp switches both.
+where the Seihai folder is the folder the program file is in (for a
+`cargo build --release`, `target/release/`). It is named by the key only (no
+`~name`) and has the same inside layout as the settings' cache. It is searched
+**before** the settings' cache, and it is **where downloads go**, so a fresh
+run from the same folder finds what the last one received.
+
+The settings' cache (`<settings dir>/cache`) is still searched, so what older
+runs saved there is found and offered to the server with its time, but it is
+no longer written by default (laundry 2026-10-30, item 7: downloads kept
+landing in `~/.config/seihai/cache`). It is written only
+
+* as a **copy**, when the user named a cache folder (`--cache-dir` or
+  `cache_dir=`): then every download goes to both, as before, or
+* **instead**, when the Seihai folder's cache cannot be written (no write
+  access, or the program's folder is unknown).
+
+A server warp switches both.
 
 Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): the first run saved
 `onlinestartlocal.nw` and `server.txt` in both caches. With the settings' cache
@@ -154,6 +164,38 @@ server is asked, and no mod time is ever sent for it.**
   them a built-in-only file is `WANTFILE` too (every build has 23).
 * For the pre-2.1 builds that give no mod time in the file reply the cache copy
   gets the download time (as before).
+
+### Base files asked for when only the built-in set has them (2026-10-30)
+
+The real client ships its base files (`pics1.png`, `sprites.png`,
+`state.png`, `letters.png`, `body.png`, `head0.png`, `sword1.png`,
+`shield1.png`, the pose and motion GANIs, the step, sword and water sounds) and
+never asks a server for them. A Seihai run with no Graal folder has only its
+built-in stand-ins, and on a server with its own tiles the built-in sheet draws
+the level as the purple/black "unassigned" checker.
+
+So Seihai goes beyond the real client here, as a fallback only
+(`FileSession::request_base_files`, `BASE_FILES`):
+
+* Right after login (and after a server warp), for each base file that **no
+  layer but the built-in set** has (or no layer at all), it sends `WANTFILE`
+  with the build's image extension. `pics1` goes first.
+* A base file in the user's folder or in the cache is **not asked about at
+  all**, not even with `UPDATEFILE`. With a full Graal folder the wire is the
+  same as before. A cached copy from an earlier run is used as it is.
+* The requests share the normal four-at-a-time `WANTFILE` window, so the
+  level's own image requests wait behind them until the server answers.
+* What arrives is saved in the cache like any download and drawn from then on:
+  the tile sheet, player, sprite, status and sign sheets are swapped in place
+  (`reload_base_art` in `main.rs`), GANIs and sounds reload as before. A new
+  sheet drops the built-in tile types (they describe only the built-in sheet);
+  a `tiledefs.txt` or `arrays.dat` in the user's folder or the cache is used
+  instead when there is one. Without one there are no walls.
+* `FILESENDFAILED`, or no reply, leaves the built-in file in use. GServer-v2
+  (`TPlayer::sendFile`) answers every `WANTFILE` with the file or
+  `FILESENDFAILED`, searching only its own file system (the world folder and
+  `foldersconfig.txt`). Before 2.14 it fails any file over 64000 bytes (no
+  large-file packets), so a 2.05 client gets no real `pics1.png` from it.
 
 ### The first-step files (decision of 2026-10-25, t122u)
 

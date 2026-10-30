@@ -397,6 +397,46 @@ pub struct LinkStart {
     pub cached_mod_time: Option<u32>,
 }
 
+/// The arrival of a link the client asked for, held until the server names
+/// the destination. It is kept by the destination's name, not by the warp:
+/// a level the server has to load or send in full can arrive after the
+/// pending warp was given up (the player may walk again by then), and the
+/// server still put the player at the requested position. A different level
+/// named first (the server warped the player elsewhere) drops it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkArrival {
+    pub dest: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl LinkArrival {
+    pub fn new(dest: &str, (x, y): (f32, f32)) -> Self {
+        Self { dest: dest.to_string(), x, y }
+    }
+
+    /// The level `entered` is now the current one: the held position if it
+    /// is the link's destination. Either way nothing stays held.
+    pub fn take_for(held: &mut Option<Self>, entered: &str) -> Option<(f32, f32)> {
+        let a = held.take()?;
+        same_level_name(&a.dest, entered).then_some((a.x, a.y))
+    }
+}
+
+/// Level names as the server and the links write them: no case, and a
+/// name without an extension is the `.nw` one.
+fn same_level_name(a: &str, b: &str) -> bool {
+    let norm = |s: &str| {
+        let s = s.trim().to_ascii_lowercase();
+        if s.contains('.') {
+            s
+        } else {
+            format!("{s}.nw")
+        }
+    };
+    norm(a) == norm(b)
+}
+
 /// Ask the server for a level change the client started: a level link the
 /// player walked into, or a level script's `setlevel` / `setlevel2`. Both
 /// use the same request (see [`link_request_frame`]); the server's answer
@@ -1258,6 +1298,19 @@ mod tests {
         let mut body = vec![0u8; u16::from_be_bytes(len) as usize];
         s.read_exact(&mut body).unwrap();
         zlib_decompress(&body).unwrap()
+    }
+
+    /// A link's arrival is applied when its destination is named, however
+    /// late, and in any case or without the extension; another level drops it.
+    #[test]
+    fn link_arrival_is_held_by_the_destination_name() {
+        let mut held = Some(LinkArrival::new("westocean_n-17.nw", (30.0, 2.0)));
+        assert_eq!(LinkArrival::take_for(&mut held, "WestOcean_n-17"), Some((30.0, 2.0)));
+        assert_eq!(held, None, "applied once");
+        let mut held = Some(LinkArrival::new("house.nw", (12.0, 3.0)));
+        assert_eq!(LinkArrival::take_for(&mut held, "onlinestartlocal.nw"), None);
+        assert_eq!(held, None, "a warp elsewhere drops it");
+        assert_eq!(LinkArrival::take_for(&mut None, "house.nw"), None);
     }
 
     #[test]

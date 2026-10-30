@@ -57,11 +57,28 @@ struct Parser<'a> {
     diags: Vec<Diag>,
     depth: usize,
     len: usize,
+    /// Names the script defines with `function`, so `move();` calls the
+    /// script's own `move` rather than the command.
+    funcs: Vec<String>,
 }
 
 impl<'a> Parser<'a> {
     fn new(src: &'a str, era: Era) -> Self {
-        Parser { lx: Lexer::new(src), peeked: None, era, diags: Vec::new(), depth: 0, len: src.len() }
+        let mut funcs = Vec::new();
+        let mut lx = Lexer::new(src);
+        let mut after_function = false;
+        loop {
+            match lx.next().tok {
+                Tok::Eof => break,
+                Tok::Ident(w) if after_function => {
+                    funcs.push(w);
+                    after_function = false;
+                }
+                Tok::Ident(w) => after_function = w == "function",
+                _ => after_function = false,
+            }
+        }
+        Parser { lx: Lexer::new(src), peeked: None, era, diags: Vec::new(), depth: 0, len: src.len(), funcs }
     }
 
     fn peek(&mut self) -> &Spanned {
@@ -84,6 +101,17 @@ impl<'a> Parser<'a> {
             self.lx.pos = t.start;
             self.lx.line = t.line;
         }
+    }
+
+    /// Whether the token after the peeked one is `op`. Reads nothing.
+    fn second_is_op(&mut self, op: &str) -> bool {
+        self.peek();
+        let saved = (self.lx.clone(), self.peeked.clone());
+        self.next();
+        let r = self.is_op(op);
+        self.lx = saved.0;
+        self.peeked = saved.1;
+        r
     }
 
     fn line(&mut self) -> u32 {
@@ -349,21 +377,47 @@ impl<'a> Parser<'a> {
     fn name_stmt(&mut self, w: String, line: u32, start: usize) -> Option<Stmt> {
         let nxt = self.peek().tok.clone();
         let assigns = matches!(nxt, Tok::Op("=" | "+=" | "-=" | "*=" | "/=" | "++" | "--" | "["));
-        if !assigns {
+        let paren = matches!(nxt, Tok::Op("("));
+        // `name(...)` calls the script's own function of that name, even
+        // one named like a command (`move();`, `hurt();` in baddy scripts).
+        let own = paren && self.funcs.contains(&w);
+        if !assigns && !own {
             if let Some(cmd) = vocab::command_in(&w, self.era) {
+                // `hideimgs();`: a command with empty parentheses and no
+                // function of that name is the command with no arguments.
+                if paren && self.second_is_op(")") {
+                    self.next();
+                    self.next();
+                    self.end_stmt();
+                    return Some(Stmt::Command { name: cmd.name.to_string(), args: Vec::new(), line });
+                }
                 return Some(self.command(cmd, line));
             }
         }
         if assigns {
             let target = self.var_tail(w);
             let s = self.assign_tail(target);
-            self.end_stmt();
+            // `this.a = {1,2,3}` with no `;` after the `}` (the hookshot
+            // and Q-menu weapons): the list's `}` ends the statement.
+            let list = matches!(&s, Stmt::Assign { value: Expr::List(_), .. });
+            if !(list && !self.is_op(";")) {
+                self.end_stmt();
+            }
             return Some(s);
         }
-        if matches!(nxt, Tok::Op("(")) {
+        if paren {
+            let saved = (self.lx.clone(), self.peeked.clone(), self.diags.len());
             let args = self.call_args(&w);
-            self.end_stmt();
-            return Some(Stmt::Call { name: w, args });
+            if !(self.diags.len() == saved.2 && self.is_op(",")) {
+                self.end_stmt();
+                return Some(Stmt::Call { name: w, args });
+            }
+            // `name (...),`: not a call but an unknown command whose text
+            // starts with `(` (`addguildmember (guildname),#t(1),#t(2);`).
+            // Kept as text below.
+            self.lx = saved.0;
+            self.peeked = saved.1;
+            self.diags.truncate(saved.2);
         }
         // Scripts taken from level files often run the first argument into
         // the command name (`hurt1;`, `shootarrowdown;`). Accept that when
@@ -566,6 +620,10 @@ impl<'a> Parser<'a> {
                 Tok::Op("/") => (BinOp::Div, 7, false),
                 Tok::Op("%") => (BinOp::Mod, 7, false),
                 Tok::Op("^") => (BinOp::Pow, 8, true),
+                // `300++this.i` (a balloon game's showimg index): `+` and a
+                // unary `+`. Statements read `x++` before this point.
+                Tok::Op("++") => (BinOp::Add, 6, false),
+                Tok::Op("--") => (BinOp::Sub, 6, false),
                 _ => break,
             };
             if prec < min {
@@ -573,6 +631,10 @@ impl<'a> Parser<'a> {
             }
             self.next();
             let rhs = self.binary(if right { prec } else { prec + 1 });
+            let rhs = match t {
+                Tok::Op("--") => Expr::Unary(UnOp::Neg, Box::new(rhs)),
+                _ => rhs,
+            };
             lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
         }
         lhs
@@ -626,6 +688,14 @@ impl<'a> Parser<'a> {
             if !self.eat_op("|") && !self.eat_op(">") {
                 // Unclosed range: stop at the next token that is not part of it.
             }
+            Expr::InRange { e, lo, hi }
+        } else if self.era >= Era::V21 && self.eat_op("<") {
+            // `in <lo,hi>` (2.1 and later): the GS2 grammar of the public
+            // GServer reads it as the same range as `|lo,hi|`.
+            let lo = Box::new(self.binary(4));
+            self.expect_op(",");
+            let hi = Box::new(self.binary(6));
+            self.expect_op(">");
             Expr::InRange { e, lo, hi }
         } else if self.eat_op("{") {
             let mut list = Vec::new();
@@ -691,7 +761,8 @@ impl<'a> Parser<'a> {
                 self.next();
                 let mut list = Vec::new();
                 while !self.is_op("}") && !matches!(self.peek().tok, Tok::Eof) {
-                    list.push(self.expr());
+                    // `{0x2, ,0x2A5}`: an empty entry is 0 and keeps its place.
+                    list.push(if self.is_op(",") { Expr::Num(0.0) } else { self.expr() });
                     if !self.eat_op(",") {
                         break;
                     }
@@ -732,9 +803,17 @@ impl<'a> Parser<'a> {
         loop {
             if kinds.get(args.len()) == Some(&ArgKind::Text) {
                 self.unpeek();
-                let raw = self.lx.raw_arg(b",)");
+                // The last text argument runs to the `)`, commas included,
+                // as a command's last text argument does
+                // (`playersays(0,buy tank1)`). [inferred]
+                let last = args.len() + 1 == kinds.len();
+                let raw = self.lx.raw_arg(if last { b")" } else { b",)" });
                 let quoted = self.lx.last_quoted;
                 args.push(text_arg(&raw, quoted, self.era));
+            } else if self.is_op(",") || self.is_op(")") {
+                // An empty argument (`textwidth(1,arial,,text)`) is 0, as an
+                // empty number argument of a command is.
+                args.push(Expr::Num(0.0));
             } else {
                 args.push(self.expr());
             }
@@ -869,7 +948,7 @@ mod tests {
         assert_eq!(g("this.a = {1, x+1};"), "(= this.a (list 1 (+ x 1)))\n");
         assert_eq!(g("x = (a>1)?2:3;"), "(= x (? (> a 1) 2 3))\n");
         assert_eq!(g("changeimgvis 300+i,(i==0)?4:5;"), "(cmd changeimgvis (+ 300 i) (? (== i 0) 4 5))\n");
-        assert_eq!(g("with (getnpc(db)) { x = 1; }"), "(with (call getnpc db) (block (= x 1)))\n");
+        assert_eq!(g("with (getnpc(db)) { x = 1; }"), "(with (call getnpc \"db\") (block (= x 1)))\n");
         // An empty number argument is 0, in every version.
         assert_eq!(g("seteffect ,,,;"), "(cmd seteffect 0 0 0)\n");
         assert!(parse("seteffect ,,,;", Era::V205).diagnostics.is_empty());
@@ -891,6 +970,33 @@ mod tests {
         // The 2.05 comparison table's other spellings.
         assert_eq!(g("if (a <> b) hide;"), "(if (!= a b) (cmd hide))\n");
         assert_eq!(g("if (a => b && c =< d) hide;"), "(if (&& (>= a b) (<= c d)) (cmd hide))\n");
+    }
+
+    #[test]
+    fn stress_set_forms_of_2026_10_30() {
+        // A command with empty parentheses is the command; a script's own
+        // function of that name is called instead.
+        assert_eq!(g("hideimgs();"), "(cmd hideimgs)\n");
+        assert_eq!(g("function move() { x = 1; }\nmove();"), "(fn move () (= x 1))\n(call move)\n");
+        assert_eq!(g("move();\nfunction move() { }"), "(call move)\n(fn move ())\n");
+        // `in <lo,hi>` (2.1 and later), the same range as `|lo,hi|`.
+        assert_eq!(g("if (x in <1,a+2> && y) hide;"), "(if (&& (in x range 1 (+ a 2)) y) (cmd hide))\n");
+        assert!(!parse("if (x in <1,2>) hide;", Era::V205).diagnostics.is_empty());
+        // Empty entries of a list keep their place; a list's `}` ends its
+        // statement.
+        assert_eq!(g("a = {1, ,2};"), "(= a (list 1 0 2))\n");
+        assert_eq!(g("a = {1,2}\nfunction f() { }"), "(= a (list 1 2))\n(fn f ())\n");
+        // An empty argument of a call is 0; a last text argument keeps its commas.
+        assert_eq!(g("w = textwidth(1,arial,,x);"), "(= w (call textwidth 1 arial 0 x))\n");
+        assert_eq!(g("if (playersays(0,buy tank1)) hide;"), "(if (call playersays \"0,buy tank1\") (cmd hide))\n");
+        // `with` targets read their name as text.
+        assert_eq!(g("with (getnpc(House-Control#v(h))) { }"), "(with (call getnpc \"House-Control#v(h)\") (block))\n");
+        // `a ++ b` between two values.
+        assert_eq!(g("x = 300++i;"), "(= x (+ 300 i))\n");
+        // A comma inside plain parentheses stays in the text.
+        assert_eq!(g("showimg 5,@a@#s(l) (#v(x), #v(y)),1,2;"), "(cmd showimg 5 \"@a@#s(l) (#v(x), #v(y))\" 1 2)\n");
+        // An unknown command whose text starts with `(`.
+        assert!(parse("addguildmember (g),#t(1),#t(2);", Era::V21).diagnostics.is_empty());
     }
 
     #[test]

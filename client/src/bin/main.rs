@@ -99,6 +99,88 @@ fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
     seihai::render::Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 }
 }
 
+/// The pictures the view is drawn with that every install has: the tile
+/// sheet and the player, sprite, status and sign sheets.
+struct BaseArt {
+    sheet: Vec<u8>,
+    sw: u32,
+    sh: u32,
+    builtin_sheet: bool,
+    body: Option<(u32, Vec<u8>)>,
+    head: Option<(u32, Vec<u8>)>,
+    sprites: Option<(u32, Vec<u8>)>,
+    sword: Option<(u32, Vec<u8>)>,
+    state: Option<(u32, Vec<u8>)>,
+    letters: Option<(u32, Vec<u8>)>,
+}
+
+/// A file the server sent may be its copy of one of [`BaseArt`]'s
+/// pictures (asked for by `FileSession::request_base_files`): draw with it
+/// from now on. A new tile sheet takes the tile types that go with it, or
+/// none: the built-in table describes only the built-in sheet. Returns
+/// whether anything changed.
+fn reload_base_art(
+    name: &str,
+    files: &FileSession,
+    resolver: &AssetResolver,
+    session: &mut OfflineSession,
+    art: &std::cell::RefCell<BaseArt>,
+) -> bool {
+    let Some((seihai::filecache::BaseKind::Image(_), stem)) = seihai::filecache::base_file_of(name) else { return false };
+    let Some(data) = files.store.read(name) else { return false };
+    let mut art = art.borrow_mut();
+    if stem == "pics1" {
+        match read_png_rgb(&data) {
+            Ok((w, h, px)) => {
+                (art.sw, art.sh, art.sheet, art.builtin_sheet) = (w, h, px, false);
+                eprintln!("tiles: {name} from the server");
+            }
+            Err(e) => {
+                eprintln!("{name} from the server not read: {e}");
+                return false;
+            }
+        }
+        match resolver.tile_types() {
+            Some((p, _)) if resolver.layer_of(&p) == Some(Layer::Builtin) => {
+                session.tiletypes = None;
+                session.refresh_water();
+                eprintln!("tile types: none (the built-in table is for the built-in sheet)");
+            }
+            Some((p, TileTypesFile::Text)) => {
+                let _ = session.load_tiletypes(p);
+            }
+            Some((p, TileTypesFile::ArraysDat)) => {
+                let _ = session.load_tiletypes_arrays(p);
+            }
+            None => {
+                session.tiletypes = None;
+                session.refresh_water();
+            }
+        }
+        return true;
+    }
+    let slot = match stem {
+        "body" => &mut art.body,
+        "head0" => &mut art.head,
+        "sprites" => &mut art.sprites,
+        "sword1" => &mut art.sword,
+        "state" => &mut art.state,
+        "letters" => &mut art.letters,
+        _ => return false,
+    };
+    match read_png_rgba(&data) {
+        Ok((w, _, px)) => {
+            *slot = Some((w, px));
+            eprintln!("{name} from the server");
+            true
+        }
+        Err(e) => {
+            eprintln!("{name} from the server not read: {e}");
+            false
+        }
+    }
+}
+
 /// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
 /// first layer that has it. A missing file leaves the plain idle figure.
 fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
@@ -424,8 +506,9 @@ fn main() {
                 println!("                             from the built-in default set; with no folder the");
                 println!("                             built-in set is all there is, and offline starts in");
                 println!("                             new1.nw");
-                println!("         --cache-dir <dir>   where per-server download caches live (default:");
-                println!("                             <settings dir>/cache; settings file: cache_dir=)");
+                println!("         --cache-dir <dir>   also keep a copy of each download here (downloads go to");
+                println!("                             _cache/ next to the program; without this the old");
+                println!("                             <settings dir>/cache is only read; settings file: cache_dir=)");
                 println!("                             search order: server cache, --assets, built-in set");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
@@ -835,10 +918,18 @@ fn main() {
         .with_builtin_levels(online.is_none());
     // What to ask the server for, and where downloads are saved (the cache).
     let mut files = FileSession::new(resolver.clone(), settings.save_downloads_with(cli_save_downloads));
+    // Downloads go to the Seihai folder's `_cache`. The settings' cache is
+    // still searched (what older runs saved there); it gets a copy only when
+    // the user named it, and takes the download when `_cache` is unavailable.
+    let settings_copy = cli_cache_dir.is_some() || settings_now.cache_dir.is_some();
+    files.store.set_settings_copy(settings_copy);
     if let Some(a) = online.as_deref() {
         files.store.set_cache_meta(Some(seihai::servercache::meta_text(a, server_name(a).as_deref())));
-        for d in game_cache_dir.iter().chain(cache_dir.iter()) {
-            eprintln!("download cache: {}", d.display());
+        match (&game_cache_dir, &cache_dir) {
+            (Some(g), Some(c)) if settings_copy => eprintln!("download cache: {} (copy in {})", g.display(), c.display()),
+            (Some(g), _) => eprintln!("download cache: {}", g.display()),
+            (None, Some(c)) => eprintln!("download cache: {}", c.display()),
+            (None, None) => {}
         }
     }
     // A fresh install with no folder of its own starts offline in the built-in level.
@@ -850,6 +941,11 @@ fn main() {
     let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
     if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
         send_file_msgs(conn.as_mut(), files.need("idle.gani"));
+    }
+    // The files every install has that we have only as stand-ins: ask the
+    // server for its copies (a fallback the real client has no need of).
+    if conn.is_some() {
+        send_file_msgs(conn.as_mut(), files.request_base_files());
     }
 
     // Sound effects: optional. With no sounds folder, no audio device, or
@@ -895,8 +991,6 @@ fn main() {
             None => "unknown",
         }
     );
-    // The open-chest art swap is for our own sheet only.
-    let view_opts = seihai::render::ViewOptions { builtin_sheet: resolver.layer_of(&sheet_path) == Some(Layer::Builtin) };
     let sheet_data = match std::fs::read(&sheet_path) {
         Ok(d) => d,
         Err(e) => {
@@ -980,16 +1074,46 @@ fn main() {
     let state_sheet = load("", "state.png");
     // The sign panel's frame and font; without it, the plain text panel.
     let letters_sheet = load("", "letters.png");
+    // The chat font of this version (see render::chattext): the game
+    // folders first (2.x ship tempsitc.ttf), then the system's fonts.
+    let chat_font = {
+        let dirs: Vec<std::path::PathBuf> = resolver.user_root().into_iter().chain(resolver.builtin_root()).map(|r| r.root.clone()).collect();
+        let f = seihai::render::chattext::ChatFont::find(profile.ui.chat_text, &dirs);
+        match &f {
+            Some(f) => eprintln!("chat font: {}", f.path.display()),
+            None => eprintln!("chat font: none found for {:?}; using the built-in letters", profile.ui.chat_text.face),
+        }
+        f
+    };
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
+    // Replaced in place when the server sends its copy of one.
+    let base_art = std::cell::RefCell::new(BaseArt {
+        sheet,
+        sw,
+        sh,
+        builtin_sheet: sheet_layer == Some(Layer::Builtin),
+        body,
+        head,
+        sprites,
+        sword: sword_sheet,
+        state: state_sheet,
+        letters: letters_sheet,
+    });
     let draw = |session: &OfflineSession,
                 others: &[seihai::protocol::OtherPlayer],
                 my_chat: &str,
+                my_nick: Option<&str>,
                 npc_imgs: &HashMap<String, (u32, Vec<u8>)>,
                 item: Option<&str>|
      -> Framebuffer {
-        let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
+        let art = base_art.borrow();
+        let (sheet, sw, sh) = (&art.sheet, art.sw, art.sh);
+        // The open-chest art swap is for our own sheet only.
+        let view_opts = seihai::render::ViewOptions { builtin_sheet: art.builtin_sheet };
+        let (body, head, sprites, sword_sheet, state_sheet) = (&art.body, &art.head, &art.sprites, &art.sword, &art.state);
+        let mut fb = seihai::render::render_view_with(session, sheet, sw, sh, view_w, view_h, view_opts);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
@@ -1124,8 +1248,11 @@ fn main() {
             seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
-        ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
-        ui::draw_bubble(&mut fb, my_chat, dx, dy);
+        ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
+        ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
+        if let Some(nick) = my_nick {
+            seihai::render::chattext::draw_nick_text(&mut fb, chat_font.as_ref(), nick, session.alignment, dx, dy);
+        }
         match &state_sheet {
             Some(st) => seihai::render::hud::draw_hud(
                 &mut fb,
@@ -1177,7 +1304,11 @@ fn main() {
     let mut weapon_bar = seihai::weaponbar::WeaponBar::default();
     let mut weapon_asked: HashSet<String> = HashSet::new();
     let mut weapon_recheck = true;
-    let mut scene = draw(&session, &[], &my_chat, &npc_images, None);
+    // Our own nickname shows for 60 frames after the start, a change of our
+    // AP and a typed `showname` (2.05); other players' always shows.
+    let mut my_name_timer = seihai::chatlists::BubbleTimer::start();
+    let mut my_name_ap = session.alignment;
+    let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None);
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
@@ -1289,8 +1420,9 @@ fn main() {
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
     let mut hearts_repair_sent = false;
-    // Where a cached level link (PLI 30) lands the player; see the link send.
-    let mut link_arrival: Option<(f32, f32)> = None;
+    // Where our own link request lands the player, held by the destination's
+    // name until the server names that level (see `LinkArrival`).
+    let mut link_arrival: Option<seihai::net::LinkArrival> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -1383,6 +1515,9 @@ fn main() {
                         send_file_msgs(conn.as_mut(), got.send);
                         weapon_recheck |= !got.written.is_empty();
                         for name in &got.written {
+                            if reload_base_art(name, &files, &resolver, &mut session, &base_art) {
+                                dirty = true;
+                            }
                             // A neighbour's file (gmap) is not the current level.
                             let is_current = net_state
                                 .current_level_name()
@@ -1578,7 +1713,14 @@ fn main() {
                 // A cached link gets no PLO_PLAYERWARP, and GServer-v2 sends
                 // none for a plain level either (only the level). The
                 // server's, if it did send one, wins.
-                if let Some((x, y)) = link_arrival.take_if(|_| entered) {
+                // The level may arrive after the warp was given up (a level
+                // the server sends in full can be slow): the arrival is held
+                // by name, not by the pending warp.
+                let arrival = match (entered, net_state.current_level_name()) {
+                    (true, Some(n)) => seihai::net::LinkArrival::take_for(&mut link_arrival, &n),
+                    _ => None,
+                };
+                if let Some((x, y)) = arrival {
                     net_state.player_x.get_or_insert(x);
                     net_state.player_y.get_or_insert(y);
                 }
@@ -2155,7 +2297,7 @@ fn main() {
                     ) {
                         Ok(Some(started)) => {
                             warp_since = Some(Instant::now());
-                            link_arrival = started.arrival;
+                            link_arrival = started.arrival.map(|a| seihai::net::LinkArrival::new(&dest, a));
                             script_warp_sent = true;
                         }
                         // Another warp is pending: nothing more to do.
@@ -2285,7 +2427,7 @@ fn main() {
                         ) {
                             Ok(Some(started)) => {
                                 warp_since = Some(Instant::now());
-                                link_arrival = started.arrival;
+                                link_arrival = started.arrival.map(|a| seihai::net::LinkArrival::new(&dest, a));
                             }
                             Ok(None) => {}
                             Err(_) => conn = None,
@@ -2354,11 +2496,12 @@ fn main() {
                 }
             }
         }
-        // A warp the server never answers is given up after a few seconds.
+        // A warp the server never answers is given up after a few seconds:
+        // the player may walk again. The link's arrival stays held, so a
+        // level that still comes lands the player where the link said.
         if warp_since.is_some_and(|t| t.elapsed() > Duration::from_secs(4)) {
             warp_since = None;
             session.cancel_warp();
-            link_arrival = None;
             net_state.cancel_cached_request();
             eprintln!("warp not answered");
         }
@@ -2451,6 +2594,7 @@ fn main() {
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
                         }
+                        send_file_msgs(Some(&mut sess.conn), files.request_base_files());
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
@@ -2560,6 +2704,11 @@ fn main() {
                             }
                         }
                         ui::ChatSend::Toall(_) => None,
+                        ui::ChatSend::ShowName => {
+                            my_name_timer = seihai::chatlists::BubbleTimer::start();
+                            dirty = true;
+                            None
+                        }
                     },
                     ui::InputMode::Pm { id, name } if !text.trim().is_empty() => {
                         net_state.push_chat(ChatKind::Private, format!("to {name}"), text.clone());
@@ -2654,6 +2803,14 @@ fn main() {
             let dt = bubble_clock.elapsed().as_millis().min(u32::MAX as u128) as u32;
             bubble_clock = Instant::now();
             if net_state.tick_bubbles(dt) {
+                dirty = true;
+            }
+            if session.alignment != my_name_ap {
+                my_name_ap = session.alignment;
+                my_name_timer = seihai::chatlists::BubbleTimer::start();
+                dirty = true;
+            }
+            if my_name_timer.tick(dt) {
                 dirty = true;
             }
             if my_chat_timer.tick(dt) {
@@ -2757,7 +2914,8 @@ fn main() {
             }
         }
         if dirty {
-            scene = draw(&session, &net_state.others, &my_chat, &npc_images, weapon_bar.current_image());
+            let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
+            scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image());
             dirty = false;
         }
         let mut frame = scene.clone();
@@ -2798,7 +2956,7 @@ fn main() {
             );
         }
         if let Some(text) = &session.reading {
-            match &letters_sheet {
+            match &base_art.borrow().letters {
                 Some(l) => {
                     let row = player_box_origin(&session, view_w, view_h).1 as f32 / 16.0;
                     seihai::render::signs::draw_sign(&mut frame, &pose_sheet(l), text, sign_page, row);

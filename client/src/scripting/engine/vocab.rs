@@ -488,6 +488,10 @@ pub static BUILTINS: &[Builtin] = &[
     Builtin { name: "keydown", args: &[N], since: V200 },
     Builtin { name: "keydown2", args: &[N], since: V200 },
     Builtin { name: "sarraylen", args: &[T], since: V200 },
+    // `with (getnpc(name))`, `with (getplayer(account))`: the targets of
+    // `with` (2.1 and later). Seihai does not switch objects; they read 0.
+    Builtin { name: "getnpc", args: &[T], since: V21 },
+    Builtin { name: "getplayer", args: &[T], since: V21 },
 ];
 
 pub fn builtin_fn(name: &str, era: Era) -> Option<&'static Builtin> {

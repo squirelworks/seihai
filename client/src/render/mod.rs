@@ -11,6 +11,7 @@ mod others;
 mod throw;
 pub mod hud;
 pub mod signs;
+pub mod chattext;
 mod tiles;
 
 pub use throw::{draw_sprite, draw_throw_layer};

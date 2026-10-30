@@ -67,6 +67,20 @@ In every era:
 
 The corpus now has 365 scripts with diagnostics read as 2.05, and 160 read as 2.1 and later. Of the rest, many are broken scripts (`if(strequals(#g,Red Team)||)`, a sign's text run into the script), and many call functions Seihai does not have yet (`strcontains`, `lindexof`).
 
+**Stress set, 2026-10-30.** The stress test now reads the 91 fixture blocks marked `recovered-from-binary` the way the level loader reads a binary level: each block is a whole `.graal` level dumped as text, so the test takes its NPC records out (`x+32, y+32, image#script`) and parses each as its own script. Before, the tiles, links and every NPC of such a level were parsed as one script, which made up half of the 2.1 failures. A sign or `say2` text line that starts `NPC ` (`NPC made by Ace2896 #b`) no longer starts a new block either. `STRESS_ALL=1` lists every failing script with the line of its first diagnostic. These forms now parse:
+
+- `hideimgs();`, `move();`: a command with empty parentheses is the command, unless the script defines a function of that name, which is then called (the baddy scripts define their own `move` and `hurt`). Every era.
+- `x in <lo,hi>` (2.1 and later): the GS2 grammar of the public GServer (gs2-parser) reads it as the same range as `|lo,hi|`. Whether the original treats the ends as open was not checked.
+- `{0x2, ,0x2A5}`: an empty list entry is 0 and keeps its place (the boomerang's tile table counts on it). A list's `}` ends an assignment with no `;` after it (`tiles = {...}` then `function`). 2.1 and later, as lists are.
+- An empty argument of a call is 0 (`textwidth(1,arial,,text)`), as an empty command argument is. Every era.
+- The last text argument of a built-in runs to its `)`, commas included (`playersays(0,buy tank1)`), as a command's last text argument does. Inferred.
+- `getnpc(name)` and `getplayer(account)` read their argument as text (`with (getnpc(House-Control#v(h)))`). 2.1 and later; they read 0, as `with` bodies are not run.
+- `300++this.i` between two values is `300 + this.i`.
+- A comma inside plain parentheses in a text argument stays in the text (`@font@#s(l) (#v(x), #v(y))`). Inferred.
+- `name (text),more;` for a name that is not a command is an unknown command with that text, not a call.
+
+Corpus: 3,306 scripts (2,947 plus 359 records from the binary levels): 352 with diagnostics as 2.05 and 95 as 2.1 and later. Every script that fails only as 2.05 uses a 2.1 form (`{...}`, `with`, `?:`). Of the 95, 53 are binary-level records (some still carry level data the dump ran into them) and 6 are Flash ActionScript files in the pack; the rest are broken scripts, such as `if (this.timeLeft > ){`, `playerx+,`, an extra `}`, a missing `;`, or a file that starts partway through a script.
+
 **Text join and the chat attribute (2.1 and later).** `a @ b` joins two texts; `SPC`, `NL` and `TAB` join with a space, a line break or a tab between (the four operators of the GS2 grammar of the public GServer, where `@` binds looser than the comparisons and tighter than `&&`). `chat` (an object's bubble text, the same as the `message` command) and `player.chat` (the player's chat text, like `setplayerprop #c`) can be read and written; `player.account` and `player.nick` can be read. A level NPC script of a server that runs NPCs (`chat = player.account SPC "touched me";`) parsed with `expected ;` before. Open: scripts that are really GS2 (`temp.` variables, `this.x` methods, `{}` object literals) are still not run; and when the server runs the NPCs (`PLO_HASNPCSERVER`) a level file's NPC script is still run locally.
 
 **Commands.** About 150 are recognised, each with a signature and the version that introduced it. Commands that change the world are returned as `Effect` values for the host to apply (messages, warps, sounds, images, weapon grants, player movement, flags, `sendtoserver`); the offline client applies the ones it can and prints the rest to stderr. The visual-effect commands do nothing when online without an NPC server, as the original does.
