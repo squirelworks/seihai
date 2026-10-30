@@ -64,6 +64,10 @@ What matched:
    * On efb5b90, which sends 182, both send the frame.
    * The trigger in `login-burst.md` ("only after 182") holds for efb5b90 but is not what the 2.17 client
      keys on.
+   * Fixed: #187 sends the 2.x frame without 182 after the level, in the shape 2.17 used on beta4. 2.17
+     now waits 96 ms for it (`LOGIN_217.frame_after_level`), the shortest gap in the five runs, instead
+     of 2.22's 240 ms. With 182 the frame still answers 182 at once; the real client waited ~100 ms there
+     too, which is left as is.
 3. **2.17 sends `SHOWIMGPLAYER` (24) when solo.**
    * It sends `GCHAR 9` in the post-login frame, then about every 5.1 s (t = 0.16, 5.2, 10.3, 16.8 ...
      in `gmap_cross`), with no other player in the level.
