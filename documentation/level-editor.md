@@ -90,5 +90,5 @@ The suggested profile fields: formats read, formats written by extension, has ch
 
 ## Notes found while doing this
 
-- The tile-to-sheet formula in the checklist is the one the renderer uses (`render/tiles.rs`). `client/src/assets/level.rs::tile_src_rect` still has the older `id % 128` / `id / 128` mapping; it is exported but not used by the renderer or the editor, and was left alone here.
+- The tile-to-sheet formula in the checklist is the one the renderer uses (`render/tiles.rs`). The older `tile_src_rect` (`id % 128` / `id / 128`) has been deleted.
 - The text format holds ids 0 to 4095 only. Binary levels from player worlds use higher ids; editing those needs the binary reader and writer (item 3 above).

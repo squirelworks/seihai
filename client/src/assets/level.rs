@@ -27,13 +27,6 @@ pub fn tile_id(tile: Tile) -> u16 {
     (val(tile[0]) << 6) | val(tile[1])
 }
 
-/// Source rectangle for a tile id on a 2048×512 sheet (128×32 of 16 px).
-pub fn tile_src_rect(id: u16) -> (u32, u32, u32, u32) {
-    let col = (id as u32) % 128;
-    let row = (id as u32) / 128;
-    (col * 16, row * 16, 16, 16)
-}
-
 /// One BOARD line: a horizontal run of tiles.
 #[derive(Debug, Clone)]
 pub struct BoardRun {
