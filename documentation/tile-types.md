@@ -90,8 +90,8 @@ With the lists of the 2.22 `arrays.dat`:
 | 2958, red | passable, lava | 13 | walked on, burns |
 
 So deep water needs no rule of its own: it is a wall because the 2.22 file
-lists it nowhere. With the built-in `tiledefs.txt` (the stand-in sheet) these
-ids are unnamed and open, as every unnamed id is.
+lists it nowhere. The built-in `tiledefs.txt` is this same 2.22 table, so these
+tiles behave the same with the built-in set (`default-assets.md`).
 
 - **Swimming:** the swim test is true on water and lava (the liquid list).
   `refresh_water` now swims on `TileKind::Lava` too.

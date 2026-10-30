@@ -99,8 +99,8 @@ name wins:
 
 So `--assets` may be missing, empty or partial: what it lacks comes from the
 built-in set, file by file. Built-in levels (`new1.nw`, `new2.nw`) are found
-offline only, and the built-in tile type table is used only with the built-in
-sheet. Layout, naming, what a download does and how `WANTFILE` / `UPDATEFILE`
+offline only. The built-in tile type table uses the Graal tile layout, so it
+is used with the user's own `pics1.png` too when their folder has no table. Layout, naming, what a download does and how `WANTFILE` / `UPDATEFILE`
 treat built-in files: `documentation/file-cache.md`. The built-in set:
 `documentation/default-assets.md`. `AssetResolver::new(root, profile)` is the
 one-folder resolver as before; `AssetResolver::empty(profile).with_assets(..)

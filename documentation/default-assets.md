@@ -6,16 +6,16 @@ Dated 2026-10-25. Base: `main` at `d5389c2`. Item 20 (wiring) is described under
 
 ## Originality and licence
 
-**Every file is original.** It was drawn or synthesised by `tools/gen_default_assets.py`: images from rectangles, ellipses, polygons and hand-written palettes (Pillow `ImageDraw` on palette images); sounds from sine tones and filtered noise; the GANIs and levels are text written by the script. Nothing was read from, traced from, recoloured from, resampled from or otherwise derived from any pixel or audio sample of the playerworld archives or the Graal clients, and the images of those archives were not opened for this item. The only things taken from them are the numbers already published in `asset-reference.md` (sheet sizes, grid layouts, frame and sprite counts, sound formats), which describe a file format, not content.
+**Every image and sound is original.** It was drawn or synthesised by `tools/gen_default_assets.py`: images from rectangles, ellipses, polygons and hand-written palettes (Pillow `ImageDraw` on palette images); sounds from sine tones and filtered noise; the GANIs and levels are text written by the script. Nothing was read from, traced from, recoloured from, resampled from or otherwise derived from any pixel or audio sample of the playerworld archives or the Graal clients, and the images of those archives were not opened for this item. Two kinds of numbers are taken from them: those already published in `asset-reference.md` (sheet sizes, grid layouts, frame and sprite counts, sound formats), and the **tile type lists of the standard Graal tile layout** (arrays 0 to 6 of the 2.22 `arrays.dat`: which tile ids are passable, liquid, lava, thrown over, chairs and beds), kept as id ranges in `tools/graal_tile_lists.txt`. Those say which tile id is a wall or water, so that the built-in sheet and table use the same ids as a Graal `pics1.png`; they are not art.
 
 **Licence:** the same as the Seihai repository (`MIT OR Apache-2.0`, see the workspace `Cargo.toml`), for the generated files and for the generator. Confirmed by the maintainer (2026-10-25): the generated files and the generator use the same licence as the Seihai repository (`MIT OR Apache-2.0`).
 
-## Contents (54.7 KB in 21 files)
+## Contents (105.7 KB in 28 files)
 
 ```
 assets/default/
-  pics1.png                  2048x512 tile sheet, 8-bit palette PNG, opaque        5.1 KB
-  tiledefs.txt               tile types, `index,x,y,type,name` rows                 2.2 KB
+  pics1.png                  2048x512 tile sheet on the Graal tile layout, 8-bit palette PNG, opaque  24.1 KB
+  tiledefs.txt               the 4096 tile types of the Graal layout, flat list     11.8 KB
   state.png                  224x145 HUD sheet, 4-bit palette PNG (our own layout)  0.6 KB
   sprites.png                128x402, shadow, ripples, carried objects, break pieces  1.5 KB
   bodies/body.png            128x720 body sheet, 4-bit palette PNG                  1.5 KB
@@ -36,45 +36,43 @@ assets/default/
   sounds/steps2.wav          22,050 Hz, 8-bit, mono, 150 ms (different pitch)        3.3 KB
   sounds/water.wav           8,000 Hz, 16-bit, mono, 450 ms                          7.2 KB
   sounds/sword.wav           8,000 Hz, 8-bit, mono, 260 ms                           2.1 KB
-  levels/new1.nw             starter level, 64x64, GLEVNW01 text                     9.6 KB
-  levels/new2.nw             second tiny level (a room), GLEVNW01 text               9.4 KB
+  levels/new1.nw             starter level, 64x64, GLEVNW01 text                     9.3 KB
+  levels/new2.nw             second tiny level (a fenced yard), GLEVNW01 text        9.2 KB
   levels/tiledefs/tiledefsOffline.txt   one line, `pics1.png,,0,0,0`
 ```
 
 The folder names are the ones `AssetResolver` already searches (`bodies/`, `heads/`, `gani/`, `sounds/`, `levels/`, `levels/tiledefs/`, root for `pics1.png`, `sprites.png`, `state.png`, `tiledefs.txt`), so nothing in the resolver has to change to find them. `seihai --assets assets/default --check-assets` reports every required file for 2.05, 2.17, 2.22 and 2.31 as found and read; the optional ones it still lists as missing are `offlinetutorial.gmap` (2.05), music (`intro.mid`; the set has no music) and most of the 2.05 sound-effect list.
 
-### Tile sheet and ids
+### Tile sheet and ids: the standard Graal layout
 
-`pics1.png` is exactly 2048x512: 128 columns by 32 rows of 16 px cells, so every id from 0 to 4095 has a cell with Seihai's mapping `column = id % 16 + (id / 512) * 16`, `row = (id / 16) % 32`. Only cells of ids that the set uses are drawn; all other cells are an 8 px purple/black checker, so a wrong id is visible at once instead of looking like grass.
+One `pics1.png` and one `tiledefs.txt` serve both this set and a Graal folder. Before, the built-in sheet had its own tile ids (water at 32, a bush at 16, ...), so its `tiledefs.txt` described only that sheet: a Graal level drawn on it showed the purple checker, and the table could not be used with a Graal `pics1.png`. Now both follow the Graal layout:
 
-All used ids are below 512, i.e. in block 0 (columns 0 to 15). That makes them valid on every sheet at least 256 px wide, including a narrower 1.33 to 1.39 sheet.
+- **`tiledefs.txt`** holds all 4096 types as a flat list, 16 per line (line `n` is ids `16n` to `16n + 15`, `#` lines are comments; `TileTypes::parse` reads it). The types are those of the Graal 2.22 `arrays.dat`, by the rules of `TileTypes::parse_arrays` (`tile-types.md`): 0 open, 3 chair, 4 bed top, 5 bed bottom, 11 water, 12 lava, 13 lava floor, 20 a wall thrown objects fly over, 22 a wall. Loading it gives exactly the table that loading the real 2.22 `arrays.dat` gives (checked for all 4096 ids). The 2.05 rev 2 file differs only in 20 ids (2650 to 2717, passable in 2.22), so the table fits 2.05 too except there.
+- **`pics1.png`** is 2048x512 with Seihai's id mapping (`column = id % 16 + (id / 512) * 16`, `row = (id / 16) % 32`), which is the real sheets' layout. Every id is drawn with the art of its type: grass for open floor, a grey stone block for walls, a lower tan block for type 20, water, lava, a cracked crust for lava floor, a chair, a bed. So any Graal level shows where its walls, water and floors are, though not what the real tiles depict. The ids below are documented and get art of their own.
 
-| id | name | type | art |
+| ids (2x2 objects: `id, id+1, id+16, id+17`) | what | type | source |
 |--:|--|--:|--|
-| 0, 1, 2 | grass, grass2, flowers | 0 | three grass variants (0 is also the id an empty board cell means) |
-| 3 | path | 0 | dirt |
-| 16 | bush | 22 | bush on grass |
-| 17 | rock | 22 | boulder on grass |
-| 32, 33 | water, water2 | **11** | two water frames |
-| 34, 35 | sand, sand2 | 0 | pond edge |
-| 48, 49 | wall, wallcap | 22 | brick face and capped brick |
-| 50 | roof | 22 | red roof tiles |
-| 51 | doorway | 0 | walkable opening; the door links sit on it |
-| 52 | woodfloor | 0 | planks, for the room |
-| 54 | void | 22 | near-black, outside the room |
-| 64..65, 80..81 | chest0..3 | 22 | closed chest on grass, 2x2 (ids `id, id+1, id+16, id+17`) |
-| 66..67, 82..83 | chestopen0..3 | 22 | open chest on grass |
-| 68..69, 84..85 | chestw0..3 | 22 | closed chest on a wood floor |
-| 70..71, 86..87 | chestwopen0..3 | 22 | open chest on a wood floor |
-| 96, 97 | sign0, sign1 | 22 | sign, 2x1, on grass |
-| 98, 99 | signw0, signw1 | 22 | sign on a wood floor |
-| 112..113, 128..129 | tree0..3 | 22 | tree, 2x2 |
+| 0 | grass | 0 | `binary-level-tiles.md` (tile 0 is grass on the 1.x and 2.x sheets) |
+| 2047 | grass (left under chests) | 0 | lab note `lab-304-linux-2026-10-30.md` (`labbush.nw`), `chest-drawing.md` |
+| 2 | bush | 20 | `arrays.dat` arrays 9 and 11 |
+| 34 | stone | 20 | array 11 |
+| 512 | sign | 20 | array 11, `board-respawn.md` |
+| 684 | pot | 20 | array 11, `board-respawn.md` |
+| 990 | black stone | 20 | array 11 |
+| 420 | tall grass | 0 | array 9 |
+| 677, 679 | left by a cut bush, cut tall grass | 0 | arrays 10 and 12 |
+| 1802, 1770, 1834 | left by a lifted sign, pot, stone | 0 | array 12 |
+| 1784 | closed chest | 20 | array 13, `chest-drawing.md` |
+| 829 | open chest | 20 | array 14 |
+| 322 | deep water (swum in) | 11 | Graal_analysis `protocol/v5v6-lab-play.md` |
+| 398 | shallow water (walked on) | 0 | `tile-types.md` (`new4.nw`) |
+| 3644 | deep water in no list (a wall) | 22 | `tile-types.md` (`new4.nw`) |
 
-Types follow the rules in `assets/level.rs`: `>= 20` blocks (`TYPE_WALL_MIN`), `11` is water (`TYPE_WATER`), everything else is open floor. Wall, water and object art fills its whole 16x16 cell (whole tiles decide blocking). The chest and sign records of a level (`CHEST x y ...`, `SIGN x y`) are triggers; the art is the board tiles at that position, which the starter levels place under them. Chests are solid as a 2x2 box and the sign as 2x1, as in `offline/mod.rs`; their tiles are type 22 too.
+No other id was given a meaning, and no type was made up: every type comes from the lists. Ids whose art is not known (trees, houses, roofs, paths, the many floor variants) look like their type.
 
-`tiledefs.txt` is a sparse `index,x,y,type,name` list (`x,y` is the pixel position of the id's cell, derived from the mapping above). `TileTypes::parse` needs the table to reach id 4095, so the last row names 4095 explicitly (type 0). Ids that no row names are type 0.
+The foot point (links and water; walls are tested on the body box, `walking-collision.md`): `FOOT_DX = 2.0`, `FOOT_DY = 2.75`, one point per player, tile under `floor(x + 2.0), floor(y + 2.75)`.
 
-The foot point (links and water; walls are tested on the body box, `walking-collision.md`) the sheet was drawn for: `FOOT_DX = 2.0`, `FOOT_DY = 2.75`, one point per player, tile under `floor(x + 2.0), floor(y + 2.75)`.
+To refresh the lists from an `arrays.dat`: `python3 tools/gen_default_assets.py --import-arrays path/to/arrays.dat`, then regenerate. The generator checks the list lengths of the 2.22 file (934, 116, 133, 76, 40, 4, 4).
 
 ### Player sheets
 
@@ -109,8 +107,10 @@ Mono PCM WAV files in the stock formats: footsteps at 22,050 Hz 8-bit (`steps.wa
 
 ### Levels
 
-- **`levels/new1.nw`** (the name `--check-assets` and the notes use for the sample level): 64x64, grass with a bush border on the north, west and east edges, a pond (water ids 32/33, sand ring) that is deep enough to swim in, a brick house with a roof and a doorway, a dirt path from the door to the default spawn point (30, 30.5, which is open grass), four trees, bushes and rocks, a sign at (26, 28) with a welcome text and a chest at (34, 26) holding `greenrupee`. Links: `LINK new2.nw 41 21 2 1 30 47` (the doorway, to the room) and `LINK new1.nw 2 63 60 1 playerx 3` (the open south edge wraps to the north: a link to itself).
-- **`levels/new2.nw`**: a 20x15 wood-floor room in a void of type-22 tiles, a chest at (24, 40) holding `bluerupee`, a sign at (36, 40), and a doorway at (31..32, 53) with `LINK new1.nw 31 53 2 1 40 22` back outside.
+Both use only the documented ids of the table above, so they read the same on this sheet and on a Graal `pics1.png`.
+
+- **`levels/new1.nw`** (the name `--check-assets` and the notes use for the sample level): 64x64 grass with a border of 2x2 bushes on the north, west and east edges, a pond of deep water (322, swum in) inside a ring of shallow water (398), bushes, stones, pots and tall grass, a sign (2x2 at (26, 27); its record is the lower row, (26, 28)) with a welcome text and a chest record at (34, 26) holding `greenrupee` on 2047 grass, the way servers leave the board under a chest. A bare patch (1834) in a ring of black stones is the way to the second level. The default spawn point (30, 30.5) is open grass. Links: `LINK new2.nw 41 20 2 2 31 47` (the patch) and `LINK new1.nw 2 63 60 1 playerx 3` (the open south edge wraps to the north: a link to itself).
+- **`levels/new2.nw`**: a yard fenced with black stones and surrounded by stones, a chest at (24, 40) holding `bluerupee`, a sign at (36, 39) (record (36, 40)), a pot and tall grass, and a gap in the south fence with `LINK new1.nw 30 55 4 1 40 23` back outside.
 
 Link arrivals land the foot point on open floor, away from the link rectangles, so a link does not fire again at once.
 
@@ -121,7 +121,7 @@ Only what the existing resolver already does is used; nothing was added to it.
 - **Builds without GANIs** (`ui.ganis` false in the profile): `AssetResolver::gani` finds none, so the three GANIs are ignored and the footstep and water sounds are read by name (`steps.wav`, `water.wav` ship for that reason).
 - **Level extensions:** the starter levels are `.nw`; for a profile with `levels.nw = false` (the early `.graal`-only builds) they are not opened. A `.graal` or `.zelda` starter level is not generated.
 - **Image extension:** a bare image name gets the profile's `image_ext` first and then `.png`; pre-2.1 profiles ask for `.gif`, and the resolver already falls back from `.gif` to `.png`. The set is PNG only (there is no GIF or MNG decoder).
-- **Sheet width:** every id of the set is below 512 and so lies in block 0, which is at the same position for any sheet that has the first 16 columns. Whether a real 1.33 to 1.39 client maps ids the same way on its 1856-wide sheet is not settled (asset-reference, "Other widths"). A 1856 variant could be made by cropping `pics1.png`; nothing here needs it.
+- **Sheet width:** the sheet is the 2048-wide layout of 1.41 and later. Whether a real 1.33 to 1.39 client maps ids the same way on its 1856-wide sheet is not settled (asset-reference, "Other widths"), and the 1.x `arrays.dat` files have shorter lists than 2.22, so the table is the 2.x one.
 - **HUD:** `state.png` is 224x145; a profile that wants 224x97 (1.38+ layouts, see `documentation/assets.md`) is not given a separate file.
 
 ## Regenerating
@@ -132,22 +132,23 @@ python3 tools/gen_default_assets.py --check         # exit 1 if the tree differs
 python3 tools/gen_default_assets.py --preview /tmp/preview.png   # contact sheet of this art
 ```
 
-Python 3.9 or later and Pillow; no network. The seed is `SEED = 20261025` in the script and every random choice (grass tufts, noise, scatter on the levels) comes from `random.Random(SEED + n)`, so two runs give identical files on the same machine; `--check` compares decoded pixels for the PNGs (not bytes, because zlib output can differ between builds) and bytes for everything else. The tree is small (54.7 KB), so it is committed; the generator is the source of truth, and a change to the art is a change to the script plus a regenerated tree.
+Python 3.9 or later and Pillow; no network. The seed is `SEED = 20261025` in the script and every random choice (grass tufts, noise, scatter on the levels) comes from `random.Random(SEED + n)`, so two runs give identical files on the same machine; `--check` compares decoded pixels for the PNGs (not bytes, because zlib output can differ between builds) and bytes for everything else. The tree is small (105.7 KB), so it is committed; the generator is the source of truth, and a change to the art is a change to the script plus a regenerated tree.
 
-The contract test is `client/tests/default_assets.rs` (`cargo test --test default_assets`): it loads each file with Seihai's own readers and checks sizes, bit depths, the 128x32 grid, that every named tile id lands on its own cell and `blit_tile` draws that cell, the type table (water 11, walls 20 or more, ids below 4096), the GANI structure (1, 8 and 8 steps, four rows each, the cues, sprites inside their sheets), WAV formats and lengths, both levels (every id named, links lead to existing levels and arrive on open floor, chests and signs sit on their art), the offline session (default spawn open, pond swims, a bush blocks) and `AssetResolver` / `check_folder` for 2.05, 2.17, 2.22 and 2.31.
+The contract test is `client/tests/default_assets.rs` (`cargo test --test default_assets`): it loads each file with Seihai's own readers and checks sizes, bit depths, the 128x32 grid, that `blit_tile` draws each id's cell, that every id has the art of its type and the documented ids their own, the type table (the `new4.nw` tiles of `tile-types.md`, the objects of `arrays.dat`, 116 liquid ids), the GANI structure (1, 8 and 8 steps, four rows each, the cues, sprites inside their sheets), WAV formats and lengths, both levels (only documented ids, links lead to existing levels and arrive on open floor, chests and signs sit on their art), the offline session (default spawn open, pond swims, a bush blocks) and `AssetResolver` / `check_folder` for 2.05, 2.17, 2.22 and 2.31.
 
 ## How it is wired in (item 20)
 
 The set is compiled into the binary and is the last layer of every lookup. The full rules are in `documentation/file-cache.md` (cache layout, naming, search order, what a download does, how `WANTFILE` / `UPDATEFILE` treat built-in files); this is the short version.
 
-1. **Embedded, then written once.** `client/src/assets/builtin.rs` holds every file of `assets/default/` with `include_bytes!` (54.7 KB), and a test fails if that list and the folder differ. The client finds files by path (resolver, sound engine, readers), so at start-up the set is written to `<settings dir>/builtin/<id>/` (`<id>` = CRC-32 of the whole set) and that folder is the lowest layer. The files are written 0444 and a missing or changed one is rewritten from the binary, so the folder is a copy of what is in the executable and nothing else; a new build with new art uses a new `<id>` and leaves the old folder alone. If the settings folder cannot be written the set goes to the system temp folder; if that fails, the client runs without the layer and says so. No network, no shipped data folder next to the exe.
+1. **Embedded, then written once.** `client/src/assets/builtin.rs` holds every file of `assets/default/` with `include_bytes!` (105.7 KB), and a test fails if that list and the folder differ. The client finds files by path (resolver, sound engine, readers), so at start-up the set is written to `<settings dir>/builtin/<id>/` (`<id>` = CRC-32 of the whole set) and that folder is the lowest layer. The files are written 0444 and a missing or changed one is rewritten from the binary, so the folder is a copy of what is in the executable and nothing else; a new build with new art uses a new `<id>` and leaves the old folder alone. If the settings folder cannot be written the set goes to the system temp folder; if that fails, the client runs without the layer and says so. No network, no shipped data folder next to the exe.
 2. **Fallback.** `--assets` is optional. With no folder, a missing folder or an empty one, every lookup falls through to the built-in set; a folder with only some files uses its own where it has them and ours for the rest (file by file). An offline run with no `--assets` and no `--level` starts in `new1.nw` (the launcher's "Play offline" does the same); with `--assets`, behaviour is unchanged. `seihai --check-assets` with no `--assets` checks the built-in set (exit 0 for 1.39, 2.05, 2.17, 2.22 and 2.31, no required file missing, nothing unreadable); with `--assets DIR` it still checks exactly that folder.
 3. **Per-server cache, searched first.** Search order is: the server's cache folder, the user's asset folder, the built-in set. Downloads are written to the cache only; the built-in set is read-only and never a download target (a target under it is refused). `save_downloads` / `--no-save-downloads` still gate writing. Layout and naming: `<cache root>/<host>_<port>[~<server name>]/` with the real clients' sub-folders; the root is `--cache-dir`, then `cache_dir=` in the settings file, then `<settings dir>/cache`.
 4. **Built-in files and the server.** A file only the built-in set has is asked for with `WANTFILE`, with no mod time (never `UPDATEFILE`), so the server's copy can be saved in the cache and win; if the server has none, ours stays. `walk.gani`, `steps.wav` and `steps2.wav` (the real client's first-step requests) are asked for only if there is no copy anywhere, built-in included, which with this set means never in a normal run.
 5. **Built-in levels are offline only.** Online, the resolver does not find `new1.nw` / `new2.nw` in the built-in set, so a server's level of the same name is requested from the server.
-6. **Drawing.** `render_view` no longer draws the brown chest box and the tan sign board over the board. A sign is a trigger; its art is the board tiles under it. A chest record is drawn by the client itself (see `chest-drawing.md`); with the built-in sheet a chest whose board tiles already are a built-in chest keeps them and an opened one shows the open tiles (closed id + 2, see the tile table above). NPC placeholders are unchanged.
+6. **Drawing.** `render_view` no longer draws the brown chest box and the tan sign board over the board. A sign is a trigger; its art is the board tiles under it. A chest record is drawn from the record with tiles 1784 (closed) or 829 (open), as the client does (see `chest-drawing.md`); the built-in sheet has its chest art at those ids, so there is no special case for it. NPC placeholders are unchanged.
+7. **One tile table.** The built-in `tiledefs.txt` is the Graal layout's table, so it is used whenever no layer above has a `tiledefs.txt` or `arrays.dat`, also with a user's own `pics1.png`. A user folder with its own `arrays.dat` still wins.
 
-What was checked, offline, on Xvfb with this set only (screenshots of our own art, not committed; `/workspace/graal/seihai_notes/default-assets-offline-*.png` on the author's box): the starter level loads, the player walks (several directions, pose changes), chest and sign show their tiles, an opened chest shows the open art, the pond swims (head only, ring), and a run with an empty `--assets` folder looks the same. The tests are `client/tests/builtin_wiring.rs` (14) and the unit tests of `builtin.rs`, `servercache.rs`, `settings.rs`, the resolver and the file cache.
+What was checked, offline, on Xvfb with this set only (before the move to the Graal layout) (screenshots of our own art, not committed; `/workspace/graal/seihai_notes/default-assets-offline-*.png` on the author's box): the starter level loads, the player walks (several directions, pose changes), chest and sign show their tiles, an opened chest shows the open art, the pond swims (head only, ring), and a run with an empty `--assets` folder looks the same. The tests are `client/tests/builtin_wiring.rs` (14) and the unit tests of `builtin.rs`, `servercache.rs`, `settings.rs`, the resolver and the file cache.
 
 The generator `tools/gen_default_assets.py` already re-emits the whole set from a seed (`--check`, `--preview`), so the optional item 21 tool is mostly done by it; a parameterised front end (tile size, palette) is not part of this PR.
 
@@ -171,4 +172,5 @@ No file request is added for these (the first-step list is unchanged); a copy of
 - The real `state.png` layout; ours is a placeholder.
 - The swim head offset (14 px in code and here; 16 and 20 in the 2.22 animation).
 - Whether a 1.33 to 1.39 client reads ids on a 1856-wide sheet the same way.
-- The art is functional and small, not final: no hats, no tile variety beyond what the two levels need. Item 21 (generator tool) can grow it.
+- The art is functional and small, not final: no hats, and one look per tile type outside the documented ids. Naming more ids (trees, houses, paths) needs a documented source for each; then the generator can draw them.
+- The built-in set has no cut and lift tables (`arrays.dat` arrays 9 to 12), so offline with the built-in set alone bushes are not cut or lifted. Shipping those tables is a separate change.

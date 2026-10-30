@@ -988,8 +988,6 @@ fn main() {
             None => "unknown",
         }
     );
-    // The open-chest art swap is for our own sheet only.
-    let view_opts = seihai::render::ViewOptions { builtin_sheet: resolver.layer_of(&sheet_path) == Some(Layer::Builtin) };
     let sheet_data = match std::fs::read(&sheet_path) {
         Ok(d) => d,
         Err(e) => {
@@ -1106,7 +1104,7 @@ fn main() {
                 item: Option<&str>,
                 own_failed: (bool, bool)|
      -> Framebuffer {
-        let mut fb = seihai::render::render_view_with(session, &sheet, sw, sh, view_w, view_h, view_opts);
+        let mut fb = seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
             ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
