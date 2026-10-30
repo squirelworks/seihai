@@ -183,8 +183,17 @@ So Seihai goes beyond the real client here, as a fallback only
 * A base file in the user's folder or in the cache is **not asked about at
   all**, not even with `UPDATEFILE`. With a full Graal folder the wire is the
   same as before. A cached copy from an earlier run is used as it is.
-* The requests share the normal four-at-a-time `WANTFILE` window, so the
-  level's own image requests wait behind them until the server answers.
+* The requests go out all at once, **outside** the four-at-a-time `WANTFILE`
+  window (`FileRequester::want_extra`). The live 2.22 server at
+  `2gta.home.eevul.net:14913` (2026-10-30) sent `pics1.png`, the player
+  images and the GANIs but never answered `sprites.png`, `state.png`,
+  `letters.png` or the sounds, neither with the file nor with
+  `FILESENDFAILED`. In the window those names held three of the four slots
+  for the whole connection. Each name asked is logged (`requesting base
+  files: ...`).
+* `arrays.dat` is asked for too when there is no tile table of the user's or
+  the cache. A downloaded one is found in `levels/webgifs`, and is used once
+  the server's sheet is in use.
 * What arrives is saved in the cache like any download and drawn from then on:
   the tile sheet, player, sprite, status and sign sheets are swapped in place
   (`reload_base_art` in `main.rs`), GANIs and sounds reload as before. A new

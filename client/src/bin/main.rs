@@ -126,7 +126,18 @@ fn reload_base_art(
     session: &mut OfflineSession,
     art: &std::cell::RefCell<BaseArt>,
 ) -> bool {
-    let Some((seihai::filecache::BaseKind::Image(_), stem)) = seihai::filecache::base_file_of(name) else { return false };
+    use seihai::filecache::BaseKind;
+    let Some((kind, stem)) = seihai::filecache::base_file_of(name) else { return false };
+    if kind == BaseKind::TileTypes {
+        // The table goes with the server's sheet, not with ours.
+        if !art.borrow().builtin_sheet {
+            apply_sheet_tile_types(resolver, session);
+        }
+        return true;
+    }
+    if !matches!(kind, BaseKind::Image(_)) {
+        return false;
+    }
     let Some(data) = files.store.read(name) else { return false };
     let mut art = art.borrow_mut();
     if stem == "pics1" {
@@ -140,23 +151,7 @@ fn reload_base_art(
                 return false;
             }
         }
-        match resolver.tile_types() {
-            Some((p, _)) if resolver.layer_of(&p) == Some(Layer::Builtin) => {
-                session.tiletypes = None;
-                session.refresh_water();
-                eprintln!("tile types: none (the built-in table is for the built-in sheet)");
-            }
-            Some((p, TileTypesFile::Text)) => {
-                let _ = session.load_tiletypes(p);
-            }
-            Some((p, TileTypesFile::ArraysDat)) => {
-                let _ = session.load_tiletypes_arrays(p);
-            }
-            None => {
-                session.tiletypes = None;
-                session.refresh_water();
-            }
-        }
+        apply_sheet_tile_types(resolver, session);
         return true;
     }
     let slot = match stem {
@@ -177,6 +172,40 @@ fn reload_base_art(
         Err(e) => {
             eprintln!("{name} from the server not read: {e}");
             false
+        }
+    }
+}
+
+/// Ask the server for the base files we have only stand-ins for, and log
+/// each name: a server may stay silent about one it lacks, and the log is
+/// then the only sign it was asked for.
+fn base_file_msgs(files: &mut FileSession) -> Vec<Vec<u8>> {
+    let reqs = files.request_base_files();
+    if !reqs.is_empty() {
+        let names: Vec<&str> = reqs.iter().map(|r| r.name()).collect();
+        eprintln!("requesting base files: {}", names.join(" "));
+    }
+    reqs.iter().map(|r| r.message()).collect()
+}
+
+/// The tile types for a sheet that is not the built-in one: a table of the
+/// user's or the cache, else none (the built-in table describes only the
+/// built-in sheet).
+fn apply_sheet_tile_types(resolver: &AssetResolver, session: &mut OfflineSession) {
+    match resolver.tile_types().filter(|(p, _)| resolver.layer_of(p) != Some(Layer::Builtin)) {
+        Some((p, TileTypesFile::Text)) => {
+            eprintln!("tile types: {} (text)", p.display());
+            let _ = session.load_tiletypes(p);
+        }
+        Some((p, TileTypesFile::ArraysDat)) => {
+            eprintln!("tile types: {} (arrays.dat)", p.display());
+            let _ = session.load_tiletypes_arrays(p);
+        }
+        None => {
+            session.tiletypes = None;
+            session.object_tables = None;
+            session.refresh_water();
+            eprintln!("tile types: none for the server's sheet (no tiledefs.txt or arrays.dat); there are no walls");
         }
     }
 }
@@ -241,8 +270,10 @@ fn local_shield_image(power: u8) -> String {
 /// Load the pictures other players are drawn with (their sword, shield,
 /// head and body props) and the local player's shield into `images`: from
 /// the asset folders first, else from the server. `tried` keeps the names
-/// already looked for in the folders, so a missing one is not searched for
-/// every frame.
+/// already looked for in the folders, and `not_received` the names the
+/// server has not sent yet, so a missing one is not searched for every frame
+/// (each search reads folders on every layer). `not_received` is emptied when
+/// a file arrives.
 fn look_image_pass(
     wanted: &[(&str, String)],
     resolver: &AssetResolver,
@@ -250,6 +281,7 @@ fn look_image_pass(
     conn: Option<&mut Connection>,
     images: &mut HashMap<String, (u32, Vec<u8>)>,
     tried: &mut std::collections::HashSet<String>,
+    not_received: &mut HashSet<String>,
 ) -> bool {
     let mut msgs = Vec::new();
     let mut added = false;
@@ -262,7 +294,7 @@ fn look_image_pass(
         if tried.insert(name.clone()) {
             got = resolver.image_in(dir, name).and_then(|p| std::fs::read(p).ok()).and_then(read);
         }
-        if got.is_none() {
+        if got.is_none() && !not_received.contains(name) {
             got = files.store.read(name).and_then(read);
         }
         match got {
@@ -270,7 +302,10 @@ fn look_image_pass(
                 images.insert(name.clone(), img);
                 added = true;
             }
-            None => msgs.extend(files.need(name)),
+            None => {
+                not_received.insert(name.clone());
+                msgs.extend(files.need(name));
+            }
         }
     }
     send_file_msgs(conn, msgs);
@@ -281,7 +316,8 @@ fn look_image_pass(
 /// keep each under [`seihai::looks::colored_body_key`] in `images`. The
 /// picture's bytes come from the asset folders (looked for once a name, kept
 /// in `raw`) or from the files the server sent. A body not here yet is
-/// asked for by [`look_image_pass`] under its plain name.
+/// asked for by [`look_image_pass`] under its plain name. `not_received`
+/// is as there.
 fn colored_body_pass(
     wanted: &[(String, [u8; 5])],
     resolver: &AssetResolver,
@@ -289,6 +325,7 @@ fn colored_body_pass(
     raw: &mut HashMap<String, Vec<u8>>,
     tried: &mut HashSet<String>,
     images: &mut HashMap<String, (u32, Vec<u8>)>,
+    not_received: &mut HashSet<String>,
 ) -> bool {
     let mut added = false;
     for (name, colors) in wanted {
@@ -301,14 +338,30 @@ fn colored_body_pass(
             if tried.insert(format!("colored body {name}")) {
                 got = resolver.image_in("bodies", name).and_then(|p| std::fs::read(p).ok());
             }
-            if let Some(data) = got.or_else(|| files.store.read(name)) {
-                raw.insert(name.clone(), data);
+            let miss = format!("colored body {name}");
+            if got.is_none() && !not_received.contains(&miss) {
+                got = files.store.read(name);
+            }
+            match got {
+                Some(data) => {
+                    raw.insert(name.clone(), data);
+                }
+                None => {
+                    not_received.insert(miss);
+                }
             }
         }
         let Some(data) = raw.get(name) else { continue };
-        if let Ok((w, _, px)) = seihai::assets::read_png_rgba_recolored(data, &seihai::looks::body_recolor(colors)) {
-            images.insert(key, (w, px));
-            added = true;
+        match seihai::assets::read_png_rgba_recolored(data, &seihai::looks::body_recolor(colors)) {
+            Ok((w, _, px)) => {
+                images.insert(key, (w, px));
+                added = true;
+            }
+            // Not decoded again every frame: only when a new copy arrives.
+            Err(_) => {
+                raw.remove(name);
+                not_received.insert(format!("colored body {name}"));
+            }
         }
     }
     added
@@ -945,7 +998,7 @@ fn main() {
     // The files every install has that we have only as stand-ins: ask the
     // server for its copies (a fallback the real client has no need of).
     if conn.is_some() {
-        send_file_msgs(conn.as_mut(), files.request_base_files());
+        send_file_msgs(conn.as_mut(), base_file_msgs(&mut files));
     }
 
     // Sound effects: optional. With no sounds folder, no audio device, or
@@ -1293,6 +1346,7 @@ fn main() {
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
     let mut look_tried = std::collections::HashSet::new();
+    let mut look_not_received: HashSet<String> = HashSet::new();
     // Body pictures as read, for drawing them in other colours.
     let mut body_raw: HashMap<String, Vec<u8>> = HashMap::new();
     let mut my_chat = String::new();
@@ -1514,6 +1568,9 @@ fn main() {
                         let got = files.process(&mut net_state);
                         send_file_msgs(conn.as_mut(), got.send);
                         weapon_recheck |= !got.written.is_empty();
+                        if !got.written.is_empty() {
+                            look_not_received.clear();
+                        }
                         for name in &got.written {
                             if reload_base_art(name, &files, &resolver, &mut session, &base_art) {
                                 dirty = true;
@@ -2591,7 +2648,7 @@ fn main() {
                         if login_burst.as_ref().is_some_and(|lb| lb.info().idle_gani) {
                             send_file_msgs(Some(&mut sess.conn), files.need("idle.gani"));
                         }
-                        send_file_msgs(Some(&mut sess.conn), files.request_base_files());
+                        send_file_msgs(Some(&mut sess.conn), base_file_msgs(&mut files));
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
@@ -2897,7 +2954,7 @@ fn main() {
                 }
             }
             wanted.push(("bodies", session.looks.body_name().to_string()));
-            if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried) {
+            if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried, &mut look_not_received) {
                 dirty = true;
             }
             let mut bodies: Vec<(String, [u8; 5])> = net_state
@@ -2906,7 +2963,7 @@ fn main() {
                 .map(|o| (o.looks.body.clone().unwrap_or_else(|| seihai::looks::DEFAULT_BODY.into()), o.looks.colors.unwrap_or(seihai::looks::DEFAULT_COLORS)))
                 .collect();
             bodies.push((session.looks.body_name().to_string(), session.looks.colors));
-            if colored_body_pass(&bodies, &resolver, &mut files, &mut body_raw, &mut look_tried, &mut npc_images) {
+            if colored_body_pass(&bodies, &resolver, &mut files, &mut body_raw, &mut look_tried, &mut npc_images, &mut look_not_received) {
                 dirty = true;
             }
         }
