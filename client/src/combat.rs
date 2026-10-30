@@ -268,7 +268,8 @@ pub const SWING_GANIS: [&str; 3] = ["sword", "ridesword", "spin"];
 
 /// True when another player's GANI prop (10, 2.1+) names a swing.
 pub fn is_swing_gani(gani: &str) -> bool {
-    let name = gani.strip_suffix(".gani").unwrap_or(gani);
+    // GServer-v2 adds `.gif` to the name a 2.05 client sends in the bow slot.
+    let name = gani.strip_suffix(".gani").or_else(|| gani.strip_suffix(".gif")).unwrap_or(gani);
     SWING_GANIS.contains(&name)
 }
 
@@ -895,7 +896,7 @@ impl OfflineSession {
         let mut out = Vec::new();
         for id in swings {
             let Some(o) = others.iter().find(|o| o.id == *id) else { continue };
-            let swing_gani = o.looks.gani.as_deref().is_some_and(is_swing_gani);
+            let swing_gani = o.looks.swing_gani();
             // A GANI client may never have sent SPRITE: its direction is all
             // the sprite would hold.
             let Some(sprite) = o.sprite.or(swing_gani.then_some(o.dir % 4)) else { continue };
@@ -1684,7 +1685,7 @@ mod tests {
 
     #[test]
     fn the_swing_ganis_are_sword_ridesword_and_spin() {
-        for g in ["sword", "ridesword", "spin", "sword.gani"] {
+        for g in ["sword", "ridesword", "spin", "sword.gani", "sword.gif"] {
             assert!(is_swing_gani(g), "{g}");
         }
         for g in ["idle", "walk", "kick", "hurt", "swordx", "Sword", ""] {
@@ -1756,6 +1757,56 @@ mod tests {
         assert!(s.receive_all(&[o.clone()], None, None, 0, &[10], &[]).is_empty(), "no sprite, no swing GANI: nothing to judge");
         o.looks.gani = Some("sword".into());
         assert_eq!(s.receive_all(&[o], None, None, 0, &[10], &[])[0].outcome, Ok(1));
+    }
+
+    #[test]
+    fn a_sprite_swing_relayed_by_gserver_is_seen_by_every_profile() {
+        for v in [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231] {
+            let mut st = SessionState::for_version(v);
+            st.apply_body(&plo8(300, &[8 + 0x20, 0x20 + 31, 0x20 + 10, b's', b'w', b'o', b'r', b'd', b'1', b'.', b'g', b'i', b'f']));
+            // A swing sprite (as Seihai's own 2.05 swing sends it): GServer-v2
+            // relays X, Y, SPRITE, then adds X2, Y2 for 2.30+.
+            let x2 = gs((20 * 16) << 1);
+            let props = [15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + sw(6, 3), 78 + 0x20, x2[0], x2[1], 79 + 0x20, x2[0], x2[1]];
+            st.apply_body(&plo8(300, &props));
+            // GServer-v2 re-encodes the sword as power + 30 and the image.
+            assert_eq!(st.swings, vec![300], "{}", v.label());
+            let o = &st.others[0];
+            assert_eq!((o.x, o.y, o.sprite, o.sword_power), (20.0, 20.0, Some(sw(6, 3)), Some(1)), "{}", v.label());
+        }
+    }
+
+    /// Prop 10 in the pre-2.1 bow form: `c(10 + len)` + name.
+    fn bow_slot(name: &str) -> Vec<u8> {
+        let mut p = vec![10 + 0x20, 0x20 + 10 + name.len() as u8];
+        p.extend_from_slice(name.as_bytes());
+        p
+    }
+
+    #[test]
+    fn a_205_swing_is_the_sword_name_in_the_bow_slot() {
+        // The real 2.05 client (2026-10-30 lab decode) sends its swing as
+        // `sword` in prop 10 and keeps SPRITE on the direction alone.
+        // GServer-v2 relays it as a bow image with `.gif` added.
+        let mut st = SessionState::for_version(ClientVersion::V205);
+        let mut props = vec![8 + 0x20, 0x20 + 32, 0x20 + 0, 15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + 3];
+        props.extend(bow_slot("walk.gif"));
+        st.apply_body(&plo8(300, &props));
+        assert!(st.swings.is_empty(), "walk is no swing");
+        // The swing comes alone, with no position or sprite.
+        st.apply_body(&plo8(300, &bow_slot("sword.gif")));
+        assert_eq!(st.swings, vec![300]);
+        assert_eq!(st.others[0].looks.gani, None, "a 2.05 player is still drawn from its sprite");
+        let swings = std::mem::take(&mut st.swings);
+        let mut s = session();
+        let out = s.receive_all(&st.others, None, None, 0, &swings, &[]);
+        assert_eq!((out[0].kind, out[0].attacker, out[0].outcome), (HitKind::Sword, Some(300), Ok(2)));
+        // A bow power under 10 names nothing, and later updates are no swing.
+        st.apply_body(&plo8(300, &[10 + 0x20, 0x20 + 3]));
+        assert_eq!(st.others[0].looks.bow_slot_gani.as_deref(), Some("sword.gif"), "a power keeps the last name");
+        st.apply_body(&plo8(300, &bow_slot("idle.gif")));
+        st.apply_body(&plo8(300, &[15 + 0x20, 0x20 + 41]));
+        assert!(st.swings.is_empty());
     }
 
     #[test]

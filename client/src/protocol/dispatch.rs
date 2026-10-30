@@ -258,6 +258,12 @@ pub struct OtherLooks {
     pub head: Option<String>,
     pub body: Option<String>,
     pub gani: Option<String>,
+    /// The animation a 2.05 player names in the pre-2.1 bow slot (prop 10,
+    /// `c(10 + len)` + name). The real 2.05 client sends its GANI name
+    /// there (`walk`, `sword`, `hurt`; the 2026-10-30 lab decode), and
+    /// GServer-v2 stores and relays it as a bow image with `.gif` added.
+    /// Only the hit judge reads it; drawing a 2.05 player keeps the sprite.
+    pub bow_slot_gani: Option<String>,
     /// Body colours (prop 13: skin, coat, sleeves, shoes, belt).
     pub colors: Option<[u8; 5]>,
     /// GANI attributes 1 to 5 (props 37 to 41; 1 is the hat).
@@ -265,8 +271,14 @@ pub struct OtherLooks {
 }
 
 impl OtherLooks {
+    /// The player's animation is a swing ([`combat::is_swing_gani`]): the
+    /// GANI (2.1+) or the name in the 2.05 bow slot.
+    pub fn swing_gani(&self) -> bool {
+        [&self.gani, &self.bow_slot_gani].into_iter().flatten().any(|g| combat::is_swing_gani(g))
+    }
+
     fn update(&mut self, u: OtherLooks) {
-        for (old, new) in [(&mut self.sword, u.sword), (&mut self.shield, u.shield), (&mut self.head, u.head), (&mut self.body, u.body), (&mut self.gani, u.gani)] {
+        for (old, new) in [(&mut self.sword, u.sword), (&mut self.shield, u.shield), (&mut self.head, u.head), (&mut self.body, u.body), (&mut self.gani, u.gani), (&mut self.bow_slot_gani, u.bow_slot_gani)] {
             if new.is_some() {
                 *old = new;
             }
@@ -1424,12 +1436,12 @@ impl SessionState {
         if let Some(c) = u.carry {
             o.carry = c;
         }
-        let moved = u.x.is_some() || u.y.is_some() || u.dir.is_some() || u.sprite.is_some() || u.looks.gani.is_some();
+        let moved = u.x.is_some() || u.y.is_some() || u.dir.is_some() || u.sprite.is_some() || u.looks.gani.is_some() || u.looks.bow_slot_gani.is_some();
         o.looks.update(std::mem::take(&mut u.looks));
         // A 2.05 swing is a swing sprite in the update. A 2.1+ client sends
         // GANI `sword` once and then only what changes, so any update of
         // its place or animation while that GANI is on is judged again.
-        let gani_swing = moved && o.looks.gani.as_deref().is_some_and(combat::is_swing_gani);
+        let gani_swing = moved && o.looks.swing_gani();
         let sprite_swing = u.sprite.zip(self.combat).is_some_and(|(sp, r)| combat::is_swing_sprite(&r, sp));
         let swing = self.combat.is_some() && (sprite_swing || gani_swing);
         if swing {
@@ -1618,6 +1630,8 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             }
             9 => u.looks.shield = power_image(&prop.raw, 3, "shield"),
             10 if !bow_prop10 => u.looks.gani = Some(text(&prop.raw)).filter(|g| !g.is_empty()),
+            // The bow slot: a byte under 10 is a bow power (no name).
+            10 => u.looks.bow_slot_gani = prop.gchar().filter(|&v| v >= 10).map(|_| text(&prop.raw)),
             11 => u.looks.head = head_image(&prop.raw),
             35 => u.looks.body = Some(text(&prop.raw)).filter(|b| !b.is_empty()),
             13 => u.looks.colors = crate::looks::colors_from_prop(&prop.raw),
@@ -1826,7 +1840,7 @@ mod tests {
         let want = |s: &str| Some(s.to_string());
         assert_eq!(
             u.looks,
-            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk"), colors: None, attrs: Default::default() }
+            OtherLooks { sword: want("sabre.png"), shield: want("shield2.png"), head: want("hat.png"), body: want("red.png"), gani: want("walk"), bow_slot_gani: None, colors: None, attrs: Default::default() }
         );
         // Plain powers name the default pictures; 0 is none.
         let u = parse_other_player(&[0x20, 0x22, g(8), g(2), g(9), g(0), g(11), g(4)], false, None).unwrap();

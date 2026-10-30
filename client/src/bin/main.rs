@@ -1883,7 +1883,16 @@ fn main() {
                                 | seihai::combat::Reject::OutOfBlast)) => {
                                     eprintln!("hit by {:?} ({:?}) refused: {why:?}", r.attacker, r.kind);
                                 }
-                                Err(_) => {}
+                                Err(why) => {
+                                    // The quiet refusals: not a swing, out of the box, the
+                                    // once-a-second limit. Where both players stood, to
+                                    // check a refused swing against the lab.
+                                    let at = net_state.others.iter().find(|o| Some(o.id) == r.attacker).map(|o| (o.x, o.y, o.sprite));
+                                    eprintln!(
+                                        "hit by {:?} ({:?}) not taken: {why:?}; attacker x, y, sprite {at:?}, we are at {:.1},{:.1}",
+                                        r.attacker, r.kind, session.player_x, session.player_y
+                                    );
+                                }
                             }
                         }
                         if took {
