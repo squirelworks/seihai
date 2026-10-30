@@ -1,5 +1,5 @@
 //! Pose animations of the player: the sword swing, the hurt pose, sitting
-//! (item 22), and the idle, walking and swimming figure.
+//! (item 22), lying in bed, and the idle, walking and swimming figure.
 //!
 //! The poses here are *driven by state that already exists* rather than by a
 //! clock of their own, so what is drawn can never disagree with what the
@@ -51,11 +51,13 @@
 //! * **Hidden** under a carried object (D): `hiddenstill` / `hidden` on
 //!   builds that play them (2.05 on), else the carry poses go on (see
 //!   `offline/hide.rs`).
-//! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
-//!   is not walking. The session sets it when the feet are on a chair tile
-//!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
-//!   real client starts the sit pose was not read; this trigger is inferred
-//!   (see `documentation/sitting.md`).
+//! * **Sit** and **sleep** are shown while [`OfflineSession::sitting`] or
+//!   [`OfflineSession::sleeping`] is set, walking or not: the 2.05 client
+//!   sets the `sit` or `sleep` gani after the walk has set `walk`, in the
+//!   same tick. The session sets them with the 2.05 client's probes: the
+//!   body's middle on a chair (tile type 3), or the head on a bed top
+//!   (type 4); see [`OfflineSession::refresh_rest`] and
+//!   `documentation/sitting.md`.
 //!
 //! A pose is shown only when its GANI is loaded (`OfflineSession::poses`),
 //! so a build without GANIs, or a data folder without `sword.gani`, draws the
@@ -85,6 +87,8 @@ pub struct PoseGanis {
     pub sword: Option<Gani>,
     pub hurt: Option<Gani>,
     pub sit: Option<Gani>,
+    /// Lying in bed.
+    pub sleep: Option<Gani>,
     pub idle: Option<Gani>,
     /// Standing and walking with an object held over the head.
     pub carrystill: Option<Gani>,
@@ -107,7 +111,7 @@ pub struct PoseGanis {
 impl PoseGanis {
     /// Every loaded pose GANI.
     pub fn all(&self) -> impl Iterator<Item = &Gani> {
-        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift, &self.hiddenstill, &self.hidden, &self.spin]
+        [&self.sword, &self.hurt, &self.sit, &self.sleep, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift, &self.hiddenstill, &self.hidden, &self.spin]
             .into_iter()
             .flatten()
     }
@@ -119,6 +123,7 @@ pub enum PoseKind {
     Sword,
     Hurt,
     Sit,
+    Sleep,
     Idle,
     Walk,
     Swim,
@@ -150,6 +155,7 @@ impl PoseKind {
             PoseKind::Sword => "sword.gani",
             PoseKind::Hurt => "hurt.gani",
             PoseKind::Sit => "sit.gani",
+            PoseKind::Sleep => "sleep.gani",
             PoseKind::Idle => "idle.gani",
             PoseKind::Walk => "walk.gani",
             PoseKind::Swim => "swim.gani",
@@ -173,6 +179,7 @@ impl PoseKind {
             PoseKind::Sword,
             PoseKind::Hurt,
             PoseKind::Sit,
+            PoseKind::Sleep,
             PoseKind::Idle,
             PoseKind::CarryStill,
             PoseKind::Carry,
@@ -227,6 +234,7 @@ impl OfflineSession {
             PoseKind::Sword => self.poses.sword = Some(gani),
             PoseKind::Hurt => self.poses.hurt = Some(gani),
             PoseKind::Sit => self.poses.sit = Some(gani),
+            PoseKind::Sleep => self.poses.sleep = Some(gani),
             PoseKind::Idle => self.poses.idle = Some(gani),
             PoseKind::CarryStill => self.poses.carrystill = Some(gani),
             PoseKind::Carry => self.poses.carry = Some(gani),
@@ -334,10 +342,10 @@ impl OfflineSession {
     }
 
     /// The pose to draw now, if any: only for a pose whose GANI is loaded.
-    /// Dead: none. A swing wins over hurt, hurt over sitting, sitting over
-    /// the motion poses: swimming (the `swim.gani` frame), walking (the
-    /// `walk.gani` frame) or idle (`idle.gani`, first step). Swimming has no
-    /// sword, hurt or sit pose.
+    /// Dead: none. A swing wins over hurt, hurt over sitting or lying in
+    /// bed, those over the motion poses: swimming (the `swim.gani` frame),
+    /// walking (the `walk.gani` frame) or idle (`idle.gani`, first step).
+    /// Swimming has no sword, hurt, sit or sleep pose.
     pub fn current_pose(&self) -> Option<PoseFrame<'_>> {
         // Dead: `dead.gani`, one step per 50 ms tick of the death timer,
         // held on its last step.
@@ -394,8 +402,16 @@ impl OfflineSession {
                 return Some(p);
             }
         }
-        if self.sitting && !self.walking {
-            return pick(PoseKind::Sit, &self.poses.sit, 0);
+        // Over the walk too: 2.05 sets these after the walk pose.
+        if self.sitting {
+            if let Some(p) = pick(PoseKind::Sit, &self.poses.sit, 0) {
+                return Some(p);
+            }
+        }
+        if self.sleeping {
+            if let Some(p) = pick(PoseKind::Sleep, &self.poses.sleep, 0) {
+                return Some(p);
+            }
         }
         if let Some(p) = self.push_tick().and_then(|t| at_tick(PoseKind::Push, &self.poses.push, t, true)) {
             return Some(p);

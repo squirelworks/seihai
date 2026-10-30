@@ -99,7 +99,7 @@ fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
     seihai::render::Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 }
 }
 
-/// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
+/// Load `sword.gani`, `hurt.gani`, `sit.gani` or another pose GANI into the session, from the
 /// first layer that has it. A missing file leaves the plain idle figure.
 /// The NPC animation a received file is for: `name` is a `.gani` and an NPC
 /// of this session already uses its stem (`setcharani`, `setani`).
@@ -964,9 +964,9 @@ fn main() {
     for name in ["walk.gani", "swim.gani"] {
         load_motion_gani(&resolver, &mut session, name);
     }
-    // The pose animations (idle, sword swing, hurt, sit) are drawn too.
+    // The pose animations (idle, sword swing, hurt, sit, sleep) are drawn too.
     for name in [
-        "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
+        "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "sleep.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
         "lift.gani", "spin.gani", "hiddenstill.gani", "hidden.gani",
     ] {
         load_pose_gani(&resolver, &mut session, name);

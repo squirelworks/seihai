@@ -69,8 +69,11 @@ first, so the byte holds every case above that changes play:
   flew over type 20, but `arrays.dat` never produced it, so until now they
   stopped at fences and low walls.
 - chairs (array 4) give 3, as before. **New:** bed tops (array 5) give 4
-  and bed bottoms (array 6) give 5. These apply only to passable tiles,
-  and nothing reads the bed types yet.
+  and bed bottoms (array 6) give 5. These apply only to passable tiles.
+  Every bed top in the 2.22 file is a wall, so it keeps 22 and goes in a
+  separate list too (`TileTypes::bed_tops`, from array 5 or the
+  `bedtop:` line of a text table). The sleep pose reads it
+  (`sitting.md`).
 - arrays 7 and 8 are not read here. Ledges belong to the cliff work.
 - **New:** a passable tile in the lava list (array 3) but not in the
   liquid list gives 13, Seihai's own number for lava floor: walked on, and
@@ -115,6 +118,6 @@ Script functions:
   The client's 50 ms player tick for the burn is assumed. Online, the burn
   changes Seihai's hearts as any local hit does.
 - `addtiledef` and the new-kind rule are not wired.
-- The bed and ground-class lists have no consumer.
+- The bed bottom and ground-class lists have no consumer.
 - 2.00 to 2.04 were not checked. All of them do have the strings
   `tiletype`, `onwater` and `onwall`.

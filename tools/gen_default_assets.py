@@ -482,6 +482,20 @@ def build_sheet(rng):
     return sheet, pal
 
 
+def id_ranges(ids):
+    """Sorted ids as space-separated `a-b` ranges (`708-711`)."""
+    out, ids = [], sorted(set(ids))
+    start = prev = None
+    for i in ids + [None]:
+        if start is not None and i == prev + 1:
+            prev = i
+            continue
+        if start is not None:
+            out.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = i
+    return " ".join(out)
+
+
 def tiledefs_text():
     """All 4096 types as a flat list, 16 per line: line n holds ids 16n to
     16n + 15 (one row of one 256 px block of the sheet)."""
@@ -492,6 +506,9 @@ def tiledefs_text():
         "# From arrays 0 to 6 of the Graal 2.22 arrays.dat (tools/graal_tile_lists.txt):",
         "# 0 open, 3 chair, 4 bed top, 5 bed bottom, 11 water, 12 lava, 13 lava floor,",
         "# 20 wall that thrown objects fly over, 22 wall. documentation/tile-types.md.",
+        "# Bed tops are walls in arrays.dat, so they keep 22 and are listed here too",
+        "# (the sleep pose asks this list; documentation/sitting.md).",
+        "bedtop: " + id_ranges(read_lists()["bed_top"]),
     ]
     for n in range(256):
         if n % 32 == 0:
@@ -1209,6 +1226,20 @@ def sit_gani():
     return "\n".join(L)
 
 
+def sleep_gani():
+    # In bed the bed tile is the blanket: only the head is drawn, on the
+    # pillow (the player's y is the bed top row). No shadow and no body.
+    L = gani_header("sleep.gani: lying in bed, the head only (1 step)")
+    L += ["DEFAULTHEAD head0.png", ""]
+    L += [f"SPRITE {100 + dr} HEAD 0 {32 * dr} 32 32 head {n}" for dr, n in enumerate(("up", "left", "down", "right"))]
+    L += ["", "ANI"]
+    for dr in range(DIRS):
+        _, _, (hx, hy) = OFFSETS[dr]
+        L.append(f"{100 + dr} {hx} {hy}")
+    L += ["ANIEND", ""]
+    return "\n".join(L)
+
+
 def carrystill_gani():
     L = gani_header("carrystill.gani: standing with an object held over the head (1 step)")
     L += ["DEFAULTHEAD head0.png", "DEFAULTBODY body.png", ""]
@@ -1509,7 +1540,7 @@ def write_all(out):
     save_png(im, p, os.path.join(out, "state.png"), 4, 16, True)
 
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
-                       ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
+                       ("sword", sword_gani()), ("sit", sit_gani()), ("sleep", sleep_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
                        ("carrystill", carrystill_gani()), ("carry", carry_gani())):
         open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(with_shields(with_hats(text), SHIELDS[name]) if name in SHIELDS else with_hats(text))
 

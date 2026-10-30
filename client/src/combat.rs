@@ -1775,7 +1775,7 @@ mod tests {
         let mut s = session();
         let tiles: Vec<u16> = vec![0; 64 * 64];
         s.current_level = Some(Level::from_board(&tiles));
-        s.tiletypes = Some(TileTypes { types: [0; 4096] });
+        s.tiletypes = Some(TileTypes::from_types([0; 4096]));
         s.player_x = x;
         s.player_y = y;
         s
@@ -1819,7 +1819,7 @@ mod tests {
         // A wall column at tile x = 34 (types[1] = 22 is a wall).
         let tiles: Vec<u16> = (0..64 * 64).map(|i| if i % 64 == 34 { 1 } else { 0 }).collect();
         s.current_level = Some(Level::from_board(&tiles));
-        let mut t = TileTypes { types: [0; 4096] };
+        let mut t = TileTypes::from_types([0; 4096]);
         t.types[1] = 22;
         s.tiletypes = Some(t);
         s.receive_hurtplayer(&HurtPlayer { dx: 1.0, dy: 0.0, ..hurt(1, 2) }, Some((28.0, 30.0)));

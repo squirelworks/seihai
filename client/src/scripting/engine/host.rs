@@ -904,7 +904,7 @@ mod tests {
         let tiles: Vec<u16> = (0..64 * 64).map(|i| if i % 64 == 10 { 1 } else { 0 }).collect();
         let mut s = OfflineSession::new();
         s.current_level = Some(Level::from_board(&tiles));
-        let mut types = crate::assets::TileTypes { types: [0; 4096] };
+        let mut types = crate::assets::TileTypes::from_types([0; 4096]);
         types.types[1] = 22;
         s.tiletypes = Some(types);
         let mut sc = SessionScripts::new(ClientVersion::V205);

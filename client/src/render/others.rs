@@ -41,6 +41,7 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
             "sword" => looped(p.sword.as_ref()),
             "hurt" => looped(p.hurt.as_ref()),
             "sit" => first(p.sit.as_ref(), 0),
+            "sleep" => first(p.sleep.as_ref(), 0),
             "carrystill" => first(p.carrystill.as_ref(), 0),
             "carry" => looped(p.carry.as_ref()),
             "dead" => first(p.dead.as_ref(), usize::MAX),

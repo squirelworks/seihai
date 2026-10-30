@@ -36,6 +36,15 @@ pub const DIR_EAST: u8 = 3;
 pub const FOOT_DX: f32 = 2.0;
 pub const FOOT_DY: f32 = 2.75;
 
+/// Where the 2.05 client tests for a chair (tile type 3), from the sprite's
+/// top-left: one point, `(x + 1.5, y + 2)`, the middle of the body.
+pub const SIT_PROBE: (f32, f32) = (1.5, 2.0);
+/// Where it tests for the top half of a bed (type 4): a left point at
+/// `x + 1` and a right one at `x + 1.8`, each at `y` or `y + 0.5`. Both
+/// sides must be on a bed top.
+pub const BED_PROBE_DX: [f32; 2] = [1.0, 1.8];
+pub const BED_PROBE_DY: [f32; 2] = [0.0, 0.5];
+
 /// Where the real client tests for walls while walking, from the sprite's
 /// top-left, in tiles, per facing (0 up, 1 left, 2 down, 3 right): six points
 /// on the leading edge of the body box (x + 0.5 to x + 2.5, y + 1 to y + 3),
@@ -202,9 +211,12 @@ pub struct OfflineSession {
     pub poses: crate::pose::PoseGanis,
     /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
     pub npc_ganis: HashMap<String, crate::assets::Gani>,
-    /// The feet are on a chair tile (type 3): the sit pose is drawn while the
-    /// player is not walking. Set by [`Self::refresh_water`].
+    /// The body is on a chair tile (type 3): the sit pose is drawn. Set by
+    /// [`Self::refresh_rest`].
     pub sitting: bool,
+    /// The head is on the top half of a bed (type 4): the sleep pose is
+    /// drawn. Set by [`Self::refresh_rest`].
+    pub sleeping: bool,
     /// `seteffect red,green,blue,alpha`: the colour the map is shaded with
     /// (default 0,0,0,0, no shading).
     pub screen_effect: [f32; 4],
@@ -486,6 +498,7 @@ impl OfflineSession {
             item_events: Vec::new(),
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
+            sleeping: false,
             screen_effect: [0.0; 4],
             player_images: Vec::new(),
             lava_ticks: 0,
@@ -1456,13 +1469,55 @@ impl OfflineSession {
                 self.spawn_leap(crate::throwing::LEAP_SPLASH, self.player_x, self.player_y);
             }
         }
-        // Feet on a chair tile (a bench): drawn sitting once the player stops.
-        self.sitting = match (&self.current_level, &self.tiletypes) {
-            (Some(level), Some(types)) if (0.0..64.0).contains(&fx) && (0.0..64.0).contains(&fy) => {
-                level.tile_id_at(fx as i32, fy as i32).is_some_and(|id| types.is_chair(id))
-            }
-            _ => false,
-        };
+        self.refresh_rest();
+    }
+
+    /// True if the tile of the current level under a point passes `test`.
+    /// Off the board nothing does.
+    fn tile_is(&self, fx: f32, fy: f32, test: fn(&TileTypes, u16) -> bool) -> bool {
+        let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) else { return false };
+        if !(0.0..64.0).contains(&fx) || !(0.0..64.0).contains(&fy) {
+            return false;
+        }
+        level.tile_id_at(fx as i32, fy as i32).is_some_and(|id| test(types, id))
+    }
+
+    /// Sit on a chair or lie down in a bed, as the 2.05 client decides it.
+    ///
+    /// The client runs this test on level entry, when an arrow key is let
+    /// go, and on every tick the player walked or a script moved them, so
+    /// after the walk has set the walk pose: on a chair the sit pose wins,
+    /// even while walking. Not while swimming or carrying (the client also
+    /// skips it on a horse).
+    ///
+    /// * Chair: the point `(x + 1.5, y + 2)` is type 3.
+    /// * Otherwise bed: `(x + 1, y)` or `(x + 1, y + 0.5)` is type 4, and
+    ///   `(x + 1.8, y)` or `(x + 1.8, y + 0.5)` is too. The client then
+    ///   puts the head on the bed's top row: y moves down half a tile when
+    ///   neither point at `y` is on the bed top, and is then cut to a whole
+    ///   tile (`floor(y + 0.0001)`). x is left alone. Walking up or down in
+    ///   a bed therefore snaps straight back; the way out is to the side.
+    pub fn refresh_rest(&mut self) {
+        self.sitting = false;
+        self.sleeping = false;
+        if self.in_water || self.carried.is_some() {
+            return;
+        }
+        let (x, y) = (self.player_x, self.player_y);
+        if self.tile_is(x + SIT_PROBE.0, y + SIT_PROBE.1, TileTypes::is_chair) {
+            self.sitting = true;
+            return;
+        }
+        let bed_top = |s: &Self, dx: f32, dy: f32| s.tile_is(x + dx, y + dy, TileTypes::is_bed_top);
+        if !BED_PROBE_DX.iter().all(|&dx| BED_PROBE_DY.iter().any(|&dy| bed_top(self, dx, dy))) {
+            return;
+        }
+        self.sleeping = true;
+        let mut ny = y;
+        if !BED_PROBE_DX.iter().any(|&dx| bed_top(self, dx, 0.0)) {
+            ny += 0.5;
+        }
+        self.player_y = (ny + 0.0001).floor();
     }
 
     /// Time between steps now (swimming and walking are the same pace).
@@ -2005,7 +2060,7 @@ mod tests {
         assert!(s.reading.is_none());
         // The same sign over open ground: the point is not blocked.
         let mut s = sign_on_wall();
-        s.tiletypes = Some(TileTypes { types: [0; 4096] });
+        s.tiletypes = Some(TileTypes::from_types([0; 4096]));
         s.player_x = 29.0;
         s.player_y = 11.0;
         s.try_move(0.0, -0.5);
@@ -2069,15 +2124,19 @@ mod tests {
     const OPEN: u16 = 0;
     const WALL: u16 = 1;
     const CHAIR: u16 = 7;
+    const BED_TOP: u16 = 8;
+    const BED_BOTTOM: u16 = 9;
     const WATER: u16 = 2;
     const LAVA: u16 = 3;
 
     fn types() -> TileTypes {
-        let mut t = TileTypes { types: [0; 4096] };
+        let mut t = TileTypes::from_types([0; 4096]);
         t.types[WALL as usize] = 22;
         t.types[WATER as usize] = 11;
         t.types[LAVA as usize] = 12;
         t.types[CHAIR as usize] = 3;
+        t.types[BED_TOP as usize] = 4;
+        t.types[BED_BOTTOM as usize] = 5;
         t
     }
 
@@ -2369,20 +2428,20 @@ mod tests {
         assert_eq!(put.leaps.len(), 3);
     }
 
-    /// A bench (chair tiles, walkable): standing with the feet on it sits,
-    /// walking off it stands. The flag only says "on a chair"; the pose is
-    /// drawn once the player stops (`pose::current_pose`).
+    /// A bench (chair tiles, walkable): the body's middle `(x + 1.5, y + 2)`
+    /// on it sits, walking off it stands. The flag is set while walking
+    /// too: the 2.05 client sets the sit pose after the walk pose.
     #[test]
-    fn feet_on_a_chair_tile_sit() {
+    fn the_body_on_a_chair_tile_sits() {
         // Chair tiles in column 20, rows 10..=11 (a 1 x 2 bench).
         let tiles = |x: i32, y: i32| if x == 20 && (10..=11).contains(&y) { CHAIR } else { OPEN };
-        // feet at (x + 2.0, y + 2.75): put the player so the feet are at (19.75, 10.5) -> tile 19: not a chair
-        let mut s = session_at(level(tiles), 19.5, 10.5);
+        // probe at (19.5, 10.5): tile 19, not a chair
+        let mut s = body_at(level(tiles), 18.0, 8.5);
         s.refresh_water();
         assert!(!s.sitting);
-        // one step right: the feet are at 20.0, 10.5: on the bench
+        // one step right: the probe is at (20.0, 10.5), on the bench
         assert!(s.try_move(0.5, 0.0).is_some());
-        assert!(s.sitting, "feet at ({}, {})", s.player_x + FOOT_DX, s.player_y + FOOT_DY);
+        assert!(s.sitting, "probe at ({}, {})", s.player_x + SIT_PROBE.0, s.player_y + SIT_PROBE.1);
         // walking on: still on it at 20.5, then off at 21.0
         assert!(s.try_move(0.5, 0.0).is_some());
         assert!(s.sitting);
@@ -2391,21 +2450,130 @@ mod tests {
         // the bench is not a wall: it did not block the walk
     }
 
-    /// A player who spawns on a bench sits as soon as the tile types are loaded.
+    /// Both rows of a 2 x 2 chair sit (the old feet point, y + 2.75, missed
+    /// the lower row whenever the body was drawn over it).
+    #[test]
+    fn both_halves_of_a_chair_sit() {
+        let tiles = |x: i32, y: i32| if (20..=21).contains(&x) && (10..=11).contains(&y) { CHAIR } else { OPEN };
+        let probe_y = |s: &OfflineSession| s.player_y + SIT_PROBE.1;
+        // y + 2 runs over rows 10 and 11: y from 8.0 up to (not with) 10.0.
+        for y in [8.0, 8.5, 9.0, 9.5] {
+            let mut s = body_at(level(tiles), 19.0, y);
+            s.refresh_water();
+            assert!(s.sitting, "probe y {}", probe_y(&s));
+        }
+        for y in [7.5, 10.0] {
+            let mut s = body_at(level(tiles), 19.0, y);
+            s.refresh_water();
+            assert!(!s.sitting, "probe y {}", probe_y(&s));
+        }
+    }
+
+    /// A player who spawns on a bench sits as soon as the tile types are
+    /// loaded; carrying or swimming does not sit.
     #[test]
     fn a_player_placed_on_a_chair_sits() {
         let tiles = |x: i32, y: i32| if (20..=21).contains(&x) && (10..=11).contains(&y) { CHAIR } else { OPEN };
         let mut s = OfflineSession::new();
         s.current_level = Some(level(tiles));
-        s.player_x = 20.0 - FOOT_DX + 0.5;
-        s.player_y = 10.0 - FOOT_DY + 0.5;
+        s.player_x = 20.0 - SIT_PROBE.0 + 0.5;
+        s.player_y = 10.0 - SIT_PROBE.1 + 0.5;
         s.tiletypes = Some(types());
         s.refresh_water();
         assert!(s.sitting);
+        s.carried = Some(Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+        s.refresh_rest();
+        assert!(!s.sitting, "not while carrying");
+        s.carried = None;
         // off the board is not a chair
         s.player_x = -10.0;
         s.refresh_water();
         assert!(!s.sitting);
+    }
+
+    /// A 2-wide bed at columns 20..=21: top row 10, bottom row 11.
+    fn bed(x: i32, y: i32) -> u16 {
+        match (x, y) {
+            (20..=21, 10) => BED_TOP,
+            (20..=21, 11) => BED_BOTTOM,
+            _ => OPEN,
+        }
+    }
+
+    /// The head on the bed's top row, both probes (x + 1 and x + 1.8) on it,
+    /// lies down; one probe off the bed does not.
+    #[test]
+    fn the_head_on_a_bed_top_sleeps() {
+        // x + 1 and x + 1.8 both in columns 20..=21: x from 19.0 up to 20.2.
+        for x in [19.0, 19.5, 20.0] {
+            let mut s = body_at(level(bed), x, 10.0);
+            s.refresh_water();
+            assert!(s.sleeping, "x {x}");
+            assert!(!s.sitting);
+            assert_eq!((s.player_x, s.player_y), (x, 10.0), "x is left alone");
+        }
+        for x in [18.5, 20.5] {
+            let mut s = body_at(level(bed), x, 10.0);
+            s.refresh_water();
+            assert!(!s.sleeping, "x {x}");
+        }
+        // The bottom half alone is never tested: the head on row 11 stands.
+        let mut s = body_at(level(bed), 19.5, 11.0);
+        s.refresh_water();
+        assert!(!s.sleeping);
+    }
+
+    /// Lying down puts the head on the top row: half a tile down when the
+    /// head is just above it, then cut to a whole tile.
+    #[test]
+    fn lying_down_snaps_the_head_to_the_bed_top_row() {
+        // y = 9.5: the probes at y (row 9) miss, at y + 0.5 (row 10) hit.
+        let mut s = body_at(level(bed), 19.5, 9.5);
+        s.refresh_water();
+        assert!(s.sleeping);
+        assert_eq!(s.player_y, 10.0);
+        // y = 10.5: the probes at y are on row 10 already: cut to 10.
+        let mut s = body_at(level(bed), 19.5, 10.5);
+        s.refresh_water();
+        assert!(s.sleeping);
+        assert_eq!(s.player_y, 10.0);
+    }
+
+    /// The sit and sleep poses are drawn walking or not, and only with
+    /// their GANI loaded.
+    #[test]
+    fn sit_and_sleep_poses_win_over_the_walk() {
+        use crate::pose::PoseKind;
+        let one = || crate::assets::Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap();
+        let tiles = |x: i32, y: i32| if (20..=21).contains(&x) && (10..=11).contains(&y) { CHAIR } else { bed(x, y - 20) };
+        let mut s = body_at(level(tiles), 19.0, 8.5);
+        s.set_pose_gani(PoseKind::Idle, one());
+        s.refresh_water();
+        assert!(s.sitting);
+        assert_eq!(s.current_pose().map(|p| p.kind), Some(PoseKind::Idle), "no sit.gani: idle");
+        s.set_pose_gani(PoseKind::Sit, one());
+        s.set_pose_gani(PoseKind::Sleep, one());
+        s.walking = true;
+        assert_eq!(s.current_pose().map(|p| p.kind), Some(PoseKind::Sit));
+        s.player_y = 30.0;
+        s.refresh_water();
+        assert!(s.sleeping && !s.sitting);
+        assert_eq!(s.current_pose().map(|p| p.kind), Some(PoseKind::Sleep));
+    }
+
+    /// In bed, a step down snaps straight back; a step to the side gets out.
+    #[test]
+    fn the_way_out_of_a_bed_is_to_the_side() {
+        let mut s = body_at(level(bed), 19.5, 10.0);
+        s.refresh_water();
+        assert!(s.sleeping);
+        s.try_move(0.0, 0.5);
+        assert_eq!(s.player_y, 10.0);
+        assert!(s.sleeping);
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(s.sleeping, "x + 1.8 = 21.8 is still on the bed");
+        assert!(s.try_move(0.5, 0.0).is_some());
+        assert!(!s.sleeping, "x + 1.8 = 22.3 is off it");
     }
 
     #[test]

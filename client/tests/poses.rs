@@ -1,4 +1,4 @@
-//! Item 22: the sword, hurt and sit poses, with Seihai's own default assets.
+//! Item 22: the sword, hurt, sit and sleep poses, with Seihai's own default assets.
 //!
 //! State level: the offline session steps `sword.gani` with the swing, plays
 //! its sound cue, shows the hurt pose on a hit and goes back to idle.
@@ -29,7 +29,7 @@ fn session() -> OfflineSession {
     s.life.set_rules(Some(seihai::protocol::DEATH_205));
     s.player_x = 30.0;
     s.player_y = 30.0;
-    for k in [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit] {
+    for k in [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Sleep] {
         s.set_pose_gani(k, gani(k.file()));
     }
     s
@@ -144,10 +144,13 @@ fn a_swing_wins_over_hurt_and_sit_shows_only_when_asked() {
     assert_eq!(pose(&t), None);
     t.sitting = true;
     assert_eq!(pose(&t), Some((PoseKind::Sit, 0)));
-    // sitting waits while an arrow key keeps the walk going
+    // walking over a chair sits too: 2.05 sets the sit gani after the walk
     t.walking = true;
-    assert_ne!(pose(&t).map(|p| p.0), Some(PoseKind::Sit));
+    assert_eq!(pose(&t), Some((PoseKind::Sit, 0)));
     t.walking = false;
+    t.sitting = false;
+    t.sleeping = true;
+    assert_eq!(pose(&t), Some((PoseKind::Sleep, 0)));
     t.in_water = true;
     assert_eq!(pose(&t), None, "not while swimming");
 }
@@ -201,6 +204,7 @@ fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
         let steps: Vec<Vec<u8>> = (0..5).map(|i| draw(&sword, i, dir, &a)).collect();
         let mut all = vec![idle.clone(), draw(&gani("sit.gani"), 0, dir, &a), draw(&gani("hurt.gani"), 0, dir, &a)];
         all.extend(steps);
+        all.push(draw(&gani("sleep.gani"), 0, dir, &a));
         for i in 0..all.len() {
             for j in i + 1..all.len() {
                 // sword steps 2 and 3 are the same picture on purpose (the thrust is held for a step)
@@ -250,7 +254,7 @@ fn walker() -> OfflineSession {
     use seihai::assets::{GaniPlayer, Level};
     let mut s = OfflineSession::new();
     s.current_level = Some(Level::from_board(&[0u16; 64 * 64]));
-    let mut t = seihai::assets::TileTypes { types: [0; 4096] };
+    let mut t = seihai::assets::TileTypes::from_types([0; 4096]);
     t.types[1] = 11; // water
     s.tiletypes = Some(t);
     s.player_x = 30.0;
