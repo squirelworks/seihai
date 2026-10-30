@@ -65,8 +65,9 @@ X, Y and direction. The 2.05 victim test read in the decompile (S 6 to 10) is
 kept: real 2.05 clients took Seihai's sprite swings in the same run. A
 GServer-v2 quirk to know: it encodes prop 10 by the *sender's* version, so a
 2.1+ receiver gets a 2.05 player's bow form and a 2.05 receiver gets a 2.1+
-player's GANI string; Seihai reads each by its own profile, as the real
-clients do.
+player's GANI string. Seihai reads prop 10 by its own profile, so a 2.1+
+Seihai misreads a 2.05 player's prop 10 on GServer-v2 (open; how the real
+2.1+ clients cope was not checked).
 
 **2.1+ swings.** A GANI client sends the swing as GANI `sword` once, and its
 SPRITE holds only the direction. Seihai takes another player as swinging when
