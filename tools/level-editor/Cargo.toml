@@ -13,7 +13,9 @@ name = "level-editor"
 path = "src/main.rs"
 
 [dependencies]
-seihai = { path = "../../client" }
+seihai-core = { path = "../../crates/seihai-core" }
+# The tile renderer (`seihai::render`) belongs to the client, not the core.
+seihai = { package = "seihai-mae", path = "../../crates/seihai-mae" }
 # The window (`level-editor gui`). The same versions as the client, so
 # nothing new is built.
 eframe = "0.29"

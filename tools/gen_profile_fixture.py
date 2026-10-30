@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerate client/src/protocol/profile_toml.tsv from the Graal_analysis version profiles.
+"""Regenerate crates/seihai-core/src/protocol/profile_toml.tsv from the Graal_analysis version profiles.
 
-usage: tools/gen_profile_fixture.py PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv
+usage: tools/gen_profile_fixture.py PATH/TO/Graal_analysis > crates/seihai-core/src/protocol/profile_toml.tsv
 
 The TSV is the cleaned per-version data (ids and numbers only) that the unit tests in
 `profile.rs` compare every `PROFILES` row against. Inputs, all in Graal_analysis:

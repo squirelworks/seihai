@@ -14,8 +14,8 @@
 use crate::{Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, Version, SCRIPT_PANE_LINES, LAYERS, SIZE, TILE_LIMIT};
 use eframe::egui;
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
-use seihai::assets::{read_png_rgb, tile_id, ObjectSet, Stamp};
-use seihai::gmap::Gmap;
+use seihai_core::assets::{read_png_rgb, tile_id, ObjectSet, Stamp};
+use seihai_core::gmap::Gmap;
 use seihai::render::{Framebuffer, TILE_PX};
 use std::path::{Path, PathBuf};
 
@@ -314,7 +314,7 @@ impl Sheet {
 
     /// The `pics1.png` of the built-in default asset set.
     pub fn builtin() -> Sheet {
-        let data = seihai::assets::builtin::bytes("pics1.png").expect("pics1.png is in the built-in set");
+        let data = seihai_core::assets::builtin::bytes("pics1.png").expect("pics1.png is in the built-in set");
         Sheet::from_png(data).expect("the built-in pics1.png decodes")
     }
 }

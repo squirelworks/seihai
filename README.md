@@ -28,7 +28,7 @@ python3 -m zipfile -e seihai-main.zip ~/Seihai
 rm -rf seihai
 mv seihai-main seihai
 cd seihai
-cargo build --release -p seihai
+cargo build --release -p seihai-mae
 ./target/release/seihai
 ```
 
@@ -40,7 +40,7 @@ On Windows (PowerShell), for a fresh extract only:
 
 ```powershell
 cd seihai
-cargo build --release -p seihai
+cargo build --release -p seihai-mae
 .\target\release\seihai.exe
 ```
 
@@ -49,7 +49,7 @@ cargo build --release -p seihai
 ```bash
 cd seihai
 git pull origin main
-cargo build --release -p seihai
+cargo build --release -p seihai-mae
 ```
 
 This creates the binary at:
@@ -60,7 +60,7 @@ This creates the binary at:
 `cargo build` only builds. It does not start the program. To build and run in one step:
 
 ```bash
-cargo run --release -p seihai
+cargo run --release -p seihai-mae
 ```
 
 `cargo run` uses the same `target` folder. On Windows, if you do not see a `target` directory, check that you are in the `seihai` folder (not a parent folder) and that the build finished without errors.
@@ -198,7 +198,7 @@ debug=1
 
 For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.txt` form) or `keyset_<action>=S,Space` rebind the game keys. The defaults are the readme's: arrows or I/J/K/L, A action, S or Space sword, D item, M map, Q item list, Tab chat (F7 shows the player list). See `documentation/keys.md`.
 
-`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai --no-default-features --features dev`.
+`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai-mae --no-default-features --features dev`.
 
 ## Features
 

@@ -34,7 +34,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release -p seihai --target ${{ matrix.target }}
+        run: cargo build --release -p seihai-mae --target ${{ matrix.target }}
       - name: Package (unix)
         if: matrix.os != 'windows-latest'
         run: |

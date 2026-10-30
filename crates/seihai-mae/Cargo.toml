@@ -1,0 +1,39 @@
+[package]
+name = "seihai-mae"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The library keeps the name `seihai` so `seihai::...` paths in the
+# binary, the examples and the tests do not change.
+[lib]
+name = "seihai"
+path = "src/lib.rs"
+
+[dependencies]
+seihai-core = { path = "../seihai-core", default-features = false }
+# Chat text over heads (TrueType). Already in the tree through egui.
+ab_glyph = "0.2"
+minifb = "0.27"
+eframe = "0.29"
+egui = "0.29"
+# Sound device output. Optional: the client runs without it, with sound
+# silent. Needs the ALSA development files on Linux.
+rodio = { version = "0.19", optional = true, default-features = false }
+
+[[bin]]
+name = "seihai"
+path = "src/bin/main.rs"
+
+[features]
+# Developer mode (F9 wallhack). On for now; build with
+# `--no-default-features` to compile it out.
+default = ["dev", "audio-rodio"]
+dev = ["seihai-core/dev"]
+# Real audio output through rodio/cpal. On by default. On Linux this
+# needs the ALSA development files (libasound2-dev). Build with
+# `--no-default-features --features dev` to compile it out.
+audio-rodio = ["dep:rodio"]
+
+[dev-dependencies]
+serde_json = "1"
