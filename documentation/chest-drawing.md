@@ -42,12 +42,9 @@ level of a public server the board has tile 2047 where the chest goes.
 ## What Seihai does
 
 `render::tiles::draw_chests` draws every chest record after the board and
-before the NPCs:
-
-* a sheet that is not the built-in one: tiles 1784 or 829 as above;
-* the built-in sheet (own art, other ids): a chest already on the board under
-  the record is left as it is (opened ones get the open tiles, id + 2),
-  otherwise the built-in grass chest `64 65 / 80 81` (open `66 67 / 82 83`).
+before the NPCs, with tiles 1784 or 829 as above. The built-in sheet follows
+the Graal tile layout and has its own chest art at those ids
+(`default-assets.md`), so every sheet is drawn the same way.
 
 ## Opening (real 2.22 client, lab capture 2026-10-25)
 

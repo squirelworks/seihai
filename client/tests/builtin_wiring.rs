@@ -9,18 +9,19 @@
 //!   time is ever sent for it), and `on_step` asks for the first-step files
 //!   only when there is no copy at all;
 //! * the offline starter level loads, walks, swims, and draws chests and
-//!   signs from the board, with no placeholder boxes.
+//!   signs with no placeholder boxes;
+//! * the built-in tile table also serves a user's own Graal `pics1.png`.
 //!
 //! Every file here is our own default art, or a few synthetic bytes.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use seihai::assets::{builtin, check_folder, read_png_rgb, AssetResolver, AssetRoot, Layer, Status};
+use seihai::assets::{builtin, check_folder, read_png_rgb, AssetResolver, AssetRoot, Layer, Status, TileTypesFile};
 use seihai::filecache::{DownloadStore, FileRequest, FileSession, Stored, FIRST_STEP_REQUESTS};
 use seihai::offline::{OfflineSession, FOOT_DX, FOOT_DY};
 use seihai::protocol::ClientVersion;
-use seihai::render::{render_view_with, Framebuffer, ViewOptions, TILE_PX};
+use seihai::render::{render_view, Framebuffer, TILE_PX, CHEST_CLOSED_TILES, CHEST_OPEN_TILES};
 
 const PROFILES: [ClientVersion; 4] = [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231];
 
@@ -96,16 +97,17 @@ fn a_partial_assets_folder_falls_back_file_by_file() {
 }
 
 #[test]
-fn the_built_in_tile_table_is_not_applied_to_a_foreign_sheet() {
+fn the_built_in_tile_table_also_serves_a_users_own_sheet() {
     let (base, bdir) = builtin_dir("table");
     let user = tmp("table-assets");
-    touch(&user, "pics1.png", b"not ours");
+    touch(&user, "pics1.png", b"a Graal sheet");
     let r = AssetResolver::empty(ClientVersion::V222.profile()).with_assets(Some(AssetRoot::new(&user))).with_builtin(Some(bdir.clone()));
-    assert!(r.tile_types().is_none(), "the user's sheet has no table; ours does not describe it");
-    // With no sheet of the user's, the built-in table goes with the built-in sheet.
-    fs::remove_file(user.join("pics1.png")).unwrap();
-    let (p, _) = r.tile_types().unwrap();
-    assert_eq!(r.layer_of(&p), Some(Layer::Builtin));
+    // Our table uses the standard Graal tile layout, so it fits the user's sheet.
+    let (p, kind) = r.tile_types().unwrap();
+    assert_eq!((r.layer_of(&p), kind), (Some(Layer::Builtin), TileTypesFile::Text));
+    // The user's own arrays.dat still comes first.
+    let mine = touch(&user, "arrays.dat", b"x");
+    assert_eq!(r.tile_types(), Some((mine, TileTypesFile::ArraysDat)));
     let _ = fs::remove_dir_all(&base);
     let _ = fs::remove_dir_all(&user);
 }
@@ -468,7 +470,7 @@ fn tiles_image(sheet: &[u8], sw: u32, sh: u32, ids: &[u16], cols: i32) -> Vec<u8
 }
 
 #[test]
-fn chests_and_signs_are_drawn_from_the_board_with_no_placeholder_boxes() {
+fn chests_are_drawn_from_their_records_and_signs_from_the_board() {
     let (base, bdir) = builtin_dir("render");
     let (mut s, r) = offline_session(&bdir);
     let l = s.current_level.clone().unwrap();
@@ -476,52 +478,32 @@ fn chests_and_signs_are_drawn_from_the_board_with_no_placeholder_boxes() {
     let (sw, sh, sheet) = read_png_rgb(&fs::read(sheet_path).unwrap()).unwrap();
     let (vw, vh) = (40u32, 30u32);
     let t = TILE_PX as i32;
-    let opts = ViewOptions { builtin_sheet: true };
     let cam = |s: &OfflineSession| {
         (((s.player_x + 1.5) * 16.0 - (vw as f32 * 16.0) / 2.0) as i32, ((s.player_y + 1.5) * 16.0 - (vh as f32 * 16.0) / 2.0) as i32)
     };
-    let chest = l.chests[0].clone();
+    // The sign is the board's tiles and nothing on top.
     let sign = l.signs[0].clone();
-    for (label, ax, ay) in [("chest", chest.x, chest.y), ("sign", sign.x, sign.y)] {
-        // Centre the camera so the object is in view.
-        s.player_x = ax as f32 - 2.0;
-        s.player_y = ay as f32 - 2.0;
-        let (cx, cy) = cam(&s);
-        let fb = render_view_with(&s, &sheet, sw, sh, vw, vh, opts);
-        let (w, h) = if label == "chest" { (2, 2) } else { (2, 1) };
-        let ids: Vec<u16> = (0..h).flat_map(|dy| (0..w).map(move |dx| (dx, dy))).map(|(dx, dy)| l.tile_id_at(ax + dx, ay + dy).unwrap()).collect();
-        let got = region(&fb, ax * t - cx, ay * t - cy, w * t, h * t);
-        assert_eq!(got, tiles_image(&sheet, sw, sh, &ids, w), "{label}: the view shows the board's tiles and nothing on top");
-    }
-    // An opened chest shows the open tiles, with our sheet.
+    s.player_x = sign.x as f32 - 2.0;
+    s.player_y = sign.y as f32 - 2.0;
+    let (cx, cy) = cam(&s);
+    let fb = render_view(&s, &sheet, sw, sh, vw, vh);
+    let ids = [l.tile_id_at(sign.x, sign.y).unwrap(), l.tile_id_at(sign.x + 1, sign.y).unwrap()];
+    assert_eq!(region(&fb, sign.x * t - cx, sign.y * t - cy, 2 * t, t), tiles_image(&sheet, sw, sh, &ids, 2), "sign");
+    // The chest is drawn from its record with the sheet's chest ids, which
+    // on our sheet carry our chest art: closed, then open once opened.
+    let chest = l.chests[0].clone();
     s.player_x = chest.x as f32 - 2.0;
     s.player_y = chest.y as f32 - 2.0;
-    s.opened_chests.insert((chest.x, chest.y));
     let (cx, cy) = cam(&s);
-    let closed: Vec<u16> = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| l.tile_id_at(chest.x + dx, chest.y + dy).unwrap()).to_vec();
-    let open: Vec<u16> = closed.iter().map(|i| i + 2).collect();
-    let fb = render_view_with(&s, &sheet, sw, sh, vw, vh, opts);
-    let got = region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t);
-    assert_eq!(got, tiles_image(&sheet, sw, sh, &open, 2));
-    assert_ne!(got, tiles_image(&sheet, sw, sh, &closed, 2));
-    // With another sheet the chest is drawn from its record with the
-    // sheet's own chest ids (open art at 829 and on).
-    let fb = render_view_with(&s, &sheet, sw, sh, vw, vh, ViewOptions::default());
-    assert_eq!(region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t), tiles_image(&sheet, sw, sh, &[829, 830, 845, 846], 2));
+    let fb = render_view(&s, &sheet, sw, sh, vw, vh);
+    let closed = region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t);
+    assert_eq!(closed, tiles_image(&sheet, sw, sh, &CHEST_CLOSED_TILES, 2));
+    s.opened_chests.insert((chest.x, chest.y));
+    let fb = render_view(&s, &sheet, sw, sh, vw, vh);
+    let open = region(&fb, chest.x * t - cx, chest.y * t - cy, 2 * t, 2 * t);
+    assert_eq!(open, tiles_image(&sheet, sw, sh, &CHEST_OPEN_TILES, 2));
+    assert_ne!(open, closed);
     let _ = fs::remove_dir_all(&base);
-}
-
-#[test]
-fn the_starter_level_chest_and_sign_tiles_have_open_art_two_ids_on() {
-    // The open-chest swap rests on this: every closed chest tile of the
-    // built-in sheet has the open tile two ids to the right, named so in tiledefs.txt.
-    let text = String::from_utf8(builtin::bytes("tiledefs.txt").unwrap().to_vec()).unwrap();
-    let name_of = |id: u16| text.lines().find_map(|l| l.split(',').collect::<Vec<_>>().get(..5).filter(|f| f[0].parse::<u16>() == Ok(id)).map(|f| f[4].to_string()));
-    for id in seihai::render::BUILTIN_CHEST_CLOSED {
-        let (c, o) = (name_of(id).unwrap(), name_of(id + 2).unwrap());
-        assert!(c.starts_with("chest") && !c.contains("open"), "{id} is {c}");
-        assert!(o.starts_with("chest") && o.contains("open"), "{} is {o}", id + 2);
-    }
 }
 
 // ---- downloads land where the resolver looks (laundry list P6, 2026-10-29) ----

@@ -37,21 +37,32 @@ fn png_header(data: &[u8]) -> (u32, u32, u8, u8, bool) {
     (w, h, data[24], data[25], trns)
 }
 
-/// The tile type rows of `tiledefs.txt`: (id, x, y, type, name).
-fn tiledef_rows() -> Vec<(u16, u32, u32, u8, String)> {
-    let text = String::from_utf8(read("tiledefs.txt")).unwrap();
-    text.lines()
-        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
-        .map(|l| {
-            let f: Vec<&str> = l.split(',').collect();
-            assert_eq!(f.len(), 5, "{l}");
-            (f[0].parse().unwrap(), f[1].parse().unwrap(), f[2].parse().unwrap(), f[3].parse().unwrap(), f[4].to_string())
-        })
-        .collect()
-}
+/// Tile ids of the standard Graal layout whose meaning is documented, and
+/// which the built-in sheet draws with art of their own
+/// (`documentation/default-assets.md`).
+const GRASS: u16 = 0;
+const GRASS2: u16 = 2047;
+const BUSH: u16 = 2;
+const STONE: u16 = 34;
+const SIGN: u16 = 512;
+const POT: u16 = 684;
+const BLACK_STONE: u16 = 990;
+const TALL_GRASS: u16 = 420;
+const CHEST: u16 = 1784;
+const CHEST_OPEN: u16 = 829;
+const DEEP_WATER: u16 = 322;
+const SHALLOW: u16 = 398;
+const NO_SWIM: u16 = 3644;
+const LAVA: u16 = 2882;
+const LAVA_FLOOR: u16 = 2958;
 
-fn id_of(rows: &[(u16, u32, u32, u8, String)], name: &str) -> u16 {
-    rows.iter().find(|r| r.4 == name).unwrap_or_else(|| panic!("no tile named {name}")).0
+/// The ids a starter level may use: the documented ones, each 2x2 object whole.
+fn documented_ids() -> HashSet<u16> {
+    let mut v: HashSet<u16> = [GRASS, GRASS2, DEEP_WATER, SHALLOW, NO_SWIM].into_iter().collect();
+    for o in [BUSH, STONE, SIGN, POT, BLACK_STONE, TALL_GRASS, CHEST, CHEST_OPEN, 677, 679, 1770, 1802, 1834] {
+        v.extend([o, o + 1, o + 16, o + 17]);
+    }
+    v
 }
 
 // ---- images ----------------------------------------------------------------
@@ -210,10 +221,10 @@ fn sprites_sheet_has_the_carried_objects_and_the_break_pieces() {
 #[test]
 fn tile_id_mapping_contract() {
     let (sw, sh, rgb) = read_png_rgb(&read("pics1.png")).unwrap();
-    let rows = tiledef_rows();
-    assert!(rows.len() > 40);
-    let filler: [[u8; 3]; 2] = [[160, 32, 160], [40, 16, 40]];
-    let cell_px = |col: u32, row: u32| -> Vec<[u8; 3]> {
+    let cell_px = |id: u16| -> Vec<[u8; 3]> {
+        let t = id as u32;
+        // the mapping Seihai's blit_tile uses, and the real sheets' layout
+        let (col, row) = (t % 16 + (t / 512) * 16, (t / 16) % 32);
         let mut v = Vec::new();
         for y in 0..16 {
             for x in 0..16 {
@@ -223,59 +234,79 @@ fn tile_id_mapping_contract() {
         }
         v
     };
-    for (id, x, y, _, name) in &rows {
-        let t = *id as u32;
-        // the mapping Seihai's blit_tile uses
-        let (col, row) = (t % 16 + (t / 512) * 16, (t / 16) % 32);
-        assert_eq!((*x, *y), (col * 16, row * 16), "tiledefs x,y of {name}");
-        let px = cell_px(col, row);
-        if name == "unassigned" {
-            assert!(px.iter().all(|p| filler.contains(p)));
-            continue;
-        }
-        assert!(t < 512, "{name}: ids stay in block 0");
-        assert!(px.iter().all(|p| !filler.contains(p)), "tile {name} ({id}) is on a filler cell");
-        // blit_tile draws exactly that cell
+    // blit_tile draws exactly the id's cell, in every block of the sheet
+    for id in [GRASS, BUSH, DEEP_WATER, SIGN, CHEST_OPEN, CHEST, GRASS2, LAVA, NO_SWIM, 4095] {
         let mut fb = Framebuffer::new(16, 16);
-        fb.blit_tile(&rgb, sw, sh, *id, 0, 0);
+        fb.blit_tile(&rgb, sw, sh, id, 0, 0);
         let drawn: Vec<[u8; 3]> = fb.pixels.chunks(3).map(|c| [c[0], c[1], c[2]]).collect();
-        assert_eq!(drawn, px, "blit_tile({id}) for {name}");
+        assert_eq!(drawn, cell_px(id), "blit_tile({id})");
     }
-    // ids that no row names are filler (purple/black checker): a wrong id shows
-    for id in [5u32, 40, 47, 100, 300, 511, 512, 4095] {
-        let (col, row) = (id % 16 + (id / 512) * 16, (id / 16) % 32);
-        assert!(cell_px(col, row).iter().all(|p| filler.contains(p)), "id {id}");
+    // Every id has art of its type: tiles of one type share a look, and the
+    // types look different from each other (grass, wall, water, lava).
+    let types = TileTypes::load(root().join("tiledefs.txt")).unwrap();
+    let main_colour = |id: u16| -> [u8; 3] {
+        let mut n: std::collections::HashMap<[u8; 3], usize> = Default::default();
+        for p in cell_px(id) {
+            *n.entry(p).or_default() += 1;
+        }
+        n.into_iter().max_by_key(|(_, k)| *k).unwrap().0
+    };
+    let (open, wall, water, lava) = (main_colour(1), main_colour(4), main_colour(461), main_colour(2883));
+    assert_eq!((types.kind(1), types.kind(4), types.kind(461), types.kind(2883)), (TileKind::Open, TileKind::Blocking, TileKind::Water, TileKind::Lava));
+    assert_eq!(HashSet::from([open, wall, water, lava]).len(), 4, "four types, four looks");
+    let documented = documented_ids();
+    for id in (0..4096u16).filter(|i| !documented.contains(i)) {
+        let want = match (types.raw(id).unwrap(), types.kind(id)) {
+            (_, TileKind::Water) => water,
+            (_, TileKind::Lava) => lava,
+            (0, TileKind::Open) => open,
+            (22, TileKind::Blocking) => wall,
+            _ => continue,
+        };
+        assert_eq!(main_colour(id), want, "tile {id} looks like its type");
     }
-    // all 4096 ids have a cell on this sheet
-    let cells: HashSet<(u32, u32)> = (0..4096u32).map(|t| (t % 16 + (t / 512) * 16, (t / 16) % 32)).collect();
-    assert_eq!(cells.len(), 4096);
-    assert!(cells.iter().all(|&(c, r)| c < 128 && r < 32));
+    // the documented objects have art of their own, unlike plain grass or wall
+    for id in [BUSH, STONE, SIGN, POT, BLACK_STONE, TALL_GRASS, CHEST, CHEST_OPEN] {
+        let px = cell_px(id + 17);
+        assert!(px != cell_px(1) && px != cell_px(4), "object {id}");
+    }
 }
 
 #[test]
 fn tile_types_contract() {
+    // One table for this sheet and for a Graal pics1.png: the types of the
+    // 2.22 arrays.dat (tile-types.md), by tile id.
     let types = TileTypes::load(root().join("tiledefs.txt")).expect("tiledefs.txt loads");
-    let rows = tiledef_rows();
-    let id = |n: &str| id_of(&rows, n);
-    // water is exactly type 11 and counts as water, not as a wall
-    for n in ["water", "water2"] {
-        assert_eq!(types.raw(id(n)), Some(11), "{n}");
-        assert_eq!(types.kind(id(n)), TileKind::Water);
-    }
-    // walls and solid objects are type 20 or more
-    for n in ["wall", "wallcap", "roof", "void", "bush", "rock", "tree0", "tree3", "chest0", "chest3", "chestopen1", "sign0", "sign1", "signw0"] {
-        assert!(types.raw(id(n)).unwrap() >= 20, "{n}");
-        assert_eq!(types.kind(id(n)), TileKind::Blocking, "{n}");
-    }
-    // floors are open
-    for n in ["grass", "grass2", "flowers", "path", "sand", "sand2", "doorway", "woodfloor"] {
-        assert_eq!(types.kind(id(n)), TileKind::Open, "{n}");
-    }
-    // every named id is below 4096 and the table has all 4096 entries
-    assert!(rows.iter().all(|r| r.0 < 4096));
     assert_eq!(types.types.len(), 4096);
-    // an id that nothing names is open floor (type 0)
-    assert_eq!(types.kind(5), TileKind::Open);
+    let kind = |id: u16| types.kind(id);
+    // the new4.nw tiles, as tile-types.md lists them for the 2.22 file
+    assert_eq!(kind(SHALLOW), TileKind::Open);
+    assert_eq!((types.raw(461), types.raw(472)), (Some(11), Some(11)));
+    assert_eq!(kind(NO_SWIM), TileKind::Blocking);
+    assert_eq!(types.raw(LAVA), Some(12));
+    assert_eq!(types.raw(LAVA_FLOOR), Some(13));
+    assert!(types.is_lava(LAVA) && types.is_lava(LAVA_FLOOR));
+    // deep water swims; grass is open
+    assert_eq!(kind(DEEP_WATER), TileKind::Water);
+    assert_eq!((kind(GRASS), kind(GRASS2)), (TileKind::Open, TileKind::Open));
+    // bushes, stones, signs, pots, black stones and chests block, and thrown
+    // objects fly over them (array 2)
+    for o in [BUSH, STONE, SIGN, POT, BLACK_STONE, CHEST, CHEST_OPEN] {
+        for t in [o, o + 1, o + 16, o + 17] {
+            assert_eq!(types.raw(t), Some(20), "{t}");
+        }
+    }
+    // a plain wall
+    assert_eq!(types.raw(4), Some(22));
+    // what a cut or lift leaves is open, and so is tall grass
+    for t in [677, 679, 1770, 1802, 1834, TALL_GRASS] {
+        assert_eq!(kind(t), TileKind::Open, "{t}");
+    }
+    // a chair (arrays.dat array 4) and a bed bottom (array 6)
+    assert_eq!((types.raw(681), types.raw(724)), (Some(3), Some(5)));
+    // the list counts of the 2.22 file: 934 passable, 116 liquid
+    let liquid = (0..4096u16).filter(|&t| matches!(types.raw(t), Some(11 | 12))).count();
+    assert_eq!(liquid, 116);
     // the foot point the contract is written for
     assert_eq!((FOOT_DX, FOOT_DY), (2.0, 2.75));
 }
@@ -438,16 +469,16 @@ fn foot_tile(l: &Level, types: &TileTypes, x: f32, y: f32) -> (u16, TileKind) {
 #[test]
 fn starter_levels_load_and_obey_the_tile_contract() {
     let types = TileTypes::load(root().join("tiledefs.txt")).unwrap();
-    let rows = tiledef_rows();
-    let named: HashSet<u16> = rows.iter().filter(|r| r.4 != "unassigned").map(|r| r.0).collect();
+    let documented = documented_ids();
     for name in ["new1.nw", "new2.nw"] {
         let l = level(name);
-        // a full 64x64 board, every id named in tiledefs.txt (so it has art)
+        // a full 64x64 board of documented ids only, so it reads the same on
+        // a Graal pics1.png
         assert_eq!(l.boards.len(), 64, "{name}: one BOARD row per tile row");
         for y in 0..64 {
             for x in 0..64 {
                 let id = l.tile_id_at(x, y).unwrap();
-                assert!(named.contains(&id), "{name}: ({x},{y}) uses tile {id}, which has no art");
+                assert!(documented.contains(&id), "{name}: ({x},{y}) uses tile {id}, whose meaning is not documented");
             }
         }
         // links: the destination exists, and the arrival foot point is open floor
@@ -459,18 +490,16 @@ fn starter_levels_load_and_obey_the_tile_contract() {
             let ny = k.new_y.unwrap();
             assert_eq!(foot_tile(&dest, &types, nx, ny).1, TileKind::Open, "{name} -> {} arrival", k.dest);
         }
-        // chests sit on chest art; signs on sign art; both have text
-        let id = |n: &str| id_of(&rows, n);
+        // the board under a chest is open grass (the chest is drawn from its
+        // record); a sign record is the lower row of a sign; both have text
         for c in &l.chests {
-            let (cx, cy) = (c.x, c.y);
-            let ids = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| l.tile_id_at(cx + dx, cy + dy).unwrap());
-            let closed_g = [id("chest0"), id("chest1"), id("chest2"), id("chest3")];
-            let closed_w = [id("chestw0"), id("chestw1"), id("chestw2"), id("chestw3")];
-            assert!(ids == closed_g || ids == closed_w, "{name}: chest at {cx},{cy} has tiles {ids:?}");
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                assert_eq!(l.tile_id_at(c.x + dx, c.y + dy), Some(GRASS2), "{name}: chest at {},{}", c.x, c.y);
+            }
         }
         for s in &l.signs {
             let ids = [l.tile_id_at(s.x, s.y).unwrap(), l.tile_id_at(s.x + 1, s.y).unwrap()];
-            assert!(ids == [id("sign0"), id("sign1")] || ids == [id("signw0"), id("signw1")], "{name}: sign at {},{}", s.x, s.y);
+            assert_eq!(ids, [SIGN + 16, SIGN + 17], "{name}: sign at {},{}", s.x, s.y);
             assert!(s.text.len() > 10);
         }
         assert!(!l.chests.is_empty() && !l.signs.is_empty());
@@ -483,7 +512,7 @@ fn starter_levels_load_and_obey_the_tile_contract() {
     let bush = (0..64)
         .flat_map(|y| (0..64).map(move |x| (x, y)))
         .find(|&(x, y)| {
-            l.tile_id_at(x, y) == Some(id_of(&rows, "bush"))
+            l.tile_id_at(x, y) == Some(BUSH + 16)
                 && y > 3
                 && x > 3
                 && x < 60

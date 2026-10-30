@@ -178,7 +178,8 @@ mod tests {
         for (n, d) in FILES {
             assert_eq!(&fs::read(root.join(n)).unwrap(), d, "{n}");
         }
-        assert!(total_size() < 100 * 1024, "the set stays small: {} bytes", total_size());
+        // 128 KB since the sheet holds art for all 4096 tile ids of the Graal layout.
+        assert!(total_size() < 128 * 1024, "the set stays small: {} bytes", total_size());
     }
 
     #[test]

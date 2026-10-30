@@ -255,18 +255,6 @@ impl Framebuffer {
     }
 }
 
-/// Closed chest tile ids of the built-in tile sheet, and the open tile of
-/// each (the open art sits two ids to the right). The built-in sheet has two
-/// chests (on grass and on a wood floor), each 2x2 tiles (`id`, `id + 1`,
-/// `id + 16`, `id + 17`). A level that already has one of them on its board
-/// at a chest record keeps it (the open art is swapped in); otherwise the
-/// grass chest is drawn from the record.
-pub const BUILTIN_CHEST_CLOSED: [u16; 8] = [64, 65, 80, 81, 68, 69, 84, 85];
-
-/// The grass chest of the built-in sheet: top-left, top-right, bottom-left,
-/// bottom-right.
-pub const BUILTIN_CHEST_GRASS: [u16; 4] = [64, 65, 80, 81];
-
 /// The chest art of the real 2.05 and 2.22 tile sheets: `arrays.dat` array 13
 /// (closed) and array 14 (open), as top-left, top-right, bottom-left,
 /// bottom-right tile ids. The client draws a chest from its record as a 32x32
@@ -275,29 +263,14 @@ pub const BUILTIN_CHEST_GRASS: [u16; 4] = [64, 65, 80, 81];
 pub const CHEST_CLOSED_TILES: [u16; 4] = [1784, 1785, 1800, 1801];
 pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
 
-/// The four tiles to draw for a chest record, or `None` when the board
-/// already shows it (built-in sheet with its own chest tiles there).
-/// `board_has_chest` says whether the board has a built-in chest tile under
-/// the record.
-pub fn chest_art(opts: ViewOptions, opened: bool, board_has_chest: bool) -> Option<[u16; 4]> {
-    if opts.builtin_sheet {
-        if board_has_chest {
-            return None;
-        }
-        let d = if opened { 2 } else { 0 };
-        return Some(BUILTIN_CHEST_GRASS.map(|t| t + d));
+/// The four tiles to draw for a chest record. The built-in sheet has its
+/// chest art at the same ids as the real sheets.
+pub fn chest_art(opened: bool) -> [u16; 4] {
+    if opened {
+        CHEST_OPEN_TILES
+    } else {
+        CHEST_CLOSED_TILES
     }
-    Some(if opened { CHEST_OPEN_TILES } else { CHEST_CLOSED_TILES })
-}
-
-/// How to draw a view beyond what the level's board says.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ViewOptions {
-    /// The tile sheet is the built-in one: an opened chest is drawn with
-    /// the open-chest tiles ([`BUILTIN_CHEST_CLOSED`] + 2). With another
-    /// sheet the board is drawn as it is, because a foreign sheet's open
-    /// chest ids are not known.
-    pub builtin_sheet: bool,
 }
 
 /// Render a camera view of the level into a framebuffer.
@@ -313,19 +286,6 @@ pub fn render_view(
     sheet_h: u32,
     view_tiles_w: u32,
     view_tiles_h: u32,
-) -> Framebuffer {
-    render_view_with(session, sheet, sheet_w, sheet_h, view_tiles_w, view_tiles_h, ViewOptions::default())
-}
-
-/// As [`render_view`], with [`ViewOptions`].
-pub fn render_view_with(
-    session: &OfflineSession,
-    sheet: &[u8],
-    sheet_w: u32,
-    sheet_h: u32,
-    view_tiles_w: u32,
-    view_tiles_h: u32,
-    opts: ViewOptions,
 ) -> Framebuffer {
     let mut fb = Framebuffer::new(view_tiles_w * TILE_PX, view_tiles_h * TILE_PX);
     let level = match &session.current_level {
@@ -350,17 +310,7 @@ pub fn render_view_with(
                 session.gmap.as_ref().and_then(|w| w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky)))
             };
             let Some(at) = at else { continue };
-            if let Some(mut id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
-                if opts.builtin_sheet && (kx, ky) == (0, 0) && BUILTIN_CHEST_CLOSED.contains(&id) {
-                    // An opened chest shows its open tiles.
-                    let (px, py) = (lx.rem_euclid(64), ly.rem_euclid(64));
-                    let opened = level.chests.iter().any(|c| {
-                        session.opened_chests.contains(&(c.x, c.y)) && (c.x..c.x + 2).contains(&px) && (c.y..c.y + 2).contains(&py)
-                    });
-                    if opened {
-                        id += 2;
-                    }
-                }
+            if let Some(id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
                 fb.blit_tile(sheet, sheet_w, sheet_h, id, tx * t - sub_x, ty * t - sub_y);
             }
         }
@@ -369,7 +319,7 @@ pub fn render_view_with(
     // Chests are drawn from their records, over the board; signs have no
     // art of their own on the board. An NPC whose image is not there yet
     // draws nothing, as in the 2.05 client (see npc-images.md).
-    draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y, opts);
+    draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y);
 
     fb
 }
@@ -378,16 +328,14 @@ pub fn render_view_with(
 /// tiles at the record's tile position. The client skips a chest whose x or y
 /// is outside 0 to 62.
 #[allow(clippy::too_many_arguments)]
-fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::assets::Level, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32, opts: ViewOptions) {
+fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::assets::Level, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32) {
     let t = TILE_PX as i32;
     for c in &level.chests {
         if !(0..=62).contains(&c.x) || !(0..=62).contains(&c.y) {
             continue;
         }
         let opened = c.opened || session.opened_chests.contains(&(c.x, c.y));
-        let board_has_chest = (0..2).any(|dy| (0..2).any(|dx| tile_at(level, c.x + dx, c.y + dy).is_some_and(|id| BUILTIN_CHEST_CLOSED.contains(&id))));
-        let Some(ids) = chest_art(opts, opened, board_has_chest) else { continue };
-        for (i, id) in ids.into_iter().enumerate() {
+        for (i, id) in chest_art(opened).into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
             fb.blit_tile(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
         }
@@ -694,9 +642,9 @@ mod tests {
 
     /// The tile ids drawn in the 2x2 tiles at level tile (x, y), for a view
     /// of 20x20 tiles centred on the player.
-    fn drawn_at(s: &OfflineSession, opts: ViewOptions, x: i32, y: i32) -> [u16; 4] {
+    fn drawn_at(s: &OfflineSession, x: i32, y: i32) -> [u16; 4] {
         let sheet = id_sheet();
-        let fb = render_view_with(s, &sheet, 2048, 512, 20, 20, opts);
+        let fb = render_view(s, &sheet, 2048, 512, 20, 20);
         let (cx, cy) = camera_origin(s, 20, 20);
         let (px, py) = (x * 16 - cx, y * 16 - cy);
         let at = |dx: i32, dy: i32| id_at(&fb, (px + dx * 16 + 8) as u32, (py + dy * 16 + 8) as u32);
@@ -704,44 +652,27 @@ mod tests {
     }
 
     /// A chest record is drawn from the record: the closed art of arrays 13,
-    /// or the open art of array 14 once it is opened, on a sheet that is not
-    /// the built-in one.
+    /// or the open art of array 14 once it is opened. The built-in sheet has
+    /// its chest art at these ids too.
     #[test]
     fn a_chest_record_is_drawn_closed_or_open() {
         let mut s = chest_session(vec![chest(12, 12, false), chest(16, 12, true)]);
-        let foreign = ViewOptions::default();
-        assert_eq!(drawn_at(&s, foreign, 12, 12), [1784, 1785, 1800, 1801], "a closed chest");
-        assert_eq!(drawn_at(&s, foreign, 16, 12), [829, 830, 845, 846], "the server said it is already opened");
+        assert_eq!(drawn_at(&s, 12, 12), [1784, 1785, 1800, 1801], "a closed chest");
+        assert_eq!(drawn_at(&s, 16, 12), [829, 830, 845, 846], "the server said it is already opened");
         // Opening the closed one in play swaps it.
         s.opened_chests.insert((12, 12));
-        assert_eq!(drawn_at(&s, foreign, 12, 12), [829, 830, 845, 846]);
+        assert_eq!(drawn_at(&s, 12, 12), [829, 830, 845, 846]);
         // Beside the chests the board is untouched.
-        assert_eq!(drawn_at(&s, foreign, 14, 12), [1, 1, 1, 1]);
-    }
-
-    /// The built-in sheet has no art at the real ids: its own grass chest
-    /// is drawn, open two ids on, unless the board already shows a chest.
-    #[test]
-    fn the_builtin_sheet_gets_its_own_chest_art() {
-        let mut s = chest_session(vec![chest(12, 12, false), chest(16, 12, true)]);
-        let own = ViewOptions { builtin_sheet: true };
-        assert_eq!(drawn_at(&s, own, 12, 12), BUILTIN_CHEST_GRASS);
-        assert_eq!(drawn_at(&s, own, 16, 12), BUILTIN_CHEST_GRASS.map(|t| t + 2));
-        // A wood chest already on the board stays as it is.
-        let level = s.current_level.as_mut().unwrap();
-        for (i, id) in [68u16, 69, 84, 85].into_iter().enumerate() {
-            level.set_tile_id(12 + (i as i32 % 2), 12 + (i as i32 / 2), id);
-        }
-        assert_eq!(drawn_at(&s, own, 12, 12), [68, 69, 84, 85]);
+        assert_eq!(drawn_at(&s, 14, 12), [1, 1, 1, 1]);
     }
 
     /// The client draws a chest only for x and y from 0 to 62.
     #[test]
     fn chests_outside_the_board_are_not_drawn() {
-        assert_eq!(chest_art(ViewOptions::default(), false, false), Some(CHEST_CLOSED_TILES));
+        assert_eq!(chest_art(false), CHEST_CLOSED_TILES);
         let s = chest_session(vec![chest(63, 12, false), chest(-1, 12, false)]);
         let sheet = id_sheet();
-        let fb = render_view_with(&s, &sheet, 2048, 512, 70, 20, ViewOptions::default());
+        let fb = render_view(&s, &sheet, 2048, 512, 70, 20);
         assert!(fb.pixels.chunks(3).all(|p| !(p[0] == 0x18 && p[1] == 7)), "no closed-chest tile anywhere");
     }
 

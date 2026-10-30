@@ -483,15 +483,11 @@ impl AssetResolver {
 
     /// The tile type table: `tiledefs.txt` (text) or `arrays.dat`.
     ///
-    /// The built-in table describes the built-in sheet, so it is used only
-    /// when `pics1.png` itself comes from the built-in set: a user folder
-    /// with its own sheet and no table gets none, as before, and not ours.
+    /// The built-in table uses the standard Graal tile layout, the same as
+    /// the built-in sheet, so it also serves a user's own `pics1.png` when
+    /// their folder has no table (`documentation/default-assets.md`).
     pub fn tile_types(&self) -> Option<(PathBuf, TileTypesFile)> {
-        let sheet_is_builtin = self.image("pics1.png").and_then(|p| self.layer_of(&p)).map_or(true, |l| l == Layer::Builtin);
-        for (layer, root) in self.roots(false) {
-            if layer == Layer::Builtin && !sheet_is_builtin {
-                continue;
-            }
+        for (_, root) in self.roots(false) {
             let r = &root.root;
             if let Some(p) = first_in(&[r.clone(), r.join(DOWNLOADS)], &["tiledefs.txt".to_string()]) {
                 return Some((p, TileTypesFile::Text));

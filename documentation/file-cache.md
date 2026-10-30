@@ -115,9 +115,9 @@ Two guards on the built-in layer:
 * **Built-in levels are offline only.** Online, `new1.nw` and `new2.nw` are not
   found in the built-in set: a server's own `new1.nw` must come from the server.
   (Tiles, sheets, GANIs and sounds stay available online.)
-* **The built-in tile type table goes with the built-in sheet.** If the user's
-  folder has its own `pics1.png` but no `tiledefs.txt`, our table is not applied
-  to it.
+* **The built-in tile type table is the Graal layout's.** If the user's folder
+  has its own `pics1.png` but no `tiledefs.txt` or `arrays.dat`, our table is
+  used with it, since both follow the same tile ids (`default-assets.md`).
 
 ### What a download does
 

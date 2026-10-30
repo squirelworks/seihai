@@ -1,6 +1,6 @@
 # Level editor (item 24)
 
-Seihai will get a level editor that follows the classic one by version, the way the client follows its version chain: **2.22 first**, other versions as small differences on top. This page is the tracking list (copied from the analysis notes in Graal_analysis `tools/level-editor/`, in Seihai's own words and order) and the notes for the part that exists: a command-line tool in `tools/level-editor/` that opens a `.nw` text level, lists its tiles, paints a rectangle, and saves, and a minimal window on top of it (`level-editor gui`): a tile palette, click-to-paint, save.
+Seihai will get a level editor that follows the classic one by version, the way the client follows its version chain: **2.22 first**, other versions as small differences on top. This page is the tracking list (copied from the analysis notes in Graal_analysis `tools/level-editor/`, in Seihai's own words and order) and the notes for the part that exists: a command-line tool in `tools/level-editor/` that opens a `.nw` text level, lists its tiles, paints a rectangle, and saves, and a window on top of it (`level-editor gui`): a tile palette, painting on layer 0 or 1, stamps from an object set, link / sign / chest / NPC markers, a `.gmap` grid that opens its levels, and save.
 
 The notes in Graal_analysis are derived facts about the editor's behaviour (no code); nothing from a decompile is repeated here. Tags in the status column: **done** in this slice, **next** is the natural following step, **later** is not started.
 
@@ -8,14 +8,14 @@ The notes in Graal_analysis are derived facts about the editor's behaviour (no c
 
 ```
 level-editor [--version V] list  FILE.nw [--rows]
-level-editor [--version V] paint FILE.nw X Y W H TILE (--out FILE | --in-place)
+level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
 level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
-level-editor [--version V] [--sheet PNG] gui [FILE.nw]
+level-editor [--version V] [--sheet PNG] gui [FILE.nw | FILE.gmap]
 level-editor versions
 ```
 
-- `list` prints the summary (rows placed and skipped, counts of links, signs, chests, baddies and NPCs, whether a `HEIGHTS` block is there, the ten most used tile ids). `--rows` also dumps the board, one line per row, each tile as three hex digits. `level-editor FILE.nw` alone is `list`.
-- `paint` fills a rectangle (top-left corner `X Y`, size `W H`, in tiles) with one tile id. The rectangle must lie inside the 64 x 64 board and the id must be 0 to 4095 (decimal or `0x` hex). A bad rectangle or id is an error and nothing is written. Painting the tile that is already there changes nothing and the file is written back unchanged.
+- `list` prints the summary (rows placed and skipped, counts of links, signs, chests, baddies and NPCs, whether a `HEIGHTS` block is there, how many layer-1 cells are filled and how many rows of other layers are kept, the ten most used tile ids). `--rows` also dumps the board, one line per row, each tile as three hex digits. `level-editor FILE.nw` alone is `list`.
+- `paint` fills a rectangle (top-left corner `X Y`, size `W H`, in tiles) with one tile id, on layer 0, or on layer 1 with `--layer 1`. The rectangle must lie inside the 64 x 64 board and the id must be 0 to 4095 (decimal or `0x` hex). A bad rectangle or id is an error and nothing is written. Painting the tile that is already there changes nothing and the file is written back unchanged.
 - `save` opens a level and writes it again. With no change the bytes are the same.
 - Writing needs an explicit `--out FILE` or `--in-place`, so a paint never overwrites a level by accident. Files are written through a temporary file in the same folder and a rename, so an interrupted save cannot leave half a level. (2.22 deleted the old file first; the notes say 2.3 changed this.)
 - `--version` defaults to 2.22. 2.17.1 is accepted as the same profile (the notes found no difference). Every other version stops with "not yet supported" and says why: 2.05 has no `HEIGHTS` block, no predefined NPCs and a different open filter; builds before 2.05 have no text level format at all; 2.31 has no built-in editor. Binary levels (`GR-V1`, `Z3-V1`) say "not yet" too.
@@ -24,15 +24,35 @@ The old tool printed an ASCII preview and had `--export`; its export rebuilt the
 
 ### The window
 
-`level-editor gui [FILE.nw]` opens a window (egui, the toolkit the client's launcher already uses; no new dependency for the build). It is the minimal window of the plan, item 10: no new format work, everything it writes goes through the same `Document` as the command line.
+`level-editor gui [FILE.nw | FILE.gmap]` opens a window (egui, the toolkit the client's launcher already uses; no new dependency for the build). Everything it writes goes through the same `Document` as the command line, and every record it reads goes through the client's own parsers (`Level` for links, signs, chests and NPCs, `ObjectSet` for `GOBJSET01`, `Gmap` for `GRMAP001`); there is no new format work.
 
-- **Board.** The 64 x 64 board drawn with the tile sheet, 16 px per tile, scrollable, zoom 1x or 2x, an optional grid. The status bar shows the cell and tile id under the mouse.
+- **Board.** The 64 x 64 board drawn with the tile sheet, 16 px per tile, scrollable, zoom 1x or 2x, an optional grid. The status bar shows the cell under the mouse with its layer-0 and layer-1 tiles.
 - **Tile palette.** The whole sheet (`pics1.png` layout, 2048 x 512) below the board; a left click selects the tile under the mouse and a yellow box marks the selection. The tile id can also be typed in the status bar (0 to 4095). The sheet is the built-in `pics1.png` unless `--sheet PNG` names another.
-- **Click to paint.** The left button paints the selected tile on one cell; dragging paints a stroke (cells skipped between two frames are filled in along a straight line). The right button picks the tile under the mouse. A paint is `Document::paint` with a 1 x 1 rectangle.
+- **Layers.** *Layer 0 / 1* picks the active layer: painting, erasing and stamps go there, and the right button picks from it. *Show 0 / 1* hides or shows each layer (a hidden layer 0 is drawn dark grey). Layer 1 is drawn over layer 0 where it has a tile.
+- **Tools.** *Paint*: the left button paints the selected tile on one cell; dragging paints a stroke (cells skipped between two frames are filled in along a straight line). *Erase* (layer 1 only): empties cells the same way. *Stamp*: see below. *Objects*: see below. In every tool the right button picks the tile under the mouse on the active layer.
+- **Stamps.** With the Stamp tool a side panel loads a `GOBJSET01` object set from a typed path and lists its stamps with their sizes. The picked stamp follows the mouse, see-through, and a left click drops it with its top-left corner on the cell, on the active layer. Cells that fall off the board are left out.
+- **Objects.** Links (cyan, their own rectangle), signs (yellow, 2 x 1), chests (orange, 2 x 2), NPCs (magenta, 2 x 2) and baddies (red, 2 x 2) are drawn as markers on the board in every tool. With the Objects tool a click on a marker selects it and dragging moves it in whole-tile steps (an NPC at 12.5 stays on the half tile); a click on an empty cell deselects and sets where the *+ link / + sign / + chest / + NPC* buttons put a new one. The side panel lists every object and edits the selected one: x and y (*Move*), a link's size, destination and arrival (`30`, `playerx`, `playery+10`), the first line of an NPC script or of a sign's text, and *Delete*. Baddies are shown but not edited. A record the client's parser cannot read is shown and left alone.
+- **Gmaps.** Opening a `.gmap` shows its grid of level names; a cell whose file is not next to the `.gmap` is greyed out and a hole says so. A click opens that level (asking first about unsaved changes) and the *Gmap* button in the toolbar goes back to the grid. Only one level is open at a time.
 - **Save.** *Save* (or Ctrl+S) writes to the file that was opened; *Save as* writes to the path in the box next to it, which then becomes the Save target. Both write through a temporary file and a rename and keep the round-trip rules below (an unchanged level is written back byte for byte). *Open* takes a path typed in the box (there is no file dialog). Opening another level or closing the window with unsaved changes asks Save / Discard / Cancel; the title starts with `*` while there are unsaved changes.
 - **Version selector.** Defaults to 2.22 (or the `--version` given); it lists the versions the command line accepts, 2.22 and 2.17.1, which are one profile. Other versions are not offered (they stop with "not yet" on the command line).
 
-Not in the window (later items of the list below): undo, selection and copy/paste, rectangle and flood fill, blocking or tile-type overlays, links, signs, chests, baddies, NPCs, tabs, New, binary levels.
+Not in the window (later items of the list below): undo, selection and copy/paste, rectangle and flood fill, blocking or tile-type overlays, layers above 1, editing baddies and chest items, the full NPC script and sign text, NPC images on the board, saving an object set, tabs, New, binary levels, editing several gmap levels at once.
+
+### Gonstruct as a reference
+
+The Gonstruct 0.2.3 source (December 2014, in the project files under `graal-decompile/unpacked-installers/gonstruct/`) was read to see which features a later editor has and how they are arranged. No code was copied.
+
+| Gonstruct behaviour | In Seihai |
+|---|---|
+| Layers: an active layer and a visibility toggle per layer; layer 0 starts as tile 0, higher layers start transparent | **matched** for layers 0 and 1 (Gonstruct has a spin box up to 50 and add / delete layer buttons: **skipped**) |
+| Saving a layer above 0 as one `BOARD x y w layer` row per run of non-transparent tiles | **matched** for layer 1; layer 0 stays the 64 canonical rows |
+| Rows of layers it does not show | Gonstruct keeps every layer; Seihai keeps rows of layers 2 and up verbatim but does not show or edit them |
+| Tile objects (stamps) kept in groups in its preferences, with new / delete / save | **different source**: Seihai loads a `GOBJSET01` file with the client's parser; creating and saving stamps **skipped** |
+| NPCs: click selects, drag moves in whole tiles, double click opens an image and script dialog, right-drag clones | select and drag **matched**; first script line only (no full script dialog), no clone, no NPC image on the board |
+| Links and signs: drawn on the board, edited in list dialogs (destination, new x / y; sign text) | **matched** as markers plus a side-panel list; links also move by drag; sign text is first line only |
+| Chests and baddies | Gonstruct does not read them and drops them on save (found by the archive thread); Seihai shows both, moves and adds chests, and keeps baddies as they are |
+| A `.gmap` opened as one big editable map of all its levels | **skipped** by request: Seihai shows the grid and opens one level per click |
+| Undo for tiles and NPCs, selection copy / paste, flood fill | **skipped** (later items below) |
 
 ### How the text file is read and written
 
@@ -42,9 +62,13 @@ Rules taken from the 2.22 notes:
 - `BOARD x y w layer data`: `x` and `y` 0 to 63, `w` at least 1, `x + w` at most 64, and `data` at least `2 x w` characters. **The layer field is not read**: a row with layer 1 is placed on the same board. A row that does not fit is skipped silently, an invalid character ends a row (the tiles before it stay), rows may come in any order and later rows overwrite earlier ones. The board starts as all zeros.
 - `NPC ... NPCEND`, `SIGN ... SIGNEND`, `BADDY ... BADDYEND` and `HEIGHTS ... HEIGHTSEND` swallow every line up to their end line, so a script line that looks like a `BOARD` row is not one.
 
-**Round trip (Seihai's choice).** The editor keeps the file as its original lines (with their line endings). A level that was not changed is written back **byte for byte**. After a paint, the `BOARD` rows are replaced by 64 canonical rows (`BOARD 0 y 64 0 <128 characters>`, the shape the 2.22 writer emits) put where the first old `BOARD` row was (right after the header when there was none), and every other line is written back as it was: comments, links, signs, chests, baddies, NPC scripts, `HEIGHTS`, CRLF endings, a missing final newline. The two starter levels are already in the canonical shape, so painting a tile and then painting the old tile back gives the starter's bytes again (tested).
+**Layers (Seihai's choice, as Gonstruct).** Besides the 2.22 view (every row on one board, which `list`, `tile` and `row` show), the editor keeps layer 0 (rows with layer 0; starts as tile 0) and layer 1 (rows with layer 1; starts empty) apart, and rows of any other layer as their own lines. A real 2.22 client still does not read the layer, so in 2.22 a layer-1 tile simply replaces the layer-0 tile under it.
 
-Not what the 2.22 writer does: it rebuilds the whole file from its own model and writes `HEIGHTS` only when the height overlay was edited. Keeping the other lines verbatim is a deliberate difference, so that a first edit of a hand-written or server-made level shows only the board in a diff.
+**Round trip (Seihai's choice).** The editor keeps the file as its original lines (with their line endings). A level that was not changed is written back **byte for byte**. After a paint, the `BOARD` rows are replaced by 64 canonical rows of layer 0 (`BOARD 0 y 64 0 <128 characters>`, the shape the 2.22 writer emits), then one `BOARD x y w 1 data` row per run of filled layer-1 cells, then the rows of other layers as they were, all put where the first old `BOARD` row was (right after the header when there was none), and every other line is written back as it was: comments, links, signs, chests, baddies, NPC scripts, `HEIGHTS`, CRLF endings, a missing final newline. The two starter levels are already in the canonical shape, so painting a tile and then painting the old tile back gives the starter's bytes again (tested).
+
+Not what the 2.22 writer does: it rebuilds the whole file from its own model (one board, so layer-1 rows end up flattened into layer 0) and writes `HEIGHTS` only when the height overlay was edited. Keeping layer 1 and the other lines is a deliberate difference, so that a first edit of a hand-written or server-made level shows only the board in a diff.
+
+**Object edits.** Moving or editing a link, sign, chest or NPC rewrites only that record's lines (the header line with single spaces, or the one text line), keeping the file's line ending; the board rows are not rewritten for it. New objects are added at the end of the file: `LINK level.nw x y 2 2 playerx playery` (clipped to the board), `SIGN x y` with an empty line, `CHEST x y greenrupee -1`, `NPC - x y` with an empty line. A changed link is read back with the client's parser before it is written.
 
 ### Tests
 
@@ -52,26 +76,28 @@ Not what the 2.22 writer does: it rebuilds the whole file from its own model and
 
 `tools/level-editor/tests/gui.rs` (9 tests): the sheet mapping covers every id 0 to 4095 on its own cell and inverts; drag strokes have no gaps; the editor state paints, picks, refuses bad cells and ids, saves and saves as (painting the old tile back gives the starter's bytes); a failed open keeps the current level; the board image matches the sheet. The real window code is also driven headless (an egui context with synthetic mouse and key events, no display): a palette click then a board click paints, Ctrl+S saves to disk, a drag paints a stroke, a right click picks, a close with unsaved changes is held for the prompt, and no board is drawn without a level.
 
+`tools/level-editor/tests/layers_objects.rs` (15 tests): a level with layer-1 runs, a layer-2 row and every kind of object reads its layers apart and keeps the 2.22 view, round trips byte for byte untouched, and after painting and erasing saves both layers (layer 1 in runs, empty cells left out, the layer-2 row as it was) so that the editor and the client's `Level` read them back; objects match the client's counts and fields; a move, a destination, arrival and size change, and a sign's first line each change only their own line; NPCs keep a half-tile position and get their first script line replaced; CRLF stays CRLF; objects of each kind are added (and read by the client) and deleted; a paint followed by an object edit keeps both; stamps load, drop on the active layer and are clipped at the board edge; erase and pick follow the active layer; gmap cells name the files next to the `.gmap`; and, headless, a click paints layer 1 and saves it, the Stamp tool drops a stamp, the Objects tool drags a link and selects and deselects, and a gmap cell click opens its level while a missing cell does nothing. The CLI's `--layer 1` paints and `list` reports it.
+
 ## Tracking list: the 2.22 feature list in implementation order
 
 | # | Feature (what the 2.22 editor does) | Status |
 |---|---|---|
-| 1 | **Level model and tile sheet.** A 64 x 64 board of tile ids, plus links, signs, chests, NPCs and baddies. Id to sheet: `col = (id % 16) + (id / 512) * 16`, `row = (id / 16) % 32` | board **done** (read, paint, write); the other lists are only counted and kept as text |
-| 2 | **Read and write GLEVNW01 text**, including `LINK`, `SIGN`, `CHEST`, `NPC`, `BADDY` and the 9 x 9 `HEIGHTS` block, with a round-trip test | **done** for the board; other records round trip verbatim; editing them is **next** |
+| 1 | **Level model and tile sheet.** A 64 x 64 board of tile ids, plus links, signs, chests, NPCs and baddies. Id to sheet: `col = (id % 16) + (id / 512) * 16`, `row = (id / 16) % 32` | board **done** (read, paint, write, layers 0 and 1); links, signs, chests and NPCs read with the client parser, moved and partly edited (**done** in the window); baddies kept as text |
+| 2 | **Read and write GLEVNW01 text**, including `LINK`, `SIGN`, `CHEST`, `NPC`, `BADDY` and the 9 x 9 `HEIGHTS` block, with a round-trip test | **done** for the board and layers 0 and 1; other records round trip verbatim and are rewritten line by line when edited; `HEIGHTS` kept as it is |
 | 3 | **Read the binary levels** (`GR-V1.00` to `1.03`, `Z3-V1.03/04`) and **write `GR-V1.03`**, picking the format by file extension (`.nw` text, anything else binary) | **later** (the client has a binary reader; the editor says "not yet") |
 | 4 | **Board view**: scrolling, 16 px tiles, overlays for blocking, foreground and terrain tiles, a status bar | scrolling, 16 px tiles, zoom, grid, status bar with cell and id **done** in the window; overlays **later** |
 | 5 | **Selection, copy, cut, paste, delete, floating paste** | **later** (`paint` is the single-tile fill) |
 | 6 | **Undo** of board writes: per tab, 128 records, rectangle snapshots | **later** |
 | 7 | **Tile palette**: one tile or a block, the background tile, draw mode, flood fill on the right button | one-tile palette, click and drag to paint, right-click pick **done** in the window; block selection, background tile, flood fill **later** |
-| 8 | **Stamps**: load `GOBJSET01` sets, place, add the selection to a set, save the set | **later** |
-| 9 | **Link tools**: list and dialog, *turn selection into a warp field* (`playerx` / `playery` defaults, the edge rules), open the destination in a new tab | **later** |
-| 10 | **Sign tools**: list, x/y, text in the sign alphabet, signs at (0, 0) | **later** |
-| 11 | **Chest tool**: the 25 items, sign index with -1 for none | **later** |
-| 12 | **Baddy tool**: ten types, three verses, types 4 to 6 without verses | **later** |
-| 13 | **NPC tool**: image, script with test and find, clone, predefined NPCs (`defnpc*.txt`) | **later** |
+| 8 | **Stamps**: load `GOBJSET01` sets, place, add the selection to a set, save the set | load and place (on the active layer, with a preview) **done** in the window; adding to and saving a set **later** |
+| 9 | **Link tools**: list and dialog, *turn selection into a warp field* (`playerx` / `playery` defaults, the edge rules), open the destination in a new tab | list, place, drag, size, destination and arrival **done** in the window; warp field from a selection and opening the destination **later** |
+| 10 | **Sign tools**: list, x/y, text in the sign alphabet, signs at (0, 0) | list, place, drag, first text line **done** in the window; full text **later** |
+| 11 | **Chest tool**: the 25 items, sign index with -1 for none | place (as `greenrupee`, -1), drag, delete **done** in the window; item and sign index **later** |
+| 12 | **Baddy tool**: ten types, three verses, types 4 to 6 without verses | shown as markers; editing **later** |
+| 13 | **NPC tool**: image, script with test and find, clone, predefined NPCs (`defnpc*.txt`) | place, drag (keeps half tiles), first script line, delete **done** in the window; image, full script, clone, predefined NPCs **later** |
 | 14 | **Tabs, Save (save-all), Save as, Close with a prompt, New.** Write to a temporary file and rename, not delete-then-write | save through temp file and rename, Save and Save as, a Save / Discard / Cancel prompt on open and close **done** (one level, no tabs); the rest **later** (a new level can be made from `assets/default/levels/new1.nw` by `save --out`) |
 | 15 | **Keys**: the key map of the editor, `F10` border toggle, optional `Ctrl+Q` batch re-save | **later** |
-| 16 | **Maps**: several levels at once, the level cache, gmap generation | **later** |
+| 16 | **Maps**: several levels at once, the level cache, gmap generation | `.gmap` grid that opens one level per click **done** in the window; several levels at once, the cache and generation **later** |
 | 17 | **Tile definitions**: `tiledefs` lines, types 0 and 1; type 4 once its meaning is traced | **later** (the client already reads `tiledefs`) |
 | 18 | **Play** the level; needs the client | out of scope for the editor |
 | 19 | **Editor control NPCs** (`editnpc*.txt` with mouse variables); needs the script engine | **later**, last |

@@ -143,10 +143,14 @@ fn painting_changes_only_the_rectangle_and_keeps_every_other_line() {
     let bytes = doc.to_bytes();
     // everything that is not a board row is untouched, in order
     assert_eq!(non_board_lines(&bytes), non_board_lines(original.as_bytes()));
-    // the saved file reads back to the same board, as 64 canonical rows
+    // the saved file reads back to the same board, as 64 canonical layer-0 rows
+    // and the one layer-1 tile kept as a layer-1 run
     let again = Document::parse(&bytes).unwrap();
-    assert_eq!(again.summary().rows_placed, 64);
+    assert_eq!(again.summary().rows_placed, 65);
+    assert_eq!(again.summary().rows_other_layer, 1);
     assert_eq!(again.summary().rows_skipped, 0);
+    assert_eq!(again.layer_tile(1, 4, 7), Some(64));
+    assert!(String::from_utf8_lossy(&bytes).contains("\nBOARD 4 7 1 1 BA\n"));
     for y in 0..SIZE {
         assert_eq!(again.row(y), doc.row(y), "row {y}");
     }
