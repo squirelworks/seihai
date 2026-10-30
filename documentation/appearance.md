@@ -51,9 +51,23 @@ These are server commands, not client ones.
   as 2.05 lists them: `#3` head, `#8` body, `#2` shield, `#1` sword,
   `#C0` … `#C4` colours (name or number) and `#P1` … `#P5` attributes.
   The body is recoloured in the NPC's colours. A colour the NPC has not set
-  is the new-player one (`DEFAULT_COLORS`), which is inferred: the 2.05
-  start value of a character's colours was not read. A picture not here
-  yet is asked for from the server, and the default is drawn meanwhile.
+  is the new-player one (`DEFAULT_COLORS`). A picture not here yet is
+  asked for from the server, and the default is drawn meanwhile.
+- **Checked in the Wine lab (2.05 rev 2, offline, 2026-10-30).** A level
+  with three `showcharacter` NPCs, run in the real client and in Seihai:
+  - No `setcharprop`: the body is orange skin, dark red coat and shoes,
+    black sleeves and belt (pixels 255,173,107 / 206,24,41 / 0,0,8), the
+    same as the player. So the new-player colours are right for characters.
+  - `#3 head5.png`, `#8 body2.png`, `#C0` … `#C4` blue, green, red, yellow,
+    white, `#P1 hat2.png`, `#2 shield2.png`: the real client draws that
+    head and body, skin 0,0,255, coat 0,255,0, sleeves 255,0,0, shoes
+    255,255,0, belt 255,255,255, and the hat over the head. Seihai draws
+    the same, and the hat sits within a pixel of the real one against the
+    body.
+  - `#P1 hat1.png` alone: the hat is drawn on the default figure in both.
+  - The real client also draws the shield, because the stock `idle.gani`
+    has `SHIELD` sprites. Seihai's own GANIs have none, so with the
+    built-in assets a character's (and the player's) shield is not drawn.
 - **Per build.** GANI attributes exist from 2.02, the build that added
   props 37 to 41 (`chain.rs`; Graal_analysis `141-217.md`). For 2.00 and
   2.01 the `ATTR` sprites draw nothing, no attribute picture is asked for,
