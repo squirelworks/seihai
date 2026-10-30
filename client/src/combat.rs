@@ -1819,6 +1819,27 @@ mod tests {
     }
 
     #[test]
+    fn a_2x_server_relays_a_20x_swing_as_a_gani_string() {
+        // GServer-v2 beta4 (generation newmain) reads the real 2.00's
+        // `c(15)` + `sword` as a GANI and sends `c(5)` + `sword` to everyone,
+        // a 2.0x login included. The 2.00 swing carries no position.
+        for v in [ClientVersion::V200, ClientVersion::V205] {
+            let mut st = SessionState::for_version(v);
+            st.combat = Some(COMBAT_205);
+            let mut props = vec![8 + 0x20, 0x20 + 32, 0x20 + 0, 15 + 0x20, 0x20 + 40, 16 + 0x20, 0x20 + 40, 17 + 0x20, 0x20 + 3];
+            props.extend(gani_prop("idle"));
+            st.apply_body(&plo8(300, &props));
+            assert!(st.swings.is_empty(), "{}", v.label());
+            assert_eq!((st.others[0].x, st.others[0].sprite), (20.0, Some(3)), "{}: the props after the GANI are read", v.label());
+            st.apply_body(&plo8(300, &gani_prop("sword")));
+            assert_eq!(st.swings, vec![300], "{}", v.label());
+            let swings = std::mem::take(&mut st.swings);
+            let mut s = session();
+            assert_eq!(s.receive_all(&st.others, None, None, 0, &swings, &[])[0].outcome, Ok(2), "{}", v.label());
+        }
+    }
+
+    #[test]
     fn packet_hits_are_decoded_by_profile() {
         let m40 = |id: u16| {
             let mut m = vec![40 + 0x20];

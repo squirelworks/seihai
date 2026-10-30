@@ -69,6 +69,15 @@ player's GANI string. Seihai reads prop 10 by its own profile, so a 2.1+
 Seihai misreads a 2.05 player's prop 10 on GServer-v2 (open; how the real
 2.1+ clients cope was not checked).
 
+**On a 2.x-generation server.** GServer-v2 beta4 (the cross-laptop lab
+server) reads and writes prop 10 as a GANI string whenever its generation is
+not classic, for every client: a 2.00 or 2.05 swing reaches a 2.0x login as
+`c(5)` + `sword`, not in the bow form. Seihai's pre-2.1 profiles read that
+form too (`props::bow_slot_holds_gani`, which says how the two are told
+apart). Before this, a 2.05-profile watcher read it as bow power 5 and lost
+the swing and the rest of the update, so 2.00's swings left no "hit by" line
+at all.
+
 **2.1+ swings.** A GANI client sends the swing as GANI `sword` once, and its
 SPRITE holds only the direction. Seihai takes another player as swinging when
 its GANI is `sword`, `ridesword` or `spin` (`combat::is_swing_gani`), and

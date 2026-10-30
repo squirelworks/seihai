@@ -1631,7 +1631,12 @@ fn parse_other_player(payload: &[u8], bow_prop10: bool, accepted: Option<&IdSet>
             9 => u.looks.shield = power_image(&prop.raw, 3, "shield"),
             10 if !bow_prop10 => u.looks.gani = Some(text(&prop.raw)).filter(|g| !g.is_empty()),
             // The bow slot: a byte under 10 is a bow power (no name).
-            10 => u.looks.bow_slot_gani = prop.gchar().filter(|&v| v >= 10).map(|_| text(&prop.raw)),
+            // A 2.x server's GANI string in the bow slot
+            // (`props::bow_slot_holds_gani`) names it the same way.
+            10 => {
+                u.looks.bow_slot_gani =
+                    (super::props::bow_slot_holds_gani(&prop.raw) || prop.gchar().is_some_and(|v| v >= 10)).then(|| text(&prop.raw))
+            }
             11 => u.looks.head = head_image(&prop.raw),
             35 => u.looks.body = Some(text(&prop.raw)).filter(|b| !b.is_empty()),
             13 => u.looks.colors = crate::looks::colors_from_prop(&prop.raw),
