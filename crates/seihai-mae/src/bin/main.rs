@@ -1091,6 +1091,9 @@ fn main() {
     let body = load("bodies", "body.png");
     let head = load("heads", "head0.png");
     let sprites = load("", "sprites.png");
+    // Bombs and their explosions: bomb2.png for power 3, else bomb1.png.
+    let bomb1 = load("", "bomb1.png");
+    let bomb2 = load("", "bomb2.png");
     let sword_sheet = load("swords", "sword1.png");
     // The build's own status display; without it, the plain bars.
     let state_sheet = load("", "state.png");
@@ -1276,7 +1279,8 @@ fn main() {
         // What the player carries, what is in flight, and the break effects:
         // sprite-sheet cut-outs with their transparency (see throwing.md).
         if let Some(sp) = &sprites {
-            seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
+            let bombs = seihai::render::BombSheets { one: bomb1.as_ref().map(pose_sheet), two: bomb2.as_ref().map(pose_sheet) };
+            seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), bombs, cam_x, cam_y);
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
         seihai::render::draw_npc_messages(&mut fb, session, &npc_art, chat_font.as_ref(), cam_x, cam_y);

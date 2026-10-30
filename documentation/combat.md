@@ -218,8 +218,20 @@ bombs, blasts and shots"):
     `PLI_CLAIMPKER`.
   - A piece or shot of nobody's, or of a player who left, always hurts.
 
+- **Drawing.** Bombs and explosion pieces are cut from `bomb1.png`, or
+  `bomb2.png` for power 3, with the rectangles of the sprite table, never from
+  `sprites.png` (2.00 and 2.05 rev 2 draw code). A bomb gets the shadow
+  (sprite 0) at `x + 0.25`, `y + 1.25` and its sprite centred on `x + 1`,
+  `y + 1`. A lifted, thrown or landed bomb takes its sheet by sprite: 65, 66
+  and 321 from `bomb1.png`, 347 and 348 from `bomb2.png`. Without the bomb
+  sheets a bomb shows only its shadow and a blast nothing. Lab, 2026-10-30:
+  cut from `sprites.png`, the bomb was only a shadow and the blast a cross of
+  hearts, shields and swords.
+
 **Inferred or not done:**
 - The explosion's sound names are taken to be a bomb's (inferred).
+- The shadow under a bomb is taken from `sprites.png` (inferred: the draw code
+  uses whichever sheet is current).
 - The way a shot knocks the player is not legible in the decompile. Seihai
   pushes along the flight (inferred).
 - A shield stopping or sending back a shot is not done.
