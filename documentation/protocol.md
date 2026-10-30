@@ -416,11 +416,26 @@ a gmap, sends no cell prop and no 35.
 - The real client sends the south crossing's flag first and the props on the
   next half-step; Seihai sends the props in the crossing step's frame.
 - Neighbour levels draw tiles only. Their NPCs, signs, chests and links are
-  not drawn or active until the player is in the level.
-- Cached-level crossings (`30` with the mod time, instead of waiting for the
-  board) are not done on a gmap: the cache serves level links off a gmap
-  only (see "Level changes").
+  not drawn or active until the player is in the level. No capture shows how
+  the real client draws them across the seam; the only note is from the 2.22
+  and 2.31 decompile (the grab lookup also searches the neighbouring map
+  parts, Graal_analysis `client-internals/ledges-push-pull.md`). Left open
+  until a lab case shows it.
+- Cached-level crossings: the lab's `gmap_cross` walk (2.22 and 2.31: east,
+  back west, south, back north) re-enters levels the client holds, and the
+  real client sends the same props frame as on a first visit. It does **not**
+  use the `30`-plus-`46` form of a cached level link on a gmap. The server's
+  answer leaves out its mod time (39): level name, an empty board packet, the
+  gmap name (Graal_analysis `protocol/lab-checks-2026-10-24.md`, feature spec
+  06, `version-profiles/lab-enterlevel-231.tsv`). Seihai already does this:
+  `cached_mod_time` is `None` on a gmap, and the answer brings the level back
+  from its parked slot (test
+  `revisit_answer_without_mod_time_restores_the_parked_level`). The `35` a
+  client sends for a neighbour it holds (a non-zero mod time) was never
+  captured: the lab only had a cold cache, so Seihai always sends 0.
 - No `PLO_BIGMAP`/`MINIMAP` map screen (171/172).
-- `PLO_BOARDHEIGHTS` (185) is decoded only.
+- `PLO_BOARDHEIGHTS` (185) is decoded only. The layout is from the 2.17.1,
+  2.22 and 2.31 receive handlers; no capture of a server sending it, and no
+  note of what the client does with the heights. Left open.
 - Not run against the real server in this change; see the PR for the test
   run.

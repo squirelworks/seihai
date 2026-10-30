@@ -2929,6 +2929,40 @@ mod tests {
         assert_eq!(st.board.as_ref().map(|b| b[0]), Some(1));
     }
 
+    /// A cached-level crossing on a gmap, as the lab captured it (2.22 and
+    /// 2.31, `gmap_cross`: east, back west, south, back north). The real
+    /// client crosses back into a level it holds with the same props frame
+    /// as a first visit, not with `PLI_LEVELWARPMOD` (30). The server's
+    /// answer then leaves out its mod time (39): level name, an empty
+    /// board packet, the gmap name. The level comes back from its parked
+    /// slot.
+    #[test]
+    fn revisit_answer_without_mod_time_restores_the_parked_level() {
+        let mut st = SessionState::for_version(ClientVersion::V231);
+        st.apply_body(
+            &[warp49((0, 0), "gm2x2.gmap"), msg(6, b"gm_nw.nw"), msg(39, &[gc(0), gc(0), gc(0), gc(1), gc(2)]), raw_board(1)]
+                .concat(),
+        );
+        st.apply_body(&[msg(1, b"lv_a.nw 0 0 1 64 60 30"), msg(6, b"gm2x2.gmap")].concat());
+        st.set_gmap_grid(grid());
+        // East, first visit: the answer carries the mod time and the board.
+        st.set_gmap_cell((1, 0));
+        st.apply_body(&[msg(6, b"gm_ne.nw"), msg(39, &[gc(0); 5]), raw_board(2), msg(0, b""), msg(6, b"gm2x2.gmap")].concat());
+        assert_eq!(st.board.as_ref().map(|b| b[0]), Some(2));
+        assert!(st.links.is_empty(), "the first level's link stays with it");
+        // Back west into the level the client holds: the gmap never asks
+        // for a cached link, whatever the cache holds.
+        assert_eq!(st.cached_mod_time("gm_nw.nw"), None);
+        st.set_gmap_cell((0, 0));
+        st.apply_body(&[msg(6, b"gm_nw.nw"), msg(0, b""), msg(6, b"gm2x2.gmap")].concat());
+        assert_eq!(st.level_name.as_deref(), Some("gm_nw.nw"));
+        assert_eq!(st.board.as_ref().map(|b| b[0]), Some(1));
+        assert_eq!(st.board_of("gm_nw.nw").map(|b| b[0]), Some(1));
+        assert_eq!(st.links, vec!["lv_a.nw 0 0 1 64 60 30".to_string()]);
+        // And the neighbour's own data is parked again, not lost.
+        assert_eq!(st.board_of("gm_ne.nw").map(|b| b[0]), Some(2));
+    }
+
     #[test]
     fn plain_49_leaves_the_gmap() {
         let mut st = SessionState::for_version(ClientVersion::V222);
