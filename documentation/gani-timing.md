@@ -37,7 +37,6 @@ Where each row starts in the chain:
 * 1.33 to 1.41 take the 1.39 row. Only 1.39 was run; 1.33 to 1.38 are inferred.
 * The NewMain 1.41 row starts at Seihai's 1.42 step. That step is the first build in the chain with ganis, and the analysis ran NewMain 1.41.1 (`graalnm24`), which is the first gani client. Pairing those two is inferred.
 * 2.00 to 2.04 keep the NewMain row (not run). 2.05 sets its own row, 2.1 to 2.17 keep it, and 2.22 and later take the 2.22 row.
-* The hide row is recorded, but Seihai does not have hiding yet.
 * 1.39 has no combat rules in Seihai, so its 4-tile knockback does not take effect until a pre-2.05 hit path exists.
 
 ## Not known or not done
@@ -45,4 +44,4 @@ Where each row starts in the chain:
 * **1.39.** It has no ganis. Its push frames change about every 2 ticks, not 4 (video only). Seihai has no built-in pre-gani poses, so a 1.39 profile draws whatever ganis it finds.
 * **The pull sprite after A is let go.** The pose was read live; what sprite number the 2.05 client sends others then was not traced. Seihai sends the pull sprite while the pose is on (inferred).
 * **Walk with `WAIT`.** The walk GANI still steps once per move. The stock `walk.gani` has no `WAIT`, so that matches; `walkslow` (8 × 2) is not used.
-* **Hiding under a carried object** is a separate change.
+* **Hiding (D while carrying).** Code: `client/src/offline/hide.rs`. You can hide under a bush, a light stone or a black stone; D on a pot or a sign does nothing. D or A comes out, and the leaves fly when you come out from under a bush. S throws. Walking hidden goes at 0.1 tile a tick. A hidden player cannot be hit. Others are sent STATUS 0x02 and sprites 18 (still) or 19, 20, 19, 18 (walking). 2.05 on plays `hiddenstill` / `hidden` and draws the object where the player stands; without those files only the object is drawn. 1.39 and NewMain 1.41 keep the carry poses. Not done: hiding under a carried NPC (Seihai cannot carry NPCs). The 2.22 pack's `hidden.gani` draws the bush itself as `ATTR3`, so with that pack the bush would be drawn twice.

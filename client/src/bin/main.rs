@@ -915,7 +915,7 @@ fn main() {
     // The pose animations (idle, sword swing, hurt, sit) are drawn too.
     for name in [
         "idle.gani", "sword.gani", "hurt.gani", "sit.gani", "carrystill.gani", "carry.gani", "dead.gani", "push.gani", "grab.gani", "pull.gani",
-        "lift.gani",
+        "lift.gani", "hiddenstill.gani", "hidden.gani",
     ] {
         load_pose_gani(&resolver, &mut session, name);
     }
@@ -1164,8 +1164,9 @@ fn main() {
                     seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, sheets, dx, dy);
                 }
             }
-            // The hurt blink without GANIs: nothing on the off ticks.
-            (Some(_), Some(_)) if session.blink_off() => {}
+            // The hurt blink without GANIs: nothing on the off ticks. Hidden
+            // under the carried object without its GANIs: only the object.
+            (Some(_), Some(_)) if session.blink_off() || session.figure_hidden() => {}
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
                 b,
@@ -1374,6 +1375,8 @@ fn main() {
     let mut last_step = Instant::now();
     // STATUS (prop 18) as the server last gave it; the dead bit is toggled on it.
     let mut status_base = 0u8;
+    // STATUS bit 0x02 last sent (hiding under a carried object).
+    let mut last_hide_status = 0u8;
     let mut life_clock = Instant::now();
     let mut combat_clock = Instant::now();
     // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
@@ -1746,6 +1749,7 @@ fn main() {
                                 | seihai::combat::Reject::Dead
                                 | seihai::combat::Reject::AlreadyHurt
                                 | seihai::combat::Reject::Swimming
+                                | seihai::combat::Reject::Hidden
                                 | seihai::combat::Reject::NpcSource
                                 | seihai::combat::Reject::UnknownPower
                                 | seihai::combat::Reject::NoPkZone
@@ -2049,6 +2053,32 @@ fn main() {
                 false,
                 keymap.pressed(&window, Action::Attack),
             );
+        // D while carrying hides under the object (or comes out); A comes out
+        // too. Others see STATUS bit 0x02 and the hidden sprites.
+        let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
+        let unhide_key = session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
+        let interact = interact && !unhide_key;
+        let hide_changed = if unhide_key {
+            session.leave_hiding();
+            true
+        } else {
+            hide_key && session.toggle_hide()
+        };
+        dirty |= hide_changed;
+        // The hidden bit goes out whenever it changes (D, A, or a throw
+        // from hiding, which is seen one frame later).
+        if session.hide_status() != last_hide_status {
+            last_hide_status = session.hide_status();
+            if let Some(c) = conn.as_mut() {
+                let sent = c
+                    .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])
+                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                if let Err(e) = sent {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
+            }
+        }
         if interact {
             sign_page = 0;
             match session.interact() {

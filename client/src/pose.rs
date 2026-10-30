@@ -45,6 +45,9 @@
 //!   other gani in the air.
 //! * **Lift** shows `lift.gani` once when an object is picked up (the stock
 //!   file: 6 ticks), then the carry poses.
+//! * **Hidden** under a carried object (D): `hiddenstill` / `hidden` on
+//!   builds that play them (2.05 on), else the carry poses go on (see
+//!   `offline/hide.rs`).
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
@@ -85,12 +88,15 @@ pub struct PoseGanis {
     pub pull: Option<Gani>,
     /// Picking an object up, before `carrystill`.
     pub lift: Option<Gani>,
+    /// Hiding under the carried object, standing and walking.
+    pub hiddenstill: Option<Gani>,
+    pub hidden: Option<Gani>,
 }
 
 impl PoseGanis {
     /// Every loaded pose GANI.
     pub fn all(&self) -> impl Iterator<Item = &Gani> {
-        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift]
+        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift, &self.hiddenstill, &self.hidden]
             .into_iter()
             .flatten()
     }
@@ -112,6 +118,8 @@ pub enum PoseKind {
     Grab,
     Pull,
     Lift,
+    HiddenStill,
+    Hidden,
 }
 
 /// A pose step ready to draw.
@@ -140,6 +148,8 @@ impl PoseKind {
             PoseKind::Grab => "grab.gani",
             PoseKind::Pull => "pull.gani",
             PoseKind::Lift => "lift.gani",
+            PoseKind::HiddenStill => "hiddenstill.gani",
+            PoseKind::Hidden => "hidden.gani",
         }
     }
 
@@ -158,6 +168,8 @@ impl PoseKind {
             PoseKind::Grab,
             PoseKind::Pull,
             PoseKind::Lift,
+            PoseKind::HiddenStill,
+            PoseKind::Hidden,
         ]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
@@ -209,6 +221,8 @@ impl OfflineSession {
             PoseKind::Grab => self.poses.grab = Some(gani),
             PoseKind::Pull => self.poses.pull = Some(gani),
             PoseKind::Lift => self.poses.lift = Some(gani),
+            PoseKind::HiddenStill => self.poses.hiddenstill = Some(gani),
+            PoseKind::Hidden => self.poses.hidden = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
@@ -237,6 +251,10 @@ impl OfflineSession {
     /// the swim stroke (moving or not) and the lift. Each swim step entered
     /// queues its `PLAYSOUND` cues. True if the drawn pose may have changed.
     pub fn tick_poses(&mut self, ms: u64) -> bool {
+        // Empty hands: no hiding place.
+        if self.carried.is_none() {
+            self.hidden = false;
+        }
         let swimming = self.in_water && self.swim_gani.is_some();
         if !swimming && self.lift_ticks.is_none() {
             self.pose_clock_ms = 0;
@@ -333,6 +351,14 @@ impl OfflineSession {
         // carrystill and carry ganis then). The carry walk shows the step the
         // walk has reached.
         if self.carried.is_some() {
+            // Hidden (2.05 on): `hiddenstill` / `hidden`, which draw only a
+            // shadow; the object is drawn where the player stands. Without
+            // those files nothing of the figure is drawn. Builds that keep
+            // the carry poses (1.39, NewMain 1.41) fall through.
+            if self.figure_hidden() {
+                let (kind, g) = if self.walking { (PoseKind::Hidden, &self.poses.hidden) } else { (PoseKind::HiddenStill, &self.poses.hiddenstill) };
+                return pick(kind, g, 0);
+            }
             if let Some(p) = self.lift_ticks.and_then(|t| once(PoseKind::Lift, &self.poses.lift, t as usize)) {
                 return Some(p);
             }

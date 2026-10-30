@@ -39,7 +39,12 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
     }
     if let Some(c) = &session.carried {
         if let Some(id) = t::carry_sprite(c.kind) {
-            let (x, y) = t::carry_origin(session.player_x, session.player_y);
+            // Hidden (2.05 on): the object sits where the player stands.
+            let (x, y) = if session.figure_hidden() {
+                (session.player_x + 0.5, session.player_y + 1.0)
+            } else {
+                t::carry_origin(session.player_x, session.player_y)
+            };
             draw_sprite(fb, sprites, tables, id, px(x) - cam_x, px(y) - cam_y);
         }
     }

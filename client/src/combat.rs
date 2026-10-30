@@ -115,6 +115,8 @@ pub enum Reject {
     AlreadyHurt,
     /// The victim is swimming (mode 10).
     Swimming,
+    /// The victim hides under a carried object (mode 14).
+    Hidden,
     /// Packet hit from farther than the profile's range.
     TooFar,
     /// The hit came from an NPC. Its position is not known to Seihai.
@@ -143,6 +145,8 @@ pub enum Vulnerability {
     Dead,
     Hurt,
     Swimming,
+    /// Hiding under a carried object (2.05 mode 14).
+    Hidden,
 }
 
 impl Vulnerability {
@@ -152,6 +156,7 @@ impl Vulnerability {
             Vulnerability::Dead => Err(Reject::Dead),
             Vulnerability::Hurt => Err(Reject::AlreadyHurt),
             Vulnerability::Swimming => Err(Reject::Swimming),
+            Vulnerability::Hidden => Err(Reject::Hidden),
         }
     }
 }
@@ -685,6 +690,8 @@ impl OfflineSession {
             Vulnerability::Hurt
         } else if self.in_water {
             Vulnerability::Swimming
+        } else if self.hidden {
+            Vulnerability::Hidden
         } else {
             Vulnerability::Hurtable
         };
@@ -883,6 +890,10 @@ impl OfflineSession {
     /// The SPRITE (17) value for the player's own walk and swing messages.
     pub fn sprite_value(&self) -> u8 {
         let s = self.combat.sprite(self.player_dir);
+        // Hidden: `hiddenstill` (18) or the `hidden` walk.
+        if let Some(h) = self.hidden_sprite_s().filter(|_| s == self.player_dir % 4) {
+            return (self.player_dir % 4) + 4 * h;
+        }
         // Holding an object (no swing can be out then): the carrystill
         // sprite, S = 18 (2.05 step 24). Hurt mode keeps its own sprite.
         if self.carried.is_some() && s == self.player_dir % 4 {

@@ -12,8 +12,10 @@ use crate::life::{respawn_half_hearts, Life, LifeEvent};
 use crate::protocol::{BoardModify, PlayerUpdate};
 use std::collections::{HashMap, HashSet};
 
+mod hide;
 mod pushpull;
 mod servernpcs;
+pub use hide::{HIDDEN_STATUS, HIDE_KINDS};
 pub use pushpull::{NpcMoved, Grab, Jump, PushPull, Trigger};
 pub use servernpcs::{block_flags, Linked, ServerNpcSync};
 use pushpull::StepResult;
@@ -171,6 +173,10 @@ pub struct OfflineSession {
     pub lift_ticks: Option<u32>,
     /// The 50 ms clock of [`Self::tick_poses`].
     pub(crate) pose_clock_ms: u64,
+    /// Hiding under the carried object (see `offline/hide.rs`).
+    pub hidden: bool,
+    /// Steps walked while hidden, for the hidden walk sprite.
+    pub(crate) hide_steps: usize,
     /// The swim stroke was running with the player moving, last tick.
     pub(crate) swim_was_moving: bool,
     /// How this build moves and looks (blink, pull release, swim when
@@ -447,6 +453,8 @@ impl OfflineSession {
             swim_ticks: 0,
             lift_ticks: None,
             pose_clock_ms: 0,
+            hidden: false,
+            hide_steps: 0,
             swim_was_moving: false,
             mannerisms: crate::protocol::MANNER_205,
             poses: crate::pose::PoseGanis::default(),
@@ -969,6 +977,8 @@ impl OfflineSession {
             return None;
         }
         let c = self.carried.take()?;
+        // S throws from hiding too.
+        self.hidden = false;
         self.thrown.push(crate::throwing::Thrown::launch(c.kind, self.player_x, self.player_y, self.player_dir));
         Some(c.kind)
     }
@@ -1650,7 +1660,9 @@ impl OfflineSession {
 
         let (x0, y0) = (self.player_x as f64, self.player_y as f64);
         let (mut x, mut y) = (x0, y0);
-        let (dx, dy) = (dx as f64, dy as f64);
+        // Hidden under a carried object: a fifth of the speed.
+        let k = if self.hidden { hide::HIDE_SPEED } else { 1.0 };
+        let (dx, dy) = ((dx * k) as f64, (dy * k) as f64);
         let steps = [(dy < 0.0, DIR_NORTH, 0.0, dy), (dx < 0.0, DIR_WEST, dx, 0.0), (dy > 0.0, DIR_SOUTH, 0.0, dy), (dx > 0.0, DIR_EAST, dx, 0.0)];
         for (pressed, dir, mx, my) in steps {
             if !pressed {
@@ -1686,6 +1698,9 @@ impl OfflineSession {
             return None;
         }
 
+        if self.hidden {
+            self.hide_steps += 1;
+        }
         self.player_x = nx;
         self.player_y = ny;
         if let Some(w) = &self.gmap {
