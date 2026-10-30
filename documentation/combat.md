@@ -221,7 +221,11 @@ bombs, blasts and shots"):
 - Flag 4 (remove a shot flying the other way) is not done.
 - Whether arrows stop at walls is still open. Seihai's arrows do not stop.
 
-**Not tested:** none of this was run in the lab.
+**Lab (2026-10-30, real 2.05 against Seihai main before this change):** the
+real 2.05 client was killed by a blast. In one frame it sent `BOARDMODIFY`,
+`PLI_CLAIMPKER`, CURPOWER 0 and GANI `dead`. This is the receiving side of the
+owner rule (an owned piece names its killer), seen in the real client. Seihai's
+own receive side, the sound names and the shot rules were not run in the lab.
 
 ## 2.00 to 2.04
 
