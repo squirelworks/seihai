@@ -58,7 +58,7 @@ Seihai's mapping is about five times better than chance and the alternatives are
 
 ### Surprise: `assets::tile_src_rect` uses the other mapping
 
-`client/src/assets/level.rs` has `pub fn tile_src_rect(id)` (re-exported from `assets`) that returns the **linear** cell (`col = id % 128`, `row = id / 128`) and its comment says "on a 2048x512 sheet (128x32 of 16 px)". That is the 74.92 row above, not the mapping the renderer uses. Nothing in the client calls it (only the re-export names it), so nothing draws wrongly today, but any caller that picked it up would. Not changed here (doc-only PR). It should be fixed or deleted, with a test that it agrees with `blit_tile`.
+`client/src/assets/level.rs` has `pub fn tile_src_rect(id)` (re-exported from `assets`) that returns the **linear** cell (`col = id % 128`, `row = id / 128`) and its comment says "on a 2048x512 sheet (128x32 of 16 px)". That is the 74.92 row above, not the mapping the renderer uses. Nothing in the client calls it (only the re-export names it), so nothing draws wrongly today, but any caller that picked it up would. It has since been deleted; the renderer's mapping in `render/tiles.rs` is the only one.
 
 ### Other widths
 
@@ -171,4 +171,4 @@ From the client code, not from the corpora.
 - The swim head offset (14 px in code against 16 and 20 in this animation).
 - The tile-id positions of any particular terrain (grass, bush and so on) are not recorded here; item 19 chooses its own ids and writes its own tile-type table.
 - GIF and MNG: a decoder is not planned for the default set (it will be PNG).
-- The `tile_src_rect` mismatch in section 1.
+- The `tile_src_rect` mismatch in section 1 (since fixed: the function was deleted).
