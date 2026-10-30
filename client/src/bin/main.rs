@@ -980,6 +980,17 @@ fn main() {
     let state_sheet = load("", "state.png");
     // The sign panel's frame and font; without it, the plain text panel.
     let letters_sheet = load("", "letters.png");
+    // The chat font of this version (see render::chattext): the game
+    // folders first (2.x ship tempsitc.ttf), then the system's fonts.
+    let chat_font = {
+        let dirs: Vec<std::path::PathBuf> = resolver.user_root().into_iter().chain(resolver.builtin_root()).map(|r| r.root.clone()).collect();
+        let f = seihai::render::chattext::ChatFont::find(profile.ui.chat_text, &dirs);
+        match &f {
+            Some(f) => eprintln!("chat font: {}", f.path.display()),
+            None => eprintln!("chat font: none found for {:?}; using the built-in letters", profile.ui.chat_text.face),
+        }
+        f
+    };
     if body.is_none() || head.is_none() {
         eprintln!("no body.png / head0.png found; drawing a marker for the player");
     }
@@ -1124,8 +1135,8 @@ fn main() {
             seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
-        ui::draw_other_labels(&mut fb, others, (cam_x, cam_y));
-        ui::draw_bubble(&mut fb, my_chat, dx, dy);
+        ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
+        ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
         match &state_sheet {
             Some(st) => seihai::render::hud::draw_hud(
                 &mut fb,

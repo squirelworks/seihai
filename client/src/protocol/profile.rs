@@ -427,6 +427,32 @@ pub enum HudArt {
     BlankButtons,
 }
 
+/// The typeface a build asks Windows for when it draws chat text over a
+/// player (`Canvas.Font.Name`). The default can be changed with `font=` in
+/// the build's config; Seihai uses the default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatFace {
+    /// `Dialog` (1st Graal to 1.38). Windows has no font of that name, so
+    /// its font mapper picks a sans serif; Seihai uses Arial or a look-alike.
+    Dialog,
+    /// `Helvetica` (1.39, 1.41). Windows maps it to Arial.
+    Helvetica,
+    /// `Tempus Sans ITC` (2.00 to 2.31). The client installs `tempsitc.ttf`
+    /// from its own folder.
+    TempusSans,
+}
+
+/// How a build draws chat text over a player: its font (bold, as every
+/// build asks for) at a cell height of `height` pixels (`Font.Height`; the
+/// `fontsize=` default). The colour, shadow, anchor and wrapping are the
+/// same in every build and live in `render::chattext`.
+/// See Graal_analysis `client-internals/chat-text.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChatText {
+    pub face: ChatFace,
+    pub height: u8,
+}
+
 /// Which parts of the client this version shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ui {
@@ -452,6 +478,8 @@ pub struct Ui {
     pub ghost_mode: bool,
     /// Server name in the window title (2.05+).
     pub server_in_title: bool,
+    /// The font of the chat text over players' heads.
+    pub chat_text: ChatText,
     /// Number of GS1 commands in the script table, for reference.
     pub gs1_commands: u16,
 }

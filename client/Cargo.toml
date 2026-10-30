@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 flate2 = "1"
+# Chat text over heads (TrueType). Already in the tree through egui.
+ab_glyph = "0.2"
 bzip2 = "0.5"
 minifb = "0.27"
 eframe = "0.29"

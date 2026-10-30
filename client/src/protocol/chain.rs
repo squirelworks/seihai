@@ -22,7 +22,7 @@
 //! `documentation/version-chain.tsv` (a unit test fails when it is stale).
 
 use super::profile::{
-    Basis, BuiltIn, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
+    Basis, BuiltIn, ChatFace, ChatText, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
     VersionProfile, COMBAT_205, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
@@ -142,6 +142,7 @@ pub struct Delta {
     pub server_list: Option<ServerList>,
     pub chat_recall: Option<bool>,
     pub hud: Option<HudArt>,
+    pub chat_text: Option<ChatText>,
     pub minimap: Option<bool>,
     pub editor: Option<bool>,
     pub ganis: Option<bool>,
@@ -191,6 +192,7 @@ impl Delta {
         server_list: None,
         chat_recall: None,
         hud: None,
+        chat_text: None,
         minimap: None,
         editor: None,
         ganis: None,
@@ -297,6 +299,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.ui.log_window = pick(p.ui.log_window, d.log_window);
     p.ui.ghost_mode = pick(p.ui.ghost_mode, d.ghost_mode);
     p.ui.server_in_title = pick(p.ui.server_in_title, d.server_in_title);
+    p.ui.chat_text = pick(p.ui.chat_text, d.chat_text);
     p.ui.gs1_commands = pick(p.ui.gs1_commands, d.gs1_commands);
     p
 }
@@ -364,6 +367,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         log_window: false,
         ghost_mode: false,
         server_in_title: false,
+        chat_text: ChatText { face: ChatFace::Dialog, height: 28 },
         gs1_commands: 88,
     },
 };
@@ -455,10 +459,11 @@ pub const CHAIN: &[Step] = &[
             own_props: IdDelta::plus(&[34]),
             other_props: IdDelta::plus(&[33]),
             chat_recall: Some(true),
+            chat_text: Some(ChatText { face: ChatFace::Helvetica, height: 24 }),
             gs1_commands: Some(111),
             ..Delta::NONE
         },
-        source: "binary (lab-verified as gen 2): PLO 75, PLI PROFILEGET/SET (80, 81), own prop 34, other prop 33, chat recall, GS1 109 to 111",
+        source: "binary (lab-verified as gen 2): PLO 75, PLI PROFILEGET/SET (80, 81), own prop 34, other prop 33, chat recall, chat font Helvetica 24, GS1 109 to 111",
         unknown: &[],
     },
     // 1.41 is the first gen 3 build. Its row was built on the 2.05 template,
@@ -510,10 +515,11 @@ pub const CHAIN: &[Step] = &[
             death: Some(None),
             combat: Some(None),
             ganis: Some(true),
+            chat_text: Some(ChatText { face: ChatFace::TempusSans, height: 24 }),
             gs1_commands: Some(134),
             ..Delta::NONE
         },
-        source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, GS1 126 to 134",
+        source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, chat font Tempus Sans ITC 24, GS1 126 to 134",
         unknown: &[
             Unknown { area: "listserver", what: "built-in port 14921 is dead; Seihai's classic login got a legacy list on 14923 on 2026-10-25 (14922 stayed silent); a real 1.42 client was not captured" },
             Unknown { area: "listserver", what: "login frame inferred, not captured: Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; a real 1.42 frame was never captured, and no run on the public service has used shape A, so the port is assumed" },
@@ -1119,6 +1125,7 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "ui", "log_window", &ua.log_window, &ub.log_window, yes_no);
     value_change(&mut o, "ui", "ghost_mode", &ua.ghost_mode, &ub.ghost_mode, yes_no);
     value_change(&mut o, "ui", "server_in_title", &ua.server_in_title, &ub.server_in_title, yes_no);
+    value_change(&mut o, "ui", "chat_text", &ua.chat_text, &ub.chat_text, dbg);
     value_change(&mut o, "ui", "gs1_commands", &ua.gs1_commands, &ub.gs1_commands, dbg);
     o
 }
@@ -1252,6 +1259,8 @@ mod tests {
             // without them.
             let got = strip_field(&format!("{p:?}"), "login: ", ", udp:");
             let got = strip_field(&got, ", link_boxes: ", " }");
+            // So did the chat font (`chat_text`).
+            let got = strip_field(&got, ", chat_text: ", ", gs1_commands");
             // The login shape and its basis (`Listserver::shape`) came later too.
             let got = if got.contains(", shape: ") { strip_field(&got, ", shape: ", " }") } else { got };
             if got != want {
