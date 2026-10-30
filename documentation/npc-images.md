@@ -95,3 +95,36 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
 Lab check (GServer-v2 at 127.0.0.1:14802, 2.22): a level with `NPC labgif.gif`
 and a 64 x 48 interlaced GIF with transparency. Seihai asked for it, logged
 `image labgif.gif`, and drew it at the NPC's place.
+
+## Images past the first four requests (laundry list item 14, 2026-10-31)
+
+NPCs still showed nothing on levels that needed many images. The cause was in
+the request lists (`seihai-core/src/filecache.rs`, `FileRequester`), not in
+the draw path or the cache.
+
+* **What went wrong.** Four `WANTFILE` (and four `UPDATEFILE`) go out at once;
+  further names wait and go out one by one as replies arrive
+  (`file-cache.md`, "How many at once?"). The lists kept each name in lower
+  case, so a waiting name went out lower-cased: a level's fifth image
+  `Block.PNG` was asked for as `block.png`. The lab's older GServer-v2 answers
+  a name in the wrong case with `PLO_FILESENDFAILED`, the name is then settled
+  for the connection, and the NPC draws nothing. The first four went out in
+  the right case, which is why some NPCs showed and others did not.
+* **The rule now.** A name goes out in the case the level, the script or the
+  server gave it, whether it goes out at once or after waiting. Names are
+  still compared without regard to case (a second ask in another case is not
+  repeated; a reply in any case settles the name).
+* **The green box.** The current draw path has no placeholder: an NPC whose
+  image is not loaded draws nothing (section *An NPC with no picture draws
+  nothing* above, and the `npc_images` tests). A box seen in an older build
+  was the removed board-view square.
+* **Cache and resolver.** Re-checked with the existing
+  `a_downloaded_image_is_found_where_it_was_saved` test (14 kinds of name, four
+  save layouts): the store writes where the resolver and the store's own
+  lookup find the file. No change there.
+
+Confirmed: the lower-casing, by a test that failed before the change
+(`a_waiting_name_goes_out_as_the_server_named_it`). Inferred: that the real
+client sends waiting names in their own case (its list code keeps the name
+strings; the case of a waiting name was not re-read in the decompile).
+Not tested: a lab run with more than four missing NPC images.
