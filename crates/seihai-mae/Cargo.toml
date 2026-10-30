@@ -21,8 +21,11 @@ egui = "0.29"
 # silent. Needs the ALSA development files on Linux.
 rodio = { version = "0.19", optional = true, default-features = false }
 
+# `seihai-mae`: the 1.x and 2.x client. The `seihai` command is
+# `seihai-launcher`, which starts this binary (or `seihai-ato` for a 3.x
+# build); this one also runs on its own.
 [[bin]]
-name = "seihai"
+name = "seihai-mae"
 path = "src/bin/main.rs"
 
 [features]
