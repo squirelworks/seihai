@@ -14,7 +14,7 @@ use seihai::assets::{read_png_rgb, read_png_rgba, write_png_rgb, AssetResolver, 
 use seihai::sound::SoundEngine;
 use seihai::gmap::{sync_world, GmapRules, WorldLoader, WorldRequests};
 use seihai::protocol::login::LoginBurst;
-use seihai::net::{enter_level_extras, login_gserver, Connection, EnterLevelSender};
+use seihai::net::{enter_level_extras, Connection, EnterLevelSender};
 use seihai::filecache::FileSession;
 use seihai::offline::OfflineSession;
 use seihai::protocol::{showimg_message, ChatKind, ClientVersion, SessionState, ShowImgSender, TamperSender};
@@ -780,7 +780,9 @@ fn main() {
         }
 
         if let Some(addr) = &online {
-            match login_gserver(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck) {
+            match seihai::net::login_gserver_with(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck, |n| {
+                first_frame_check(assets.as_deref(), n)
+            }) {
                 Ok(mut sess) => {
                     eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
                     if sess.tamper_unavailable {
@@ -909,7 +911,7 @@ fn main() {
     // tick, with the tile changes of the tick (see `protocol::walkcadence`).
     let mut walk_cadence = conn.as_ref().and_then(|_| seihai::protocol::walkcadence::WalkCadence::for_version(version));
     let mut cadence_clock = Instant::now();
-    session.gani_swing = version == ClientVersion::V222;
+    session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304);
     let mut held_boards: Vec<Vec<u8>> = Vec::new();
 
     // Sound effects: optional. With no sounds folder, no audio device, or
@@ -1567,7 +1569,7 @@ fn main() {
             // The burst has ended: the file checks, process list and props
             // a real client answers with.
             if changed {
-                if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
+                if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| lb.info().full), conn.as_mut()) {
                     let mut msgs = lb.take(
                         &net_state,
                         &account,
@@ -2540,6 +2542,17 @@ fn main() {
                 c.queue_flag(&name, value.as_deref());
             }
         }
+        // The 3.04 frame goes once the board is in, after the scripts of the
+        // level's first tick, so it carries their first flags as the real
+        // client's did.
+        if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| !lb.info().full), conn.as_mut()) {
+            let msgs = lb.take(&net_state, &account, |n| files.need(n), Vec::new, || c.take_flags());
+            if !msgs.is_empty() {
+                if let Err(e) = c.send_messages(&msgs) {
+                    eprintln!("login frame send failed: {e}");
+                }
+            }
+        }
         if !login_burst.as_ref().is_some_and(|lb| lb.pending()) {
             if let Some(c) = conn.as_mut() {
                 if let Err(e) = c.send_stale_flags(Duration::from_millis(60)) {
@@ -2634,13 +2647,14 @@ fn main() {
                 let target = w.address();
                 eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
                 let result = match target {
-                    Some(a) => seihai::net::login_gserver(
+                    Some(a) => seihai::net::login_gserver_with(
                         &a,
                         version,
                         seihai::net::random_key(),
                         &account,
                         &password,
                         send_tampercheck,
+                        |n| first_frame_check(resolver.user_root().map(|r| r.root.as_path()), n),
                     )
                     .map(|s| (a, s))
                     .map_err(|e| e.to_string()),
@@ -3299,4 +3313,16 @@ fn attr_sheets<'a>(
     images: &'a HashMap<String, (u32, Vec<u8>)>,
 ) -> [Option<seihai::render::Sheet<'a>>; 5] {
     [0, 1, 2, 3, 4].map(|i| seihai::looks::attr_image(attrs, gani, i).and_then(|n| images.get(n)).map(pose_sheet))
+}
+
+/// The file check a 3.04 puts in its login frame, before the asset layers
+/// exist: `PLI_UPDATEFILE` with the mod time of `<assets>/maps/<name>` or
+/// `<assets>/<name>` (the 3.04 install keeps its map files in `maps/`),
+/// `PLI_WANTFILE` when neither is there.
+fn first_frame_check(assets: Option<&std::path::Path>, name: &str) -> Vec<u8> {
+    let found = assets.and_then(|a| [a.join("maps").join(name), a.join(name)].into_iter().find(|p| p.is_file()));
+    match found.and_then(|p| seihai::filecache::mod_time_of(&p)) {
+        Some(t) => seihai::net::updatefile_message(t, name),
+        None => seihai::net::wantfile_message(name),
+    }
 }

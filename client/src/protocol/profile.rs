@@ -208,6 +208,9 @@ pub enum LoginShape {
     /// Shape C: a plain zlib frame with id 7 (key byte, token `GNW30123`,
     /// `newmain`), then a gen-5 frame with id 1. Real 2.22 and 2.31.
     Gen5,
+    /// Shape D: shape C's id 7 and id 1 in **one** plain zlib frame at the
+    /// default level (`78 9C`); replies are gen 5. Real 3.04.
+    Gen5OneFrame,
 }
 
 impl LoginShape {
@@ -217,6 +220,7 @@ impl LoginShape {
             LoginShape::NewmainOnly => "A",
             LoginShape::NewmainAccount => "B",
             LoginShape::Gen5 => "C",
+            LoginShape::Gen5OneFrame => "D",
         }
     }
 }
@@ -1171,6 +1175,8 @@ mod tests {
             ("2.22", Gen5, Captured),
             ("2.3", Gen5, Inferred),
             ("2.31", Gen5, Captured),
+            ("3.04", Gen5OneFrame, Captured),
+            ("3.153", Gen5OneFrame, Captured),
         ];
         for (label, shape, basis) in want {
             let l = by_label(label).unwrap().protocol.listserver.unwrap();

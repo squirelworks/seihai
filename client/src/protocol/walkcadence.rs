@@ -13,6 +13,11 @@
 //! * a sword swing: `GANI` (`sword`) with no `SPRITE`, in the same frame as
 //!   the `PLI_BOARDMODIFY` of the bush it cuts.
 //!
+//! The real 3.04 (lab, 2026-10-30, `documentation/login-burst.md`)
+//! sends the same walk: `walk` + X + `SPRITE`, then X every 100 ms. It sent
+//! `idle` one tick after the last step, with that step's position, where
+//! 2.22 waits two.
+//!
 //! The 2.31 client sends `X2`/`Y2` every 50 ms instead, and is not handled
 //! here.
 
@@ -24,8 +29,10 @@ use super::ClientVersion;
 pub const INTERVAL_TICKS: u32 = 2;
 
 /// Ticks the GANI stays `walk` after the last step before `idle` is sent:
-/// in both captures `idle` went out two ticks after the last step.
+/// in both 2.22 captures `idle` went out two ticks after the last step.
 pub const IDLE_AFTER_TICKS: u32 = 2;
+/// The same for the real 3.04: one tick (one stop, lab 2026-10-30).
+pub const IDLE_AFTER_TICKS_304: u32 = 1;
 
 /// What the player shows, as the props would carry it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,12 +61,18 @@ pub struct WalkCadence {
     sent_tick: Option<u32>,
     pos: (u8, u8),
     moved_tick: u32,
+    idle_after: u32,
 }
 
 impl WalkCadence {
-    /// The builds this sender is for: 2.22 only.
+    /// The builds this sender is for: 2.22 and 3.04.
     pub fn for_version(v: ClientVersion) -> Option<Self> {
-        (v == ClientVersion::V222).then_some(Self { sent: None, tick: 0, sent_tick: None, pos: (0, 0), moved_tick: 0 })
+        let idle_after = match v {
+            ClientVersion::V222 => IDLE_AFTER_TICKS,
+            ClientVersion::V304 => IDLE_AFTER_TICKS_304,
+            _ => return None,
+        };
+        Some(Self { sent: None, tick: 0, sent_tick: None, pos: (0, 0), moved_tick: 0, idle_after })
     }
 
     /// One 50 ms tick: the props message to send in this tick's frame, if
@@ -77,8 +90,8 @@ impl WalkCadence {
             self.sent = Some(cur);
             return None;
         };
-        // A stop keeps `walk` for two ticks after the last step.
-        let settling = last.gani == Some("walk") && n.wrapping_sub(self.moved_tick) < IDLE_AFTER_TICKS;
+        // A stop keeps `walk` for a tick or two after the last step.
+        let settling = last.gani == Some("walk") && n.wrapping_sub(self.moved_tick) < self.idle_after;
         let gani = cur.gani.filter(|g| last.gani != Some(*g) && !(settling && *g == "idle"));
         if gani.is_none() && cur.x == last.x && cur.y == last.y && cur.sprite == last.sprite {
             return None;
@@ -123,7 +136,11 @@ mod tests {
     /// Run `ticks` (position, gani) through a sender that starts idle at
     /// `start`, facing down; the result is (tick, props) of each message.
     fn run(start: f32, ticks: &[(f32, &'static str)], sprite: u8) -> Vec<(usize, String)> {
-        let mut c = WalkCadence::for_version(ClientVersion::V222).unwrap();
+        run_as(ClientVersion::V222, start, ticks, sprite)
+    }
+
+    fn run_as(v: ClientVersion, start: f32, ticks: &[(f32, &'static str)], sprite: u8) -> Vec<(usize, String)> {
+        let mut c = WalkCadence::for_version(v).unwrap();
         assert_eq!(c.tick(WalkState::new(start, 30.0, 2, Some("idle"))), None);
         // Long idle first, as in both captures.
         for _ in 0..10 {
@@ -170,6 +187,19 @@ mod tests {
                 (10, "*$idle".to_string()),
             ]
         );
+    }
+
+    /// Lab 2026-10-30, the real 3.04, right from 30 to 41: walk + X +
+    /// SPRITE, X every second tick on the half tiles, and the last step
+    /// (41, a tick after 40.5) goes with `idle`.
+    #[test]
+    fn the_304_walk_stops_with_idle_in_the_same_message() {
+        let mut t: Vec<(f32, &str)> = (1..=22).map(|i| (30.0 + 0.5 * i as f32, "walk")).collect();
+        t.extend([(41.0, "idle"), (41.0, "idle"), (41.0, "idle")]);
+        let mut want: Vec<(usize, String)> = vec![(0, format!("*$walk/{}1#", hx(30.5)))];
+        want.extend((1..=10).map(|i| (2 * i, format!("/{}", hx(30.5 + i as f32)))));
+        want.push((22, format!("*$idle/{}", hx(41.0))));
+        assert_eq!(run_as(ClientVersion::V304, 30.0, &t, 3), want);
     }
 
     #[test]

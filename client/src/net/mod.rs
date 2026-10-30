@@ -527,15 +527,39 @@ pub fn login_gserver(
     password: &str,
     send_tampercheck: bool,
 ) -> Result<GserverSession, LoginFailure> {
+    login_gserver_with(addr, version, key, account, password, send_tampercheck, |n| wantfile_message(n))
+}
+
+/// As [`login_gserver`]. `check` gives the file message for each of the
+/// profile's first-frame files ([`crate::protocol::login::LoginInfo::first_frame_files`]):
+/// `PLI_UPDATEFILE` for a file the client has, `PLI_WANTFILE` otherwise.
+pub fn login_gserver_with(
+    addr: &str,
+    version: ClientVersion,
+    key: u8,
+    account: &str,
+    password: &str,
+    send_tampercheck: bool,
+    check: impl Fn(&str) -> Vec<u8>,
+) -> Result<GserverSession, LoginFailure> {
     let mut conn =
         Connection::connect(addr).map_err(|error| LoginFailure { connect: true, error })?;
-    conn.login_versioned(version, key, account, password)
-        .map_err(|error| LoginFailure { connect: false, error })?;
+    let first_files = version.profile().protocol.login.map_or(&[][..], |l| l.first_frame_files);
     let mut warnings = Vec::new();
     let tamper = if send_tampercheck { TamperSender::for_version(version) } else { None };
     let tamper_unavailable = send_tampercheck && tamper.is_none();
-    if let Err(e) = conn.send_post_login_with(version, "English", tamper.as_ref()) {
-        warnings.push(format!("post-login send failed: {e}"));
+    if first_files.is_empty() {
+        conn.login_versioned(version, key, account, password)
+            .map_err(|error| LoginFailure { connect: false, error })?;
+        if let Err(e) = conn.send_post_login_with(version, "English", tamper.as_ref()) {
+            warnings.push(format!("post-login send failed: {e}"));
+        }
+    } else {
+        // The real 3.04: login line, language and the file checks in one plain frame.
+        let mut then = conn.post_login_messages(version, "English", tamper.as_ref());
+        then.extend(first_files.iter().map(|n| check(n)));
+        conn.login_versioned_with(version, key, account, password, &then)
+            .map_err(|error| LoginFailure { connect: false, error })?;
     }
     let mut enter_level = EnterLevelSender::for_version(version);
     if version.profile().protocol.login.is_some() {
@@ -664,9 +688,26 @@ impl Connection {
         account: &str,
         password: &str,
     ) -> io::Result<()> {
+        self.login_versioned_with(version, key, account, password, &[])
+    }
+
+    /// As [`Self::login_versioned`], with `then` in the same plain frame
+    /// after the login line (the real 3.04 sends its language and two file
+    /// checks there).
+    pub fn login_versioned_with(
+        &mut self,
+        version: ClientVersion,
+        key: u8,
+        account: &str,
+        password: &str,
+        then: &[Vec<u8>],
+    ) -> io::Result<()> {
         let mut line = Vec::new();
         write_login(&mut line, version, key, account, password)?;
         line.push(b'\n');
+        for m in then {
+            line.extend_from_slice(m);
+        }
         self.send_raw(&write_zlib_frame(&line)?)?;
         self.pli = Some(version.profile().protocol.pli);
         self.take_flags();
@@ -687,6 +728,8 @@ impl Connection {
     /// - C (2.22, 2.3, 2.31): a plain zlib frame with id 7 = `GCHAR key` +
     ///   `GNW30123` + `newmain`, then a gen-5 frame with id 1 = account and
     ///   password. Replies are gen-5 frames keyed with the same key.
+    /// - D (3.04): C's two messages in one plain zlib frame, at the default
+    ///   level (`78 9C`) as the real 3.04 sent it. Replies as for C.
     /// - B (2.17 and the builds with no capture from 1.41 and 2.1 to 2.16):
     ///   one plain zlib frame with id 0 `newmain` and id 1. There is no
     ///   cipher on this link.
@@ -713,13 +756,18 @@ impl Connection {
         write_gstring(&mut serverlist, account)?;
         write_gstring(&mut serverlist, password)?;
         serverlist.push(b'\n');
-        if shape == LoginShape::Gen5 {
+        if matches!(shape, LoginShape::Gen5 | LoginShape::Gen5OneFrame) {
             let mut hs = vec![7 + 0x20, (key & 0x7F) + 0x20];
             hs.extend_from_slice(version.listserver_token().as_bytes());
             hs.extend_from_slice(b"newmain\n");
-            self.send_raw(&write_zlib_frame_best(&hs)?)?;
             self.gen5 = Some(Gen5::new(key));
             self.gen5_in = Some(Gen5::new(key));
+            if shape == LoginShape::Gen5OneFrame {
+                hs.extend_from_slice(&serverlist);
+                self.send_raw(&write_zlib_frame(&hs)?)?;
+                return self.stream.flush();
+            }
+            self.send_raw(&write_zlib_frame_best(&hs)?)?;
             self.send_messages(&[serverlist])
         } else {
             let mut body = b" newmain\n".to_vec();
@@ -852,6 +900,15 @@ impl Connection {
         language: &str,
         tamper: Option<&TamperSender>,
     ) -> io::Result<()> {
+        let msgs = self.post_login_messages(version, language, tamper);
+        if msgs.is_empty() {
+            return Ok(());
+        }
+        self.send_messages(&msgs)
+    }
+
+    /// The messages of [`Self::send_post_login_with`], not sent.
+    fn post_login_messages(&self, version: ClientVersion, language: &str, tamper: Option<&TamperSender>) -> Vec<Vec<u8>> {
         let mut msgs = Vec::new();
         if version.profile().protocol.sends_language {
             let mut msg = vec![37 + 0x20];
@@ -862,10 +919,7 @@ impl Connection {
         if let Some(m) = tamper.and_then(|t| t.message()) {
             msgs.push(m);
         }
-        if msgs.is_empty() {
-            return Ok(());
-        }
-        self.send_messages(&msgs)
+        msgs
     }
 
     /// Send `PLI_ENTERLEVEL` (46) for `version`, if its profile's send set
@@ -1488,6 +1542,22 @@ mod tests {
         srv.write_all(&frame).unwrap();
         let reply = parse_list_reply(&conn.read_body().unwrap());
         assert_eq!(reply.status.as_deref(), Some("Lab listserver"));
+    }
+
+    /// 3.04 listserver login: id 7 and id 1 in one plain zlib frame at the
+    /// default level, as the real 3.04 sent it in the lab (2026-10-30); the
+    /// reply is gen 5.
+    #[test]
+    fn one_frame_listserver_login_304() {
+        let (mut conn, mut srv) = pair();
+        conn.login_listserver(ClientVersion::V304, 0x2b, "ab", "cd").unwrap();
+        let first = wire(&mut srv);
+        assert_eq!(&first[2..4], &[0x78, 0x9C], "the real 3.04 frame is at the default level");
+        assert_eq!(crate::protocol::zlib_decompress(&first[2..]).unwrap(), b"'KG3D30123newmain\n!\"ab\"cd\n");
+        let mut out = Gen5::new(0x2b);
+        let z = zlib_compress(b"\"Lab listserver\n").unwrap();
+        srv.write_all(&write_frame(Gen5Comp::Zlib, &out.encode(z, Gen5Comp::Zlib))).unwrap();
+        assert_eq!(parse_list_reply(&conn.read_body().unwrap()).status.as_deref(), Some("Lab listserver"));
     }
 
     /// The raw bytes of the next frame on the wire, length prefix and all.

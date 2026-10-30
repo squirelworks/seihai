@@ -27,7 +27,7 @@ use super::profile::{
     Mannerisms, VersionProfile, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
-use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
+use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
 use super::version::{ClientVersion, EncryptionGen};
@@ -889,12 +889,12 @@ pub const CHAIN: &[Step] = &[
             listserver: Some(Some(
                 // The address built into the binary; license/license.graal names the one used.
                 Listserver::new(ListKind::Supported, PortStatus::Assumed, Some(BuiltIn { host: "listserver.graalonline.com", port: 14922 }), Some("G3D30123"))
-                    .shape(LoginShape::Gen5, ShapeBasis::Captured),
+                    .shape(LoginShape::Gen5OneFrame, ShapeBasis::Captured),
             )),
             tampercheck: Some(false),
             tamper: Some(None),
             showimg: Some(None),
-            login: Some(None),
+            login: Some(Some(LOGIN_304)),
             udp_off_by_default: Some(false),
             // Parses its own props up to 74, without 33, 50, 51 and 53; no X2/Y2/Z2.
             own_props: IdDelta { minus: &[33], minus_ranges: &[(78, 80)], ..IdDelta::NONE },
@@ -906,7 +906,7 @@ pub const CHAIN: &[Step] = &[
         source: "binary (Linux i386 ELF) and one lab run on GServer-v2 (Graal_analysis version-profiles/lab-304-linux-2026-10-30.md): PLO and PLI sets, props up to 76 (parsed to 74), NPC props to 73, no tampercheck, no showimg timer (UDP 15 instead), listserver id 7 with G3D30123",
         unknown: &[
             Unknown { area: "listserver", what: "port 14922 and the G3D token were checked against the lab listserver only, never the public one" },
-            Unknown { area: "login", what: "the first props (0, 18, 31, 33, 52, 75, 76, OSTYPE linux) are not sent: no post-login frame is modelled for this build" },
+            Unknown { area: "login", what: "UDPPORT (31) is left out of the first props, as for every build (no UDP socket); the nickname is the account, where the real client sends the start window's nickname field" },
             Unknown { area: "ui", what: "the Torque front end (start window, options, themes, chat as white text with a blue shadow) is not modelled; the 2.31 UI row is kept" },
             Unknown { area: "other props", what: "the props it parses for other players are taken as 2.31's without 78-80" },
         ],
@@ -1096,8 +1096,12 @@ fn login_text(l: &Option<LoginInfo>) -> String {
     match l {
         None => "none".into(),
         Some(l) => format!(
-            "files, process list, props{}{}{}",
-            if l.os_props { " with OS and code page" } else { "" },
+            "{}{}{}{}",
+            if l.full { "files, process list, props" } else { "head and default-weapon files, props without head or colours" },
+            match l.os_props {
+                Some((os, cp)) => format!(" with OS {os} and code page {cp}"),
+                None => String::new(),
+            },
             if l.idle_gani { ", idle.gani at once" } else { "" },
             if l.status_icons { ", status icons" } else { "" },
         ),
