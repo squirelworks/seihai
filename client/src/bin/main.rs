@@ -822,7 +822,7 @@ fn main() {
                         eprintln!("--send-showimg: {} has no recorded id 24 behaviour; not sent", version.label());
                     }
                     showimg_clock = Instant::now();
-                    match sess.conn.spawn_reader() {
+                    match sess.conn.spawn_reader_timed() {
                         Ok(rx) => frames = Some(rx),
                         Err(e) => eprintln!("reader failed: {e}"),
                     }
@@ -930,9 +930,6 @@ fn main() {
     // (the idle.gani check where the build asks, image checks, process
     // list, props).
     let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
-    // When the first level of this connection arrived: idle.gani goes alone
-    // a while after it if the post-login frame is not due by then.
-    let mut first_level_at: Option<Instant> = None;
     // A gen-2 build (1.33 to 1.39) sends its own props once the first level
     // has loaded instead (see `classic_login_props_message`).
     let mut classic_props_owed = conn.is_some() && seihai::protocol::login::sends_classic_login_props(version);
@@ -1520,7 +1517,7 @@ fn main() {
             let mut changed = false;
             loop {
                 match rx.try_recv() {
-                    Ok(Ok(body)) => {
+                    Ok((read_at, Ok(body))) => {
                         frames_seen += 1;
                         if let Some(f) = packet_log.as_mut() {
                             use std::io::Write;
@@ -1529,6 +1526,11 @@ fn main() {
                             let _ = f.flush();
                         }
                         net_state.apply_body(&body);
+                        // The first level's arrival starts the post-login
+                        // frame's timer (240 ms without a 182).
+                        if let (Some(lb), Some(_)) = (login_burst.as_mut(), net_state.current_level_name()) {
+                            lb.note_level(read_at);
+                        }
                         // Save completed files by the clients' folder rules,
                         // settle the replies, and reload levels.
                         let got = files.process(&mut net_state);
@@ -1592,7 +1594,7 @@ fn main() {
                         }
                         changed = true;
                     }
-                    Ok(Err(e)) => {
+                    Ok((_, Err(e))) => {
                         // The server's own reason, when it sent one.
                         let why = match &net_state.disconnect_message {
                             Some(m) => format!("disconnected: {m}"),
@@ -1609,13 +1611,15 @@ fn main() {
                     Err(_) => break,
                 }
             }
-            // The burst has ended: the file checks, process list and props
-            // a real client answers with.
-            if changed {
+            // The burst has ended (182), or the level has been in for 240 ms
+            // without one: the file checks, process list and props a real
+            // client answers with.
+            {
                 if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| lb.info().full), conn.as_mut()) {
                     let mut msgs = lb.take(
                         &net_state,
                         &account,
+                        Instant::now(),
                         |n| files.need(n),
                         || enter_level.as_mut().map(|el| el.take_login()).unwrap_or_default(),
                         || c.take_flags(),
@@ -1640,8 +1644,11 @@ fn main() {
             if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
                 if el.login_owed() && login_since.elapsed() > LATE_LOGIN_46 {
                     let msgs = el.take_login();
-                    if let Err(e) = c.send_messages(&msgs) {
-                        eprintln!("late enter-level send failed: {e}");
+                    // 2.22 owes no login 46: nothing to send (it once sent an empty frame).
+                    if !msgs.is_empty() {
+                        if let Err(e) = c.send_messages(&msgs) {
+                            eprintln!("late enter-level send failed: {e}");
+                        }
                     }
                 }
             }
@@ -1673,7 +1680,6 @@ fn main() {
                 if let Some(name) = &net_state.current_level_name() {
                     if loaded_level.as_deref().map_or(true, |l| !l.eq_ignore_ascii_case(name)) {
                         entered = true;
-                        first_level_at.get_or_insert_with(Instant::now);
                         // The first level after login is not a "level change":
                         // the login send already covers it.
                         // A new level (not the first after login) owes a
@@ -2623,20 +2629,10 @@ fn main() {
         // level's first tick, so it carries their first flags as the real
         // client's did.
         if let (Some(lb), Some(c)) = (login_burst.as_mut().filter(|lb| !lb.info().full), conn.as_mut()) {
-            let msgs = lb.take(&net_state, &account, |n| files.need(n), Vec::new, || c.take_flags());
+            let msgs = lb.take(&net_state, &account, Instant::now(), |n| files.need(n), Vec::new, || c.take_flags());
             if !msgs.is_empty() {
                 if let Err(e) = c.send_messages(&msgs) {
                     eprintln!("login frame send failed: {e}");
-                }
-            }
-        }
-        // A server that sends no PLO_LISTPROCESSES: the idle.gani check goes
-        // alone when the real client's frame would have gone.
-        if let (Some(lb), Some(c)) = (login_burst.as_mut(), conn.as_mut()) {
-            let msgs = lb.take_idle_gani_late(first_level_at.map(|t| t.elapsed()), |n| files.need(n));
-            if !msgs.is_empty() {
-                if let Err(e) = c.send_messages(&msgs) {
-                    eprintln!("send failed: {e}");
                 }
             }
         }
@@ -2780,7 +2776,6 @@ fn main() {
                         files.store.set_caches(warp_game_cache, warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
                         sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
-                        first_level_at = None;
                         classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
                         walk_cadence = seihai::protocol::walkcadence::WalkCadence::for_version(version);
                         tamper = sess.tamper.take();
@@ -2789,7 +2784,7 @@ fn main() {
                         login_since = Instant::now();
                         showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
                         showimg_clock = Instant::now();
-                        match sess.conn.spawn_reader() {
+                        match sess.conn.spawn_reader_timed() {
                             Ok(rx) => frames = Some(rx),
                             Err(e) => eprintln!("reader failed: {e}"),
                         }

@@ -69,6 +69,36 @@ filtered to 7 alone) and id 8 `wbomb1.png` (the 2.05 rev 2 item table), which
 gives the real 2.22 and 2.31 order, `wbomb1.png` before `wbowi1.png`
 (`file-cache.md`, `weapon-images.md`).
 
+## Without `PLO_LISTPROCESSES`
+
+Stock GServer beta4 never sends 182. Lab, 2026-10-30 (Windows, real 2.22 and 2.31,
+two runs each, decoded message by message): the client sent its frame anyway,
+236 to 246 ms after the level frame. Before it the server had sent the
+signature, the start messages, `STATUSLIST`, the full own props, the weapon
+messages and the level, all within 5 ms; the client had sent only `LANGUAGE`
+and `TAMPERCHECK`. The frame:
+
+| order | message | content |
+|---|---|---|
+| 1 | `WANTFILE idle.gani` | 2.22 only |
+| 2 | `UPDATEFILE` / `WANTFILE`, one per status icon | the four in flight |
+| 3 | `PLI_ENTERLEVEL` (46) | 2.31 only |
+| 4 | `PLI_PLAYERPROPS` (2) | `NICKNAME`, `HEADGIF`, `COLORS`, `STATUS`, `UDPPORT` 0, `ADDITFLAGS`, `PLANGUAGE`, `OSTYPE`, `TEXTCODEPAGE` |
+| 5 | `SHOWIMGPLAYER` (24) | |
+
+No `PLI_PROCESSLIST` and no image checks in the frame. The other icons, then the
+sword, shield and body images and the weapon images (`wbomb1.png`, `wbowi1.png`)
+followed in later frames through the four-in-flight queue. **The head image was
+never checked.**
+
+Seihai does the same (`LoginBurst::due_at`, `late_frame`): when no 182 has come
+240 ms after the first level (`FRAME_AFTER_LEVEL`, timed from the moment the
+level's frame was read off the socket), it sends this shape. Images the window
+lets out at once follow the props. `SHOWIMGPLAYER` stays opt-in (`--send-showimg`),
+as for the 182 frame, and `UDPPORT` stays out (see below). A 182 that comes first
+keeps the frame above. 2.17 was not captured on stock beta4, and the same rule is
+applied to it.
+
 ## Gen-2 builds (1.33 to 1.39)
 
 These builds have no post-login frame and no process list. Their first
