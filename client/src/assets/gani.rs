@@ -43,6 +43,10 @@ pub const LISTENER_DY: f32 = 2.0;
 pub struct GaniFrame {
     pub rows: Vec<Vec<GaniPlacement>>,
     pub sounds: Vec<GaniSound>,
+    /// `WAIT n` after the step: it is shown for `1 + n` 50 ms ticks. The
+    /// real 2.05 client honours it (Graal_analysis
+    /// `player-mannerisms-live.md`: push 4 ticks a frame, hurt 31, lift 6).
+    pub wait: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -202,6 +206,16 @@ impl Gani {
             }
 
             if in_ani {
+                // `WAIT n` (the stock `hidden.gani` writes `WAIT4`) belongs to
+                // the step whose rows came just before it.
+                if let Some(n) = line.strip_prefix("WAIT").and_then(|r| r.trim().parse::<u32>().ok()) {
+                    if !current.rows.is_empty() {
+                        current.wait = n;
+                    } else if let Some(last) = frames.last_mut() {
+                        last.wait = n;
+                    }
+                    continue;
+                }
                 if let Some(rest) = line.strip_prefix("PLAYSOUND ") {
                     // The cue belongs to the step whose rows came just
                     // before it (every shipped file puts it there).
@@ -258,6 +272,35 @@ impl Gani {
         } else {
             self.frames.get(index % self.frames.len())
         }
+    }
+
+    /// Ticks step `index` is shown for (`1 + WAIT`).
+    pub fn frame_ticks(&self, index: usize) -> usize {
+        self.frames.get(index).map_or(1, |f| 1 + f.wait as usize)
+    }
+
+    /// Ticks one pass of the animation takes.
+    pub fn total_ticks(&self) -> usize {
+        (0..self.frames.len()).map(|i| self.frame_ticks(i)).sum()
+    }
+
+    /// The step shown `tick` ticks after the animation started, each step
+    /// held for its `WAIT`: wrapping round when `wrap` is set, else held on
+    /// the last step.
+    pub fn frame_at_tick(&self, tick: usize, wrap: bool) -> usize {
+        let total = self.total_ticks();
+        if total == 0 {
+            return 0;
+        }
+        let mut t = if wrap { tick % total } else { tick.min(total - 1) };
+        for i in 0..self.frames.len() {
+            let n = self.frame_ticks(i);
+            if t < n {
+                return i;
+            }
+            t -= n;
+        }
+        self.frames.len() - 1
     }
 
     /// Advance a frame index by one step, wrapping.
@@ -317,6 +360,24 @@ mod tests {
         assert_eq!(g.default_attrs[0].as_deref(), Some("hat0.png"));
         assert_eq!(g.default_attrs[1], None);
         assert_eq!(g.default_attrs[2].as_deref(), Some("star.png"));
+    }
+
+    #[test]
+    fn wait_holds_a_step_for_more_ticks() {
+        // The stock push.gani: five steps, each WAIT 3 (4 ticks).
+        let step = "1 0 0\n1 0 0\n1 0 0\n1 0 0\nWAIT 3\n\n";
+        let g = Gani::parse(&format!("ANI\n{}ANIEND\n", step.repeat(5))).unwrap();
+        assert_eq!(g.total_ticks(), 20);
+        let frames: Vec<_> = (0..21).map(|t| g.frame_at_tick(t, true)).collect();
+        assert_eq!(&frames[..9], [0, 0, 0, 0, 1, 1, 1, 1, 2]);
+        assert_eq!(frames[20], 0, "wraps after 20 ticks");
+        // hurt.gani: one step, WAIT 30, held to the end when not wrapping.
+        let hurt = Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nWAIT 30\nANIEND\n").unwrap();
+        assert_eq!(hurt.total_ticks(), 31);
+        assert_eq!(hurt.frame_at_tick(99, false), 0);
+        // `WAIT4` with no space, as in the stock hidden.gani.
+        let hidden = Gani::parse("SINGLEDIRECTION\nANI\n1 0 0\nWAIT4\nANIEND\n").unwrap();
+        assert_eq!(hidden.total_ticks(), 5);
     }
 
     #[test]

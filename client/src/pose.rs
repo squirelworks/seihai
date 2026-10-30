@@ -5,11 +5,17 @@
 //! clock of their own, so what is drawn can never disagree with what the
 //! other players are sent:
 //!
-//! * **Walk** and **swim** show the frame `offline` has stepped to: one GANI
-//!   frame per step taken (every 50 ms on foot, 100 ms swimming), the same
-//!   stepping that plays the footstep cues. **Idle** shows `idle.gani`'s first
-//!   step when the player is not walking. The sprite value the other players
-//!   are sent is not touched.
+//! Every step of a GANI is held for `1 + WAIT` ticks of 50 ms, as the real
+//! 2.05 client holds it (Graal_analysis `player-mannerisms-live.md`, read
+//! live: push 4 ticks a frame, pull 2, hurt 31, lift 6, swim 2). A file
+//! without `WAIT` lines steps once a tick.
+//!
+//! * **Walk** shows the frame `offline` has stepped to: one GANI frame per
+//!   step taken (every 50 ms), the same stepping that plays the footstep
+//!   cues. **Swim** runs on the tick clock instead ([`OfflineSession::tick_poses`]):
+//!   the real client keeps the stroke going while the player floats still.
+//!   **Idle** shows `idle.gani`'s first step when the player is not walking.
+//!   The sprite value the other players are sent is not touched.
 //! * **Sword** follows the swing of [`crate::combat::CombatState`]: swing
 //!   step `i` (the sprite value S = 6 + `i` that goes on the wire) shows step
 //!   `i` of `sword.gani`. A GANI `PLAYSOUND` cue after a step is queued as a
@@ -17,34 +23,33 @@
 //!   of the swing. When the swing ends the pose is gone and the player is
 //!   drawn as idle again, which is what the file's `SETBACKTO idle` says.
 //! * **Hurt** follows hurt mode. The 2.05 client sets the `hurt` gani when
-//!   hurt mode starts (Graal_analysis 01-death-respawn). Seihai steps it one
-//!   step per [`GANI_STEP_MS`]: a `LOOP` file repeats for the whole hurt mode,
-//!   any other plays once (for at least [`HURT_POSE_MS`]) and gives way. The
-//!   sprite others see (S = 32) lasts the whole of hurt mode and is not
-//!   changed here.
+//!   hurt mode starts (Graal_analysis 01-death-respawn). A `LOOP` file
+//!   repeats for the whole hurt mode; any other plays once by its waits (the
+//!   stock file: 31 ticks) and gives way to idle. The sprite others see
+//!   (S = 32) lasts the whole of hurt mode and is not changed here.
 //! * **Dead** shows `dead.gani` while the player is dead, one step per tick
-//!   of the death timer, held on its last step. The 2.05 client plays the
+//!   of the death timer by its waits, held on its last step. The 2.05 client plays the
 //!   local `dead` gani on death. Seihai's default set has its own: the hurt
 //!   pose, kneeling, then lying on the back.
 //! * **Push**, **grab** and **pull** follow [`crate::offline::PushPull`]:
-//!   the push pose after 17 blocked steps in a row (one step of `push.gani`
-//!   per blocked step), the grab pose while A holds a wall, and the pull pose
-//!   (one step of `pull.gani` per tick, looping) while the arrow away from
-//!   the wall is held. The 2.05 client plays its `push`, `grab` and `pull`
-//!   ganis then. Before the push pose (and before a ledge jump) the walk
+//!   the push pose on the 18th blocked step in a row (`push.gani` from its
+//!   first step there, restarting each time the count wraps from 38 to 18),
+//!   the grab pose while A holds a wall, and the pull pose (`pull.gani`,
+//!   looping) from the arrow away from the wall on. Once started the pull
+//!   pose stays, letting go of the arrow and of A, until the player moves:
+//!   the 2.05 client sets nothing else then. The 2.05 client plays its
+//!   `push`, `grab` and `pull` ganis then. Before the push pose (and before a ledge jump) the walk
 //!   pose keeps stepping while the arrow is held: 2.05 sets the walk gani
 //!   on every walk tick whether the step moved or not, so the player runs in
 //!   place against the wall. A ledge jump keeps the walk pose: 2.05 plays no
 //!   other gani in the air.
+//! * **Lift** shows `lift.gani` once when an object is picked up (the stock
+//!   file: 6 ticks), then the carry poses.
 //! * **Sit** is shown while [`OfflineSession::sitting`] is set and the player
 //!   is not walking. The session sets it when the feet are on a chair tile
 //!   (arrays.dat array 4, tile type 3: benches, chairs, couches). How the
 //!   real client starts the sit pose was not read; this trigger is inferred
 //!   (see `documentation/sitting.md`).
-//!
-//! How long the real client shows each step of the hurt and dead ganis was
-//! not read (Seihai does not parse per-step waits), so the 50 ms step and the
-//! 500 ms minimum are Seihai's own convention.
 //!
 //! A pose is shown only when its GANI is loaded (`OfflineSession::poses`),
 //! so a build without GANIs, or a data folder without `sword.gani`, draws the
@@ -54,11 +59,7 @@ use crate::assets::{Gani, GaniSound};
 use crate::offline::OfflineSession;
 use crate::sound::SoundEvent;
 
-/// How long the hurt pose is shown at the start of hurt mode.
-pub const HURT_POSE_MS: u64 = 500;
-
-/// How long one GANI step is shown when the file gives no time of its own
-/// (Seihai does not read per-step waits).
+/// One GANI tick: a step is shown for `1 + WAIT` of these.
 pub const GANI_STEP_MS: u64 = 50;
 
 /// The loaded pose animations.
@@ -77,12 +78,14 @@ pub struct PoseGanis {
     pub push: Option<Gani>,
     pub grab: Option<Gani>,
     pub pull: Option<Gani>,
+    /// Picking an object up, before `carrystill`.
+    pub lift: Option<Gani>,
 }
 
 impl PoseGanis {
     /// Every loaded pose GANI.
     pub fn all(&self) -> impl Iterator<Item = &Gani> {
-        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull]
+        [&self.sword, &self.hurt, &self.sit, &self.idle, &self.carrystill, &self.carry, &self.dead, &self.push, &self.grab, &self.pull, &self.lift]
             .into_iter()
             .flatten()
     }
@@ -103,6 +106,7 @@ pub enum PoseKind {
     Push,
     Grab,
     Pull,
+    Lift,
 }
 
 /// A pose step ready to draw.
@@ -130,6 +134,7 @@ impl PoseKind {
             PoseKind::Push => "push.gani",
             PoseKind::Grab => "grab.gani",
             PoseKind::Pull => "pull.gani",
+            PoseKind::Lift => "lift.gani",
         }
     }
 
@@ -147,6 +152,7 @@ impl PoseKind {
             PoseKind::Push,
             PoseKind::Grab,
             PoseKind::Pull,
+            PoseKind::Lift,
         ]
             .into_iter()
             .find(|k| k.file().eq_ignore_ascii_case(name))
@@ -157,23 +163,26 @@ fn pick(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> 
     gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i.min(g.frame_count() - 1) })
 }
 
-/// Step `i` of a looping pose, wrapped to its length.
-fn cycle(kind: PoseKind, gani: &Option<Gani>, i: usize) -> Option<PoseFrame<'_>> {
-    gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: i % g.frame_count() })
+/// The step `tick` ticks into a pose, each step held for its `WAIT`:
+/// wrapping when `wrap`, else held on the last step.
+fn at_tick(kind: PoseKind, gani: &Option<Gani>, tick: usize, wrap: bool) -> Option<PoseFrame<'_>> {
+    gani.as_ref().filter(|g| g.frame_count() > 0).map(|g| PoseFrame { kind, gani: g, frame: g.frame_at_tick(tick, wrap) })
 }
 
-/// The step of `hurt.gani` `ms` into hurt mode: one step per
-/// [`GANI_STEP_MS`]. A `LOOP` GANI repeats for the whole hurt mode; any
-/// other is shown once (at least [`HURT_POSE_MS`]) and then gives way, as
-/// its `SETBACKTO` says.
+/// A one-pass pose `tick` ticks in: `None` once its waits have run out.
+fn once(kind: PoseKind, gani: &Option<Gani>, tick: usize) -> Option<PoseFrame<'_>> {
+    gani.as_ref().filter(|g| tick < g.total_ticks()).and_then(|_| at_tick(kind, gani, tick, false))
+}
+
+/// The step of `hurt.gani` `ms` into hurt mode. A `LOOP` GANI repeats for
+/// the whole hurt mode; any other is shown once, by its waits, and then
+/// gives way, as its `SETBACKTO` says.
 fn hurt_step(hurt: &Option<Gani>, ms: u64) -> Option<PoseFrame<'_>> {
-    let g = hurt.as_ref().filter(|g| g.frame_count() > 0)?;
-    let n = g.frame_count() as u64;
-    let step = ms / GANI_STEP_MS;
-    if g.looped {
-        return pick(PoseKind::Hurt, hurt, (step % n) as usize);
+    let tick = (ms / GANI_STEP_MS) as usize;
+    match hurt {
+        Some(g) if g.looped => at_tick(PoseKind::Hurt, hurt, tick, true),
+        _ => once(PoseKind::Hurt, hurt, tick),
     }
-    (ms < (n * GANI_STEP_MS).max(HURT_POSE_MS)).then(|| PoseFrame { kind: PoseKind::Hurt, gani: g, frame: step.min(n - 1) as usize })
 }
 
 fn pick_player<'a>(kind: PoseKind, p: &'a crate::assets::GaniPlayer) -> Option<PoseFrame<'a>> {
@@ -194,9 +203,50 @@ impl OfflineSession {
             PoseKind::Push => self.poses.push = Some(gani),
             PoseKind::Grab => self.poses.grab = Some(gani),
             PoseKind::Pull => self.poses.pull = Some(gani),
+            PoseKind::Lift => self.poses.lift = Some(gani),
             // Loaded with `set_walk_gani` / `set_swim_gani`.
             PoseKind::Walk | PoseKind::Swim => {}
         }
+    }
+
+    /// Advance the poses that run on the 50 ms tick, not on steps taken:
+    /// the swim stroke (moving or not) and the lift. Each swim step entered
+    /// queues its `PLAYSOUND` cues. True if the drawn pose may have changed.
+    pub fn tick_poses(&mut self, ms: u64) -> bool {
+        let swimming = self.in_water && self.swim_gani.is_some();
+        if !swimming && self.lift_ticks.is_none() {
+            self.pose_clock_ms = 0;
+            return false;
+        }
+        self.pose_clock_ms += ms;
+        let mut changed = false;
+        while self.pose_clock_ms >= GANI_STEP_MS {
+            self.pose_clock_ms -= GANI_STEP_MS;
+            changed = true;
+            if let Some(t) = self.lift_ticks.as_mut() {
+                *t += 1;
+                let done = self.poses.lift.as_ref().map_or(true, |g| *t as usize >= g.total_ticks());
+                if done || self.carried.is_none() {
+                    self.lift_ticks = None;
+                }
+            }
+            if swimming {
+                self.swim_ticks += 1;
+                let Some(p) = self.swim_gani.as_mut() else { continue };
+                let total = p.gani.total_ticks().max(1);
+                let t = self.swim_ticks % total;
+                p.frame = p.gani.frame_at_tick(t, true);
+                // A step is entered when `t` is where it starts.
+                let start: usize = (0..p.frame).map(|i| p.gani.frame_ticks(i)).sum();
+                if t == start {
+                    let cues = p.current().map(|f| f.sounds.clone()).unwrap_or_default();
+                    for c in cues {
+                        self.sound_events.push(SoundEvent { file: c.file, x: self.player_x + c.x, y: self.player_y + c.y });
+                    }
+                }
+            }
+        }
+        changed
     }
 
     /// The player stopped walking (no arrow key is held): back to idle.
@@ -214,7 +264,7 @@ impl OfflineSession {
         // Dead: `dead.gani`, one step per 50 ms tick of the death timer,
         // held on its last step.
         if self.life.is_dead() {
-            return pick(PoseKind::Dead, &self.poses.dead, usize::from(self.life.timer()));
+            return at_tick(PoseKind::Dead, &self.poses.dead, usize::from(self.life.timer()), false);
         }
         if self.in_water {
             return self.swim_gani.as_ref().and_then(|p| pick_player(PoseKind::Swim, p));
@@ -227,20 +277,23 @@ impl OfflineSession {
         if let Some(p) = self.combat.hurt_elapsed_ms().and_then(|ms| hurt_step(&self.poses.hurt, ms)) {
             return Some(p);
         }
-        // Holding a wall with A: the grab pose, or the pull while the arrow
-        // away from it is held. Without those ganis the player stands.
-        if let Some(g) = self.pushpull.grab {
-            let p = if g.pulling() {
-                cycle(PoseKind::Pull, &self.poses.pull, self.pushpull.pull_ticks as usize)
-            } else {
-                pick(PoseKind::Grab, &self.poses.grab, 0)
-            };
-            return p.or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
+        // Holding a wall with A: the grab pose, or the pull once the arrow
+        // away from it was pressed. The pull goes on after the keys are let
+        // go, until the player moves. Without those ganis the player stands.
+        if self.pushpull.pull_pose() {
+            return at_tick(PoseKind::Pull, &self.poses.pull, self.pushpull.pull_ticks as usize, true)
+                .or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
+        }
+        if self.pushpull.grab.is_some() {
+            return pick(PoseKind::Grab, &self.poses.grab, 0).or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
         // Holding an object: the carry poses (the 2.05 client plays its
         // carrystill and carry ganis then). The carry walk shows the step the
         // walk has reached.
         if self.carried.is_some() {
+            if let Some(p) = self.lift_ticks.and_then(|t| once(PoseKind::Lift, &self.poses.lift, t as usize)) {
+                return Some(p);
+            }
             if self.walking {
                 let step = self.walk_gani.as_ref().map_or(0, |p| p.frame);
                 if let Some(p) = pick(PoseKind::Carry, &self.poses.carry, step) {
@@ -254,11 +307,8 @@ impl OfflineSession {
         if self.sitting && !self.walking {
             return pick(PoseKind::Sit, &self.poses.sit, 0);
         }
-        if self.push_pose() {
-            let step = self.pushpull.blocked_steps as usize;
-            if let Some(p) = cycle(PoseKind::Push, &self.poses.push, step) {
-                return Some(p);
-            }
+        if let Some(p) = self.push_tick().and_then(|t| at_tick(PoseKind::Push, &self.poses.push, t, true)) {
+            return Some(p);
         }
         if self.walking {
             if let Some(p) = self.walk_gani.as_ref().and_then(|p| pick_player(PoseKind::Walk, p)) {

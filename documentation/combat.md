@@ -78,7 +78,7 @@ nothing about that).
 
 ## What is drawn (item 22)
 
-The swing and hurt mode are shown with the player's own animations: the S key plays `sword.gani` step by step in time with the swing (its sound after step 0 is queued at the start), and an accepted hit shows `hurt.gani` for the first 500 ms of hurt mode. Both follow `CombatState`, so they also run in the offline session. The conventions (the hurt file name, the 500 ms) are Seihai's own, not a documented real-client behaviour; see `default-assets.md`, "Poses".
+The swing and hurt mode are shown with the player's own animations: the S key plays `sword.gani` step by step in time with the swing (its sound after step 0 is queued at the start), and an accepted hit shows `hurt.gani` by its `WAIT` (the stock file and Seihai's default: one step of `WAIT 30`, 31 ticks, as the 2.05 client was seen to show it live). Both follow `CombatState`, so they also run in the offline session. See `default-assets.md`, "Poses".
 
 ## Packets
 

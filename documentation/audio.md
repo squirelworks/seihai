@@ -35,8 +35,9 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
   cue to the wrong one.) In the 2.22 folder: 108 cues in 62 of the 137 files, names such
   as `steps2.wav`, `steps.wav`, `lift.wav`, `sword.wav`; the usual
   coordinates are `1.5 2`, the player's own point.
-- **Once per frame entry.** One GANI step per move (a move is half a tile, 50 ms
-  at walking speed, which is also the length of a GANI step with no `WAIT`).
+- **Once per frame entry.** One walk GANI step per move (a move is half a tile,
+  50 ms, which is also the length of a GANI step with no `WAIT`). The swim GANI
+  runs on the 50 ms tick by its `WAIT`s, moving or not, as 2.05 does.
   Each frame entered with a cue plays it once. Frame 0 is the pose before the
   first step and does not play until the loop wraps back to it.
 - **In water** the swim GANI is stepped instead of the walk one.
@@ -98,8 +99,9 @@ The output stream runs on its own thread (`seihai-audio`) and the engine sends i
 - **Volume with distance.** The note says volume is an attenuation that grows
   with distance on both axes, floored at -10000, but gives no formula. Every
   effect plays at full volume. Pan is implemented.
-- **Frame timing.** GANI `WAIT` is not modelled; a frame lasts one move. The real
-  client advances GANIs by time, so footstep spacing is approximate.
+- **Frame timing.** The walk GANI steps once per move; its stock file has no
+  `WAIT`, so that is the real client's one step a tick. A walk GANI with `WAIT`s
+  would still step once per move here.
 - **NPC image size.** Script sounds use the image part or shape for the NPC's
   centre, else a 32-pixel image (see above).
 - **Gmap neighbours.** 2.05 shifts a sound from a neighbouring gmap level by 64

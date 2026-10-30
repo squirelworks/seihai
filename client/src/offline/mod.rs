@@ -81,10 +81,11 @@ fn walk_frac(v: f64) -> f64 {
     }
 }
 
-/// Walking and swimming step times. A step is half a tile; swimming is
-/// half as fast.
+/// Walking and swimming step times. A step is half a tile. Swimming is as
+/// fast as walking: 0.5 tile a tick, read live in 2.05 rev 2 (Graal_analysis
+/// `player-mannerisms-live.md`).
 pub const WALK_STEP_MS: u64 = 50;
-pub const SWIM_STEP_MS: u64 = 100;
+pub const SWIM_STEP_MS: u64 = 50;
 
 /// When the step just taken counts from, so the pace holds on a loop that
 /// ticks every 16 ms or so. A step is due `interval` after the last one; if
@@ -158,9 +159,16 @@ pub struct OfflineSession {
     pub in_water: bool,
     /// Optional walk animation.
     pub walk_gani: Option<GaniPlayer>,
-    /// Optional swim animation, stepped instead of the walk one while the
-    /// feet are in water.
+    /// Optional swim animation, shown instead of the walk one while the
+    /// feet are in water. It runs on the tick clock, moving or not.
     pub swim_gani: Option<GaniPlayer>,
+    /// Ticks in the water, for the swim frame.
+    pub(crate) swim_ticks: usize,
+    /// Ticks since an object was picked up, while `lift.gani` may still
+    /// show; `None` after.
+    pub lift_ticks: Option<u32>,
+    /// The 50 ms clock of [`Self::tick_poses`].
+    pub(crate) pose_clock_ms: u64,
     /// The sword, hurt and sit animations (see [`crate::pose`]).
     pub poses: crate::pose::PoseGanis,
     /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
@@ -424,6 +432,9 @@ impl OfflineSession {
             in_water: false,
             walk_gani: None,
             swim_gani: None,
+            swim_ticks: 0,
+            lift_ticks: None,
+            pose_clock_ms: 0,
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
             screen_effect: [0.0; 4],
@@ -931,6 +942,7 @@ impl OfflineSession {
         self.current_level.as_mut()?.put_object(ax, ay, &left);
         self.note_board_change(ax, ay, 2, 2);
         self.carried = Some(Carried { kind, tiles });
+        self.lift_ticks = Some(0);
         Some(kind)
     }
 
@@ -1370,6 +1382,17 @@ impl OfflineSession {
             _ => false,
         };
         if self.in_water != was {
+            // The stroke starts from its first step in the water; on land the
+            // walk comes back at its first step.
+            self.swim_ticks = 0;
+            if let Some(g) = self.swim_gani.as_mut() {
+                g.reset();
+            }
+            if !self.in_water {
+                if let Some(g) = self.walk_gani.as_mut() {
+                    g.reset();
+                }
+            }
             let n = if self.in_water && !self.walking { 3 } else { 1 };
             for _ in 0..n {
                 self.spawn_leap(crate::throwing::LEAP_SPLASH, self.player_x, self.player_y);
@@ -1384,7 +1407,7 @@ impl OfflineSession {
         };
     }
 
-    /// Time between steps now: swimming is slower than walking.
+    /// Time between steps now (swimming and walking are the same pace).
     pub fn step_interval(&self) -> std::time::Duration {
         std::time::Duration::from_millis(if self.in_water { SWIM_STEP_MS } else { WALK_STEP_MS })
     }
@@ -1659,11 +1682,11 @@ impl OfflineSession {
         self.walking = true;
         self.refresh_water();
         self.read_sign_ahead();
-        // One GANI step per move; each frame entered with a PLAYSOUND cue
-        // queues that sound once, at the cue's offset from the player.
+        // One walk GANI step per move; each frame entered with a PLAYSOUND
+        // cue queues that sound once, at the cue's offset from the player.
+        // The swim GANI runs on the tick clock instead (`tick_poses`).
         let swimming = self.in_water && self.swim_gani.is_some();
-        let gani = if swimming { self.swim_gani.as_mut() } else { self.walk_gani.as_mut() };
-        if let Some(gani) = gani {
+        if let Some(gani) = self.walk_gani.as_mut().filter(|_| !swimming) {
             let cues = gani.step_sounds();
             for c in cues {
                 self.sound_events.push(SoundEvent { file: c.file, x: self.player_x + c.x, y: self.player_y + c.y });
@@ -1728,7 +1751,7 @@ impl OfflineSession {
         self.walk_gani = Some(gani);
     }
 
-    /// Attach a swim GANI, stepped instead of the walk one in water.
+    /// Attach a swim GANI, shown instead of the walk one in water.
     pub fn set_swim_gani(&mut self, gani: GaniPlayer) {
         self.swim_gani = Some(gani);
     }
@@ -2376,11 +2399,12 @@ mod tests {
     }
 
     #[test]
-    fn swimming_is_slower_and_reports_the_gani() {
+    fn swimming_is_as_fast_as_walking_and_reports_the_gani() {
         let mut s = session_at(level(|_, _| WATER), 30.5, 30.5);
         assert!(s.try_move(0.5, 0.0).is_some());
         assert!(s.in_water);
-        assert!(s.step_interval() > std::time::Duration::from_millis(WALK_STEP_MS));
+        // 2.05 rev 2 swims 0.5 tile a tick, the walking pace.
+        assert_eq!(s.step_interval(), std::time::Duration::from_millis(WALK_STEP_MS));
         let mut dry = session_at(level(|_, _| OPEN), 30.5, 30.5);
         dry.try_move(0.5, 0.0);
         assert_eq!(dry.step_interval(), std::time::Duration::from_millis(WALK_STEP_MS));
@@ -3595,13 +3619,33 @@ mod tests {
     fn swimming_steps_the_swim_gani_not_the_walk_one() {
         let mut s = session_at(level(|x, _| if (10..=13).contains(&x) { WATER } else { OPEN }), 8.5, 20.5);
         s.set_walk_gani(gani_with(1, &[(0, "steps.wav")]));
-        s.set_swim_gani(gani_with(1, &[(0, "water.wav")]));
+        s.set_swim_gani(gani_with(1, &[(0, "stroke.wav")]));
         walk(&mut s, 0.5, 0.0, 1); // 9.0, still on land
         assert_eq!(s.take_sound_events()[0].file, "steps.wav");
         walk(&mut s, 0.5, 0.0, 4); // into the water
         assert!(s.in_water);
         let files: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
-        assert_eq!(files.last().map(String::as_str), Some("water.wav"));
+        assert!(!files.iter().any(|f| f == "stroke.wav"), "the stroke is not stepped by moves: {files:?}");
+        // The stroke runs on the tick clock: its cue comes with the tick.
+        s.tick_poses(50);
+        let files: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
+        assert_eq!(files, ["stroke.wav"]);
+    }
+
+    #[test]
+    fn the_swim_stroke_goes_on_while_floating_still() {
+        let mut s = session_at(level(|_, _| WATER), 30.5, 30.5);
+        // Eight steps of two ticks (WAIT 1), as the stock swim.gani.
+        let text = format!("SINGLEDIRECTION\nLOOP\nANI\n{}ANIEND\n", "1 0 0\nWAIT 1\n\n".repeat(8));
+        s.set_swim_gani(GaniPlayer::new(Gani::parse(&text).unwrap()));
+        s.try_move(0.5, 0.0);
+        assert!(s.in_water);
+        let frames: Vec<usize> = (0..17).map(|_| {
+            s.tick_poses(50);
+            s.swim_gani.as_ref().unwrap().frame
+        }).collect();
+        assert_eq!(&frames[..5], [0, 1, 1, 2, 2]);
+        assert_eq!(frames[15], 0, "a 16-tick stroke");
     }
     // ---- throwing -----------------------------------------------------
 
