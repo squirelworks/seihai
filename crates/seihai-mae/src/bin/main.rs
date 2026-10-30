@@ -2299,15 +2299,20 @@ fn main() {
         if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Pause) {
             session.toggle_pause();
         }
-        session.set_focused(window.is_active());
+        session.set_focused(window.is_active() || !seihai::offline::focus_pauses(version));
         // The hidden and paused bits go out whenever they change (D, A, a
         // throw from hiding, which is seen one frame later, P, or focus).
         if session.hide_status() | session.pause_status() != last_hide_status {
             last_hide_status = session.hide_status() | session.pause_status();
             if let Some(c) = conn.as_mut() {
-                let sent = c
-                    .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])
-                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
+                let (status, with_pos) = seihai::offline::pause_message_bits(version, status_base, last_hide_status);
+                let sent = c.send_messages(&[seihai::life::status_message(status)]).and_then(|()| {
+                    if with_pos {
+                        c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis))
+                    } else {
+                        Ok(())
+                    }
+                });
                 if let Err(e) = sent {
                     eprintln!("send failed: {e}");
                     conn = None;
