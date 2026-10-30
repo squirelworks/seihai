@@ -34,6 +34,9 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
     for g in &session.grounded {
         draw_sprite(fb, sprites, tables, g.sprite, px(g.x) - cam_x, px(g.y) - cam_y);
     }
+    for b in &session.placed_bombs {
+        draw_sprite(fb, sprites, tables, b.sprite, px(b.x) - cam_x, px(b.y) - cam_y);
+    }
     for o in &session.thrown {
         draw_sprite(fb, sprites, tables, t::SHADOW_SPRITE, px(o.x + 0.25) - cam_x, px(o.ground + 1.25) - cam_y);
     }
@@ -52,6 +55,9 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
         if let Some(id) = o.sprite {
             draw_sprite(fb, sprites, tables, id, px(o.x) - cam_x, px(o.y) - cam_y);
         }
+    }
+    for p in &session.blast {
+        draw_sprite(fb, sprites, tables, p.sprite, px(p.x) - cam_x, px(p.y) - cam_y);
     }
     for l in &session.leaps {
         if l.frame < 0 {
