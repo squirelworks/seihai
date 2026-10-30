@@ -110,6 +110,46 @@ Not done:
   neither client sent either id.
 * 1.34 to 1.38 are taken to behave as 1.33. They were not run.
 
+## 3.04 (Linux)
+
+Lab check, 2026-10-30. The real 3.04 (the Linux installer's own executable,
+run natively with i386 libraries on Xvfb) and Seihai `--version 3.04` each
+logged in to the lab's GServer-v2 and lab listserver, walked right and swung
+the sword. Graal_analysis `version-profiles/lab-304-linux-2026-10-30.md` has
+the setup.
+
+What the real 3.04 sends, and what Seihai now sends:
+
+| step | real 3.04 | Seihai 3.04 |
+|---|---|---|
+| listserver | one plain zlib frame (`78 9C`): id 7 (key, `G3D30123`, `newmain`) and id 1 | the same; byte for byte once the key, account and password are masked |
+| game login | one plain zlib frame: login (type 5, `G3D03014`), `LANGUAGE`, `UPDATEFILE bigmap.txt`, `UPDATEFILE minimap.txt` | the same, byte for byte with key, account, password and mod times masked. A map file Seihai does not have (in `<assets>/maps/` or `<assets>/`) gets `WANTFILE` |
+| tamper check, process list, id 24 | none in the whole session | none |
+| post-login frame | once the board is in (182 is not handled): `UPDATEFILE` head image, `wbomb1.png`, `wbowi1.png`; the `gr.x`/`gr.y` flags; the status icons; then props | the same order. No sword, shield, body or `-.gif` checks, as in the real one |
+| login props | `NICKNAME`, `STATUS`, `UDPPORT`, `ADDITFLAGS` 0, `PLANGUAGE`, `OSTYPE` `linux`, `TEXTCODEPAGE` 1250; no `HEADGIF` or `COLORS` | the same without `UDPPORT`; the bytes after the nickname match except `STATUS` (below) |
+
+Still different:
+
+* **Nickname.** The real client sends the start window's nickname field; Seihai
+  has no such field and sends the account.
+* **Status.** The real one sent 21 where the server gave 20 (bit 1 set). Seihai
+  sends the server's value. Which client state sets bit 1 was not traced.
+* **`UDPPORT`**, left out as for every build.
+* **Status icons.** The real client asked only the icons it lacks, with
+  `WANTFILE`, plus `chest.png` for the level's chests. Seihai checks every
+  icon of the list through the usual file rules and does not ask the chest
+  image.
+* **First `gr.y`.** At the same start (30, 30.5) the real 3.04 sent `gr.y=30`, the
+  real 2.22 and Seihai `gr.y=30.5`. Not traced.
+* **Walk and sword GANI files.** The real client sent `UPDATEFILE walk.gani` with
+  its first step and `UPDATEFILE sword.gani` with its first swing. Seihai asks a
+  GANI only when it has no copy (`documentation/file-cache.md`).
+
+The walk and sword props follow the 2.22 cadence (`protocol/walkcadence.rs`):
+`walk` + X + `SPRITE`, then X every 100 ms, with the `gr.x` flag every tick; the
+real 3.04 sent `idle` one tick after the last step, with its position, and the
+sword GANI with no `SPRITE`, `idle` 249 ms later (Seihai 244 ms).
+
 ## Tests
 
 `protocol::login::tests` pin the image order, the icon names, the process list text,

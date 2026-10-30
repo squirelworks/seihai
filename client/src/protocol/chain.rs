@@ -27,7 +27,7 @@ use super::profile::{
     ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
-use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231};
+use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304};
 use super::showimg::ShowImgInfo;
 use super::tampercheck::TamperInfo;
 use super::version::{ClientVersion, EncryptionGen};
@@ -880,6 +880,69 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "live", what: "no game-server login on a public server; only the list reply was checked (2026-10-25)" },
         ],
     },
+    // The 3.x builds (Graal_analysis `version-profiles/3.04-3.153.toml`). Their
+    // tokens carry the dates of 2.22 and 2.31; the chain puts them after 2.31
+    // and writes each as a change to the row before it.
+    Step {
+        version: ClientVersion::V304,
+        label: "3.04",
+        token: "G3D03014",
+        date: "",
+        basis: Basis::Binary,
+        delta: Delta {
+            // Against 2.31: 44, 101 and 102 in; 170, 177, 182, 183 and MOVE2 (189) out.
+            plo: IdDelta::plus_minus(&[44, 101, 102], &[170, 177, 182, 183, 189]),
+            // PUTNPC (21), 36 and 81 in; TAMPERCHECK (39), PROCESSLIST (44)
+            // and ENTERLEVEL (46) out.
+            pli: IdDelta::plus_minus(&[21, 36, 81], &[39, 44, 46]),
+            listserver: Some(Some(
+                // The address built into the binary; license/license.graal names the one used.
+                Listserver::new(ListKind::Supported, PortStatus::Assumed, Some(BuiltIn { host: "listserver.graalonline.com", port: 14922 }), Some("G3D30123"))
+                    .shape(LoginShape::Gen5OneFrame, ShapeBasis::Captured),
+            )),
+            tampercheck: Some(false),
+            tamper: Some(None),
+            showimg: Some(None),
+            login: Some(Some(LOGIN_304)),
+            udp_off_by_default: Some(false),
+            // Parses its own props up to 74, without 33, 50, 51 and 53; no X2/Y2/Z2.
+            own_props: IdDelta { minus: &[33], minus_ranges: &[(78, 80)], ..IdDelta::NONE },
+            other_props: IdDelta { minus_ranges: &[(78, 80)], ..IdDelta::NONE },
+            npc_max: Some(73),
+            precise_pos: Some(false),
+            ..Delta::NONE
+        },
+        source: "binary (Linux i386 ELF) and one lab run on GServer-v2 (Graal_analysis version-profiles/lab-304-linux-2026-10-30.md): PLO and PLI sets, props up to 76 (parsed to 74), NPC props to 73, no tampercheck, no showimg timer (UDP 15 instead), listserver id 7 with G3D30123",
+        unknown: &[
+            Unknown { area: "listserver", what: "port 14922 and the G3D token were checked against the lab listserver only, never the public one" },
+            Unknown { area: "login", what: "UDPPORT (31) is left out of the first props, as for every build (no UDP socket); the nickname is the account, where the real client sends the start window's nickname field" },
+            Unknown { area: "ui", what: "the Torque front end (start window, options, themes, chat as white text with a blue shadow) is not modelled; the 2.31 UI row is kept" },
+            Unknown { area: "other props", what: "the props it parses for other players are taken as 2.31's without 78-80" },
+        ],
+    },
+    Step {
+        version: ClientVersion::V3153,
+        label: "3.153",
+        token: "G3D28015",
+        date: "",
+        basis: Basis::Binary,
+        delta: Delta {
+            plo: IdDelta::plus_minus(&[67, 74, 82, 104, 131, 132, 133, 134, 187, 189], &[44]),
+            pli: IdDelta::plus(&[46, 50, 93, 96, 97, 98, 152, 154, 155, 156, 157, 158]),
+            udp_off_by_default: Some(true),
+            own_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
+            other_props: IdDelta { plus_ranges: &[(78, 80)], ..IdDelta::NONE },
+            npc_max: Some(77),
+            precise_pos: Some(true),
+            ..Delta::NONE
+        },
+        source: "binary (Mac OS X PPC Mach-O), not run: PLO 67, 74, 82, 104, 131-134, 187 and MOVE2 (189) in, 44 out; RC file browser, script upload and text request ids; X2/Y2/Z2; UDP off in the shipped prefs",
+        unknown: &[
+            Unknown { area: "pli", what: "2, 3, 15, 24, 29 and 80 are taken from 3.04; the PPC scan did not resolve those call sites" },
+            Unknown { area: "live", what: "never run" },
+            Unknown { area: "3d", what: "the 3D mode (Torque GameConnection on port 28000) is not modelled" },
+        ],
+    },
 ];
 
 /// The resolved rows, one per step.
@@ -1042,8 +1105,12 @@ fn login_text(l: &Option<LoginInfo>) -> String {
     match l {
         None => "none".into(),
         Some(l) => format!(
-            "files, process list, props{}{}{}",
-            if l.os_props { " with OS and code page" } else { "" },
+            "{}{}{}{}",
+            if l.full { "files, process list, props" } else { "head and default-weapon files, props without head or colours" },
+            match l.os_props {
+                Some((os, cp)) => format!(" with OS {os} and code page {cp}"),
+                None => String::new(),
+            },
             if l.idle_gani { ", idle.gani at once" } else { "" },
             if l.status_icons { ", status icons" } else { "" },
         ),

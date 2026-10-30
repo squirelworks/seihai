@@ -31,29 +31,41 @@ pub const PLI_PROCESSLIST: u8 = 44;
 pub const PLO_LISTPROCESSES: u8 = 182;
 
 /// What a profile records about the post-login frame. `Some` only for the
-/// builds observed doing it (2.17, 2.22 and 2.31).
+/// builds observed doing it (2.17, 2.22, 2.31 and 3.04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoginInfo {
-    /// The props carry `OSTYPE` (75) and `TEXTCODEPAGE` (76): 2.22 and 2.31;
-    /// the 2.17 message stops at `PLANGUAGE`.
-    pub os_props: bool,
+    /// The props carry `OSTYPE` (75) and `TEXTCODEPAGE` (76) with these
+    /// values: 2.22 and 2.31 (`wind`, 1252), 3.04 (`linux`, 1250). The 2.17
+    /// message stops at `PLANGUAGE`.
+    pub os_props: Option<(&'static str, u32)>,
     /// `WANTFILE idle.gani` goes out at once with the first frame after the
     /// login line (2.17 and 2.22; 2.31 does not ask).
     pub idle_gani: bool,
     /// The status icons are asked for after the burst.
     pub status_icons: bool,
+    /// The 2.x shape: every worn image and every weapon image is checked,
+    /// `PLI_PROCESSLIST` (44) answers the burst, and the props carry
+    /// `HEADGIF` and `COLORS`. The real 3.04 checks only the head image and
+    /// the default weapons' images, sends no process list (it has no 44),
+    /// and its props carry neither.
+    pub full: bool,
+    /// The login line, `PLI_LANGUAGE` and a check of each of these files go
+    /// in one plain zlib frame (3.04: `bigmap.txt` and `minimap.txt`, which
+    /// its install ships in `maps/`). Empty: the login line goes alone.
+    pub first_frame_files: &'static [&'static str],
 }
 
-pub const LOGIN_217: LoginInfo = LoginInfo { os_props: false, idle_gani: true, status_icons: true };
-pub const LOGIN_222: LoginInfo = LoginInfo { os_props: true, idle_gani: true, status_icons: true };
-pub const LOGIN_231: LoginInfo = LoginInfo { os_props: true, idle_gani: false, status_icons: true };
+pub const LOGIN_217: LoginInfo = LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
+pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[] };
+pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[] };
+/// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
+pub const LOGIN_304: LoginInfo =
+    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"] };
 
-/// The windows-1252 code page, as `TEXTCODEPAGE` carries it.
-const CODEPAGE_1252: u32 = 1252;
-/// What the clients put in `OSTYPE`. Every real client observed ran on
-/// Windows; Seihai has no value of its own to report, so it sends the one
+/// What the Windows clients put in `OSTYPE` and `TEXTCODEPAGE`. Seihai has
+/// no value of its own to report, so the Windows builds send the one
 /// servers know.
-const OSTYPE: &str = "wind";
+const OS_WINDOWS: (&str, u32) = ("wind", 1252);
 /// The language the post-login `PLI_LANGUAGE` names.
 pub const LANGUAGE: &str = "English";
 
@@ -67,6 +79,12 @@ fn gstring(out: &mut Vec<u8>, text: &str) {
 /// check order: `SWORDPOWER` (8), `SHIELDPOWER` (9), `HEADGIF` (11), then
 /// `BODYIMG` (35). A prop whose value has no image gives nothing.
 pub fn wear_images(own_props: &[u8], accepted: Option<&IdSet>) -> Vec<String> {
+    worn_images(own_props, accepted).into_iter().flatten().collect()
+}
+
+/// The sword, shield, head and body images of [`wear_images`], each `None`
+/// when its prop has no image.
+fn worn_images(own_props: &[u8], accepted: Option<&IdSet>) -> [Option<String>; 4] {
     let mut sword = None;
     let mut shield = None;
     let mut head = None;
@@ -98,7 +116,7 @@ pub fn wear_images(own_props: &[u8], accepted: Option<&IdSet>) -> Vec<String> {
             _ => {}
         }
     }
-    [sword, shield, head, body].into_iter().flatten().collect()
+    [sword, shield, head, body]
 }
 
 /// The image of each weapon, in the order the server added them.
@@ -135,6 +153,9 @@ pub fn default_weapon_image(id: u8) -> Option<&'static str> {
     }
 }
 
+/// The bomb image the 3.04 login frame checks after the head image.
+const BOMB_IMAGE: &str = "wbomb1.png";
+
 /// The icon file for a status name: `plisticon` and the lower-case name
 /// (`No PMs` gives `plisticonno pms.png`).
 pub fn status_icon(status: &str) -> String {
@@ -162,7 +183,8 @@ pub fn process_list_message(names: &[&str]) -> Vec<u8> {
 /// `NICKNAME` (0), `HEADGIF` (11), `COLORS` (13), `STATUS` (18),
 /// `ADDITFLAGS` (33), `PLANGUAGE` (52), and with `os_props` `OSTYPE` (75) and
 /// `TEXTCODEPAGE` (76). Head, colours and status are copied from the server's
-/// own props as they came. A real client also sends `UDPPORT` (31) between
+/// own props as they came. Without `full` (3.04) the props have no head or
+/// colours. A real client also sends `UDPPORT` (31) between
 /// `STATUS` and `ADDITFLAGS`; Seihai binds no UDP socket, so it leaves the
 /// prop out.
 pub fn login_props_message(info: &LoginInfo, own_props: &[u8], account: &str, accepted: Option<&IdSet>) -> Vec<u8> {
@@ -171,7 +193,8 @@ pub fn login_props_message(info: &LoginInfo, own_props: &[u8], account: &str, ac
     let mut m = vec![PLI_PLAYERPROPS + 0x20];
     m.push(0x20);
     gstring(&mut m, account);
-    for id in [11u8, 13, 18] {
+    let ids: &[u8] = if info.full { &[11, 13, 18] } else { &[18] };
+    for &id in ids {
         if let Some(raw) = raw_of(id) {
             m.push(id + 0x20);
             m.extend(raw);
@@ -180,11 +203,10 @@ pub fn login_props_message(info: &LoginInfo, own_props: &[u8], account: &str, ac
     m.extend([33 + 0x20, 0x20]);
     m.push(52 + 0x20);
     gstring(&mut m, LANGUAGE);
-    if info.os_props {
+    if let Some((os, v)) = info.os_props {
         m.push(75 + 0x20);
-        gstring(&mut m, OSTYPE);
+        gstring(&mut m, os);
         m.push(76 + 0x20);
-        let v = CODEPAGE_1252;
         m.extend([((v >> 14) & 0x7F) as u8 + 0x20, ((v >> 7) & 0x7F) as u8 + 0x20, (v & 0x7F) as u8 + 0x20]);
     }
     m.push(b'\n');
@@ -265,7 +287,7 @@ pub fn sends_classic_login_props(version: super::ClientVersion) -> bool {
 
 /// Decides when the post-login frame goes out: once, when the server's
 /// burst has ended (`PLO_LISTPROCESSES` seen). A build with no
-/// [`LoginInfo`], or one that cannot send ids 34 and 44, never sends it.
+/// [`LoginInfo`], or one that cannot send `PLI_PLAYERPROPS` (2), never sends it.
 #[derive(Debug, Clone)]
 pub struct LoginBurst {
     info: LoginInfo,
@@ -277,7 +299,8 @@ impl LoginBurst {
     pub fn for_version(version: super::ClientVersion) -> Option<Self> {
         let p = version.profile();
         let info = p.protocol.login?;
-        (p.protocol.pli.contains(PLI_PROCESSLIST) && p.protocol.pli.contains(PLI_PLAYERPROPS)).then_some(Self { info, sent: false })
+        let can = p.protocol.pli.contains(PLI_PLAYERPROPS) && (!info.full || p.protocol.pli.contains(PLI_PROCESSLIST));
+        can.then_some(Self { info, sent: false })
     }
 
     pub fn info(&self) -> LoginInfo {
@@ -290,8 +313,11 @@ impl LoginBurst {
         !self.sent
     }
 
+    /// The 2.x builds answer the burst's end (`PLO_LISTPROCESSES`); 3.04,
+    /// which has no handler for 182, sent its frame once the first board
+    /// was in (lab, 2026-10-30).
     pub fn due(&self, state: &SessionState) -> bool {
-        !self.sent && state.process_list_requests > 0
+        !self.sent && if self.info.full { state.process_list_requests > 0 } else { state.board.is_some() }
     }
 
     /// Build the frame's messages (once). `check` turns an image name into
@@ -316,8 +342,18 @@ impl LoginBurst {
         }
         self.sent = true;
         let mut out = Vec::new();
-        let mut names = wear_images(&state.player_props, state.own_prop_ids.as_ref());
-        names.extend(weapon_images(&state.weapons));
+        let mut names = if self.info.full {
+            let mut n = wear_images(&state.player_props, state.own_prop_ids.as_ref());
+            n.extend(weapon_images(&state.weapons));
+            n
+        } else {
+            // 3.04 checks the head image alone of the worn ones, then the
+            // bomb image: the real 2.22 asks `wbomb1.png` whatever default
+            // weapons it was sent, and the real 3.04 asked it in the same
+            // place (lab, 2026-10-30).
+            let [_, _, head, _] = worn_images(&state.player_props, state.own_prop_ids.as_ref());
+            head.into_iter().chain([BOMB_IMAGE.to_string()]).collect()
+        };
         // Default weapons the server sent: the real client asks for their
         // images too (`wbowi1.png` for id 7).
         names.extend(
@@ -329,15 +365,25 @@ impl LoginBurst {
                 .filter(|n| !names.contains(n))
                 .collect::<Vec<_>>(),
         );
-        if self.info.status_icons {
-            names.extend(state.status_list.iter().map(|s| status_icon(s)));
+        let icons: Vec<String> = if self.info.status_icons { state.status_list.iter().map(|s| status_icon(s)).collect() } else { Vec::new() };
+        // 2.x asks the icons with the other files; the real 3.04 asked them
+        // after the flags.
+        if self.info.full {
+            names.extend(icons.iter().cloned());
         }
         for n in &names {
             out.extend(check(n));
         }
         out.extend(enter_level());
         out.extend(flags());
-        out.push(process_list_message(&["seihai"]));
+        if !self.info.full {
+            for n in &icons {
+                out.extend(check(n));
+            }
+        }
+        if self.info.full {
+            out.push(process_list_message(&["seihai"]));
+        }
         out.push(login_props_message(&self.info, &state.player_props, account, state.own_prop_ids.as_ref()));
         out
     }
@@ -483,6 +529,39 @@ mod tests {
         assert_eq!(default_weapon_image(8), None);
         assert_eq!(default_weapon_image(0), None);
         assert_eq!(default_weapon_image(99), None);
+    }
+
+    /// The real 3.04 on the lab's GServer-v2 (2026-10-30): once the board
+    /// is in, the head image, `wbomb1.png` and the default weapon 7's
+    /// image, the queued flags, the status icons, then the props
+    /// `NICKNAME`, `STATUS`, `ADDITFLAGS`, `PLANGUAGE`, `OSTYPE` `linux`,
+    /// `TEXTCODEPAGE` 1250, with no process list.
+    #[test]
+    fn the_304_login_frame_follows_the_lab_run() {
+        let v = super::super::ClientVersion::V304;
+        let mut b = LoginBurst::for_version(v).unwrap();
+        let mut st = SessionState::for_version(v);
+        st.player_props = own_props();
+        st.weapons = vec![Weapon { name: "-gr_movement".into(), image: Some("-".into()), script: None }];
+        st.default_weapons = vec![8, 7];
+        st.status_list = vec!["Eating".into(), "No PMs".into()];
+        st.process_list_requests = 1;
+        assert!(!b.due(&st), "3.04 does not wait for 182; it waits for the board");
+        st.board = Some(vec![0; 4096]);
+        let msgs = b.take(&st, "Lab304", |n| vec![n.as_bytes().to_vec()], Vec::new, || vec![b"flag".to_vec()]);
+        let names: Vec<&[u8]> = msgs.iter().map(|m| m.as_slice()).collect();
+        assert_eq!(&names[..6], [&b"head0.png"[..], b"wbomb1.png", b"wbowi1.png", b"flag", b"plisticoneating.png", b"plisticonno pms.png"]);
+        let mut want = vec![0x22, 0x20, 0x26];
+        want.extend(b"Lab304");
+        want.extend([0x32, 0x20 + 20, 0x41, 0x20, 0x20 + 52, 0x20 + 7]);
+        want.extend(b"English");
+        want.extend([0x20 + 75, 0x25]);
+        want.extend(b"linux");
+        // TEXTCODEPAGE: the capture's three bytes, 1250.
+        want.extend([0x20 + 76, 0x20, 0x29, 0x82]);
+        want.push(b'\n');
+        assert_eq!(names.len(), 7);
+        assert_eq!(names[6], want.as_slice());
     }
 
     #[test]

@@ -208,6 +208,9 @@ pub enum LoginShape {
     /// Shape C: a plain zlib frame with id 7 (key byte, token `GNW30123`,
     /// `newmain`), then a gen-5 frame with id 1. Real 2.22 and 2.31.
     Gen5,
+    /// Shape D: shape C's id 7 and id 1 in **one** plain zlib frame at the
+    /// default level (`78 9C`); replies are gen 5. Real 3.04.
+    Gen5OneFrame,
 }
 
 impl LoginShape {
@@ -217,6 +220,7 @@ impl LoginShape {
             LoginShape::NewmainOnly => "A",
             LoginShape::NewmainAccount => "B",
             LoginShape::Gen5 => "C",
+            LoginShape::Gen5OneFrame => "D",
         }
     }
 }
@@ -841,7 +845,8 @@ mod tests {
     fn tokens_and_labels() {
         for p in PROFILES {
             assert_eq!(p.token.len(), 8, "{}", p.label);
-            assert!(p.token.starts_with("GNW"), "{}", p.label);
+            // GNW for the 2D builds, G3D for the 3.x ones.
+            assert!(p.token.starts_with("GNW") || p.token.starts_with("G3D"), "{}", p.label);
         }
         let mut labels: Vec<_> = PROFILES.iter().map(|p| p.label).collect();
         labels.dedup();
@@ -1135,7 +1140,7 @@ mod tests {
             "1.41", "1.42", "2.00", "2.01", "2.02", "2.02 rev2", "2.03", "2.04", "2.05", "2.1", "2.12", "2.13", "2.14",
             "2.15", "2.16", "2.17",
         ];
-        let gen5 = ["2.22", "2.3", "2.31"];
+        let gen5 = ["2.22", "2.3", "2.31", "3.04", "3.153"];
         let mut seen = 0;
         for p in PROFILES {
             match p.protocol.listserver {
@@ -1198,6 +1203,8 @@ mod tests {
             ("2.22", Gen5, Captured),
             ("2.3", Gen5, Inferred),
             ("2.31", Gen5, Captured),
+            ("3.04", Gen5OneFrame, Captured),
+            ("3.153", Gen5OneFrame, Captured),
         ];
         for (label, shape, basis) in want {
             let l = by_label(label).unwrap().protocol.listserver.unwrap();
