@@ -135,15 +135,17 @@ pub fn weapon_images(weapons: &[Weapon]) -> Vec<String> {
 /// The weapon image the real 2.22 client asks for when the server sends a
 /// default weapon (`PLO_DEFAULTWEAPON`, 43) with this id.
 ///
-/// Only pairs a lab run showed: with the server's ids filtered to 7 alone the
+/// Lab pairs (real 2.22): with the server's ids filtered to 7 alone the
 /// client asked `wbowi1.png`; ids 12, 20, 21, 22 and 23 sent after login made
 /// it ask `wbomb2.png`, `wbowi2.png`, `wbowi3.png`, `wbowi4.png` and
-/// `wbomb3.png`. Id 8 is left out: `wbomb1.png` was asked whether or not id 8
-/// was sent, so the capture does not tie it to that id. Nothing is invented
-/// for other ids.
+/// `wbomb3.png`. Id 8 is the bomb: the 2.05 rev 2 item table ties it to
+/// `wbomb1` (Graal_analysis `client-internals/status-display.md`); the lab
+/// could not isolate it because the client asks `wbomb1.png` for its own
+/// bomb as well. Nothing is invented for other ids.
 pub fn default_weapon_image(id: u8) -> Option<&'static str> {
     match id {
         7 => Some("wbowi1.png"),
+        8 => Some("wbomb1.png"),
         12 => Some("wbomb2.png"),
         20 => Some("wbowi2.png"),
         21 => Some("wbowi3.png"),
@@ -354,8 +356,9 @@ impl LoginBurst {
             let [_, _, head, _] = worn_images(&state.player_props, state.own_prop_ids.as_ref());
             head.into_iter().chain([BOMB_IMAGE.to_string()]).collect()
         };
-        // Default weapons the server sent: the real client asks for their
-        // images too (`wbowi1.png` for id 7).
+        // Default weapons the server sent, in arrival order: the real client
+        // asks for their images too (2.31: ids 8 then 7 gave `wbomb1.png`
+        // then `wbowi1.png`).
         names.extend(
             state
                 .default_weapons
@@ -525,8 +528,8 @@ mod tests {
         assert_eq!(default_weapon_image(7), Some("wbowi1.png"));
         assert_eq!(default_weapon_image(20), Some("wbowi2.png"));
         assert_eq!(default_weapon_image(23), Some("wbomb3.png"));
-        // No pair seen: id 8 (wbomb1.png comes with or without it), others.
-        assert_eq!(default_weapon_image(8), None);
+        // Id 8 from the 2.05 rev 2 item table.
+        assert_eq!(default_weapon_image(8), Some("wbomb1.png"));
         assert_eq!(default_weapon_image(0), None);
         assert_eq!(default_weapon_image(99), None);
     }
@@ -589,6 +592,25 @@ mod tests {
             vec![n.as_bytes().to_vec()]
         }, Vec::new, Vec::new);
         assert!(asked.contains(&"wbowi1.png".to_string()));
+    }
+
+    /// The server sends default weapons 8 then 7 and no weapon of its own
+    /// names their images: the real 2.31 asked `wbomb1.png` then
+    /// `wbowi1.png` (difftest `gmap_cross`).
+    #[test]
+    fn login_burst_asks_both_default_weapon_images_in_arrival_order() {
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V231).unwrap();
+        let mut st = burst_state();
+        st.weapons.clear();
+        st.default_weapons = vec![8, 7];
+        st.process_list_requests = 1;
+        let mut asked = Vec::new();
+        b.take(&st, "acct", |n| {
+            asked.push(n.to_string());
+            vec![n.as_bytes().to_vec()]
+        }, Vec::new, Vec::new);
+        let w: Vec<&str> = asked.iter().map(String::as_str).filter(|n| n.starts_with("wbo")).collect();
+        assert_eq!(w, ["wbomb1.png", "wbowi1.png"]);
     }
 
     fn burst_state() -> SessionState {

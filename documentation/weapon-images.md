@@ -28,8 +28,10 @@ The weapon's name is the item name with its first letter in upper case.
   `.gif` before 2.1 and `.png` from 2.1 on.
 * **Id 8.** The binary ties `wbomb1` to id 8. The lab capture could not show
   this, because the 2.22 client asked for `wbomb1.png` whether or not id 8
-  was sent. `protocol::login::default_weapon_image` (the login image list)
-  still leaves id 8 out. The login burst is not part of this change.
+  was sent (it has its own bomb; the server deletes the client's "Bomb" and
+  "Bow" at login and sends the ids). `protocol::login::default_weapon_image`
+  (the login image list) takes the pair from the binary, so ids 8 then 7 give
+  `wbomb1.png` then `wbowi1.png`, the order the real 2.31 asked in.
 
 ## The list and the selection (2.05 rev 2)
 

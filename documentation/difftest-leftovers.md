@@ -40,9 +40,11 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
   with none; the real client had them cached (it sent `UPDATEFILE gm2x2.gmap` instead). A cache-state
   difference of the lab, not a wire rule.
 * `wbowi1.png`: the server sends `PLO_DEFAULTWEAPON` ids 8 then 7 and the real client asks for
-  `wbomb1.png` then `wbowi1.png`. Seihai asks for the images of the weapons the server lists, so it
-  misses the second. Which id is the bomb and which the bow is not decided by the capture (the pairing
-  depends on whether the client walks its list in arrival or in id order). Skipped; no payload invented.
+  `wbomb1.png` then `wbowi1.png`. **Done.** Id 7 is the bow (`wbowi1.png`, lab 2026-10-25, real 2.22
+  with the ids filtered to 7 alone) and id 8 the bomb (`wbomb1`, the 2.05 rev 2 item table,
+  Graal_analysis `client-internals/status-display.md`). The login frame asks the image of each
+  default weapon in arrival order, after the server weapons' images, once per name
+  (`protocol::login::default_weapon_image`).
 
 ## 8. Walk update fields and the 2.22 cadence
 
