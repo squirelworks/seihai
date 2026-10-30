@@ -159,6 +159,33 @@ impl SessionScripts {
         self.apply(session);
     }
 
+    /// Level NPC `index` arrived after the level's scripts started (a
+    /// server NPC online): it runs `created`, then `playerenters`.
+    pub fn add_npc(&mut self, session: &mut OfflineSession, index: usize) {
+        let Some(n) = session.current_level.as_ref().and_then(|l| l.npcs.get(index)) else { return };
+        let mut spec = ObjSpec::npc(&n.image, n.x as f64, n.y as f64, &n.script).with_tag(index);
+        spec.kind = ObjKind::Npc;
+        let visible = n.visible;
+        let id = self.world.add(spec);
+        if let Some(o) = self.world.obj_mut(id) {
+            o.visible = visible;
+        }
+        self.sync_player(session);
+        self.world.fire(id, "created", &[]);
+        self.world.fire(id, "playerenters", &[]);
+        self.apply(session);
+    }
+
+    /// The server moved level NPC `index` (another player pushed it): the
+    /// script sees the new `x` and `y`. No event runs.
+    pub fn set_npc_pos(&mut self, index: usize, x: f32, y: f32) {
+        let id = self.world.ids().into_iter().find(|&id| self.world.obj(id).is_some_and(|o| o.kind == ObjKind::Npc && o.tag == index));
+        if let Some(o) = id.and_then(|id| self.world.obj_mut(id)) {
+            o.x = f64::from(x);
+            o.y = f64::from(y);
+        }
+    }
+
     /// Advance script time by `ms` and run what falls due. Also notices
     /// the end of sign reading (`playerendsreading`).
     pub fn tick(&mut self, session: &mut OfflineSession, ms: u64) {
