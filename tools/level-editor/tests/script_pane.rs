@@ -6,7 +6,7 @@ use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{EditorApp, Sheet, Tool};
 use level_editor::{tile_code, Document, EditError, ObjectEdit, Version, SCRIPT_PANE_LINES, SIZE};
-use seihai::assets::Level;
+use seihai_core::assets::Level;
 use std::path::PathBuf;
 
 /// A level with a link, a 25-line NPC script, an NPC with no script and a sign.

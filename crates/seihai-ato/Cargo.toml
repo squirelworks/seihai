@@ -1,0 +1,10 @@
+[package]
+name = "seihai-ato"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The Torque / 3.x client line. A place-holder for now: it shares the core
+# and does not draw yet.
+[dependencies]
+seihai-core = { path = "../seihai-core" }

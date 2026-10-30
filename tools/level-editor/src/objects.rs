@@ -1,10 +1,10 @@
 //! Links, signs, chests, NPCs and baddies of an open level, as records of
-//! lines. They are read with the client's level parser (`seihai::assets::Level`)
+//! lines. They are read with the client's level parser (`seihai_core::assets::Level`)
 //! and edited by rewriting only their own lines, so the rest of the file
 //! stays as it was.
 
 use crate::{Document, EditError, SIZE};
-use seihai::assets::Level;
+use seihai_core::assets::Level;
 
 /// What a record is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

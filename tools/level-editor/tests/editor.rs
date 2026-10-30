@@ -81,7 +81,7 @@ fn untouched_starter_levels_round_trip_byte_for_byte() {
 fn starter_summary_matches_what_seihai_reads() {
     let data = std::fs::read(starter("new1.nw")).unwrap();
     let doc = Document::parse(&data).unwrap();
-    let level = seihai::assets::Level::parse(&String::from_utf8_lossy(&data)).unwrap();
+    let level = seihai_core::assets::Level::parse(&String::from_utf8_lossy(&data)).unwrap();
     assert_eq!(doc.summary().npcs, level.npcs.len());
     assert_eq!(doc.summary().links, level.links.len());
     assert_eq!(doc.summary().signs, level.signs.len());
@@ -168,7 +168,7 @@ fn seihai_reads_what_the_editor_saved() {
     doc.paint(2, 3, 10, 6, 0x5A5).unwrap();
     let out = scratch("seihai-reads.nw");
     doc.save(&out).unwrap();
-    let level = seihai::assets::Level::load(&out).unwrap();
+    let level = seihai_core::assets::Level::load(&out).unwrap();
     for y in 0..64 {
         for x in 0..64 {
             let want = if (2..12).contains(&x) && (3..9).contains(&y) { 0x5A5 } else { Document::open(&starter("new1.nw")).unwrap().tile(x, y).unwrap() };
@@ -176,7 +176,7 @@ fn seihai_reads_what_the_editor_saved() {
         }
     }
     // links, signs, chests and NPCs survive
-    let orig = seihai::assets::Level::load(starter("new1.nw")).unwrap();
+    let orig = seihai_core::assets::Level::load(starter("new1.nw")).unwrap();
     assert_eq!((level.links.len(), level.signs.len(), level.chests.len(), level.npcs.len()), (orig.links.len(), orig.signs.len(), orig.chests.len(), orig.npcs.len()));
 }
 
@@ -241,7 +241,7 @@ fn every_tile_id_survives_a_save_and_read() {
     let bytes = doc.to_bytes();
     assert!(bytes.starts_with(b"GLEVNW01\nBOARD 0 0 64 0 AAAB"));
     let again = Document::parse(&bytes).unwrap();
-    let level = seihai::assets::Level::parse(&String::from_utf8(bytes).unwrap()).unwrap();
+    let level = seihai_core::assets::Level::parse(&String::from_utf8(bytes).unwrap()).unwrap();
     for id in 0..4096u32 {
         let (x, y) = ((id % 64) as usize, (id / 64) as usize);
         assert_eq!(again.tile(x, y), Some(id as u16));

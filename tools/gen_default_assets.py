@@ -124,7 +124,7 @@ G = dict(
 OBJECTS_2X2 = ("BUSH", "STONE", "SIGN", "POT", "BLACK_STONE", "TALL_GRASS", "BUSH_LEFT", "GRASS_LEFT",
                "SIGN_LEFT", "POT_LEFT", "STONE_LEFT", "CHEST", "CHEST_OPEN")
 
-# Seihai's type numbers (client/src/assets/level.rs, documentation/tile-types.md)
+# Seihai's type numbers (crates/seihai-core/src/assets/level.rs, documentation/tile-types.md)
 OPEN, CHAIR, BED_TOP, BED_BOTTOM = 0, 3, 4, 5
 WATER, LAVA, LAVA_FLOOR = 11, 12, 13
 THROW_THROUGH, WALL = 20, 22
