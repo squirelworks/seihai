@@ -4,7 +4,7 @@ Seihai already has a first CLI slice of a level editor (open, list, paint, save)
 
 ## Existing foundation
 
-- CLI editor under `tools/level-editor/` (open / list / paint / save).
+- CLI editor under `tools/level-editor/` (open / list / paint / save), and a minimal window on it (`level-editor gui`: tile palette, click-to-paint, save).
 - Tracking checklist and 2.22 reference: Graal_analysis `tools/level-editor/seihai-tracking.md`, `222-reference.md`, `version-deltas.md`.
 - Binary and text level loaders already in `client/src/assets/level.rs` (GLEVNW01, GR-V1, Z3-V1).
 - Tile-type tables (text tiledefs and `arrays.dat`).

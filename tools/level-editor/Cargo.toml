@@ -14,3 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 seihai = { path = "../../client" }
+# The window (`level-editor gui`). The same versions as the client, so
+# nothing new is built.
+eframe = "0.29"
+egui = "0.29"
