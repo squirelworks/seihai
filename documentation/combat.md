@@ -40,7 +40,7 @@ arrive with a swing sprite.
 
 | Build | The swing on the wire | Who judges the hit | Hit message for a sword |
 |---|---|---|---|
-| 2.05 rev 2 | SPRITE (17) = `dir + 4 * S`, S 6 to 10 | the victim's client | none |
+| 2.05 rev 2 | prop 10 (the pre-2.1 bow slot) = `c(10 + len)` + `sword`, SPRITE = direction only (lab); the decompile's victim test reads SPRITE S 6 to 10 | the victim's client | none |
 | 2.17.1, 2.22, 2.31 | GANI (10) = `sword` (`ridesword`, `spin`), SPRITE = direction only | the victim's client | none |
 
 The victim's side was read in all four builds: the sword's damage comes from
@@ -52,6 +52,21 @@ No read build sends `PLI_HURTPLAYER` (26) for a sword: in 2.05 the attacker's
 The server only relays the props; GServer-v2 checks nothing about a hit. The
 one server-made hit is the spin: on GANI `spin` GServer-v2 sends four
 `PLO_HITOBJECTS` (46) around the player (`02-weapons-combat.md`).
+
+**2.05 swings on the wire.** The real 2.05 client in the 2026-10-30
+cross-laptop lab (its own client-to-server decode) never sent a swing
+sprite: SPRITE stayed on the direction (128 + direction while hurt), and each
+swing went out as prop 10 in the bow form with the animation's name, `sword`,
+repeated about every 0.4 s with no position (`walk` and `hurt` the same
+way). GServer-v2 stores that as a bow image, adds `.gif`, and relays it in the
+same form. Seihai reads the name from that slot (`OtherLooks::bow_slot_gani`)
+and judges a `sword` there like the 2.1+ GANI below, from the player's last
+X, Y and direction. The 2.05 victim test read in the decompile (S 6 to 10) is
+kept: real 2.05 clients took Seihai's sprite swings in the same run. A
+GServer-v2 quirk to know: it encodes prop 10 by the *sender's* version, so a
+2.1+ receiver gets a 2.05 player's bow form and a 2.05 receiver gets a 2.1+
+player's GANI string; Seihai reads each by its own profile, as the real
+clients do.
 
 **2.1+ swings.** A GANI client sends the swing as GANI `sword` once, and its
 SPRITE holds only the direction. Seihai takes another player as swinging when
