@@ -123,6 +123,8 @@ pub struct PlayerView {
     pub account: String,
     /// Last chat line (`#c`).
     pub chat: String,
+    /// The selected weapon's name (`#w`).
+    pub weapon: String,
     /// Names of the status flags that are true (`playerswimming`, ...).
     pub status: BTreeSet<String>,
 }
@@ -144,6 +146,7 @@ impl Default for PlayerView {
             nick: String::new(),
             account: String::new(),
             chat: String::new(),
+            weapon: String::new(),
             status: BTreeSet::new(),
         }
     }
