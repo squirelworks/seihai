@@ -812,6 +812,30 @@ mod tests {
         assert_eq!(out[0], b"plisticononline.png");
     }
 
+    /// Stock beta4 (lab, 2026-10-30): the full own props, then `Z` alone at
+    /// the end of the level frame. The login frame still has the head,
+    /// colours and status, and the sword is checked.
+    #[test]
+    fn a_later_z_only_props_message_keeps_the_login_props() {
+        let hex = "2123222623202020242a25252621283f2a73776f7264312e706e67292b2b736869656c64312e706e672a2469646c652b8d68656164302e706e672d22202a24323122323435203620372039205c3a20405242287a313837613232324328626f64792e706e67444e927e452046204720482049204d524e204f205020512056205720582059205a205b205c205d205e205f2060206120622063206420652066206720682069206a206e27606f277070202072287a31383761323232";
+        let full: Vec<u8> = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+        for v in [super::super::ClientVersion::V222, super::super::ClientVersion::V231] {
+            let mut st = SessionState::for_version(v);
+            let mut body = vec![9 + 0x20];
+            body.extend(&full);
+            body.push(b'\n');
+            body.extend([9 + 0x20, 0x4d, 0x52, b'\n']);
+            st.apply_body(&body);
+            assert_eq!(wear_images(&st.player_props, st.own_prop_ids.as_ref()), ["sword1.png", "shield1.png", "head0.png", "body.png"], "{v:?}");
+            let m = login_props_message(&LOGIN_222, &st.player_props, "acct", st.own_prop_ids.as_ref());
+            let props = parse_player_props_in(&m[1..m.len() - 1], false, None);
+            let raw = |id: u8| props.iter().find(|p| p.id == id).map(|p| p.raw.clone());
+            assert_eq!(raw(11).as_deref(), Some(&b"\x8dhead0.png"[..]), "{v:?} HEADGIF: as the server sent it");
+            assert_eq!(raw(13).as_deref(), Some(&[0x22, 0x20, 0x2a, 0x24, 0x32][..]), "{v:?} COLORS");
+            assert_eq!(raw(18).as_deref(), Some(&[0x34][..]), "{v:?} STATUS");
+        }
+    }
+
     /// Real 2.17.1 on beta4 (no 182, lab 2026-10-30): the frame went 96 and
     /// 105 ms after the board, with the status icons, the flags and the
     /// props, no process list.

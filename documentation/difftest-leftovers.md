@@ -83,6 +83,10 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
     (`FRAME_AFTER_LEVEL`), in the shape decoded from those captures (`login-burst.md`, "Without
     `PLO_LISTPROCESSES`"). Seihai 2.22 also sent an empty frame at +3022 ms: the late login 46, which
     2.22 does not owe, went out with no messages. **Fixed:** nothing goes when there is nothing to send.
+  * Rerun with #187 (2026-10-30): the login props had no `HEADGIF`, `COLORS` or `STATUS`, and `sword1.png`
+    was never checked. Stock beta4 sends the full own props, then `Z` alone as the last message of the
+    level frame; Seihai's state kept only the last `PLO_PLAYERPROPS`. The real 2.22 and 2.31 still sent
+    the head, colours and status of the first. **Fixed:** own props merge by id (`merge_player_props`).
 * `lv_*.nw`, `gm_nw.nw`, `gm2x2.gmap`: Seihai asks for the level files it enters, because it starts
   with none; the real client had them cached (it sent `UPDATEFILE gm2x2.gmap` instead). A cache-state
   difference of the lab, not a wire rule.
