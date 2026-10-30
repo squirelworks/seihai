@@ -665,6 +665,7 @@ fn main() {
     // the values the server has for each (see `offline/servernpcs.rs`).
     let mut npc_link_serial = u64::MAX;
     let mut npc_sync = seihai::offline::ServerNpcSync::default();
+    let mut npc_sync_clock = Instant::now();
 
     let mut net_state = SessionState::default();
     // Buddy, ignore and mute lists from the settings directory.
@@ -2198,6 +2199,9 @@ fn main() {
         }
         for m in session.take_npc_moves() {
             eprintln!("npc {} moved to {:.1},{:.1} ({})", m.index, m.x, m.y, m.event);
+            if let Some(n) = session.current_level.as_ref().and_then(|l| l.npcs.get(m.index)) {
+                npc_sync.pushed(n);
+            }
             if !no_scripts {
                 scripts.npc_moved(&mut session, &m);
             }
@@ -2902,9 +2906,12 @@ fn main() {
             dirty = true;
         }
         // Server NPCs a push, a pull or a script changed: the 2.05 client
-        // sends the new X, Y and BLOCKFLAGS, and the server passes them on.
+        // sends the new X, Y and BLOCKFLAGS, at most every 100 ms, and the
+        // server passes them on.
+        let npc_dt = npc_sync_clock.elapsed();
+        npc_sync_clock += npc_dt;
         if let (Some(c), Some(level)) = (conn.as_mut(), session.current_level.as_ref()) {
-            let msgs = npc_sync.changes(level);
+            let msgs = npc_sync.tick(level, npc_dt);
             if !msgs.is_empty() {
                 if let Err(e) = c.send_messages(&msgs) {
                     eprintln!("send failed: {e}");

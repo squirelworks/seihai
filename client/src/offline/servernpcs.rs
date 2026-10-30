@@ -20,7 +20,8 @@
 //! server NPC's image and position *is* that NPC and takes its id; a server
 //! NPC with no such twin is added to the level.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use super::OfflineSession;
 use crate::assets::{DrawLayer, Level, Npc};
@@ -229,17 +230,36 @@ struct Known {
     attrs: [String; 5],
 }
 
+/// How often the 2.05 client sends NPC props: at most every 100 ms. In
+/// the lab an NPC that a 0.05 s timeout moved half a tile went out every
+/// 0.1 s, a whole tile at a time, and an idle NPC sent nothing at all.
+pub const NPC_SEND_INTERVAL: Duration = Duration::from_millis(100);
+
 /// The values the server last had for each linked NPC. Anything the
 /// level's NPC has that differs goes out.
 #[derive(Debug, Default)]
 pub struct ServerNpcSync {
     known: HashMap<u32, Known>,
+    /// Time since the last send round ([`ServerNpcSync::tick`]).
+    since: Duration,
+    /// NPCs a push or a pull moved since the last round: only their X and
+    /// Y go out. A position a script set stays on this client.
+    pushed: HashSet<u32>,
 }
 
 impl ServerNpcSync {
     /// Forget everything (a new level).
     pub fn clear(&mut self) {
         self.known.clear();
+        self.pushed.clear();
+    }
+
+    /// The player pushed or pulled the NPC `n`: its new X and Y go out
+    /// with the next round.
+    pub fn pushed(&mut self, n: &Npc) {
+        if let Some(id) = n.server_id {
+            self.pushed.insert(id);
+        }
     }
 
     /// The server sent `p` for `id`: those are now the values it has.
@@ -304,6 +324,18 @@ impl ServerNpcSync {
         }
     }
 
+    /// `dt` more went by: every [`NPC_SEND_INTERVAL`], the
+    /// [`ServerNpcSync::changes`] since the last round; else nothing.
+    pub fn tick(&mut self, level: &Level, dt: Duration) -> Vec<Vec<u8>> {
+        self.since += dt;
+        if self.since < NPC_SEND_INTERVAL {
+            return Vec::new();
+        }
+        // A long frame does not owe the rounds it skipped.
+        self.since = Duration::from_nanos((self.since.as_nanos() % NPC_SEND_INTERVAL.as_nanos()) as u64);
+        self.changes(level)
+    }
+
     /// `PLI_NPCPROPS` messages for every linked NPC of `level` whose props
     /// differ from what the server has; those become known.
     pub fn changes(&mut self, level: &Level) -> Vec<Vec<u8>> {
@@ -318,10 +350,13 @@ impl ServerNpcSync {
                 k.image = image.to_string();
                 props.push((NPCPROP_IMAGE, PropValue::Text(image.to_string())));
             }
+            let pushed = self.pushed.remove(&id);
             for (prop, now, was) in [(NPCPROP_X, half_tiles(n.x), &mut k.x), (NPCPROP_Y, half_tiles(n.y), &mut k.y)] {
                 if now != *was {
                     *was = now;
-                    props.push((prop, PropValue::Byte(now)));
+                    if pushed {
+                        props.push((prop, PropValue::Byte(now)));
+                    }
                 }
             }
             let vis = vis_flags(n, k.vis_base);
@@ -448,6 +483,7 @@ mod tests {
         assert_eq!(sync.changes(s.current_level.as_ref().unwrap()), vec![b"# '\x89.(\n".to_vec()]);
         // Pushed up one tile: Y only (48 half tiles).
         s.current_level.as_mut().unwrap().npcs[0].y = 24.0;
+        sync.pushed(&s.current_level.as_ref().unwrap().npcs[0]);
         assert_eq!(sync.changes(s.current_level.as_ref().unwrap()), vec![b"# '\x89#P\n".to_vec()]);
         assert!(sync.changes(s.current_level.as_ref().unwrap()).is_empty());
         // Another player moved it: the server's value is not sent back.

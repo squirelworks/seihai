@@ -131,6 +131,19 @@ So VISFLAGS is 1 for shown, 2 for `drawoverplayer` and 4 for `drawunderplayer`. 
 
 **Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends IMAGE, X, Y, GANI, VISFLAGS, BLOCKFLAGS and MESSAGE, and for a `showcharacter` NPC also SPRITE (18, the direction), COLORS (19), NICK (20), HEAD (22), BODY (35) and GATTRIB1 to 5 (36 to 40), when they differ from what the server last said (`offline/servernpcs.rs`). A character NPC's IMAGE is `#c#`; HEAD is an index below 100 for `head<n>.png`, else 100 plus the length and the name. Against the stub it sent the same values as the real client for every row of both tables above, for twelve more `showcharacter` cases (`setcharprop` head, body, colours, nickname, attributes, `setcharani`, `dir`, and the same props from the server), and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
 
+**How often, and script moves (lab, 2026-10-30, real 2.05 rev 2 and Seihai on the same stub).**
+
+| case | real 2.05 sent | Seihai sends |
+|---|---|---|
+| 10 s idle | nothing | nothing |
+| a 0.05 s timeout doing `x+=0.5` | X every 0.1 s (51 in 5 s), a whole tile each | nothing after the first VISFLAGS: a position a script set stays on this client (the user's call) |
+| a 0.05 s timeout doing `message hi; dir=2` | MESSAGE once | MESSAGE once |
+| `message changed` after 1 s | MESSAGE once | MESSAGE once |
+| a `setcharani idle,` loop | GANI about ten times a second, the same value each time | GANI once |
+| a push right | `PLI_TRIGGERACTION pushed,3` each second the player pushes, X (half tiles) of the NPC once it moves | the same |
+
+Seihai sends X and Y only for an NPC a push or a pull moved (`ServerNpcSync::pushed`), and the other props when they change, at most every 100 ms (`ServerNpcSync::tick`). `tests/npc_sync_rate.rs` counts both over five seconds of script frames.
+
 **Drawing the message.** 2.05 draws an NPC's `message` in the chat style (white over a blue shadow, the #141 font): centred over the NPC's picture (the image part, or the whole image; the 48-pixel player box for a `showcharacter` NPC), the top of the line one tile above the NPC, so the glyphs sit just over its top edge. Checked with a 32-pixel crate, a 64-pixel image part and a character NPC on one level, in the real client and in Seihai (`render::draw_npc_messages`). Hidden NPCs show no message.
 
 ## Open
