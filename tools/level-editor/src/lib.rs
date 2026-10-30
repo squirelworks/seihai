@@ -14,6 +14,19 @@
 //! the 2.22 writer's shape) at the place of the first old `BOARD` row, and
 //! every other line (links, signs, chests, baddies, NPC scripts, `HEIGHTS`,
 //! comments) is written back as it was.
+//!
+//! **Layers.** The 2.22 reader does not read a row's layer field, so `tile`
+//! and `row` give that view: every row on one board, in file order. The
+//! editor also keeps layer 0 and layer 1 apart (`layer_tile`,
+//! `paint_layer`), the way Gonstruct does: layer 0 starts as tile 0
+//! everywhere, layer 1 starts empty. After a change, layer 0 is written as
+//! the 64 canonical rows and layer 1 as one `BOARD x y w 1 data` row per run
+//! of filled cells; rows of other layers are written back as they were.
+//!
+//! **Objects.** Links, signs, chests, baddies and NPCs are records of lines
+//! (`objects`), read with the client's level parser. Moving one, or changing
+//! a link's destination and arrival or the first line of an NPC script or a
+//! sign, rewrites only that record's lines (`edit_object`).
 
 pub mod gui;
 
@@ -22,10 +35,15 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+pub mod objects;
+pub use objects::{Object, ObjectEdit, ObjectKind};
+
 /// Board edge in tiles.
 pub const SIZE: usize = 64;
 /// Tile ids the text format can hold (two base64 characters).
 pub const TILE_LIMIT: u16 = 4096;
+/// Layers the editor shows and edits (0 and 1).
+pub const LAYERS: usize = 2;
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -141,6 +159,8 @@ pub struct Summary {
     pub npcs: usize,
     /// A HEIGHTS block is present; the editor leaves it as it is.
     pub heights: bool,
+    /// Placed rows with a layer other than 0 and 1 (kept as they are).
+    pub rows_other_layers_kept: usize,
 }
 
 /// An opened level.
@@ -150,8 +170,17 @@ pub struct Document {
     lines: Vec<Vec<u8>>,
     /// Indexes of the BOARD lines in `lines`.
     board_lines: Vec<usize>,
-    /// The board, index = y * 64 + x.
+    /// The board as 2.22 reads it (all rows, layer not read), index = y * 64 + x.
     board: Vec<u16>,
+    /// Layer 0 (starts as tile 0) and layer 1 (starts empty), index = y * 64 + x.
+    layer0: Vec<u16>,
+    layer1: Vec<Option<u16>>,
+    /// Placed BOARD rows of other layers, without their line ending, in file order.
+    other_rows: Vec<Vec<u8>>,
+    /// The object records, in file order.
+    records: Vec<objects::Record>,
+    /// Lines were changed by an object edit (the board rows are not rewritten for that).
+    edited: bool,
     summary: Summary,
     eol: &'static [u8],
     dirty: bool,
@@ -195,6 +224,11 @@ impl Document {
             lines,
             board_lines: Vec::new(),
             board: vec![0; SIZE * SIZE],
+            layer0: vec![0; SIZE * SIZE],
+            layer1: vec![None; SIZE * SIZE],
+            other_rows: Vec::new(),
+            records: Vec::new(),
+            edited: false,
             summary: Summary::default(),
             eol,
             dirty: false,
@@ -225,9 +259,19 @@ impl Document {
             };
             if let Some(end) = block_end {
                 // A block swallows its lines up to the terminator (or the end of the file).
+                let first = i;
                 i += 1;
                 while i < doc.lines.len() && strip_eol(&doc.lines[i]).trim_ascii() != end {
                     i += 1;
+                }
+                let kind = match key {
+                    b"NPC" => Some(ObjectKind::Npc),
+                    b"SIGN" => Some(ObjectKind::Sign),
+                    b"BADDY" => Some(ObjectKind::Baddy),
+                    _ => None,
+                };
+                if let Some(kind) = kind {
+                    doc.records.push(objects::Record { kind, first, last: i.min(doc.lines.len() - 1) });
                 }
                 i += 1;
                 continue;
@@ -235,10 +279,16 @@ impl Document {
             match key {
                 b"BOARD" => {
                     doc.board_lines.push(i);
-                    doc.place_row(&toks);
+                    doc.place_row(&toks, &raw);
                 }
-                b"LINK" => doc.summary.links += 1,
-                b"CHEST" => doc.summary.chests += 1,
+                b"LINK" => {
+                    doc.summary.links += 1;
+                    doc.records.push(objects::Record { kind: ObjectKind::Link, first: i, last: i });
+                }
+                b"CHEST" => {
+                    doc.summary.chests += 1;
+                    doc.records.push(objects::Record { kind: ObjectKind::Chest, first: i, last: i });
+                }
                 _ => {}
             }
             i += 1;
@@ -247,7 +297,7 @@ impl Document {
     }
 
     /// Place one `BOARD x y w layer data` row by the 2.22 reader's rules.
-    fn place_row(&mut self, toks: &[&[u8]]) {
+    fn place_row(&mut self, toks: &[&[u8]], raw: &[u8]) {
         let (Some(x), Some(y), Some(w)) = (
             toks.get(1).and_then(|t| parse_num(t)),
             toks.get(2).and_then(|t| parse_num(t)),
@@ -267,11 +317,22 @@ impl Document {
         if layer != 0 {
             self.summary.rows_other_layer += 1;
         }
+        if layer != 0 && layer != 1 {
+            self.summary.rows_other_layers_kept += 1;
+            self.other_rows.push(raw.to_vec());
+        }
         for k in 0..w as usize {
             let (Some(hi), Some(lo)) = (b64_value(data[2 * k]), b64_value(data[2 * k + 1])) else {
                 break; // an invalid character ends the row; tiles already placed stay
             };
-            self.board[y as usize * SIZE + x as usize + k] = (hi << 6) | lo;
+            let at = y as usize * SIZE + x as usize + k;
+            let t = (hi << 6) | lo;
+            self.board[at] = t;
+            match layer {
+                0 => self.layer0[at] = t,
+                1 => self.layer1[at] = Some(t),
+                _ => {}
+            }
         }
     }
 
@@ -285,9 +346,27 @@ impl Document {
         &self.summary
     }
 
-    /// Whether a paint changed the board since the file was opened.
+    /// Whether a paint or an object edit changed the level since it was opened.
     pub fn is_modified(&self) -> bool {
-        self.dirty
+        self.dirty || self.edited
+    }
+
+    /// Tile of `layer` (0 or 1) at (x, y). `None` outside the board, for
+    /// another layer, and for an empty layer-1 cell.
+    pub fn layer_tile(&self, layer: usize, x: usize, y: usize) -> Option<u16> {
+        if x >= SIZE || y >= SIZE {
+            return None;
+        }
+        match layer {
+            0 => Some(self.layer0[y * SIZE + x]),
+            1 => self.layer1[y * SIZE + x],
+            _ => None,
+        }
+    }
+
+    /// Filled cells of layer 1.
+    pub fn layer1_count(&self) -> usize {
+        self.layer1.iter().filter(|t| t.is_some()).count()
     }
 
     /// Tile id at (x, y), or `None` outside the board.
@@ -315,6 +394,19 @@ impl Document {
     /// tile id. Checks the bounds and the id first and changes nothing when
     /// they fail. Returns how many tiles changed value.
     pub fn paint(&mut self, x: usize, y: usize, w: usize, h: usize, tile: u32) -> Result<usize, EditError> {
+        self.paint_layer(0, x, y, w, h, Some(tile))
+    }
+
+    /// Paint a rectangle of `layer` (0 or 1) with one tile id, or empty it
+    /// (`None`, layer 1 only). The same checks as `paint`. Returns how many
+    /// cells of that layer changed.
+    pub fn paint_layer(&mut self, layer: usize, x: usize, y: usize, w: usize, h: usize, tile: Option<u32>) -> Result<usize, EditError> {
+        if layer >= LAYERS {
+            return Err(EditError::Bounds(format!("layer {layer} is not editable; the editor edits layers 0 and 1")));
+        }
+        if layer == 0 && tile.is_none() {
+            return Err(EditError::Bounds("layer 0 has no empty cells; paint a tile instead".into()));
+        }
         if w == 0 || h == 0 {
             return Err(EditError::Bounds(format!("the rectangle is empty ({w} x {h}); width and height must be at least 1")));
         }
@@ -323,24 +415,61 @@ impl Document {
                 "the rectangle x {x}, y {y}, {w} x {h} leaves the {SIZE} x {SIZE} board (x + width and y + height must be at most {SIZE})"
             )));
         }
-        if tile >= TILE_LIMIT as u32 {
-            return Err(EditError::TileRange(tile));
+        if let Some(t) = tile {
+            if t >= TILE_LIMIT as u32 {
+                return Err(EditError::TileRange(t));
+            }
         }
-        let tile = tile as u16;
+        let tile = tile.map(|t| t as u16);
         let mut changed = 0;
         for yy in y..y + h {
             for xx in x..x + w {
-                let t = &mut self.board[yy * SIZE + xx];
-                if *t != tile {
-                    *t = tile;
+                let at = yy * SIZE + xx;
+                if layer == 0 {
+                    let t = tile.expect("checked above");
+                    if self.layer0[at] != t {
+                        self.layer0[at] = t;
+                        changed += 1;
+                    }
+                } else if self.layer1[at] != tile {
+                    self.layer1[at] = tile;
                     changed += 1;
                 }
             }
         }
         if changed > 0 {
             self.dirty = true;
+            self.compose();
         }
         Ok(changed)
+    }
+
+    /// The 2.22 view of the board as the editor will write it: layer 0, then
+    /// the layer 1 runs, then the rows of other layers (all placed, in that order).
+    fn compose(&mut self) {
+        self.board.copy_from_slice(&self.layer0);
+        for (b, t) in self.board.iter_mut().zip(&self.layer1) {
+            if let Some(t) = t {
+                *b = *t;
+            }
+        }
+        for raw in &self.other_rows {
+            let toks: Vec<&[u8]> = raw.split(|&b| b == b' ').filter(|t| !t.is_empty()).collect();
+            let (Some(x), Some(y), Some(w)) = (
+                toks.get(1).and_then(|t| parse_num(t)),
+                toks.get(2).and_then(|t| parse_num(t)),
+                toks.get(3).and_then(|t| parse_num(t)),
+            ) else {
+                continue;
+            };
+            let data = toks.get(5).copied().unwrap_or(b"");
+            for k in 0..w as usize {
+                let (Some(hi), Some(lo)) = (data.get(2 * k).and_then(|&c| b64_value(c)), data.get(2 * k + 1).and_then(|&c| b64_value(c))) else {
+                    break;
+                };
+                self.board[y as usize * SIZE + x as usize + k] = (hi << 6) | lo;
+            }
+        }
     }
 
     /// The level as bytes: the original bytes when nothing was painted.
@@ -352,8 +481,32 @@ impl Document {
         for y in 0..SIZE {
             canonical.extend_from_slice(format!("BOARD 0 {y} {SIZE} 0 ").as_bytes());
             for x in 0..SIZE {
-                canonical.extend_from_slice(&tile_code(self.board[y * SIZE + x]));
+                canonical.extend_from_slice(&tile_code(self.layer0[y * SIZE + x]));
             }
+            canonical.extend_from_slice(self.eol);
+        }
+        // layer 1: one row per run of filled cells, empty cells left out (as Gonstruct writes it)
+        for y in 0..SIZE {
+            let mut x = 0;
+            while x < SIZE {
+                if self.layer1[y * SIZE + x].is_none() {
+                    x += 1;
+                    continue;
+                }
+                let start = x;
+                let mut data = Vec::new();
+                while x < SIZE {
+                    let Some(t) = self.layer1[y * SIZE + x] else { break };
+                    data.extend_from_slice(&tile_code(t));
+                    x += 1;
+                }
+                canonical.extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
+                canonical.extend_from_slice(&data);
+                canonical.extend_from_slice(self.eol);
+            }
+        }
+        for raw in &self.other_rows {
+            canonical.extend_from_slice(raw);
             canonical.extend_from_slice(self.eol);
         }
         let first = self.board_lines.first().copied();
