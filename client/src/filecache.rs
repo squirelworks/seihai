@@ -91,6 +91,8 @@ pub struct FileRequester {
     update_asked: Vec<(String, u32)>,
     settled: HashSet<String>,
     failed: HashSet<String>,
+    /// Names asked for outside the window ([`want_extra`](Self::want_extra)).
+    extra: HashSet<String>,
 }
 
 fn key(name: &str) -> String {
@@ -105,6 +107,7 @@ impl FileRequester {
             update_asked: Vec::new(),
             settled: HashSet::new(),
             failed: HashSet::new(),
+            extra: HashSet::new(),
         }
     }
 
@@ -117,7 +120,7 @@ impl FileRequester {
         }
         match local {
             None => {
-                if self.failed.contains(&k) || self.wanted.contains(&k) {
+                if self.failed.contains(&k) || self.wanted.contains(&k) || self.extra.contains(&k) {
                     return Vec::new();
                 }
                 self.wanted.push(k);
@@ -144,11 +147,27 @@ impl FileRequester {
         }
     }
 
+    /// Ask for `name` with `WANTFILE` **outside** the window: it takes no
+    /// slot and frees none when answered. For Seihai's own requests that the
+    /// real client never makes (the base files): some servers never answer
+    /// a name they do not have, and in the window such a name would hold its
+    /// slot for the rest of the connection, so the level's own images would
+    /// wait behind it. A name asked this way is not asked for again by
+    /// [`need`](Self::need) until the server answers it.
+    pub fn want_extra(&mut self, name: &str) -> Option<FileRequest> {
+        let k = key(name);
+        if k.is_empty() || self.failed.contains(&k) || self.settled.contains(&k) || self.wanted.contains(&k) {
+            return None;
+        }
+        self.extra.insert(k).then(|| FileRequest::Want(name.trim().to_string()))
+    }
+
     /// The server answered for `name` (it sent the file, said it is up to
     /// date, or could not send it). Returns the next waiting requests.
     pub fn done(&mut self, name: &str) -> Vec<FileRequest> {
         let k = key(name);
         let mut next = Vec::new();
+        self.extra.remove(&k);
         if let Some(i) = self.wanted.iter().position(|n| *n == k) {
             self.wanted.remove(i);
             if i < WINDOW && self.wanted.len() >= WINDOW {
@@ -598,6 +617,8 @@ pub enum BaseKind {
     Gani,
     /// A `.wav`, by stem.
     Sound,
+    /// The tile type table, by its full name (`arrays.dat`).
+    TileTypes,
 }
 
 /// Files every install of the real client ships with, that Seihai draws
@@ -629,6 +650,7 @@ pub const BASE_FILES: &[(BaseKind, &str)] = &[
     (BaseKind::Sound, "steps2"),
     (BaseKind::Sound, "sword"),
     (BaseKind::Sound, "water"),
+    (BaseKind::TileTypes, "arrays.dat"),
 ];
 
 /// The [`BASE_FILES`] entry a received file is, by its name with any
@@ -640,11 +662,12 @@ pub fn base_file_of(name: &str) -> Option<(BaseKind, &'static str)> {
         _ => (base.as_str(), ""),
     };
     BASE_FILES.iter().copied().find(|(kind, s)| {
-        *s == stem
+        (*s == stem || (*kind == BaseKind::TileTypes && *s == base))
             && match kind {
                 BaseKind::Image(_) => is_image_name(&base),
                 BaseKind::Gani => ext == ".gani",
                 BaseKind::Sound => ext == ".wav",
+                BaseKind::TileTypes => true,
             }
     })
 }
@@ -699,9 +722,14 @@ impl FileSession {
     ///   `FILESENDFAILED`, and before 2.14 it fails any file over 64000
     ///   bytes (no large-file packets), which a real `pics1.png` is.
     ///
+    /// The requests go outside the four-request window
+    /// ([`FileRequester::want_extra`]): a server that stays silent about a
+    /// name it lacks (seen on a live 2.22 server for `sprites.png`,
+    /// `state.png` and `letters.png`) must not hold the window's slots.
+    ///
     /// Builds without `WANTFILE` ask for nothing; builds without GANIs skip
-    /// the GANIs.
-    pub fn request_base_files(&mut self) -> Vec<Vec<u8>> {
+    /// the GANIs. Returns the requests; their names are for the log.
+    pub fn request_base_files(&mut self) -> Vec<FileRequest> {
         let resolver = self.store.resolver();
         let profile = resolver.profile();
         if !profile.protocol.pli.contains(23) {
@@ -714,17 +742,22 @@ impl FileSession {
                 BaseKind::Gani if !profile.ui.ganis => continue,
                 BaseKind::Gani => (format!("{stem}.gani"), resolver.gani(stem)),
                 BaseKind::Sound => (format!("{stem}.wav"), resolver.sound(stem)),
+                BaseKind::TileTypes => {
+                    // A table of the user's or the cache counts; the built-in
+                    // one only fits the built-in sheet.
+                    let own = resolver.tile_types().is_some_and(|(p, _)| resolver.layer_of(&p) != Some(Layer::Builtin));
+                    if own {
+                        continue;
+                    }
+                    (stem.to_string(), None)
+                }
             };
             let own_copy = found.is_some_and(|p| resolver.layer_of(&p).is_some_and(|l| l != Layer::Builtin));
             if !own_copy && self.store.memory_file(&name).is_none() {
                 names.push(name);
             }
         }
-        let mut out = Vec::new();
-        for name in names {
-            out.extend(self.need(&name));
-        }
-        out
+        names.iter().filter_map(|n| self.requests.want_extra(n)).collect()
     }
 
     /// The player took a step. On the first two steps of a connection the
@@ -1099,13 +1132,19 @@ mod tests {
             .with_builtin(Some(builtin.clone()));
         let mut fs_ = FileSession::new(resolver, true);
         let sent = fs_.request_base_files();
-        // pics1 (built-in only) goes first; state.png (the user's) is not asked about.
-        assert_eq!(sent.len(), WINDOW);
-        assert_eq!(sent[0], wantfile_message("pics1.png"));
-        assert!(!sent.contains(&wantfile_message("state.png")));
-        assert!(sent.iter().all(|m| m[0] == 23 + 0x20));
-        // Asked once a connection.
+        // pics1 (built-in only) goes first; state.png (the user's) is not asked
+        // about. All go out at once, outside the window.
+        assert_eq!(sent[0], FileRequest::Want("pics1.png".into()));
+        assert!(!sent.contains(&FileRequest::Want("state.png".into())));
+        assert!(sent.contains(&FileRequest::Want("arrays.dat".into())));
+        assert!(sent.len() > WINDOW);
+        assert!(sent.iter().all(|r| matches!(r, FileRequest::Want(_))));
+        // Asked once a connection, and not again by `need`.
         assert!(fs_.request_base_files().is_empty());
+        assert!(fs_.need("pics1.png").is_empty());
+        // They hold no slot: the level's images still go out four at once.
+        let level: usize = (0..4).map(|i| fs_.need(&format!("npc{i}.png")).len()).sum();
+        assert_eq!(level, 4);
         fs::remove_dir_all(&builtin).ok();
         fs::remove_dir_all(&user).ok();
     }
@@ -1118,6 +1157,7 @@ mod tests {
                 BaseKind::Image(c) => (*c, ".png"),
                 BaseKind::Gani => ("levels/ganis", ".gani"),
                 BaseKind::Sound => ("sounds", ".wav"),
+                BaseKind::TileTypes => ("", ""),
             };
             let d = user.join(dir);
             fs::create_dir_all(&d).unwrap();
