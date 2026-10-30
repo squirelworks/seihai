@@ -44,6 +44,37 @@ fn gstring_len(data: &[u8]) -> Option<usize> {
     Some(1 + n)
 }
 
+/// In the pre-2.1 bow slot (prop 10), whether the value at `data` is a GANI
+/// name in the 2.1 string form, `c(len)` + name, rather than a bow power.
+///
+/// A server running the 2.x generation sends prop 10 as a GANI string to
+/// every client, a 2.0x one included: GServer-v2 beta4 reads and writes the
+/// prop as a GANI whenever its generation is not classic
+/// (`PropertyGaniOrBowGif`), and the lab saw a 2.05 login get a GANI name.
+/// The real 2.00 and 2.05 send their own swing as `c(10 + len)` + `sword`,
+/// which such a server stores and relays as `c(5)` + `sword`. Read in the bow
+/// form that is bow power 5 followed by garbage, and the swing is lost.
+///
+/// The two forms overlap for a length under 10. The string form is taken
+/// when the name is 1 to 9 bytes of what a GANI name holds (lower-case
+/// letters, digits, `_`, `-`, `.`, `[`, `]`), starting with a letter, and is
+/// followed by the end of the stream or a prop id below 83. A bow power is
+/// followed by the next prop's id, and a pre-2.1 prop id is never a
+/// lower-case letter (those are ids 65 to 90). A name of 10 bytes or more
+/// (`carrystill`) still reads as a bow image; none of the swing names is that
+/// long.
+pub fn bow_slot_holds_gani(data: &[u8]) -> bool {
+    let Some(&first) = data.first() else { return false };
+    let n = usize::from(first.wrapping_sub(0x20));
+    if !(1..10).contains(&n) {
+        return false;
+    }
+    let Some(name) = data.get(1..1 + n) else { return false };
+    let gani_byte = |b: &u8| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-.[]".contains(b);
+    let next_ok = data.get(1 + n).is_none_or(|b| b.wrapping_sub(0x20) < 83);
+    name[0].is_ascii_lowercase() && name.iter().all(gani_byte) && next_ok
+}
+
 /// Byte length of one player prop value for `id`, or `None` if the id
 /// is unknown or the value runs past the end.
 ///
@@ -53,6 +84,7 @@ fn prop_len(id: u8, data: &[u8], bow_prop10: bool) -> Option<usize> {
     let c = |i: usize| data.get(i).map(|b| b.wrapping_sub(0x20) as usize);
     let len = match id {
         // Pre-2.1 bow slot: c(10 + len) + image, or c(power) under 10.
+        10 if bow_prop10 && bow_slot_holds_gani(data) => gstring_len(data)?,
         10 if bow_prop10 => {
             let v = c(0)?;
             if v >= 10 {
@@ -169,6 +201,24 @@ mod tests {
         let p = [&[0x2a, 0x20 + 15][..], b"b.gif", &[0x31, 0x22]].concat();
         let props = parse_player_props_with(&p, true);
         assert_eq!(props[1].id, 17);
+    }
+
+    #[test]
+    fn bow_slot_takes_a_gani_string_from_a_2x_server() {
+        // GANI `sword` as a 2.x server relays it, then SPRITE dir 1.
+        let p = [&[0x2a, 0x20 + 5][..], b"sword", &[0x31, 0x21]].concat();
+        let props = parse_player_props_with(&p, true);
+        assert_eq!(props.iter().map(|p| p.id).collect::<Vec<_>>(), vec![10, 17]);
+        assert_eq!(props[0].raw, [&[0x25][..], b"sword"].concat());
+        // Alone at the end of the stream.
+        assert!(bow_slot_holds_gani(&[&[0x24][..], b"idle"].concat()));
+        // A bow power followed by a prop: X = 30, SPRITE.
+        assert!(!bow_slot_holds_gani(&[0x23, 0x2f, 0x20 + 60, 0x31, 0x22]));
+        // Power 0, and a bow image in the bow form, stay the bow slot.
+        assert!(!bow_slot_holds_gani(&[0x20, 0x2f, 0x20 + 60]));
+        assert!(!bow_slot_holds_gani(&[&[0x20 + 15][..], b"b.gif"].concat()));
+        // Upper case is no GANI name.
+        assert!(!bow_slot_holds_gani(&[&[0x25][..], b"Sword"].concat()));
     }
 
     #[test]
