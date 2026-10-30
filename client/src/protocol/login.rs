@@ -64,14 +64,37 @@ pub struct LoginInfo {
     /// line carry the gen-3 insertion already. A build with
     /// `first_frame_files` bundles as well.
     pub bundle_login: bool,
+    /// How long after the level a 2.x frame goes when no 182 came first.
+    /// `None`: [`FRAME_AFTER_LEVEL`] (2.22, 2.31). The real 2.17.1 sent its
+    /// frame 96 to 112 ms after the board on both lab servers, with or without
+    /// 182 (2026-10-30, `documentation/difftest-217.md` item 2), so 2.17 has
+    /// 96 ms, the shortest gap seen.
+    pub frame_after_level: Option<Duration>,
 }
 
-pub const LOGIN_217: LoginInfo = LoginInfo { os_props: None, idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: true };
-pub const LOGIN_222: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: false };
-pub const LOGIN_231: LoginInfo = LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], bundle_login: false };
+pub const LOGIN_217: LoginInfo = LoginInfo {
+    os_props: None,
+    idle_gani: true,
+    status_icons: true,
+    full: true,
+    first_frame_files: &[],
+    bundle_login: true,
+    frame_after_level: Some(Duration::from_millis(96)),
+};
+pub const LOGIN_222: LoginInfo =
+    LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: true, status_icons: true, full: true, first_frame_files: &[], bundle_login: false, frame_after_level: None };
+pub const LOGIN_231: LoginInfo =
+    LoginInfo { os_props: Some(OS_WINDOWS), idle_gani: false, status_icons: true, full: true, first_frame_files: &[], bundle_login: false, frame_after_level: None };
 /// The real 3.04 Linux build (lab, 2026-10-30, `documentation/login-burst.md`).
-pub const LOGIN_304: LoginInfo =
-    LoginInfo { os_props: Some(("linux", 1250)), idle_gani: false, status_icons: true, full: false, first_frame_files: &["bigmap.txt", "minimap.txt"], bundle_login: true };
+pub const LOGIN_304: LoginInfo = LoginInfo {
+    os_props: Some(("linux", 1250)),
+    idle_gani: false,
+    status_icons: true,
+    full: false,
+    first_frame_files: &["bigmap.txt", "minimap.txt"],
+    bundle_login: true,
+    frame_after_level: None,
+};
 /// 3.153 (Mac OS X), never run: 3.04's frame with `OSTYPE` `mac`, the value
 /// its binary writes (Graal_analysis `version-profiles/3.04-3.153.toml`). The
 /// code page and the rest of the frame are 3.04's; the notes have no 3.153
@@ -349,9 +372,11 @@ impl LoginBurst {
     }
 
     /// The frame is due at `now` without a 182: a 2.x build whose first level
-    /// has been in for [`FRAME_AFTER_LEVEL`].
+    /// has been in for [`FRAME_AFTER_LEVEL`] (or the build's own
+    /// [`LoginInfo::frame_after_level`]).
     fn late_at(&self, now: Instant) -> bool {
-        self.info.full && self.level_at.is_some_and(|t| now.saturating_duration_since(t) >= FRAME_AFTER_LEVEL)
+        let after = self.info.frame_after_level.unwrap_or(FRAME_AFTER_LEVEL);
+        self.info.full && self.level_at.is_some_and(|t| now.saturating_duration_since(t) >= after)
     }
 
     /// [`Self::due`], or the frame is late at `now` ([`FRAME_AFTER_LEVEL`]).
@@ -785,6 +810,24 @@ mod tests {
         b.note_level(t0);
         let out = b.take(&st, "acct", t0 + FRAME_AFTER_LEVEL, check, Vec::new, Vec::new);
         assert_eq!(out[0], b"plisticononline.png");
+    }
+
+    /// Real 2.17.1 on beta4 (no 182, lab 2026-10-30): the frame went 96 and
+    /// 105 ms after the board, with the status icons, the flags and the
+    /// props, no process list.
+    #[test]
+    fn the_217_frame_without_182_goes_96_ms_after_the_level() {
+        let st = burst_state();
+        let t0 = Instant::now();
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V217).unwrap();
+        let check = |n: &str| vec![n.as_bytes().to_vec()];
+        b.note_level(t0);
+        assert!(!b.due_at(&st, t0 + Duration::from_millis(95)));
+        let out = b.take(&st, "acct", t0 + Duration::from_millis(96), check, Vec::new, || vec![b"flag".to_vec()]);
+        let names: Vec<&[u8]> = out.iter().map(|m| m.as_slice()).collect();
+        assert_eq!(&names[..4], [&b"idle.gani"[..], b"plisticononline.png", b"plisticonno pms.png", b"flag"]);
+        assert_eq!(out[4][0], PLI_PLAYERPROPS + 0x20);
+        assert!(!out.iter().any(|m| m.first() == Some(&(PLI_PROCESSLIST + 0x20))), "no process list");
     }
 
     #[test]

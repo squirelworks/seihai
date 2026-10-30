@@ -96,8 +96,10 @@ Seihai does the same (`LoginBurst::due_at`, `late_frame`): when no 182 has come
 level's frame was read off the socket), it sends this shape. Images the window
 lets out at once follow the props. `SHOWIMGPLAYER` stays opt-in (`--send-showimg`),
 as for the 182 frame, and `UDPPORT` stays out (see below). A 182 that comes first
-keeps the frame above. 2.17 was not captured on stock beta4, and the same rule is
-applied to it.
+keeps the frame above. Real 2.17.1 was captured on beta4 later the same day
+(`difftest-217.md` item 2): the same shape (status icons, the `gr` flags, the props,
+`SHOWIMGPLAYER`, no process list), but 96 to 112 ms after the board rather than
+240 ms, so 2.17 waits 96 ms (`LoginInfo::frame_after_level`).
 
 ## Gen-2 builds (1.33 to 1.39)
 
