@@ -101,6 +101,16 @@ fn pose_sheet(i: &(u32, Vec<u8>)) -> seihai::render::Sheet<'_> {
 
 /// Load `sword.gani`, `hurt.gani` or `sit.gani` into the session, from the
 /// first layer that has it. A missing file leaves the plain idle figure.
+/// The NPC animation a received file is for: `name` is a `.gani` and an NPC
+/// of this session already uses its stem (`setcharani`, `setani`).
+fn npc_ani_of(session: &OfflineSession, name: &str) -> Option<String> {
+    let lower = name.to_ascii_lowercase();
+    let stem = lower.strip_suffix(".gani")?;
+    let last = stem.rsplit('/').next().unwrap_or(stem);
+    let found = [stem, last].into_iter().find(|k| session.npc_ganis.contains_key(*k)).map(str::to_string);
+    found
+}
+
 fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
     let (Some(kind), Some(path)) = (seihai::pose::PoseKind::from_file(name), resolver.gani(name)) else { return };
     match Gani::load(&path) {
@@ -349,6 +359,7 @@ fn main() {
     // None: not given on the command line, so the settings file decides.
     let mut cli_sound: Option<bool> = None;
     let mut cli_save_downloads: Option<bool> = None;
+    let mut no_builtin = false;
     let mut cli_cache_dir: Option<PathBuf> = None;
     while i < args.len() {
         match args[i].as_str() {
@@ -433,6 +444,7 @@ fn main() {
             "--no-sound" => cli_sound = Some(false),
             "--sound" => cli_sound = Some(true),
             "--no-save-downloads" => cli_save_downloads = Some(false),
+            "--no-builtin" => no_builtin = true,
             "--password-env" => {
                 i += 1;
                 if let Some(var) = args.get(i) {
@@ -499,6 +511,10 @@ fn main() {
                 println!("         --sound             play them even if the settings file says off");
                 println!("         --no-save-downloads  keep downloaded files in memory only, do not");
                 println!("                             write them to disk (settings file: save_downloads=0)");
+                println!("         --no-builtin        run without the built-in assets, as the real client's");
+                println!("                             clean folder: a GANI or sound found nowhere else is");
+                println!("                             asked for (walk.gani and the step sounds at the first");
+                println!("                             steps); needs --assets with pics1.png");
                 println!("       seihai [--assets <dir>] --check-assets [--version 2.22]");
                 println!("         --check-assets      resolve and load the files a version uses from the");
                 println!("                             --assets folder, or from the built-in set when none");
@@ -842,14 +858,23 @@ fn main() {
         }
         None => None,
     };
-    let builtin_dir = match seihai::assets::builtin::default_dir() {
-        Ok(d) => Some(d),
-        Err(e) => {
-            eprintln!("{e}; running without the built-in assets");
-            None
+    let builtin_dir = if no_builtin {
+        eprintln!("--no-builtin: running without the built-in assets");
+        None
+    } else {
+        match seihai::assets::builtin::default_dir() {
+            Ok(d) => Some(d),
+            Err(e) => {
+                eprintln!("{e}; running without the built-in assets");
+                None
+            }
         }
     };
     if user_root.is_none() && builtin_dir.is_none() {
+        if no_builtin {
+            eprintln!("no assets: --no-builtin needs --assets <dir>");
+            return;
+        }
         eprintln!("no assets: give --assets <dir> or fix the settings folder so the built-in assets can be written");
         return;
     }
@@ -1533,6 +1558,16 @@ fn main() {
                                 load_pose_gani(&resolver, &mut session, name);
                             } else if name.eq_ignore_ascii_case("walk.gani") || name.eq_ignore_ascii_case("swim.gani") {
                                 load_motion_gani(&resolver, &mut session, name);
+                            } else if let Some(ani) = npc_ani_of(&session, name) {
+                                // An NPC's animation that was asked for.
+                                match files.store.read(name).map(|d| Gani::parse(&String::from_utf8_lossy(&d))) {
+                                    Some(Ok(g)) => {
+                                        session.set_npc_gani(&ani, g);
+                                        eprintln!("NPC animation {name}");
+                                    }
+                                    Some(Err(e)) => eprintln!("NPC animation {name} not read: {e}"),
+                                    None => {}
+                                }
                             } else if seihai::filecache::is_image_name(name) {
                                 // A new copy of an image replaces the one in memory.
                                 if let Some(data) = files.store.read(name) {
@@ -2302,7 +2337,7 @@ fn main() {
             for ev in session.take_sound_events() {
                 if sound.play(&ev, listener, now) == seihai::sound::Outcome::Missing && conn.is_some() {
                     let name = seihai::sound::wanted_name(&ev.file);
-                    let msgs = files.need(&name);
+                    let msgs = files.need_missing(&name);
                     if !msgs.is_empty() {
                         eprintln!("requesting {name}");
                     }
@@ -2470,11 +2505,19 @@ fn main() {
             }
             // NPC animations (setcharani, setani): load the GANIs they name, then
             // step them. A missing file is replaced by an empty animation, so the
-            // NPC keeps its image and the name is not looked up again.
+            // NPC keeps its image and the name is not looked up again; online it
+            // is asked for, and loaded over the empty one when it arrives.
             for name in session.wanted_npc_anis() {
-                let gani = resolver.gani(&format!("{name}.gani")).and_then(|p| Gani::load(p).ok());
+                let file = format!("{name}.gani");
+                let gani = resolver.gani(&file).and_then(|p| Gani::load(p).ok());
                 if gani.is_none() {
-                    eprintln!("NPC animation {name}.gani not found");
+                    let msgs = if conn.is_some() { files.need_missing(&file) } else { Vec::new() };
+                    if msgs.is_empty() {
+                        eprintln!("NPC animation {file} not found");
+                    } else {
+                        eprintln!("NPC animation {file} not found; requesting");
+                    }
+                    send_file_msgs(conn.as_mut(), msgs);
                 }
                 session.set_npc_gani(&name, gani.unwrap_or_else(|| Gani::parse("").expect("empty gani")));
             }

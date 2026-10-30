@@ -201,6 +201,27 @@ with no GANIs or no `WANTFILE` ask for none (not captured). The names are asked
 for once per connection (the lists are per connection), and a new connection
 starts the count again.
 
+`--no-builtin` runs Seihai without the built-in layer, as the real client's
+clean folder; with an asset folder that lacks the three files, the first steps
+then ask for them in the real order (for a lab comparison against the real
+client).
+
+### Other missing GANIs and sounds
+
+`FileSession::need_missing(name)` is the same rule for any GANI or sound: a
+`WANTFILE` only when no layer and no download of this session has the file,
+and only from a build that sends `WANTFILE` (`pli` 23); a GANI also needs a
+build with GANIs (`ui.ganis`). The real GANI and sound loaders send
+`WANTFILE` for a name they cannot find (table above, "Who asks for what?").
+It is used for:
+
+* the first-step files (`on_step`, above);
+* a sound that a script (`play`, `play2`) or a GANI cue plays and the engine
+  cannot find (`documentation/audio.md`);
+* the GANI an NPC names with `setcharani` or `setani`. Until it arrives the NPC
+  uses an empty animation and keeps its image; when the file arrives it is read
+  (from the cache, or from memory with saving off) and replaces the empty one.
+
 This differs on purpose from the login-time files (`idle.gani` where the build
 asks for it at login, the player images, the icons): those are part of the real
 login frame and keep their request, with `WANTFILE` for a file only we have.
