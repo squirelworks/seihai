@@ -245,9 +245,13 @@ requested for default weapons 8 and 7 (`weapon-images.md`).
 * **Online levels come from the server.** On a level change (and for each
   gmap cell) Seihai draws the server's board (`PLO_BOARDPACKET`) with its
   links, signs and chests. A local level file of the same name stands in only
-  when its last-write time is the server's `PLO_LEVELMODTIME` for that level
+  when it is in this server's cache folder and its last-write time is the
+  server's `PLO_LEVELMODTIME` for that level
   (`AssetResolver::level_at_mod_time`), the role of the real clients'
-  modtime-keyed web-level cache (Graal_analysis `formats/gwebl001-cache.md`).
+  per-server, modtime-keyed web-level cache
+  (`weblevels/<host>/<level>-<port>.code`, Graal_analysis
+  `formats/gwebl001-cache.md`). The user's asset folder and the built-in set
+  are never searched for an online level.
   A client install's own `new1.nw` therefore no longer hides a server's
   `new1.nw` (lab, 2026-10-30: the 2.22 watcher drew the install's indoor
   room while the real clients drew the server's grass level).

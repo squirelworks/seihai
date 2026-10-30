@@ -245,6 +245,12 @@ impl AssetResolver {
     /// a format this version opens; a bare name gets the version's level
     /// extensions in turn.
     pub fn level(&self, name: &str) -> Option<PathBuf> {
+        self.level_in(name, false)
+    }
+
+    /// [`Self::level`], in the per-server cache only (`cache_only`) or in
+    /// every layer.
+    fn level_in(&self, name: &str, cache_only: bool) -> Option<PathBuf> {
         let rel = clean_name(name)?;
         let candidates: Vec<String> = match level_ext(&rel) {
             Some(ext) => {
@@ -255,7 +261,7 @@ impl AssetResolver {
             }
             None => self.profile.level_extensions().iter().map(|e| format!("{rel}{e}")).collect(),
         };
-        for (_, r) in self.roots(true) {
+        for (_, r) in self.roots(true).into_iter().filter(|(l, _)| !cache_only || *l == Layer::Cache) {
             let dirs = [r.root.join(DOWNLOADS), r.root.clone(), r.root.join("maps")];
             if let Some(p) = first_in(&dirs, &candidates) {
                 return Some(p);
@@ -265,16 +271,18 @@ impl AssetResolver {
     }
 
     /// Online, the local copy of a level that may stand in for the
-    /// server's: only one whose last-write time is the mod time the server
-    /// gave for it (`PLO_LEVELMODTIME`, 39). The real clients draw the
-    /// server's board and keep levels only in their web-level cache, keyed
-    /// by that mod time (Graal_analysis `formats/gwebl001-cache.md`), so a
-    /// same-named file of a client install (its `new1.nw`) is not the
-    /// server's level. A download saved with the server's time
-    /// (`documentation/file-cache.md`) matches.
+    /// server's: one in this server's cache folder only, and only when its
+    /// last-write time is the mod time the server gave for it
+    /// (`PLO_LEVELMODTIME`, 39). The real clients draw the server's board
+    /// and keep levels only in their web-level cache, one folder per server
+    /// (`weblevels/<host>/<level>-<port>.code`) keyed by that mod time
+    /// (Graal_analysis `formats/gwebl001-cache.md`). A same-named file of a
+    /// client install (its `new1.nw`) is therefore never the server's
+    /// level. A download is saved there with the server's time
+    /// (`documentation/file-cache.md`), so it matches.
     pub fn level_at_mod_time(&self, name: &str, server_mod_time: Option<u32>) -> Option<PathBuf> {
         let want = server_mod_time?;
-        self.level(name).filter(|p| crate::filecache::mod_time_of(p) == Some(want))
+        self.level_in(name, true).filter(|p| crate::filecache::mod_time_of(p) == Some(want))
     }
 
     /// Does this version open files with this level extension (".nw")?
@@ -665,7 +673,7 @@ mod tests {
         let d = tmp("level-mod-time");
         touch(&d, "new1.nw");
         crate::filecache::set_mod_time(&d.join("new1.nw"), 1_000).unwrap();
-        let r = resolver(&d, ClientVersion::V222);
+        let r = AssetResolver::empty(ClientVersion::V222.profile()).with_cache(Some(d.clone()));
         // The server's time for the level: the file is its copy.
         assert_eq!(r.level_at_mod_time("new1.nw", Some(1_000)), Some(d.join("new1.nw")));
         assert_eq!(r.level_at_mod_time("NEW1", Some(1_000)), Some(d.join("new1.nw")));
@@ -674,6 +682,24 @@ mod tests {
         assert_eq!(r.level_at_mod_time("new1.nw", None), None);
         // No file at all.
         assert_eq!(r.level_at_mod_time("other.nw", Some(1_000)), None);
+    }
+
+    /// The install's own `new1.nw` is not this server's level, even at the
+    /// same time: only the server's cache folder counts.
+    #[test]
+    fn online_levels_come_only_from_the_server_cache() {
+        let install = tmp("level-install");
+        let cache = tmp("level-cache");
+        touch(&install, "new1.nw");
+        crate::filecache::set_mod_time(&install.join("new1.nw"), 1_000).unwrap();
+        let r = AssetResolver::empty(ClientVersion::V222.profile())
+            .with_assets(Some(AssetRoot::new(&install)))
+            .with_cache(Some(cache.clone()));
+        assert_eq!(r.level("new1.nw"), Some(install.join("new1.nw")), "offline lookups still see it");
+        assert_eq!(r.level_at_mod_time("new1.nw", Some(1_000)), None);
+        touch(&cache, "levels/new1.nw");
+        crate::filecache::set_mod_time(&cache.join("levels/new1.nw"), 1_000).unwrap();
+        assert_eq!(r.level_at_mod_time("new1.nw", Some(1_000)), Some(cache.join("levels/new1.nw")));
     }
 
     #[test]
