@@ -895,6 +895,36 @@ OFFSETS = [((12, 34), (8, 16), (8, 2)), ((12, 36), (12, 16), (12, 2)),
 SWIM_HEAD_DROP = 14  # draw_player_sprites lowers the head by this in water
 
 
+# The hat (ATTR1) against the head, per head facing (up, left, down,
+# right): a 48x48 cell of the 192x144 hat sheet at (48 * facing, 0), placed
+# this far from the head and drawn after it. Measured on the stock 2.22
+# player GANIs (idle, walk, sword, sit, swim, carry), where every row with
+# a facing head has the same offsets (documentation/appearance.md).
+HAT_FROM_HEAD = [(-8, -18), (-12, -18), (-8, -18), (-4, -18)]
+
+
+def with_hats(text):
+    """Add an ATTR1 sprite after every head placement of a GANI, so a
+    player's hat (prop 37, `#P1`) draws on Seihai's own animations. No
+    DEFAULTATTR1: Seihai ships no hat, so a player without one wears none."""
+    out = []
+    for line in text.split("\n"):
+        if line.startswith("SPRITE 100 HEAD"):
+            out += [f"SPRITE {40 + f} ATTR1 {48 * f} 0 48 48 hat {n}"
+                    for f, n in enumerate(("up", "left", "down", "right"))]
+        elif line and line[0].isdigit():
+            parts = []
+            for pl in line.split(", "):
+                parts.append(pl)
+                sid, x, y = (int(v) for v in pl.split())
+                if 100 <= sid <= 103:
+                    dx, dy = HAT_FROM_HEAD[sid - 100]
+                    parts.append(f"{40 + sid - 100} {x + dx} {y + dy}")
+            line = ", ".join(parts)
+        out.append(line)
+    return "\n".join(out)
+
+
 def gani_header(title):
     return [
         f"// {title}",
@@ -1308,7 +1338,7 @@ def write_all(out):
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
                        ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
                        ("carrystill", carrystill_gani()), ("carry", carry_gani())):
-        open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(text)
+        open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(with_hats(text))
 
     # the default sheet is the only tile sheet: one line, image,prefix,type,x,y
     open(os.path.join(out, "levels", "tiledefs", "tiledefsOffline.txt"), "w", newline="\n").write("pics1.png,,0,0,0\n")
@@ -1380,6 +1410,8 @@ def gani_frame_into(out, tile, name, step, dr):
     for chunk in rows[step][dr].split(","):
         sid, x, y = map(int, chunk.split())
         sh, sx, sy, w, h = defs[sid]
+        if sh not in sheets:  # ATTR1: Seihai ships no hat
+            continue
         tile.alpha_composite(sheets[sh].crop((sx, sy, sx + w, sy + h)), (x, y))
 
 
