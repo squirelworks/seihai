@@ -1,9 +1,9 @@
 //! How many NPC prop messages Seihai sends while the scripts run: none for
-//! NPCs whose scripts keep setting the same values, and at most one every
-//! 100 ms for an NPC a script keeps moving, as the 2.05 client (lab,
-//! `documentation/ledges-push-pull.md`).
+//! NPCs whose scripts keep setting the same values, and none for an NPC a
+//! script keeps moving (its position is this client's business; only a
+//! push or a pull sends X and Y). See `documentation/ledges-push-pull.md`.
 
-use seihai::offline::{Linked, OfflineSession, ServerNpcSync, NPC_SEND_INTERVAL};
+use seihai::offline::{Linked, OfflineSession, ServerNpcSync};
 use seihai::protocol::npcprops::NpcProps;
 use seihai::protocol::ClientVersion;
 use seihai::scripting::engine::host::SessionScripts;
@@ -59,10 +59,9 @@ fn npcs_whose_scripts_set_the_same_values_send_nothing_after_the_first_round() {
 }
 
 #[test]
-fn an_npc_a_script_keeps_moving_goes_out_at_most_every_100_ms() {
+fn an_npc_a_script_keeps_moving_stays_on_this_client() {
     let n = messages_per_second(&[(1, "if (created||timeout) { x+=0.5; if (x>40) x=20; timeout=0.05; }\n")], 5);
-    let most = (Duration::from_secs(1).as_millis() / NPC_SEND_INTERVAL.as_millis()) as usize;
-    for (sec, &count) in n.iter().enumerate() {
-        assert!(count <= most && count >= most - 1, "second {sec}: {count} messages ({n:?})");
-    }
+    // The first round is its VISFLAGS, as 2.05 sends for every NPC.
+    assert!(n[0] <= 1, "{n:?}");
+    assert_eq!(n[1..].iter().sum::<usize>(), 0, "{n:?}");
 }

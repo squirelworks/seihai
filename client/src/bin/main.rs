@@ -2196,6 +2196,9 @@ fn main() {
         }
         for m in session.take_npc_moves() {
             eprintln!("npc {} moved to {:.1},{:.1} ({})", m.index, m.x, m.y, m.event);
+            if let Some(n) = session.current_level.as_ref().and_then(|l| l.npcs.get(m.index)) {
+                npc_sync.pushed(n);
+            }
             if !no_scripts {
                 scripts.npc_moved(&mut session, &m);
             }
