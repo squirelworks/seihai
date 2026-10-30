@@ -21,13 +21,7 @@ client sends one frame:
 | 2 | `PLI_PROCESSLIST` (44) | the answer to 182. The text is the client's list of running programs, gtokenized, one per line; GServer-v2 parses it with `guntokenize` and splits on newlines. |
 | 3 | `PLI_PLAYERPROPS` (2) | `NICKNAME`, `HEADGIF`, `COLORS`, `STATUS`, `UDPPORT`, `ADDITFLAGS`, `PLANGUAGE`, and in 2.22 and 2.31 `OSTYPE` and `TEXTCODEPAGE`. Head, colours and status are the values the server gave. |
 
-2.17 sends the same three parts; its props stop at `PLANGUAGE`. It does not
-wait for 182, though: the real 2.17.1 sent its frame 96 to 112 ms after the
-board on both lab servers (2026-10-30, `difftest-217.md` item 2). On beta4,
-which sends no 182, the frame had no image checks and no process list: the
-status icons, the `gr` flags, the props and `SHOWIMGPLAYER`. Seihai 2.17 sends
-its frame 96 ms after the first level and adds the image checks and the
-process list only when 182 has come (`LoginInfo::after_level`).
+2.17 sends the same three parts; its props stop at `PLANGUAGE`.
 
 Then the status icons: one `WANTFILE plisticon<status>.png` per
 `PLO_STATUSLIST` (180) entry, lower-cased (`No PMs` is `plisticonno pms.png`).
@@ -74,6 +68,38 @@ default weapon in arrival order: id 7 `wbowi1.png` (lab, real 2.22 with the ids
 filtered to 7 alone) and id 8 `wbomb1.png` (the 2.05 rev 2 item table), which
 gives the real 2.22 and 2.31 order, `wbomb1.png` before `wbowi1.png`
 (`file-cache.md`, `weapon-images.md`).
+
+## Without `PLO_LISTPROCESSES`
+
+Stock GServer beta4 never sends 182. Lab, 2026-10-30 (Windows, real 2.22 and 2.31,
+two runs each, decoded message by message): the client sent its frame anyway,
+236 to 246 ms after the level frame. Before it the server had sent the
+signature, the start messages, `STATUSLIST`, the full own props, the weapon
+messages and the level, all within 5 ms; the client had sent only `LANGUAGE`
+and `TAMPERCHECK`. The frame:
+
+| order | message | content |
+|---|---|---|
+| 1 | `WANTFILE idle.gani` | 2.22 only |
+| 2 | `UPDATEFILE` / `WANTFILE`, one per status icon | the four in flight |
+| 3 | `PLI_ENTERLEVEL` (46) | 2.31 only |
+| 4 | `PLI_PLAYERPROPS` (2) | `NICKNAME`, `HEADGIF`, `COLORS`, `STATUS`, `UDPPORT` 0, `ADDITFLAGS`, `PLANGUAGE`, `OSTYPE`, `TEXTCODEPAGE` |
+| 5 | `SHOWIMGPLAYER` (24) | |
+
+No `PLI_PROCESSLIST` and no image checks in the frame. The other icons, then the
+sword, shield and body images and the weapon images (`wbomb1.png`, `wbowi1.png`)
+followed in later frames through the four-in-flight queue. **The head image was
+never checked.**
+
+Seihai does the same (`LoginBurst::due_at`, `late_frame`): when no 182 has come
+240 ms after the first level (`FRAME_AFTER_LEVEL`, timed from the moment the
+level's frame was read off the socket), it sends this shape. Images the window
+lets out at once follow the props. `SHOWIMGPLAYER` stays opt-in (`--send-showimg`),
+as for the 182 frame, and `UDPPORT` stays out (see below). A 182 that comes first
+keeps the frame above. Real 2.17.1 was captured on beta4 later the same day
+(`difftest-217.md` item 2): the same shape (status icons, the `gr` flags, the props,
+`SHOWIMGPLAYER`, no process list), but 96 to 112 ms after the board rather than
+240 ms, so 2.17 waits 96 ms (`LoginInfo::frame_after_level`).
 
 ## Gen-2 builds (1.33 to 1.39)
 

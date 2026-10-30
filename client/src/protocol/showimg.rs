@@ -39,6 +39,7 @@
 //! |---|---|---|
 //! | 2.22 | about 5.1 s | the TCP copy goes out only while another player is in the level (0 sends in 3 solo sessions); the client's UDP copy (2.05 UDP id 15) is the other way to reach players |
 //! | 2.31 | median 5.13 s (5.11 to 5.17) | always, idle or walking, in every level used |
+//! | 2.17.1 | 5.07 to 5.11 s while idle (lab, 2026-10-30) | always: alone in the level in all five runs, on both lab servers, the first one at the end of the post-login frame |
 //!
 //! GServer-v2 relays the payload unchanged to the other players in the
 //! level as `PLO_SHOWIMG` (32, `GSHORT sender id` plus the client's bytes).
@@ -368,13 +369,15 @@ mod tests {
         }
         let with: Vec<&str> =
             PROFILES.iter().filter(|p| p.protocol.showimg.is_some()).map(|p| p.label).collect();
-        assert_eq!(with, ["2.22", "2.31"]);
+        assert_eq!(with, ["2.17", "2.22", "2.31"]);
         let i222 = ClientVersion::V222.profile().protocol.showimg.unwrap();
         let i231 = ClientVersion::V231.profile().protocol.showimg.unwrap();
         assert!(i222.needs_others && !i231.needs_others);
         assert_eq!(i222.period, MS(5100));
         assert_eq!(i231.period, MS(5130));
-        assert!(ShowImgSender::for_version(ClientVersion::V217).is_none());
+        let i217 = ClientVersion::V217.profile().protocol.showimg.unwrap();
+        assert!(!i217.needs_others);
+        assert_eq!(i217.period, MS(5100));
         assert!(ShowImgSender::for_version(ClientVersion::V205).is_none());
     }
 
@@ -392,6 +395,21 @@ mod tests {
         // One send per call even after a long stall.
         assert!(s.advance(Duration::from_secs(60), false));
         assert!(!s.advance(MS(50), false));
+    }
+
+    /// 2.17.1, alone (`2.17-login-real.trace.tsv`): sends at 0.15, 5.24,
+    /// 10.35, 15.45 and 20.55 s, the first with the post-login frame.
+    #[test]
+    fn v217_sends_alone_every_period() {
+        let mut s = ShowImgSender::for_version(ClientVersion::V217).unwrap();
+        assert!(s.advance(MS(0), false));
+        let mut at = Vec::new();
+        for i in 1..=410 {
+            if s.advance(MS(50), false) {
+                at.push(i * 50);
+            }
+        }
+        assert_eq!(at, [5100, 10200, 15300, 20400]);
     }
 
     /// 2.22: the counter runs free. Wraps while alone are lost; a player

@@ -64,15 +64,18 @@ What matched:
    * On efb5b90, which sends 182, both send the frame.
    * The trigger in `login-burst.md` ("only after 182") holds for efb5b90 but is not what the 2.17 client
      keys on.
-   * Fixed for 2.17 (`LOGIN_217.after_level`): the frame goes 96 ms after the first level, the shortest gap
-     in the five runs (96 to 112 ms after the board, with or without 182). The image checks and
-     `PROCESSLIST` go in it only when 182 came; without 182 the frame is the status icons, the flags, the
-     props and `SHOWIMGPLAYER` (with `--send-showimg`), as on beta4. 2.22 and 2.31 are unchanged.
+   * Fixed: #187 sends the 2.x frame without 182 after the level, in the shape 2.17 used on beta4. 2.17
+     now waits 96 ms for it (`LOGIN_217.frame_after_level`), the shortest gap in the five runs, instead
+     of 2.22's 240 ms. With 182 the frame still answers 182 at once; the real client waited ~100 ms there
+     too, which is left as is.
 3. **2.17 sends `SHOWIMGPLAYER` (24) when solo.**
    * It sends `GCHAR 9` in the post-login frame, then about every 5.1 s (t = 0.16, 5.2, 10.3, 16.8 ...
      in `gmap_cross`), with no other player in the level.
    * Seihai has no 2.17 entry for it (`ShowImgSender::for_version(V217)` is `None`), so even
      `--send-showimg` sends nothing. This is the only high divergence left in the 2.17 parity runs.
+   * Fixed: the 2.17 profile now has an id 24 entry (5.1 s, sent alone too), so `--send-showimg` sends
+     the marker at the end of the post-login frame and then once per period. The longer gaps while
+     walking (6.5 to 9.3 s) are not modelled.
 4. **2.17 walks like 2.22.**
    * The first step sends `GANI=walk, X, SPRITE`. After that it sends `X` (or `Y`) alone, one tile further,
      every 100 ms, and `GANI=idle` when it stops.
@@ -80,6 +83,9 @@ What matched:
    * The 2.22 cadence (`protocol/walkcadence.rs`) is what the 2.17 capture shows.
    * The same cadence explains the east crossing value: real `X=0.5, GMAPLEVELX=1` against Seihai `X=0`.
      That is the 2.22 note in `gmap-order.md`, now seen in 2.17 too.
+   * Fixed: `WalkCadence::for_version(V217)` now gives the 2.22 sender with 3.04's one-tick stop, which
+     is what the five free stops (not at a wall) in the two 2.17 `gmap_cross` captures show. The east crossing value is not
+     changed by this; it is still the open 2.22 note.
 5. **Login frame bundling.**
    * Real 2.17 sends `LOGIN`, `LANGUAGE` and `TAMPERCHECK` in one TCP frame.
    * Seihai sends `LOGIN` alone, then `LANGUAGE` (and `TAMPERCHECK`) in a second frame.

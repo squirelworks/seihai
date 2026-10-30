@@ -24,7 +24,7 @@
 use super::profile::{
     Basis, BuiltIn, ChatFace, ChatText, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
-    ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
+    ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_217, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304, LOGIN_3153};
@@ -785,17 +785,18 @@ pub const CHAIN: &[Step] = &[
             pli: IdDelta::plus(&[39, 40, 43, 44, 45]),
             tampercheck: Some(true),
             tamper: Some(Some(TAMPER_217)),
+            showimg: Some(Some(SHOWIMG_217)),
             login: Some(Some(LOGIN_217)),
             npc_max: Some(73),
             heights: Some(true),
             ..Delta::NONE
         },
-        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, and the post-login frame seen in the lab (image checks, process list, props up to the language)",
+        source: "binary (2.17.1): TAMPERCHECK (39) with its constant, SHOOT (40), MUTEPLAYER (43), process-list pair (44, 45), PLO 175 to 185, level heights, NPC props to 73, the post-login frame seen in the lab (image checks, process list, props up to the language), and id 24 about every 5.1 s when alone (lab, 2026-10-30)",
         unknown: &[
             Unknown { area: "props", what: "other-player prop parser was not read; the 2.22 set is used" },
             Unknown { area: "ui", what: "GS1 command count was not read; 161 is carried" },
             Unknown { area: "login", what: "the real 2.17.1 login to a lab listserver was captured: shape B (one plain zlib frame, id 0 `newmain` then id 1 with the account, no token), which Seihai sends. What the public service does for a real 2.17.1 was not observed; Seihai's frame got a legacy list on 14923 and no reply on 14922 on 2026-10-25 (with the default zlib header 78 9C; Seihai now sends 78 DA like the real client, not yet run)" },
-            Unknown { area: "showimg", what: "the binary has the id 24 sender with 2.22's send test, and the solo 90 s capture saw none, as that test predicts; the period and a two-player run are not observed, so none is sent" },
+            Unknown { area: "showimg", what: "the binary reading gave 2.17.1 2.22's send test (others in the level), and a solo 90 s capture on 2026-10-25 saw no id 24; the five solo 2026-10-30 runs on two lab servers saw it every 5.1 s, so Seihai follows those. Why the two disagree is not known, and the gap while walking (6.5 to 9.3 s) is not modelled" },
         ],
     },
     Step {
@@ -1121,8 +1122,8 @@ fn login_text(l: &Option<LoginInfo>) -> String {
             },
             if l.idle_gani { ", idle.gani at once" } else { "" },
             if l.status_icons { ", status icons" } else { "" },
-            match l.after_level {
-                Some(d) => format!(", {} ms after the level (files and process list only after 182)", d.as_millis()),
+            match l.frame_after_level {
+                Some(d) => format!(", {} ms after the level without 182", d.as_millis()),
                 None => String::new(),
             },
         ),
@@ -1348,7 +1349,8 @@ mod tests {
     /// changed on purpose afterwards: every listserver is now `Listserver {
     /// host, port, kind, status, built_in, token }` on listserver.graal.in
     /// (classic login 14923, gen-5 login 14922; the old rows had the bare port the
-    /// build carries, mostly the dead 14921).
+    /// build carries, mostly the dead 14921). 2.17 then got its id 24
+    /// sender (lab, 2026-10-30, `documentation/difftest-217.md` item 3).
     #[test]
     fn chain_equals_the_hand_written_rows() {
         let mut seen = 0;

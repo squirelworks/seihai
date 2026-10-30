@@ -112,8 +112,8 @@ fn objects_are_read_with_the_client_parser() {
     assert_eq!(objs.iter().filter(|o| o.kind == ObjectKind::Sign).count(), level.signs.len());
     assert_eq!(objs.iter().filter(|o| o.kind == ObjectKind::Chest).count(), level.chests.len());
     let link = &objs[0];
-    assert_eq!((link.kind, link.x, link.y, link.w, link.h, link.name.as_str()), (ObjectKind::Link, 41.0, 21.0, 2.0, 1.0, "new2.nw"));
-    assert_eq!(link.arrival, ("30".to_string(), "47".to_string()));
+    assert_eq!((link.kind, link.x, link.y, link.w, link.h, link.name.as_str()), (ObjectKind::Link, 41.0, 20.0, 2.0, 2.0, "new2.nw"));
+    assert_eq!(link.arrival, ("31".to_string(), "47".to_string()));
     let sign = objs.iter().find(|o| o.kind == ObjectKind::Sign).unwrap();
     assert_eq!(sign.first_line, "Welcome to Seihai!");
 
@@ -135,7 +135,7 @@ fn moving_and_editing_rewrites_only_that_record() {
     let mut doc = Document::parse(original.as_bytes()).unwrap();
     doc.edit_object(0, ObjectEdit::Move(40.4, 22.0)).unwrap();
     let after = String::from_utf8(doc.to_bytes()).unwrap();
-    assert_eq!(changed_lines(&original, &after), vec![(65, "LINK new2.nw 41 21 2 1 30 47".into(), "LINK new2.nw 40 22 2 1 30 47".into())], "whole tiles for a link");
+    assert_eq!(changed_lines(&original, &after), vec![(65, "LINK new2.nw 41 20 2 2 31 47".into(), "LINK new2.nw 40 22 2 2 31 47".into())], "whole tiles for a link");
     assert!(doc.is_modified());
 
     doc.edit_object(0, ObjectEdit::LinkArrival("playerx".into(), "playery+10".into())).unwrap();
@@ -395,14 +395,14 @@ fn window_objects_tool_drags_a_link_and_adds_at_the_clicked_cell() {
     let mut h = Harness::new(Some(&path));
     h.app.editor.tool = Tool::Objects;
     h.frame();
-    // the first link is 2 x 1 at (41, 21); grab it in its middle and drag 3 right, 2 down
-    let (a, b) = (h.board_at(42.0, 21.5), h.board_at(45.0, 23.5));
+    // the first link is 2 x 2 at (41, 20); grab it in its middle and drag 3 right, 2 down
+    let (a, b) = (h.board_at(42.0, 21.0), h.board_at(45.0, 23.0));
     h.press(a);
     assert_eq!(h.app.editor.selected, Some(0));
     h.move_to(b);
     h.release(b);
     let link = h.app.editor.doc().unwrap().object(0).unwrap();
-    assert_eq!((link.x, link.y), (44.0, 23.0));
+    assert_eq!((link.x, link.y), (44.0, 22.0));
     assert!(h.app.editor.has_unsaved());
     // a click on an empty cell deselects and sets where new objects go
     let e = h.board_at(5.5, 6.5);
