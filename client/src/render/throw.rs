@@ -59,6 +59,9 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
     for p in &session.blast {
         draw_sprite(fb, sprites, tables, p.sprite, px(p.x) - cam_x, px(p.y) - cam_y);
     }
+    for a in &session.arrows {
+        draw_sprite(fb, sprites, tables, a.sprite, px(a.x) - cam_x, px(a.y) - cam_y);
+    }
     for l in &session.leaps {
         if l.frame < 0 {
             continue;

@@ -1,5 +1,6 @@
 //! Seihai — open Graal Reborn-compatible client
 
+pub mod arrows;
 pub mod assets;
 pub mod bombs;
 pub mod chatlists;
