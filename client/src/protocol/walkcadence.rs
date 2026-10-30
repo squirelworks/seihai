@@ -18,6 +18,12 @@
 //! `idle` one tick after the last step, with that step's position, where
 //! 2.22 waits two.
 //!
+//! The real 2.17.1 (lab, 2026-10-30, `documentation/difftest-217.md` item 4)
+//! walks the same way: `walk` + X + `SPRITE`, then the moving axis alone
+//! every 100 ms. Its stop is 3.04's: a stop on a half tile goes out with
+//! `idle` in the next slot (`X=36`, then `GANI=idle, X=35.5` 100 ms later),
+//! and a stop on a whole tile sends `idle` alone in the next slot.
+//!
 //! The 2.31 client sends `X2`/`Y2` every 50 ms instead, and is not handled
 //! here.
 
@@ -33,6 +39,9 @@ pub const INTERVAL_TICKS: u32 = 2;
 pub const IDLE_AFTER_TICKS: u32 = 2;
 /// The same for the real 3.04: one tick (one stop, lab 2026-10-30).
 pub const IDLE_AFTER_TICKS_304: u32 = 1;
+/// The same for the real 2.17.1: one tick, as 3.04 (five stops away from a wall in the two
+/// 2026-10-30 `gmap_cross` captures).
+pub const IDLE_AFTER_TICKS_217: u32 = 1;
 
 /// What the player shows, as the props would carry it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,9 +74,10 @@ pub struct WalkCadence {
 }
 
 impl WalkCadence {
-    /// The builds this sender is for: 2.22 and 3.04.
+    /// The builds this sender is for: 2.17, 2.22 and 3.04.
     pub fn for_version(v: ClientVersion) -> Option<Self> {
         let idle_after = match v {
+            ClientVersion::V217 => IDLE_AFTER_TICKS_217,
             ClientVersion::V222 => IDLE_AFTER_TICKS,
             ClientVersion::V304 => IDLE_AFTER_TICKS_304,
             _ => return None,
@@ -200,6 +210,32 @@ mod tests {
         want.extend((1..=10).map(|i| (2 * i, format!("/{}", hx(30.5 + i as f32)))));
         want.push((22, format!("*$idle/{}", hx(41.0))));
         assert_eq!(run_as(ClientVersion::V304, 30.0, &t, 3), want);
+    }
+
+    /// Lab 2026-10-30, real 2.17.1 (`2.17-gmap_cross-real.trace.tsv`): left
+    /// from 47.5 to 35.5; X every 100 ms on the whole tiles, and the last
+    /// step, a tick after 36, goes with `idle` (`X=36` at 21019 ms, then
+    /// `GANI=idle, X=35.5` at 21119 ms).
+    #[test]
+    fn the_217_walk_stops_with_idle_in_the_same_message() {
+        let mut t: Vec<(f32, &str)> = (1..=24).map(|i| (47.5 - 0.5 * i as f32, "walk")).collect();
+        t.extend([(35.5, "idle"), (35.5, "idle"), (35.5, "idle")]);
+        let mut want: Vec<(usize, String)> = vec![(0, format!("*$walk/{}1!", hx(47.0)))];
+        want.extend((1..=11).map(|i| (2 * i, format!("/{}", hx(47.0 - i as f32)))));
+        want.push((24, format!("*$idle/{}", hx(35.5))));
+        assert_eq!(run_as(ClientVersion::V217, 47.5, &t, 1), want);
+    }
+
+    /// Real 2.17.1, a stop on a whole tile (`Y=52` at 31603 ms in
+    /// `2.17-gmap_cross-real-old-cached.trace.tsv`): `idle` alone 100 ms later.
+    #[test]
+    fn the_217_walk_stopping_on_a_whole_tile_sends_idle_alone() {
+        let mut t: Vec<(f32, &str)> = (1..=5).map(|i| (30.5 + 0.5 * i as f32, "walk")).collect();
+        t.extend([(33.0, "idle"), (33.0, "idle"), (33.0, "idle")]);
+        assert_eq!(
+            run_as(ClientVersion::V217, 30.5, &t, 3),
+            vec![(0, format!("*$walk/{}1#", hx(31.0))), (2, format!("/{}", hx(32.0))), (4, format!("/{}", hx(33.0))), (6, "*$idle".to_string())]
+        );
     }
 
     #[test]

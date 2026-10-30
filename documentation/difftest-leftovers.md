@@ -94,7 +94,9 @@ Decoded from the real traces (`gmap_cross`, `door_warp`):
 |---|---|---|---|---|
 | 2.22 | `GANI=walk, X (or Y), SPRITE` | `X` (or `Y`) alone, one tile further each message | `GANI=idle` | one message per 100 ms (every second 50 ms step); the `gr` flags go per step |
 | 2.31 | `GANI=walk, SPRITE, X2` (or `Y2`) | `X2` (or `Y2`) alone, half a tile | `GANI=idle` | one message per 50 ms |
+| 2.17 | as 2.22 | as 2.22 | a half-tile stop: the last position and `GANI=idle` in one message; a whole-tile stop: `GANI=idle` alone | as 2.22 (`difftest-217.md` item 4) |
 | Seihai 2.22 | as the real 2.22 | as the real 2.22 | the last position, then `GANI=idle` | as the real 2.22 (`protocol/walkcadence.rs`) |
+| Seihai 2.17 | as the real 2.17 | as the real 2.17 | as the real 2.17 (3.04's one-tick stop) | as the real 2.22 (`protocol/walkcadence.rs`) |
 | Seihai, other builds | `X, Y, SPRITE` | `X, Y, SPRITE` | nothing | one message per step (50 ms after `walk-pace.md`) |
 
 2.22 is now done. Lab, 2026-10-30, on the lab GServer-v2: the real 2.22 walked

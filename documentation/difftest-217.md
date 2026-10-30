@@ -76,6 +76,9 @@ What matched:
    * The 2.22 cadence (`protocol/walkcadence.rs`) is what the 2.17 capture shows.
    * The same cadence explains the east crossing value: real `X=0.5, GMAPLEVELX=1` against Seihai `X=0`.
      That is the 2.22 note in `gmap-order.md`, now seen in 2.17 too.
+   * Fixed: `WalkCadence::for_version(V217)` now gives the 2.22 sender with 3.04's one-tick stop, which
+     is what the five free stops (not at a wall) in the two 2.17 `gmap_cross` captures show. The east crossing value is not
+     changed by this; it is still the open 2.22 note.
 5. **Login frame bundling.**
    * Real 2.17 sends `LOGIN`, `LANGUAGE` and `TAMPERCHECK` in one TCP frame.
    * Seihai sends `LOGIN` alone, then `LANGUAGE` (and `TAMPERCHECK`) in a second frame.
