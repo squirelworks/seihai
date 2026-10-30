@@ -89,13 +89,9 @@ exactly.
 
 ## The device backend
 
-Real output is the `audio-rodio` cargo feature (`rodio` 0.19 on `cpal`). It is on by default. It is
-**not built or run**. The box this was written on has no sound card, no
-`pkg-config` and no ALSA development files, so `cpal` cannot build there, and a
-headless box could not play anyway. `cargo build -p seihai` and the tests do not
-touch it. A plain `cargo build --release -p seihai` includes it. On a machine with audio
-is the real test of `rodio_out.rs`. If no device opens at run time, the engine
-falls back to the null backend and logs one line.
+Real output is the `audio-rodio` cargo feature (`rodio` 0.19 on `cpal`). It is on by default; `--no-default-features --features dev` compiles it out. On Linux it needs the ALSA development files and `pkg-config` to build. If no device opens at run time, the engine falls back to the null backend and logs one line.
+
+The output stream runs on its own thread (`seihai-audio`) and the engine sends it play and stop commands over a channel. On Windows the launcher's window (winit, drag and drop on) makes the main thread a single-threaded COM apartment, and a WASAPI stream opened on that thread opened fine but played nothing. The first Windows run (2026-10-30, Realtek headphones, Graal the Adventure on 2.22) was silent that way. With the stream on its own thread, footsteps and script sounds played.
 
 ## Unresolved
 
@@ -117,8 +113,6 @@ falls back to the null backend and logs one line.
 - **Music** (MIDI, MP3, BASS streams on 2.17+), `setmusicvolume`, and the 2.22
   volume options (`sfxvolume`, `midivolume`...) are not handled. The 2.22
   extension-to-backend dispatch is still untraced.
-- **Not run against a live session.** Tests cover the engine, the decoder, the
-  parser and the session; the GUI loop was not run with a real device.
 
 ## Sword cue (item 22)
 

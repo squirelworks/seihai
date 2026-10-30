@@ -3,7 +3,8 @@
 //! The output stream lives on its own thread and is told what to do over
 //! a channel. On Windows the launcher's window (winit, with drag and drop)
 //! makes the main thread a single-threaded COM apartment, and a WASAPI
-//! stream opened there stays silent: the device opens but nothing is heard.
+//! stream opened there stays silent: the device opens but nothing is heard
+//! (seen on Windows, 2026-10-30).
 //! A thread of our own starts with no COM apartment, so `cpal` sets up the
 //! one it needs. (`OutputStream` is not `Send` either, so it has to stay on
 //! the thread that made it.)
