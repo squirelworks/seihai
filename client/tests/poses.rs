@@ -477,3 +477,23 @@ fn the_hurt_blink_starts_at_the_hit_or_after_the_hurt_pose() {
     assert!(seen[..31].iter().all(|b| !b));
     assert_eq!(&seen[31..34], [false, true, false]);
 }
+
+#[test]
+fn a_held_arrow_walks_out_of_the_hurt_pose_after_12_ticks() {
+    let mut s = walker();
+    s.combat.set_rules(Some(COMBAT_205));
+    s.set_pose_gani(PoseKind::Hurt, gani("hurt.gani"));
+    s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
+    s.tick_combat(11 * 50);
+    let x = s.player_x;
+    assert!(s.try_move(0.5, 0.0).is_none(), "the arrows are ignored for 11 ticks");
+    assert_eq!(s.player_x, x);
+    assert_eq!(pose(&s).map(|p| p.0), Some(PoseKind::Hurt));
+    s.tick_combat(50);
+    assert!(s.try_move(0.5, 0.0).is_some(), "the 12th tick walks");
+    assert_eq!(pose(&s).map(|p| p.0), Some(PoseKind::Walk));
+    // Standing again before hurt mode ends: idle, not hurt.
+    assert!(s.stop_walking());
+    assert_eq!(pose(&s).map(|p| p.0), Some(PoseKind::Idle));
+    assert!(s.combat.is_hurt());
+}

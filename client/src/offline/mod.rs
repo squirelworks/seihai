@@ -173,6 +173,9 @@ pub struct OfflineSession {
     pub lift_ticks: Option<u32>,
     /// The 50 ms clock of [`Self::tick_poses`].
     pub(crate) pose_clock_ms: u64,
+    /// A held arrow walked the player out of the hurt pose in this hurt
+    /// mode.
+    pub(crate) hurt_walked: bool,
     /// Hiding under the carried object (see `offline/hide.rs`).
     pub hidden: bool,
     /// Steps walked while hidden, for the hidden walk sprite.
@@ -453,6 +456,7 @@ impl OfflineSession {
             swim_ticks: 0,
             lift_ticks: None,
             pose_clock_ms: 0,
+            hurt_walked: false,
             hidden: false,
             hide_steps: 0,
             swim_was_moving: false,
@@ -1643,6 +1647,14 @@ impl OfflineSession {
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
         if dx == 0.0 && dy == 0.0 || self.life.is_dead() || self.jumping() {
             return None;
+        }
+        // Hurt: the arrows are ignored for the first ticks; after that a
+        // held arrow walks again and the walk replaces the hurt pose.
+        if let Some(ms) = self.combat.hurt_elapsed_ms() {
+            if ms / crate::pose::GANI_STEP_MS < crate::pose::HURT_WALK_AFTER_TICKS {
+                return None;
+            }
+            self.hurt_walked = true;
         }
         if self.pushpull.grab.is_some() {
             self.grab_arrow(dx, dy);
