@@ -125,8 +125,13 @@ answered with `FILESENDFAILED`). Each run changed the server's head or status:
 | then | `UDPPORT` (a new port each run), `ADDITFLAGS` 0 | the same |
 
 Seihai builds the message in `classic_login_props_message` with those rules.
-The test `classic_login_props_match_the_real_1_33_and_1_39` holds the real
-bytes of nine of the runs. Against the same stub, Seihai 1.33 and 1.39 sent the
+The real 1.34 to 1.38 were run once each with head `head3.png` and status 20
+(lab, 2026-10-30). All five sent `head3.png` as the real 1.39 does, so Seihai
+sends the name from 1.34 on and `c(0)` before it. The numbered-head rule
+(`head1.gif` as `c(1)`) was only seen in 1.39 and is taken to hold from 1.34.
+
+The test `classic_login_props_match_the_real_1_33_to_1_39` holds the real
+bytes of fourteen of the runs. Against the same stub, Seihai 1.33 and 1.39 sent the
 real clients' bytes exactly, apart from `UDPPORT`: Seihai binds no UDP socket,
 so it leaves that prop out, as for the later builds.
 
