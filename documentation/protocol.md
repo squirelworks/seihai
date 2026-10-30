@@ -409,9 +409,10 @@ a gmap, sends no cell prop and no 35.
 
 **Not done or not matching the real client.**
 
-- The `gr.x`/`gr.y` flags (`PLI_SETFLAG`, global position) are not sent. The
-  captures do not say whether the client or a server movement script sends
-  them; GServer does not need them for a crossing.
+- The `gr.x`/`gr.y` flags come from GServer-v2's `-gr_movement` weapon, not
+  from the client (lab, 2026-10-30; `gr-flags.md`). Seihai sends them when that
+  weapon runs, but with the position in the current cell, where the real 2.22
+  uses the whole-map position.
 - The real client sends the south crossing's flag first and the props on the
   next half-step; Seihai sends the props in the crossing step's frame.
 - Neighbour levels draw tiles only. Their NPCs, signs, chests and links are
