@@ -315,6 +315,13 @@ Nothing below is invented as if known; each is a labelled constant or a gap.
   when one of 12 body-box probes is blocked (`damage-respawn.md`). Tile
   `Blocking` and chests block; a walk-through (wallhack) session skips the
   probes. A push across a gmap cell edge crosses it like a walk step.
+  The new position goes out after each step, except as 2.00: the real 2.00
+  moves a tile every 50 ms but its props carry X/Y every 100 ms, on steps 1,
+  3 and 5 (lab, 2026-10-30 lan-200j, raw frame read: `18.5`, `16.5`, `14.5`;
+  the frames between hold only its `gr.x`/`gr.y` flags), so Seihai's 2.00
+  sends on those steps (`OfflineSession::knock_send_steps`). The real one
+  puts step 1 in the frame of the hit with CURPOWER and GANI `hurt`; Seihai
+  sends it one tick later.
 - **Other players' bombs, explosions and shots** are applied (see "Bombs,
   explosions and shots" below). The `playerhurt` script event is not done.
 - **Preconditions of a swing** the notes list and Seihai skips: the level or

@@ -1082,6 +1082,9 @@ fn main() {
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
     session.set_mannerisms(profile.mannerisms);
+    // The real 2.00's props carry the knockback position every 100 ms,
+    // every other step (lab, 2026-10-30 lan-200j).
+    session.knock_send_steps = if version == ClientVersion::V200 { 2 } else { 1 };
     // Who drops bush and pot items: the 1.x roll, or the server.
     session.set_drops(profile.drops);
     let view_w = 40u32;
