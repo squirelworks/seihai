@@ -1003,6 +1003,7 @@ fn main() {
     // The death sequence of this build (none for builds before 2.05).
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
+    session.set_mannerisms(profile.mannerisms);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -1155,10 +1156,16 @@ fn main() {
                     shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
                     attrs: pose.filter(|_| gani_attrs).map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs)).unwrap_or_default(),
                 };
+                // The hurt blink: on its off ticks only the shadow (the
+                // SPRITES sheet's placements) is drawn.
+                let shadow_only = seihai::render::PoseSheets { sprites: sheets.sprites, ..Default::default() };
+                let sheets = if session.blink_off() { &shadow_only } else { &sheets };
                 if let Some(p) = pose {
-                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
+                    seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, sheets, dx, dy);
                 }
             }
+            // The hurt blink without GANIs: nothing on the off ticks.
+            (Some(_), Some(_)) if session.blink_off() => {}
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
                 b,
@@ -1999,6 +2006,8 @@ fn main() {
             }
             // The swim stroke and the lift run on the tick, moving or not.
             dirty |= session.tick_poses(dt);
+            // The hurt blink changes the picture every tick of hurt mode.
+            dirty |= session.combat.is_hurt();
             // Push, grab and pull have their own sprite numbers.
             let pp_sprite = session.pushpull_sprite_s();
             if pp_sprite != last_pp_sprite {

@@ -171,6 +171,11 @@ pub struct OfflineSession {
     pub lift_ticks: Option<u32>,
     /// The 50 ms clock of [`Self::tick_poses`].
     pub(crate) pose_clock_ms: u64,
+    /// The swim stroke was running with the player moving, last tick.
+    pub(crate) swim_was_moving: bool,
+    /// How this build moves and looks (blink, pull release, swim when
+    /// still): see [`crate::protocol::Mannerisms`].
+    pub mannerisms: crate::protocol::Mannerisms,
     /// The sword, hurt and sit animations (see [`crate::pose`]).
     pub poses: crate::pose::PoseGanis,
     /// GANIs for animated NPCs, by lower-case name (see [`crate::npcart`]).
@@ -442,6 +447,8 @@ impl OfflineSession {
             swim_ticks: 0,
             lift_ticks: None,
             pose_clock_ms: 0,
+            swim_was_moving: false,
+            mannerisms: crate::protocol::MANNER_205,
             poses: crate::pose::PoseGanis::default(),
             sitting: false,
             screen_effect: [0.0; 4],
@@ -3654,6 +3661,29 @@ mod tests {
         }).collect();
         assert_eq!(&frames[..5], [0, 1, 1, 2, 2]);
         assert_eq!(frames[15], 0, "a 16-tick stroke");
+    }
+
+    #[test]
+    fn floating_still_the_stroke_runs_restarts_or_freezes_by_build() {
+        use crate::protocol::{MANNER_141, MANNER_205, MANNER_222};
+        let run = |m| {
+            let mut s = session_at(level(|_, _| WATER), 30.5, 30.5);
+            s.set_mannerisms(m);
+            let text = format!("SINGLEDIRECTION\nLOOP\nANI\n{}ANIEND\n", "1 0 0\nWAIT 1\n\n".repeat(8));
+            s.set_swim_gani(GaniPlayer::new(Gani::parse(&text).unwrap()));
+            s.try_move(0.5, 0.0);
+            for _ in 0..6 {
+                s.tick_poses(50);
+            }
+            s.stop_walking();
+            (0..4).map(|_| {
+                s.tick_poses(50);
+                s.swim_gani.as_ref().unwrap().frame
+            }).collect::<Vec<_>>()
+        };
+        assert_eq!(run(MANNER_205), [3, 4, 4, 5], "2.05 runs on");
+        assert_eq!(run(MANNER_222), [0, 0, 1, 1], "2.22 restarts at the stop");
+        assert_eq!(run(MANNER_141), [0, 0, 0, 0], "NewMain 1.41 freezes");
     }
     // ---- throwing -----------------------------------------------------
 

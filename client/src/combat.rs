@@ -526,6 +526,9 @@ pub struct CombatState {
     /// Knockback steps that came due in the ticks just run; the session
     /// takes them with [`CombatState::take_knock_steps`].
     knock_steps: Vec<(f32, f32)>,
+    /// Knockback steps per hit when the build differs from
+    /// [`KNOCKBACK_TICKS`] (1.39: 4).
+    knockback_ticks: Option<u16>,
 }
 
 /// One client tick, in milliseconds.
@@ -540,9 +543,16 @@ impl CombatState {
         self.rules.as_ref()
     }
 
+    /// Knockback steps per hit, the build's own (`Mannerisms`).
+    pub fn set_knockback_ticks(&mut self, n: u16) {
+        self.knockback_ticks = Some(n);
+    }
+
     /// Take the rules of another build. Ends a swing and a hurt in progress.
     pub fn set_rules(&mut self, rules: Option<CombatRules>) {
+        let k = self.knockback_ticks;
         *self = CombatState::new(rules);
+        self.knockback_ticks = k;
     }
 
     pub fn is_hurt(&self) -> bool {
@@ -637,7 +647,7 @@ impl CombatState {
                 }
                 self.hurt_left -= 1;
                 if let Some(k) = self.knock {
-                    if self.hurt_left + KNOCKBACK_TICKS >= r.hurt_ticks {
+                    if self.hurt_left + self.knockback_ticks.unwrap_or(KNOCKBACK_TICKS) >= r.hurt_ticks {
                         self.knock_steps.push(k);
                     } else {
                         self.knock = None;

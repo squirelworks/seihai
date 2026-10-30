@@ -62,6 +62,11 @@ use crate::sound::SoundEvent;
 /// One GANI tick: a step is shown for `1 + WAIT` of these.
 pub const GANI_STEP_MS: u64 = 50;
 
+/// The 1.39 hurt pose, built into the client: about 10 ticks (video, ±1).
+/// Used for the blink of a build that blinks after the hurt pose when no
+/// `hurt.gani` is loaded.
+pub const HURT_POSE_139_TICKS: usize = 10;
+
 /// The loaded pose animations.
 #[derive(Debug, Clone, Default)]
 pub struct PoseGanis {
@@ -209,6 +214,25 @@ impl OfflineSession {
         }
     }
 
+    /// Take the mannerisms of a build.
+    pub fn set_mannerisms(&mut self, m: crate::protocol::Mannerisms) {
+        self.mannerisms = m;
+        self.combat.set_knockback_ticks(m.knockback_ticks);
+    }
+
+    /// The hurt blink leaves the figure out this tick: only its shadow is
+    /// drawn. Every other tick of hurt mode, from the hit (1.41 on) or once
+    /// the hurt pose is over (1.39).
+    pub fn blink_off(&self) -> bool {
+        let Some(ms) = self.combat.hurt_elapsed_ms() else { return false };
+        let tick = (ms / GANI_STEP_MS) as usize;
+        let from = match self.mannerisms.blink {
+            crate::protocol::Blink::FromHit => 0,
+            crate::protocol::Blink::AfterHurtPose => self.poses.hurt.as_ref().map_or(HURT_POSE_139_TICKS, |g| g.total_ticks()),
+        };
+        tick >= from && (tick - from) % 2 == 1
+    }
+
     /// Advance the poses that run on the 50 ms tick, not on steps taken:
     /// the swim stroke (moving or not) and the lift. Each swim step entered
     /// queues its `PLAYSOUND` cues. True if the drawn pose may have changed.
@@ -231,8 +255,26 @@ impl OfflineSession {
                 }
             }
             if swimming {
-                self.swim_ticks += 1;
+                use crate::protocol::SwimStill;
+                let moving = self.walking;
+                let stopped = std::mem::replace(&mut self.swim_was_moving, moving) && !moving;
                 let Some(p) = self.swim_gani.as_mut() else { continue };
+                match self.mannerisms.swim_still {
+                    // NewMain 1.41: back to the first step and held.
+                    SwimStill::Freezes if !moving => {
+                        self.swim_ticks = 0;
+                        p.frame = 0;
+                        continue;
+                    }
+                    // 2.22: back to the first step at the stop, then on.
+                    SwimStill::Restarts if stopped => {
+                        self.swim_ticks = 0;
+                        p.frame = 0;
+                        continue;
+                    }
+                    _ => {}
+                }
+                self.swim_ticks += 1;
                 let total = p.gani.total_ticks().max(1);
                 let t = self.swim_ticks % total;
                 p.frame = p.gani.frame_at_tick(t, true);
@@ -284,7 +326,7 @@ impl OfflineSession {
             return at_tick(PoseKind::Pull, &self.poses.pull, self.pushpull.pull_ticks as usize, true)
                 .or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
-        if self.pushpull.grab.is_some() {
+        if self.pushpull.grab.is_some() || self.pushpull.grab_shown {
             return pick(PoseKind::Grab, &self.poses.grab, 0).or_else(|| pick(PoseKind::Idle, &self.poses.idle, 0));
         }
         // Holding an object: the carry poses (the 2.05 client plays its
