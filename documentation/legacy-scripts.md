@@ -33,13 +33,13 @@ The current engine in `client/src/scripting/engine/` already implements a practi
 
 - **Image ID management** — Classic HUDs and shops fight over the ~300+ band; the Ash runtime notes document the bands and collision patterns.
 - **`toweapons` / weapon-bar persistence** and `weaponfired` input — larency inventory and shop scripts are the clearest examples.
-- **`board[]` / `tiles[]` reads** — many props and triggers depend on them; level data is already loaded.
+- **`board[]` / `tiles[]` reads** — many props and triggers depend on them. Done: `board-reads.md`.
 - **Timeout-driven AI and growth** — smartbaddy, farm scripts, and minigames show typical rates (0.05 for AI/projectiles, 0.1–0.2 for menus, 0.5–1.0 for idle).
 - **Client-authority patterns** — `client.*`, `save[]`, and local-only state are heavily used; useful for deciding what the offline host should simulate.
 
 Suggested next steps for the engine (for review by the Seihai development project):
 
-1. Wire `board`/`tiles` reads to the loaded level.
+1. Wire `board`/`tiles` reads to the loaded level. (Done: `board-reads.md`.)
 2. Improve `showimg`/`hideimg`/`setimg` with reserved ID bands or a simple manager.
 3. Add a basic weapon-bar / hotbar host path so `toweapons` and `weaponfired` can drive inventory UIs offline.
 4. Use the documented larency and Phoenix scripts as a regression corpus.
