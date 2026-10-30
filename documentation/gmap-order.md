@@ -91,6 +91,14 @@ it, running their `created`. A record now belongs to the level being sent (the l
 and only the player's level takes updates as they come; a neighbour's wait in `server_npcs` until it is
 entered. Test: `a_neighbours_npcs_are_kept_for_the_neighbour`.
 
+The third rerun showed GANI leaving `minipw_1_1` and the full first-entry set coming back into it. In the
+game loop the step that crosses moves the session into the new cell at once, but the network side's cell
+(and `loaded_level`) change only later in the same frame, in the crossing block. The NPC link and the
+script load, which run in between, took the old level's name: the old level's server records were put on
+the new level, and its scripts were parked and resumed under the wrong name. On a gmap both now take the
+session's cell level (`OfflineSession::level_name`). No unit test covers the loop order; the lab rerun is
+the check.
+
 Still open: on the **first** entry of a level the 2.22 build sends `VISFLAGS` for each NPC and the props
 its `created` sets (`BODY`), the 2.05 rule (`documentation/ledges-push-pull.md`). The real 2.22 sent no NPC
 props at all on the same walk. Which props 2.22 sends, if any, is not captured, so this is not changed here.
