@@ -1960,6 +1960,37 @@ fn main() {
                         session.throw_remote(sprite, x, y, o.dir, o.id);
                     }
                 }
+                // Other players' bombs, explosions and shots: put in our
+                // cell's coordinates (the sender's cell offset on a gmap),
+                // owned by the sender while it is in the player list.
+                session.present_players = net_state.others.iter().map(|o| o.id).collect();
+                let own_cell = net_state.gmap.as_ref().map(|g| g.cell);
+                let shift = |id: u16| {
+                    net_state.others.iter().find(|o| o.id == id).map_or((0.0, 0.0), |o| {
+                        let (x, y) = o.position_from(own_cell);
+                        (x - o.x, y - o.y)
+                    })
+                };
+                for obj in std::mem::take(&mut net_state.level_objects) {
+                    match obj {
+                        seihai::protocol::LevelObject::Bomb { sender, mut bomb } => {
+                            let (dx, dy) = shift(sender);
+                            (bomb.x, bomb.y) = (bomb.x + dx, bomb.y + dy);
+                            session.receive_bomb(&bomb, Some(sender));
+                        }
+                        seihai::protocol::LevelObject::BombDel { x, y } => session.remove_bomb(x, y),
+                        seihai::protocol::LevelObject::Explosion { sender, mut explosion } => {
+                            let (dx, dy) = shift(sender);
+                            (explosion.x, explosion.y) = (explosion.x + dx, explosion.y + dy);
+                            session.receive_explosion(&explosion, Some(sender));
+                        }
+                        seihai::protocol::LevelObject::Arrow { sender, mut arrow } => {
+                            let (dx, dy) = shift(sender);
+                            (arrow.x, arrow.y) = (arrow.x + dx, arrow.y + dy);
+                            session.receive_arrow(&arrow, Some(sender));
+                        }
+                    }
+                }
                 if entered || (warped && session.warp_pending.is_some()) {
                     // Arrival: the server's position is final. Links stay
                     // quiet until the player moves off it.
