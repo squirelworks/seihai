@@ -108,14 +108,34 @@ Checked with the real 2.05 rev 2 client and Seihai against the lab stub (`graal-
 
 Each push sent trigger, own Y, then the NPC's Y, in one frame. GServer-v2 passes `PLI_NPCPROPS` on to the other players in the level, so they see the NPC where it was pushed.
 
-The client also sent VISFLAGS (13) with every first reply: 81 when the server gave none, 16 when the server gave 0. Those bits are not understood yet.
+**VISFLAGS, IMAGE and MESSAGE.** A second round with one NPC per case:
 
-**Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends X, Y and BLOCKFLAGS when they differ from what the server last said (`offline/servernpcs.rs`): the same bytes as the real client for the BLOCKFLAGS after `canbepushed; canbepulled;` and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
+| server VISFLAGS | script | what 2.05 sent |
+|---|---|---|
+| none | `//` | VISFLAGS 81 |
+| 0 | `//` | VISFLAGS 16 |
+| 1 | `//` | VISFLAGS 17 |
+| 64 | `//` | VISFLAGS 80 |
+| 16 or 81 | `//` | nothing |
+| none | `hide` | VISFLAGS 80 |
+| 1 | `hide` | VISFLAGS 16 |
+| none | `drawoverplayer` | VISFLAGS 83 |
+| none | `drawunderplayer` | VISFLAGS 85 |
+| none | `drawaslight` | VISFLAGS 81 |
+| none | `setimg bomb1.png` | IMAGE (0) `bomb1.png`, VISFLAGS 81 |
+| none | `message hi` | VISFLAGS 81, MESSAGE (15) `hi` |
+| none | `message hi; message ;` | VISFLAGS 81 (no MESSAGE: it is empty again) |
+| none | `showcharacter` | IMAGE `#c#`, GANI `idle`, VISFLAGS 81, head 0, body `body.png` |
+
+So VISFLAGS is 1 for shown, 2 for `drawoverplayer` and 4 for `drawunderplayer`. The client sets 16 on every NPC it reports and keeps any other bit the server gave. With no server value it starts from 65 (64 plus shown). Props go out in prop-id order. A prop is sent only when it differs from what the server last said.
+
+**Seihai** now reads `PLO_NPCPROPS` (`protocol/npcprops.rs`). On a level from the server's board the NPC is added to the level, drawn and scripted; on a level from a local file the file's NPC with the same image and position takes the server's id instead. Seihai then sends IMAGE, X, Y, VISFLAGS, BLOCKFLAGS and MESSAGE when they differ from what the server last said (`offline/servernpcs.rs`). Against the stub it sent the same values as the real client for every row of both tables above (except `showcharacter`), and for three pushes up. An update from the server (another player pushed it) moves the NPC and is not sent back.
 
 ## Open
 
 * What the 2.05 client draws right after A is let go while the pull gani is on was not settled; Seihai goes back to idle.
-* VISFLAGS and MESSAGE in the NPC prop sync: Seihai sends neither yet.
+* A `showcharacter` NPC's character props (IMAGE `#c#`, GANI, head, body) are not sent; Seihai draws those NPCs by animation.
+* Seihai keeps an NPC's `message` text but still shows it in its old place, not above the NPC.
 * The `pushed` / `pulled` trigger to UDP peers (id 26) is not sent.
 * Blocking on every NPC that blocks, which needs the NPC image sizes in the session.
 * A jump across a gmap edge: 2.05 shifts the jump's start point when the level changes in the air; Seihai moves into the next cell when it lands.

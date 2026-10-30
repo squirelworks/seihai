@@ -3,17 +3,33 @@
 //! Both ways the payload is `GINT3 id`, then props as `GCHAR prop id` and
 //! a value. The prop ids and value shapes are GServer-v2's (`TNPC.h`); the
 //! 2.05 behaviour was checked in the lab (`documentation/ledges-push-pull.md`).
-//! Only image, script, position and the two flag bytes are kept; the other
+//! Only image, script, position, the two flag bytes and the message are kept; the other
 //! props of the pre-2.2 table are skipped by their length, and reading stops
 //! at a prop whose length is not known.
 
 use super::dispatch::{latin1, read_gint3, read_gshort, script_text};
 
+/// `NPCPROP_IMAGE` (0): `GCHAR` length and the file name.
+pub const NPCPROP_IMAGE: u8 = 0;
 /// `NPCPROP_X` (2) and `NPCPROP_Y` (3): `GCHAR` in half tiles.
 pub const NPCPROP_X: u8 = 2;
 pub const NPCPROP_Y: u8 = 3;
+/// `NPCPROP_VISFLAGS` (13), see [`VIS_VISIBLE`] and the others.
+pub const NPCPROP_VISFLAGS: u8 = 13;
 /// `NPCPROP_BLOCKFLAGS` (14), see [`BLOCK_DONTBLOCK`] and the others.
 pub const NPCPROP_BLOCKFLAGS: u8 = 14;
+/// `NPCPROP_MESSAGE` (15): `GCHAR` length and the text of `message`.
+pub const NPCPROP_MESSAGE: u8 = 15;
+
+/// Vis flag bits, as the 2.05 client reports them: shown 1,
+/// `drawoverplayer` 2, `drawunderplayer` 4 (`drawaslight` sets none).
+/// It sets [`VIS_CLIENT`] on every NPC it reports, and keeps any other
+/// bit the server gave; with none given it starts from [`VIS_DEFAULT`].
+pub const VIS_VISIBLE: u8 = 1;
+pub const VIS_OVER: u8 = 2;
+pub const VIS_UNDER: u8 = 4;
+pub const VIS_CLIENT: u8 = 16;
+pub const VIS_DEFAULT: u8 = 64 | VIS_VISIBLE;
 
 /// Block flag bits, as the 2.05 client reports them after the NPC's script
 /// ran: `dontblock` 1, `canbepulled` 4, `canbepushed` 8.
@@ -33,6 +49,8 @@ pub struct NpcProps {
     pub y: Option<f32>,
     pub vis_flags: Option<u8>,
     pub block_flags: Option<u8>,
+    /// The NPC's `message` text.
+    pub message: Option<String>,
 }
 
 impl NpcProps {
@@ -45,6 +63,7 @@ impl NpcProps {
         self.y = o.y.or(self.y);
         self.vis_flags = o.vis_flags.or(self.vis_flags);
         self.block_flags = o.block_flags.or(self.block_flags);
+        self.message = o.message.or(self.message.take());
     }
 }
 
@@ -90,6 +109,11 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
                 p.block_flags = Some(gc(i)? as u8);
                 i += 1;
             }
+            15 => {
+                let (s, n) = text(i)?;
+                p.message = Some(s);
+                i += n;
+            }
             // Power, arrows, bombs, glove and bomb power, sprite, saves,
             // alignment, gmap level x / y: one byte.
             4 | 6..=9 | 18 | 23..=33 | 41 | 42 => i += 1,
@@ -119,8 +143,8 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
                 let sp = gc(i)?;
                 i += 1 + sp.saturating_sub(10);
             }
-            // GANI, message, nickname, horse, body, GANI attributes 1 to 5.
-            12 | 15 | 20 | 21 | 35..=40 => i += text(i)?.1,
+            // GANI, nickname, horse, body, GANI attributes 1 to 5.
+            12 | 20 | 21 | 35..=40 => i += text(i)?.1,
             // Head: an index under 100, else 100 + the name's length.
             22 => {
                 let len = gc(i)?;
@@ -135,15 +159,33 @@ pub fn parse_npc_props(b: &[u8], bow_prop12: bool) -> Option<(u32, NpcProps)> {
     Some((id, p))
 }
 
-/// The `PLI_NPCPROPS` (3) message: `GINT3 id`, then `(prop id, GCHAR value)`
-/// pairs, and the newline. The 2.05 client sends the props of a server NPC
-/// that its client-side script changed: X and Y (half tiles) after a push,
-/// a pull or `x = …`, BLOCKFLAGS after `canbepushed` and the like.
-pub fn npc_props_message(id: u32, props: &[(u8, u8)]) -> Vec<u8> {
+/// One prop value for [`npc_props_message`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum PropValue {
+    /// One `GCHAR`.
+    Byte(u8),
+    /// `GCHAR` length, then the text (Latin-1, at most 223 bytes).
+    Text(String),
+}
+
+/// The `PLI_NPCPROPS` (3) message: `GINT3 id`, then each prop id and its
+/// value, and the newline. The 2.05 client sends the props of a server NPC
+/// that its client-side script changed, in prop id order: IMAGE after
+/// `setimg`, X and Y (half tiles) after a push, a pull or `x = …`,
+/// VISFLAGS, BLOCKFLAGS after `canbepushed` and the like, MESSAGE.
+pub fn npc_props_message(id: u32, props: &[(u8, PropValue)]) -> Vec<u8> {
     let mut m = vec![3 + 0x20, ((id >> 14) & 0x7F) as u8 + 0x20, ((id >> 7) & 0x7F) as u8 + 0x20, (id & 0x7F) as u8 + 0x20];
-    for &(prop, v) in props {
+    for (prop, v) in props {
         m.push(prop + 0x20);
-        m.push(v.min(223) + 0x20);
+        match v {
+            PropValue::Byte(b) => m.push((*b).min(223) + 0x20),
+            PropValue::Text(t) => {
+                let mut bytes: Vec<u8> = t.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect();
+                bytes.truncate(223);
+                m.push(bytes.len() as u8 + 0x20);
+                m.extend(bytes);
+            }
+        }
     }
     m.push(b'\n');
     m
@@ -223,8 +265,21 @@ mod tests {
     fn the_message_matches_the_2_05_client() {
         // Lab capture: after a push up the 2.05 client sent `3`, id 1001,
         // Y = 48 half tiles; after `canbepushed; canbepulled;` BLOCKFLAGS 12.
-        assert_eq!(npc_props_message(1001, &[(NPCPROP_Y, 48)]), b"# '\x89#P\n");
-        assert_eq!(npc_props_message(1001, &[(NPCPROP_BLOCKFLAGS, 12)]), b"# '\x89.,\n");
+        assert_eq!(npc_props_message(1001, &[(NPCPROP_Y, PropValue::Byte(48))]), b"# '\x89#P\n");
+        assert_eq!(npc_props_message(1001, &[(NPCPROP_BLOCKFLAGS, PropValue::Byte(12))]), b"# '\x89.,\n");
+        // NPC 1121 (`message hi;`): VISFLAGS 81, MESSAGE "hi".
+        let m = npc_props_message(1121, &[(NPCPROP_VISFLAGS, PropValue::Byte(81)), (NPCPROP_MESSAGE, PropValue::Text("hi".into()))]);
+        assert_eq!(m, b"# (\x81-q/\"hi\n");
+        // NPC 1118 (`setimg bomb1.png;`): IMAGE, then VISFLAGS.
+        let m = npc_props_message(1118, &[(NPCPROP_IMAGE, PropValue::Text("bomb1.png".into())), (NPCPROP_VISFLAGS, PropValue::Byte(81))]);
+        assert_eq!(m, b"# (~ )bomb1.png-q\n");
+    }
+
+    #[test]
+    fn the_message_prop_is_read() {
+        let p = [gc(0), gc(0), gc(1), gc(15), gc(4), b't', b'i', b'c', b'k', gc(13), gc(81)];
+        let (_, p) = parse_npc_props(&p, true).unwrap();
+        assert_eq!((p.message.as_deref(), p.vis_flags), (Some("tick"), Some(81)));
     }
 
     #[test]
