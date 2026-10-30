@@ -2602,12 +2602,17 @@ fn main() {
                 let mut todo: Vec<(u32, seihai::protocol::npcprops::NpcProps)> = Vec::new();
                 if session.level_serial != npc_link_serial {
                     npc_link_serial = session.level_serial;
-                    npc_sync.clear();
                     let here = net_state.current_level_name();
+                    // Back in a gmap level still loaded: its NPCs are linked
+                    // and the server has what was sent; its stored records
+                    // are older, so they are not replayed.
+                    let resumed = npc_sync.switch_level(here.as_deref(), session.gmap.is_some())
+                        && session.current_level.as_ref().is_some_and(|l| l.npcs.iter().any(|n| n.server_id.is_some()));
                     todo.extend(
                         net_state
                             .server_npcs
                             .iter()
+                            .filter(|_| !resumed)
                             .filter(|(_, (l, _))| l.as_deref().zip(here.as_deref()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b)))
                             .map(|(&id, (_, p))| (id, p.clone())),
                     );

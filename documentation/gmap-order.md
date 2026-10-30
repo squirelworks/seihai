@@ -77,3 +77,13 @@ objects and `level.` variables (`ScriptWorld::park_level`), and walking back in 
 `created`. A level dropped from the neighbourhood, or any level after leaving the gmap, starts afresh.
 `playerenters` still fires on each entry (not captured either way). Timeouts due while parked fire once
 on return. Test: `re_entering_a_loaded_gmap_level_resumes_its_scripts`.
+
+The NPC props side does the same (live rerun, 2026-10-30: with the scripts kept, `GANI idle` and `BODY`
+still went out on each crossing back, because the sync forgot what it had sent and replayed the
+server's older stored records). `ServerNpcSync::switch_level` parks what the server has for a gmap
+level's NPCs and brings it back on re-entry, and the stored records are not replayed into a level whose
+NPCs are still linked. Test: `walking_back_into_a_gmap_level_sends_nothing_again`.
+
+Still open: on the **first** entry of a level the 2.22 build sends `VISFLAGS` for each NPC and the props
+its `created` sets (`BODY`), the 2.05 rule (`documentation/ledges-push-pull.md`). The real 2.22 sent no NPC
+props at all on the same walk. Which props 2.22 sends, if any, is not captured, so this is not changed here.
