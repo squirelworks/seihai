@@ -84,6 +84,17 @@ impl WorldLoader for RootLoader<'_> {
 
 /// Load `walk.gani` or `swim.gani` (the animations whose cues are played)
 /// from the first layer that has it, into the session.
+/// The SPRITE (17) the player's walk updates carry. A 2.00 to 2.05 build
+/// sends its swing as a name in prop 10, not as a sprite
+/// (`combat::swing_in_bow_slot`).
+fn sent_sprite(session: &OfflineSession, version: ClientVersion, ganis: bool) -> u8 {
+    if seihai::combat::swing_in_bow_slot(version) {
+        session.bow_slot_sprite(ganis)
+    } else {
+        session.sprite_value_for(ganis)
+    }
+}
+
 fn load_motion_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
     if let Some(path) = resolver.gani(name) {
         match Gani::load(&path) {
@@ -1461,6 +1472,8 @@ fn main() {
     let mut combat_clock = Instant::now();
     // The push / grab / pull sprite number last sent (see `pushpull_sprite_s`).
     let mut last_pp_sprite: Option<u8> = None;
+    // The animation name a 2.00 to 2.05 build last put in prop 10.
+    let mut last_bow_anim = "idle";
     let mut char_repeat: ui::CharRepeat<minifb::Key> = ui::CharRepeat::new();
     let run_clock = Instant::now();
     let mut slow_log = SlowFrameLog::default();
@@ -1934,7 +1947,7 @@ fn main() {
                             // one, hurt mode still shows in the sprite.
                             if !send_power_report(&mut conn, &mut session, version) {
                                 if let Some(c) = conn.as_mut() {
-                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
+                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
                                         eprintln!("send failed: {e}");
                                         conn = None;
                                     }
@@ -2273,10 +2286,22 @@ fn main() {
             }
             // A thrown object's hit, or the end of hurt mode (GANI `idle`).
             send_power_report(&mut conn, &mut session, version);
+            // 2.00 to 2.05: the swing goes out as `sword` in prop 10 when
+            // it starts, and `idle` when it ends, as the real ones send it.
+            let bow_anim = session.bow_slot_anim();
+            if seihai::combat::swing_in_bow_slot(version) && bow_anim != last_bow_anim {
+                last_bow_anim = bow_anim;
+                if let Some(c) = conn.as_mut() {
+                    if let Err(e) = c.send_messages(&[seihai::net::bow_slot_message(bow_anim)]) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
+            }
             if sprite_changed {
                 dirty = true;
                 if let (Some(c), None) = (conn.as_mut(), &walk_cadence) {
-                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
+                    if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
                         eprintln!("send failed: {e}");
                         conn = None;
                     }
@@ -2341,7 +2366,7 @@ fn main() {
                 let (status, with_pos) = seihai::offline::pause_message_bits(version, status_base, last_hide_status);
                 let sent = c.send_messages(&[seihai::life::status_message(status)]).and_then(|()| {
                     if with_pos {
-                        c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis))
+                        c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis))
                     } else {
                         Ok(())
                     }
@@ -2372,7 +2397,7 @@ fn main() {
                     if let Some(c) = conn.as_mut() {
                         let sent = c
                             .send_carry_sprite(seihai::throwing::carry_sprite(kind))
-                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
+                            .and_then(|()| c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)));
                         if let Err(e) = sent {
                             eprintln!("send failed: {e}");
                             conn = None;
@@ -2387,7 +2412,7 @@ fn main() {
                                 eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
                                 let sent = c
                                     .send_carry_sprite(None)
-                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
+                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)));
                                 if let Err(e) = sent {
                                     eprintln!("send failed: {e}");
                                     conn = None;
@@ -2736,7 +2761,7 @@ fn main() {
                 send_world_requests(conn.as_mut(), req, &mut files);
             } else if let (Some(c), false, None) = (conn.as_mut(), script_warp_sent, &walk_cadence) {
                 // Online: send the new position as PLI_PLAYERPROPS.
-                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
+                if let Err(e) = c.send_walk_sprite(&session.player_update(), sent_sprite(&session, version, profile.ui.ganis)) {
                     eprintln!("send failed: {e}");
                     conn = None;
                 }
