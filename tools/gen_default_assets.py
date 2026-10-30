@@ -2,10 +2,12 @@
 """Generate Seihai's default asset set (assets/default/).
 
 Every file is original: drawn here, pixel by pixel, from primitives and hand
-specified palettes, or synthesised from noise and sine tones. Nothing is read
-from any Graal client, playerworld or other asset; the only numbers taken from
-the measurements in documentation/asset-reference.md are sizes, grid layouts and
-frame counts.
+specified palettes, or synthesised from noise and sine tones. No image or sound
+of any Graal client, playerworld or other asset is read. Numbers taken from
+elsewhere: sizes, grid layouts and frame counts from
+documentation/asset-reference.md, and the tile type lists of the standard
+Graal tile layout (tools/graal_tile_lists.txt, from the 2.22 arrays.dat), so
+that pics1.png and tiledefs.txt use the same tile ids as a Graal pics1.png.
 
 Usage (from the repository root, Python 3.9+, Pillow):
 
@@ -13,6 +15,8 @@ Usage (from the repository root, Python 3.9+, Pillow):
     python3 tools/gen_default_assets.py --check         # regenerate in a temp
                                                         # dir, compare (exit 1)
     python3 tools/gen_default_assets.py --preview P.png # contact sheet of OUR art
+    python3 tools/gen_default_assets.py --import-arrays arrays.dat
+                                        # rewrite tools/graal_tile_lists.txt
 
 No network access, no randomness other than `random.Random(SEED)`, so two runs
 give the same files. PNG files are compared by decoded pixels in --check, not by
@@ -87,53 +91,128 @@ def save_gif_copy(png_path):
 
 SHEET_W, SHEET_H = 2048, 512
 
-# Tile ids. All below 512, so they sit in block 0 (columns 0..15) and exist on
-# every sheet at least 256 px wide. Cell: column = id % 16 + (id / 512) * 16,
-# row = (id / 16) % 32.
-T = dict(
-    GRASS_A=0, GRASS_B=1, GRASS_C=2, PATH=3,
-    BUSH=16, ROCK=17,
-    WATER_A=32, WATER_B=33, SAND_A=34, SAND_B=35,
-    BRICK=48, BRICK_CAP=49, ROOF=50, DOORWAY=51, WOOD_FLOOR=52, VOID=54,
-    CHEST_G=64, CHEST_G_OPEN=66, CHEST_W=68, CHEST_W_OPEN=70,  # 2x2: id, id+1, id+16, id+17
-    SIGN_G=96, SIGN_W=98,                                       # 2x1: id, id+1
-    TREE=112,                                                   # 2x2
+# The sheet follows the standard Graal tile layout: tile id N is the cell the
+# real pics1.png has for N, and its type is the one the real arrays.dat gives
+# N. So the same tiledefs.txt fits this sheet and a Graal pics1.png, and an
+# ordinary Graal level walks the same on both. The type lists are numbers
+# only, kept in tools/graal_tile_lists.txt (see there for the source); no
+# pixel of a Graal sheet was used. Each id is drawn with the art of its type
+# (wall, water, floor, ...), and the ids below get art of their own.
+
+# Ids whose meaning is documented (Graal_analysis notes and Seihai's docs).
+G = dict(
+    GRASS=0,          # binary-level-tiles.md: tile 0 is grass on the 1.x and 2.x sheets
+    GRASS2=2047,      # lab-304 note: labbush.nw is grass (2047) with bushes, stones, vases
+    BUSH=2,           # arrays.dat 9 and 11: bush 2 3 / 18 19 (cut and lifted)
+    STONE=34,         # arrays.dat 11: stone 34 35 / 50 51
+    SIGN=512,         # arrays.dat 11: sign 512 513 / 528 529 (board-respawn.md)
+    POT=684,          # arrays.dat 11: pot (vase) 684 685 / 700 701
+    BLACK_STONE=990,  # arrays.dat 11: black stone 990 991 / 1006 1007
+    TALL_GRASS=420,   # arrays.dat 9: tall grass 420 421 / 436 437 (cut)
+    BUSH_LEFT=677,    # arrays.dat 10 and 12: what a cut or lifted bush leaves
+    GRASS_LEFT=679,   # arrays.dat 10: what cut tall grass leaves
+    SIGN_LEFT=1802,   # arrays.dat 12: what a lifted sign leaves
+    POT_LEFT=1770,    # arrays.dat 12: what a lifted pot leaves
+    STONE_LEFT=1834,  # arrays.dat 12: what a lifted stone or black stone leaves
+    CHEST=1784,       # arrays.dat 13: closed chest 1784 1785 / 1800 1801
+    CHEST_OPEN=829,   # arrays.dat 14: open chest 829 830 / 845 846
+    DEEP_WATER=322,   # v5v6-lab-play.md: "walk into deep water, tile 322" (swim)
+    SHALLOW=398,      # tile-types.md, new4.nw: shallow water, walked on
+    NO_SWIM=3644,     # tile-types.md, new4.nw: deep water in no list, a wall
 )
+# 2x2 objects: id, id + 1, id + 16, id + 17
+OBJECTS_2X2 = ("BUSH", "STONE", "SIGN", "POT", "BLACK_STONE", "TALL_GRASS", "BUSH_LEFT", "GRASS_LEFT",
+               "SIGN_LEFT", "POT_LEFT", "STONE_LEFT", "CHEST", "CHEST_OPEN")
 
-WALL = 22
-WATER = 11
-# id -> (collision type, name); type >= 20 blocks, 11 is water, else open
+# Seihai's type numbers (client/src/assets/level.rs, documentation/tile-types.md)
+OPEN, CHAIR, BED_TOP, BED_BOTTOM = 0, 3, 4, 5
+WATER, LAVA, LAVA_FLOOR = 11, 12, 13
+THROW_THROUGH, WALL = 20, 22
+
+LISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "graal_tile_lists.txt")
+LIST_NAMES = ("passable", "liquid", "throw_through", "lava", "chair", "bed_top", "bed_bottom")
+
+
+def read_lists(path=LISTS_FILE):
+    """The seven arrays.dat lists, by name, from tools/graal_tile_lists.txt."""
+    lists = {}
+    for line in open(path).read().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        name, _, ids = line.partition(":")
+        out = lists.setdefault(name.strip(), [])
+        for part in ids.split():
+            a, _, b = part.partition("-")
+            out.extend(range(int(a), int(b or a) + 1))
+    assert set(lists) == set(LIST_NAMES), sorted(lists)
+    # the 2.22 file's list lengths (documentation/tile-types.md)
+    assert [len(lists[n]) for n in LIST_NAMES] == [934, 116, 133, 76, 40, 4, 4], [len(lists[n]) for n in LIST_NAMES]
+    return lists
+
+
 def type_table():
-    t = {}
-
-    def put(i, ty, name):
-        t[i] = (ty, name)
-
-    for i, n in ((T["GRASS_A"], "grass"), (T["GRASS_B"], "grass2"), (T["GRASS_C"], "flowers"),
-                 (T["PATH"], "path"), (T["SAND_A"], "sand"), (T["SAND_B"], "sand2"),
-                 (T["DOORWAY"], "doorway"), (T["WOOD_FLOOR"], "woodfloor")):
-        put(i, 0, n)
-    put(T["BUSH"], WALL, "bush")
-    put(T["ROCK"], WALL, "rock")
-    put(T["WATER_A"], WATER, "water")
-    put(T["WATER_B"], WATER, "water2")
-    put(T["BRICK"], WALL, "wall")
-    put(T["BRICK_CAP"], WALL, "wallcap")
-    put(T["ROOF"], WALL, "roof")
-    put(T["VOID"], WALL, "void")
-    for base, nm in ((T["CHEST_G"], "chest"), (T["CHEST_G_OPEN"], "chestopen"),
-                     (T["CHEST_W"], "chestw"), (T["CHEST_W_OPEN"], "chestwopen"),
-                     (T["TREE"], "tree")):
-        for k, off in enumerate((0, 1, 16, 17)):
-            put(base + off, WALL, f"{nm}{k}")
-    for base, nm in ((T["SIGN_G"], "sign"), (T["SIGN_W"], "signw")):
-        put(base, WALL, nm + "0")
-        put(base + 1, WALL, nm + "1")
+    """One type per id, by the rules of TileTypes::parse_arrays."""
+    li = read_lists()
+    t = [WALL] * 4096
+    for i in li["passable"]:
+        t[i] = OPEN
+    lava = set(li["lava"])
+    for i in li["liquid"]:
+        t[i] = LAVA if i in lava else WATER
+    for i in li["throw_through"]:
+        if t[i] == WALL:
+            t[i] = THROW_THROUGH
+    for name, ty in (("chair", CHAIR), ("bed_top", BED_TOP), ("bed_bottom", BED_BOTTOM)):
+        for i in li[name]:
+            if t[i] == OPEN:
+                t[i] = ty
+    for i in lava:
+        if t[i] == OPEN:
+            t[i] = LAVA_FLOOR
     return t
 
 
+def import_arrays(path):
+    """Write tools/graal_tile_lists.txt from a Graal arrays.dat (arrays 0 to 6,
+    which are flat lists of big-endian u32 ids, each after a u32 count)."""
+    import hashlib
+    data = open(path, "rb").read()
+    off, arrays = 0, []
+    while len(arrays) < len(LIST_NAMES):
+        n = struct.unpack(">I", data[off:off + 4])[0]
+        assert n >> 16 == 0, "arrays 0 to 6 are flat"
+        arrays.append(sorted(struct.unpack(">%dI" % n, data[off + 4:off + 4 + 4 * n])))
+        off += 4 + 4 * n
+    out = [
+        "# Tile type lists of the standard Graal tile layout: arrays 0 to 6 of the",
+        "# Graal 2.22 arrays.dat (11,500 bytes, sha256",
+        "# " + hashlib.sha256(data).hexdigest() + ").",
+        "# Numbers only; written by `gen_default_assets.py --import-arrays`. The 2.05",
+        "# rev 2 file differs only in passable: 2.22 adds 2650-2653, 2666-2669, 2682-2685,",
+        "# 2698-2701, 2714-2717. Meaning: documentation/tile-types.md.",
+    ]
+    for name, ids in zip(LIST_NAMES, arrays):
+        runs, start = [], None
+        for k, i in enumerate(ids):
+            if start is None:
+                start = i
+            if k + 1 == len(ids) or ids[k + 1] != i + 1:
+                runs.append(str(start) if start == i else f"{start}-{i}")
+                start = None
+        words, line = [], name + ":"
+        for r in runs:
+            if len(line) + len(r) + 1 > 100:
+                words.append(line)
+                line = name + ":"
+            line += " " + r
+        words.append(line)
+        out.extend(words)
+    open(LISTS_FILE, "w", newline="\n").write("\n".join(out) + "\n")
+
+
 def tile_cell(tid):
-    """The mapping Seihai's blit_tile uses."""
+    """The mapping Seihai's blit_tile uses (and the real sheets)."""
     return tid % 16 + (tid // 512) * 16, (tid // 16) % 32
 
 
@@ -146,18 +225,18 @@ def sheet_palette():
         ("bush", (36, 112, 52)), ("bush_dk", (20, 72, 36)), ("bush_lt", (84, 168, 80)), ("berry", (214, 52, 60)),
         ("rock", (148, 148, 156)), ("rock_dk", (88, 88, 100)), ("rock_lt", (200, 200, 208)),
         ("water", (48, 112, 208)), ("water_lt", (120, 176, 244)), ("water_dk", (32, 80, 168)),
-        ("sand", (232, 208, 148)), ("sand_dk", (200, 172, 112)), ("sand_lt", (248, 232, 184)),
-        ("brick", (156, 124, 104)), ("brick_dk", (100, 78, 70)), ("brick_lt", (190, 160, 132)),
-        ("roof", (176, 64, 52)), ("roof_dk", (120, 36, 36)), ("roof_lt", (216, 104, 76)),
-        ("door", (38, 30, 36)), ("door_lt", (74, 56, 52)),
+        ("shallow", (96, 168, 224)), ("deep", (24, 52, 128)),
+        ("lava", (224, 72, 24)), ("lava_lt", (252, 176, 48)), ("lava_dk", (150, 32, 20)), ("crust", (70, 40, 36)),
+        ("wall", (128, 120, 112)), ("wall_dk", (82, 76, 72)), ("wall_lt", (170, 162, 150)),
+        ("low", (156, 136, 104)), ("low_dk", (104, 88, 66)), ("low_lt", (196, 178, 140)),
         ("wood", (192, 142, 92)), ("wood_dk", (146, 100, 62)), ("wood_lt", (222, 176, 120)),
-        ("void", (16, 12, 20)),
+        ("cloth", (88, 112, 196)), ("cloth_lt", (150, 170, 232)), ("white", (248, 248, 248)),
+        ("pot", (196, 112, 64)), ("pot_dk", (128, 64, 40)), ("pot_lt", (232, 160, 104)),
         ("outline", (28, 24, 32)),
         ("trunk", (112, 74, 44)), ("trunk_dk", (72, 46, 30)),
         ("chest", (150, 86, 40)), ("chest_dk", (92, 50, 28)), ("chest_lt", (192, 122, 64)),
-        ("gold", (244, 204, 64)), ("gold_dk", (184, 140, 40)), ("white", (248, 248, 248)),
+        ("gold", (244, 204, 64)), ("gold_dk", (184, 140, 40)),
         ("shadow", (30, 80, 34)), ("ink", (60, 40, 30)),
-        ("miss_a", (160, 32, 160)), ("miss_b", (40, 16, 40)),
     ]:
         p.add(n, c)
     return p
@@ -177,42 +256,14 @@ def draw_grass(d, pal, rng, tufts, flowers=False):
             d.point([(x, y)], fill=pal["flower_y"] if c == "flower_w" else pal["flower_w"])
 
 
-def t_path(pal, rng):
-    im = Image.new("P", (16, 16), pal["dirt"])
-    d = ImageDraw.Draw(im)
-    for _ in range(14):
-        x, y = rng.randrange(0, 15), rng.randrange(0, 15)
-        d.point([(x, y)], fill=pal["dirt_dk"])
-    for _ in range(6):
-        x, y = rng.randrange(0, 14), rng.randrange(0, 14)
-        d.rectangle([x, y, x + 1, y + 1], fill=pal["dirt_lt"])
-    return im
-
-
-def t_bush(pal, rng):
+def t_grass(pal, rng, tufts, flowers=False):
     im = Image.new("P", (16, 16), pal["grass"])
-    d = ImageDraw.Draw(im)
-    d.ellipse([1, 2, 14, 14], fill=pal["bush"], outline=pal["bush_dk"])
-    d.ellipse([3, 3, 9, 8], fill=pal["bush_lt"])
-    d.point([(5, 4), (6, 5)], fill=pal["grass_lt"])
-    for (x, y) in ((10, 9), (6, 11), (11, 6)):
-        d.point([(x, y)], fill=pal["berry"])
-    d.arc([2, 8, 13, 15], 20, 160, fill=pal["bush_dk"])
+    draw_grass(ImageDraw.Draw(im), pal, rng, tufts, flowers)
     return im
 
 
-def t_rock(pal, rng):
-    im = Image.new("P", (16, 16), pal["grass"])
-    d = ImageDraw.Draw(im)
-    d.polygon([(2, 12), (3, 6), (7, 2), (12, 3), (14, 8), (13, 13), (7, 14)], fill=pal["rock"], outline=pal["rock_dk"])
-    d.polygon([(4, 7), (7, 4), (10, 4), (7, 8)], fill=pal["rock_lt"])
-    d.line([(8, 9), (11, 12)], fill=pal["rock_dk"])
-    d.line([(5, 11), (7, 12)], fill=pal["rock_dk"])
-    return im
-
-
-def t_water(pal, variant):
-    im = Image.new("P", (16, 16), pal["water"])
+def t_water(pal, variant, base="water"):
+    im = Image.new("P", (16, 16), pal[base])
     d = ImageDraw.Draw(im)
     spots = [(2, 3), (9, 7), (4, 12)] if variant == 0 else [(7, 2), (2, 8), (10, 12)]
     for (x, y) in spots:
@@ -221,57 +272,64 @@ def t_water(pal, variant):
     return im
 
 
-def t_sand(pal, rng, variant):
-    im = Image.new("P", (16, 16), pal["sand"])
+def t_lava(pal, variant):
+    im = Image.new("P", (16, 16), pal["lava"])
     d = ImageDraw.Draw(im)
-    for _ in range(10):
-        d.point([(rng.randrange(0, 16), rng.randrange(0, 16))], fill=pal["sand_dk"])
-    for _ in range(4):
-        d.point([(rng.randrange(0, 16), rng.randrange(0, 16))], fill=pal["sand_lt"])
+    spots = [(3, 2), (9, 8), (2, 12)] if variant == 0 else [(8, 3), (1, 7), (10, 13)]
+    for (x, y) in spots:
+        d.ellipse([x, y, x + 3, y + 2], fill=pal["lava_lt"])
+        d.point([(x + 4, y + 1)], fill=pal["lava_dk"])
+    return im
+
+
+def t_lava_floor(pal):
+    im = Image.new("P", (16, 16), pal["crust"])
+    d = ImageDraw.Draw(im)
+    d.line([(0, 5), (5, 7), (9, 4), (15, 6)], fill=pal["lava"])
+    d.line([(3, 15), (6, 10), (12, 12), (15, 10)], fill=pal["lava"])
+    d.point([(5, 7), (12, 12)], fill=pal["lava_lt"])
+    return im
+
+
+def t_block(pal, base, variant):
+    """A solid block: stone (wall) or a low, lighter one (thrown objects fly
+    over it)."""
+    im = Image.new("P", (16, 16), pal[base])
+    d = ImageDraw.Draw(im)
+    d.rectangle([0, 0, 15, 15], outline=pal[base + "_dk"])
+    d.line([(1, 1), (14, 1)], fill=pal[base + "_lt"])
+    d.line([(1, 1), (1, 14)], fill=pal[base + "_lt"])
     if variant:
-        d.ellipse([5, 6, 9, 9], fill=pal["sand_lt"], outline=pal["sand_dk"])
+        d.line([(1, 8), (14, 8)], fill=pal[base + "_dk"])
+        d.line([(8, 1), (8, 7)], fill=pal[base + "_dk"])
+        d.line([(4, 9), (4, 14)], fill=pal[base + "_dk"])
+    else:
+        d.line([(1, 8), (14, 8)], fill=pal[base + "_dk"])
+        d.line([(5, 1), (5, 7)], fill=pal[base + "_dk"])
+        d.line([(11, 9), (11, 14)], fill=pal[base + "_dk"])
     return im
 
 
-def t_brick(pal, cap):
-    im = Image.new("P", (16, 16), pal["brick"])
+def t_chair(pal):
+    im = t_wood(pal)
     d = ImageDraw.Draw(im)
-    for y in (3, 7, 11, 15):
-        d.line([(0, y), (15, y)], fill=pal["brick_dk"])
-    for y0, xs in ((0, (7, 15)), (4, (3, 11)), (8, (7, 15)), (12, (3, 11))):
-        for x in xs:
-            d.line([(x, y0), (x, y0 + 2)], fill=pal["brick_dk"])
-    for y in (0, 4, 8, 12):
-        d.line([(0, y), (15, y)], fill=pal["brick_lt"])
-    if cap:
-        d.rectangle([0, 0, 15, 5], fill=pal["brick_lt"])
-        d.line([(0, 5), (15, 5)], fill=pal["brick_dk"])
-        d.line([(0, 0), (15, 0)], fill=pal["white"])
+    d.rectangle([3, 2, 12, 5], fill=pal["trunk"], outline=pal["trunk_dk"])
+    d.rectangle([3, 6, 12, 12], fill=pal["wood_lt"], outline=pal["trunk_dk"])
+    d.line([(4, 13), (4, 15)], fill=pal["trunk_dk"])
+    d.line([(11, 13), (11, 15)], fill=pal["trunk_dk"])
     return im
 
 
-def t_roof(pal):
-    im = Image.new("P", (16, 16), pal["roof"])
+def t_bed(pal, top):
+    im = Image.new("P", (16, 16), pal["cloth"])
     d = ImageDraw.Draw(im)
-    for row in range(4):
-        y = row * 4
-        off = 0 if row % 2 == 0 else 4
-        d.line([(0, y + 3), (15, y + 3)], fill=pal["roof_dk"])
-        for x in range(off, 16, 8):
-            d.line([(x, y), (x, y + 2)], fill=pal["roof_dk"])
-        d.line([(0, y), (15, y)], fill=pal["roof_lt"])
-    return im
-
-
-def t_doorway(pal):
-    im = Image.new("P", (16, 16), pal["door"])
-    d = ImageDraw.Draw(im)
-    d.rectangle([0, 0, 1, 15], fill=pal["brick"])
-    d.rectangle([14, 0, 15, 15], fill=pal["brick"])
-    d.line([(1, 0), (1, 15)], fill=pal["brick_dk"])
-    d.line([(14, 0), (14, 15)], fill=pal["brick_dk"])
-    d.rectangle([2, 0, 13, 1], fill=pal["brick_lt"])
-    d.rectangle([4, 10, 11, 15], fill=pal["door_lt"])
+    if top:
+        d.rectangle([0, 0, 15, 15], outline=pal["trunk_dk"])
+        d.rectangle([2, 2, 13, 7], fill=pal["white"], outline=pal["cloth_lt"])
+    else:
+        d.rectangle([0, 0, 15, 15], outline=pal["trunk_dk"])
+        d.line([(1, 4), (14, 4)], fill=pal["cloth_lt"])
+        d.rectangle([0, 13, 15, 15], fill=pal["trunk"])
     return im
 
 
@@ -287,10 +345,77 @@ def t_wood(pal):
     return im
 
 
-def chest_img(pal, bg, opened):
-    im = Image.new("P", (32, 32), pal[bg])
+def grass32(pal, rng):
+    im = Image.new("P", (32, 32), pal["grass"])
     d = ImageDraw.Draw(im)
-    d.ellipse([3, 24, 28, 31], fill=pal["shadow"] if bg == "grass" else pal["wood_dk"])
+    for _ in range(10):
+        x, y = rng.randrange(1, 31), rng.randrange(2, 31)
+        d.point([(x, y), (x - 1, y - 1), (x + 1, y - 1)], fill=pal["grass_dk"])
+    return im, d
+
+
+def bush_img(pal, rng):
+    im, d = grass32(pal, rng)
+    d.ellipse([2, 4, 29, 30], fill=pal["bush"], outline=pal["bush_dk"])
+    d.ellipse([6, 7, 18, 17], fill=pal["bush_lt"])
+    for (x, y) in ((20, 18), (11, 22), (22, 10), (15, 26)):
+        d.point([(x, y), (x + 1, y)], fill=pal["berry"])
+    d.arc([4, 16, 27, 30], 20, 160, fill=pal["bush_dk"])
+    return im
+
+
+def stone_img(pal, rng, dark):
+    im, d = grass32(pal, rng)
+    body, edge, hi = ("rock_dk", "outline", "rock") if dark else ("rock", "rock_dk", "rock_lt")
+    d.ellipse([3, 24, 28, 31], fill=pal["shadow"])
+    d.polygon([(3, 24), (5, 11), (13, 4), (23, 5), (28, 14), (27, 26), (15, 29)], fill=pal[body], outline=pal[edge])
+    d.polygon([(8, 13), (13, 8), (20, 8), (14, 15)], fill=pal[hi])
+    d.line([(16, 18), (22, 24)], fill=pal[edge])
+    return im
+
+
+def pot_img(pal, rng):
+    im, d = grass32(pal, rng)
+    d.ellipse([5, 25, 26, 31], fill=pal["shadow"])
+    d.ellipse([5, 9, 26, 29], fill=pal["pot"], outline=pal["pot_dk"])
+    d.rectangle([10, 4, 21, 10], fill=pal["pot"], outline=pal["pot_dk"])
+    d.ellipse([10, 2, 21, 7], fill=pal["pot_dk"], outline=pal["outline"])
+    d.arc([8, 12, 20, 24], 180, 260, fill=pal["pot_lt"])
+    return im
+
+
+def sign_img(pal, rng):
+    im, d = grass32(pal, rng)
+    d.rectangle([14, 20, 17, 31], fill=pal["trunk"], outline=pal["trunk_dk"])
+    d.rectangle([3, 5, 28, 21], fill=pal["wood_lt"], outline=pal["trunk_dk"])
+    for y in (9, 12, 15):
+        d.line([(7, y), (24 - (y % 3) * 2, y)], fill=pal["ink"])
+    return im
+
+
+def tall_grass_img(pal, rng):
+    im, d = grass32(pal, rng)
+    for x in range(1, 31, 3):
+        h = rng.randrange(14, 26)
+        d.line([(x, 31), (x + rng.choice((-1, 0, 1)), 31 - h)], fill=pal["bush"])
+        d.line([(x + 1, 31), (x + 1, 34 - h)], fill=pal["grass_dk"])
+        d.point([(x, 31 - h)], fill=pal["grass_lt"])
+    return im
+
+
+def patch_img(pal, rng, fill, rim):
+    """Bare ground where an object stood."""
+    im, d = grass32(pal, rng)
+    d.ellipse([4, 6, 27, 27], fill=pal[fill], outline=pal[rim])
+    for _ in range(8):
+        d.point([(rng.randrange(9, 23), rng.randrange(10, 23))], fill=pal[rim])
+    return im
+
+
+def chest_img(pal, opened):
+    im = Image.new("P", (32, 32), pal["grass"])
+    d = ImageDraw.Draw(im)
+    d.ellipse([3, 24, 28, 31], fill=pal["shadow"])
     d.rectangle([3, 12, 28, 27], fill=pal["chest"], outline=pal["outline"])
     d.line([(4, 24), (27, 24)], fill=pal["chest_dk"])
     d.line([(4, 13), (27, 13)], fill=pal["chest_lt"])
@@ -308,37 +433,24 @@ def chest_img(pal, bg, opened):
     return im
 
 
-def sign_img(pal, bg):
-    im = Image.new("P", (32, 16), pal[bg])
-    d = ImageDraw.Draw(im)
-    d.rectangle([14, 9, 17, 15], fill=pal["trunk"], outline=pal["trunk_dk"])
-    d.rectangle([3, 1, 28, 10], fill=pal["wood_lt"], outline=pal["trunk_dk"])
-    for y in (3, 5, 7):
-        d.line([(6, y), (25 - (y % 3) * 2, y)], fill=pal["ink"])
-    return im
-
-
-def tree_img(pal, rng):
-    im = Image.new("P", (32, 32), pal["grass"])
-    d = ImageDraw.Draw(im)
-    d.rectangle([13, 20, 18, 31], fill=pal["trunk"], outline=pal["trunk_dk"])
-    d.ellipse([1, 1, 30, 24], fill=pal["bush"], outline=pal["bush_dk"])
-    d.ellipse([5, 4, 17, 13], fill=pal["bush_lt"])
-    for _ in range(10):
-        x, y = rng.randrange(6, 26), rng.randrange(6, 20)
-        d.point([(x, y)], fill=pal["bush_dk"])
-    return im
-
-
 def build_sheet(rng):
     pal = sheet_palette()
-    sheet = Image.new("P", (SHEET_W, SHEET_H), pal["miss_b"])
-    d = ImageDraw.Draw(sheet)
-    # Unassigned cells: 8 px purple/black checker, so a wrong id is obvious.
-    for cy in range(SHEET_H // 8):
-        for cx in range(SHEET_W // 8):
-            if (cx + cy) % 2 == 0:
-                d.rectangle([cx * 8, cy * 8, cx * 8 + 7, cy * 8 + 7], fill=pal["miss_a"])
+    types = type_table()
+    # Art by type: every id gets the art of its type, so any Graal level
+    # shows where its walls, water and floors are.
+    grass = [t_grass(pal, rng, 5)]
+    by_type = {
+        OPEN: grass,
+        CHAIR: [t_chair(pal)],
+        BED_TOP: [t_bed(pal, True)],
+        BED_BOTTOM: [t_bed(pal, False)],
+        WATER: [t_water(pal, 0)],
+        LAVA: [t_lava(pal, 0)],
+        LAVA_FLOOR: [t_lava_floor(pal)],
+        THROW_THROUGH: [t_block(pal, "low", 0)],
+        WALL: [t_block(pal, "wall", 0)],
+    }
+    sheet = Image.new("P", (SHEET_W, SHEET_H), pal["grass"])
 
     def put(tid, im, w=1, h=1):
         # a w x h block of tiles whose ids are tid + dx + 16 * dy
@@ -347,47 +459,44 @@ def build_sheet(rng):
                 cx, cy = tile_cell(tid + dx + 16 * dy)
                 sheet.paste(im.crop((dx * 16, dy * 16, dx * 16 + 16, dy * 16 + 16)), (cx * 16, cy * 16))
 
-    for tid, tufts, fl in ((T["GRASS_A"], 5, False), (T["GRASS_B"], 9, False), (T["GRASS_C"], 4, True)):
-        im = Image.new("P", (16, 16), pal["grass"])
-        draw_grass(ImageDraw.Draw(im), pal, rng, tufts, fl)
-        put(tid, im)
-    put(T["PATH"], t_path(pal, rng))
-    put(T["BUSH"], t_bush(pal, rng))
-    put(T["ROCK"], t_rock(pal, rng))
-    put(T["WATER_A"], t_water(pal, 0))
-    put(T["WATER_B"], t_water(pal, 1))
-    put(T["SAND_A"], t_sand(pal, rng, 0))
-    put(T["SAND_B"], t_sand(pal, rng, 1))
-    put(T["BRICK"], t_brick(pal, False))
-    put(T["BRICK_CAP"], t_brick(pal, True))
-    put(T["ROOF"], t_roof(pal))
-    put(T["DOORWAY"], t_doorway(pal))
-    put(T["WOOD_FLOOR"], t_wood(pal))
-    put(T["VOID"], Image.new("P", (16, 16), pal["void"]))
-    put(T["CHEST_G"], chest_img(pal, "grass", False), 2, 2)
-    put(T["CHEST_G_OPEN"], chest_img(pal, "grass", True), 2, 2)
-    put(T["CHEST_W"], chest_img(pal, "wood", False), 2, 2)
-    put(T["CHEST_W_OPEN"], chest_img(pal, "wood", True), 2, 2)
-    put(T["SIGN_G"], sign_img(pal, "grass"), 2, 1)
-    put(T["SIGN_W"], sign_img(pal, "wood"), 2, 1)
-    put(T["TREE"], tree_img(pal, rng), 2, 2)
+    for tid, ty in enumerate(types):
+        put(tid, by_type[ty][0])
+    put(G["GRASS"], grass[0])
+    put(G["GRASS2"], grass[0])
+    put(G["DEEP_WATER"], t_water(pal, 0, "deep"))
+    put(G["SHALLOW"], t_water(pal, 1, "shallow"))
+    put(G["NO_SWIM"], Image.new("P", (16, 16), pal["deep"]))
+    put(G["BUSH"], bush_img(pal, rng), 2, 2)
+    put(G["STONE"], stone_img(pal, rng, False), 2, 2)
+    put(G["BLACK_STONE"], stone_img(pal, rng, True), 2, 2)
+    put(G["POT"], pot_img(pal, rng), 2, 2)
+    put(G["SIGN"], sign_img(pal, rng), 2, 2)
+    put(G["TALL_GRASS"], tall_grass_img(pal, rng), 2, 2)
+    put(G["BUSH_LEFT"], patch_img(pal, rng, "grass_dk", "bush_dk"), 2, 2)
+    put(G["GRASS_LEFT"], patch_img(pal, rng, "grass_lt", "grass_dk"), 2, 2)
+    put(G["SIGN_LEFT"], patch_img(pal, rng, "dirt", "dirt_dk"), 2, 2)
+    put(G["POT_LEFT"], patch_img(pal, rng, "dirt_lt", "dirt"), 2, 2)
+    put(G["STONE_LEFT"], patch_img(pal, rng, "dirt_dk", "trunk_dk"), 2, 2)
+    put(G["CHEST"], chest_img(pal, False), 2, 2)
+    put(G["CHEST_OPEN"], chest_img(pal, True), 2, 2)
     return sheet, pal
 
 
 def tiledefs_text():
+    """All 4096 types as a flat list, 16 per line: line n holds ids 16n to
+    16n + 15 (one row of one 256 px block of the sheet)."""
+    types = type_table()
     lines = [
-        "# Seihai default tile types (original). index,x,y,type,name",
-        "# x,y: pixel position of the tile's cell on pics1.png (2048x512, 16 px cells).",
-        "# type: 11 water, 20 and above blocks, anything else is open floor.",
-        "# Ids not listed are type 0 (open) and draw the purple/black 'unassigned' checker.",
+        "# Tile types of the standard Graal tile layout, for Seihai's pics1.png and for",
+        "# a Graal pics1.png alike. Flat list: 4096 values in id order, 16 per line.",
+        "# From arrays 0 to 6 of the Graal 2.22 arrays.dat (tools/graal_tile_lists.txt):",
+        "# 0 open, 3 chair, 4 bed top, 5 bed bottom, 11 water, 12 lava, 13 lava floor,",
+        "# 20 wall that thrown objects fly over, 22 wall. documentation/tile-types.md.",
     ]
-    for tid, (ty, name) in sorted(type_table().items()):
-        cx, cy = tile_cell(tid)
-        lines.append(f"{tid},{cx * 16},{cy * 16},{ty},{name}")
-    # TileTypes::parse needs a value for every id up to 4095 (it counts the
-    # highest index), so the last id is listed explicitly.
-    cx, cy = tile_cell(4095)
-    lines.append(f"4095,{cx * 16},{cy * 16},0,unassigned")
+    for n in range(256):
+        if n % 32 == 0:
+            lines.append(f"# ids {n * 16} to {n * 16 + 511}: sheet columns {n // 32 * 16} to {n // 32 * 16 + 15}")
+        lines.append(",".join(str(t) for t in types[n * 16:(n + 1) * 16]))
     return "\n".join(lines) + "\n"
 
 
@@ -1258,15 +1367,11 @@ def code(tid):
     return B64[(tid >> 6) & 63] + B64[tid & 63]
 
 
-def new_board(rng):
-    g = []
-    for _ in range(64 * 64):
-        r = rng.random()
-        g.append(T["GRASS_A"] if r < 0.68 else (T["GRASS_B"] if r < 0.9 else T["GRASS_C"]))
-    return g
+def new_board(tid=None):
+    return [G["GRASS"] if tid is None else tid] * (64 * 64)
 
 
-def put_block(b, tid, x, y, w, h):
+def put_block(b, tid, x, y, w=2, h=2):
     for dy in range(h):
         for dx in range(w):
             b[(y + dy) * 64 + x + dx] = tid + dx + 16 * dy
@@ -1285,44 +1390,45 @@ def board_text(b):
     return lines
 
 
+# Both starter levels use only the documented ids in G, so they look the same
+# on Seihai's sheet and on a Graal pics1.png.
 def level_new1(rng):
-    b = new_board(rng)
-    # border of bushes on the north, west and east edges; the south edge is open
-    fill(b, T["BUSH"], 0, 0, 63, 1)
-    fill(b, T["BUSH"], 0, 0, 1, 63)
-    fill(b, T["BUSH"], 62, 0, 63, 63)
-    # pond with a sand ring (centre 14,42; the water is deep enough to swim in)
+    b = new_board()
+    # border of bushes (2x2) on the north, west and east edges; the south edge is open
+    for x in range(0, 64, 2):
+        put_block(b, G["BUSH"], x, 0)
+    for y in range(2, 64, 2):
+        put_block(b, G["BUSH"], 0, y)
+        put_block(b, G["BUSH"], 62, y)
+    # pond: deep water (322, swum in) inside a ring of shallow water (398, walked on)
     cx, cy, rx, ry = 14, 42, 8, 6
     for y in range(cy - ry - 1, cy + ry + 2):
         for x in range(cx - rx - 1, cx + rx + 2):
             e = ((x - cx) / (rx + 1.5)) ** 2 + ((y - cy) / (ry + 1.5)) ** 2
             w = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
             if w <= 1.0:
-                b[y * 64 + x] = T["WATER_A"] if (x + y) % 3 else T["WATER_B"]
+                b[y * 64 + x] = G["DEEP_WATER"]
             elif e <= 1.0:
-                b[y * 64 + x] = T["SAND_A"] if (x * 7 + y * 3) % 5 else T["SAND_B"]
-    # house: roof rows 14..16, wall rows 17..21, doorway at 41..42 on row 21
-    fill(b, T["ROOF"], 36, 14, 47, 16)
-    fill(b, T["BRICK_CAP"], 36, 17, 47, 17)
-    fill(b, T["BRICK"], 36, 18, 47, 21)
-    fill(b, T["DOORWAY"], 41, 21, 42, 21)
-    # dirt path from the door to the spawn point and on to the pond
-    fill(b, T["PATH"], 41, 22, 42, 30)
-    fill(b, T["PATH"], 24, 30, 42, 31)
-    # scenery
-    put_block(b, T["TREE"], 50, 8, 2, 2)
-    put_block(b, T["TREE"], 54, 24, 2, 2)
-    put_block(b, T["TREE"], 8, 10, 2, 2)
-    put_block(b, T["TREE"], 20, 20, 2, 2)
-    for (x, y) in ((6, 28), (7, 28), (7, 29), (46, 30), (47, 30), (28, 12), (29, 12), (52, 44), (12, 58), (13, 58), (40, 52)):
-        b[y * 64 + x] = T["BUSH"]
-    for (x, y) in ((30, 26), (46, 40), (47, 41), (24, 52), (56, 54), (4, 20)):
-        b[y * 64 + x] = T["ROCK"]
-    # sign (2x1) and chest (2x2), both on grass
-    put_block(b, T["SIGN_G"], 26, 28, 2, 1)
-    put_block(b, T["CHEST_G"], 34, 26, 2, 2)
+                b[y * 64 + x] = G["SHALLOW"]
+    # the way to the second level: a bare patch inside a ring of black stones
+    for (x, y) in ((37, 16), (39, 16), (41, 16), (43, 16), (45, 16), (37, 18), (45, 18), (37, 20), (45, 20)):
+        put_block(b, G["BLACK_STONE"], x, y)
+    put_block(b, G["STONE_LEFT"], 41, 20)
+    # scenery: bushes, stones, pots and tall grass
+    for (x, y) in ((6, 28), (46, 30), (28, 12), (52, 44), (12, 56), (40, 52), (20, 20)):
+        put_block(b, G["BUSH"], x, y)
+    for (x, y) in ((30, 25), (48, 40), (24, 52), (56, 54), (4, 20)):
+        put_block(b, G["STONE"], x, y)
+    for (x, y) in ((50, 8), (52, 8), (54, 24)):
+        put_block(b, G["POT"], x, y)
+    for (x, y) in ((8, 10), (10, 10), (8, 12), (44, 44), (46, 46)):
+        put_block(b, G["TALL_GRASS"], x, y)
+    # sign (2x2; the record is its lower row) and the chest's place (the
+    # client draws the chest from its record; servers leave 2047 under it)
+    put_block(b, G["SIGN"], 26, 27)
+    fill(b, G["GRASS2"], 34, 26, 35, 27)
     links = [
-        "LINK new2.nw 41 21 2 1 30 47",
+        "LINK new2.nw 41 20 2 2 31 47",
         "LINK new1.nw 2 63 60 1 playerx 3",   # south edge wraps to the north: a link to itself
     ]
     objs = [
@@ -1338,22 +1444,31 @@ def level_new1(rng):
 
 
 def level_new2(rng):
-    b = [T["VOID"]] * (64 * 64)
-    # room: floor x 22..41, y 38..52; walls around it, top row 37 is the wall cap
-    fill(b, T["BRICK_CAP"], 21, 37, 42, 37)
-    fill(b, T["BRICK"], 21, 38, 21, 53)
-    fill(b, T["BRICK"], 42, 38, 42, 53)
-    fill(b, T["BRICK"], 21, 53, 42, 53)
-    fill(b, T["WOOD_FLOOR"], 22, 38, 41, 52)
-    fill(b, T["DOORWAY"], 31, 53, 32, 53)
-    put_block(b, T["CHEST_W"], 24, 40, 2, 2)
-    put_block(b, T["SIGN_W"], 36, 40, 2, 1)
-    links = ["LINK new1.nw 31 53 2 1 40 22"]
+    b = new_board()
+    # a yard fenced with black stones (x 20..43, y 34..55); the gap in the
+    # south fence (x 30..33) leads back
+    for x in range(20, 44, 2):
+        put_block(b, G["BLACK_STONE"], x, 34)
+        if x not in (30, 32):
+            put_block(b, G["BLACK_STONE"], x, 54)
+    for y in range(36, 54, 2):
+        put_block(b, G["BLACK_STONE"], 20, y)
+        put_block(b, G["BLACK_STONE"], 42, y)
+    # outside the yard: stones
+    for y in range(0, 64, 2):
+        for x in range(0, 64, 2):
+            if not (18 <= x <= 44 and 32 <= y <= 56):
+                put_block(b, G["STONE"], x, y)
+    fill(b, G["GRASS2"], 24, 40, 25, 41)
+    put_block(b, G["SIGN"], 36, 39)
+    put_block(b, G["POT"], 22, 50)
+    put_block(b, G["TALL_GRASS"], 38, 48)
+    links = ["LINK new1.nw 30 55 4 1 40 23"]
     objs = [
         "CHEST 24 40 bluerupee -1",
         "SIGN 36 40",
         "This is the second starter level.",
-        "The doorway to the south leads back outside.",
+        "The gap in the south fence leads back outside.",
         "SIGNEND",
     ]
     return b, links, objs
@@ -1477,7 +1592,7 @@ def gani_frame_into(out, tile, name, step, dr):
 def preview(out, path):
     """Contact sheet of our own art, for people to look at (not committed)."""
     S = 4
-    tiles = [(k, v) for k, v in T.items() if k not in ("CHEST_G_OPEN", "CHEST_W_OPEN", "CHEST_W", "SIGN_W")]
+    tiles = list(G.items())
     sheet = Image.open(os.path.join(out, "pics1.png")).convert("RGB")
     body = Image.open(os.path.join(out, "bodies", "body.png")).convert("RGBA")
     head = Image.open(os.path.join(out, "heads", "head0.png")).convert("RGBA")
@@ -1494,11 +1609,7 @@ def preview(out, path):
     d.text((10, 24), "tiles (x4), in id order: " + " ".join(f"{k.lower()}={v}" for k, v in sorted(tiles, key=lambda kv: kv[1])), fill=(200, 200, 200))
     x, ty, rowh = 10, 46, 0
     for k, v in sorted(tiles, key=lambda kv: kv[1]):
-        w, h = 1, 1
-        if k.startswith(("CHEST", "TREE")):
-            w, h = 2, 2
-        if k.startswith("SIGN"):
-            w, h = 2, 1
+        w, h = (2, 2) if k in OBJECTS_2X2 else (1, 1)
         blk = Image.new("RGB", (16 * w, 16 * h))
         for dy in range(h):
             for dx in range(w):
@@ -1561,7 +1672,12 @@ def main():
     ap.add_argument("--out", default=os.path.join(root, "assets", "default"))
     ap.add_argument("--check", action="store_true", help="regenerate to a temp dir and compare with --out")
     ap.add_argument("--preview", metavar="PNG", help="write a contact sheet of the generated art")
+    ap.add_argument("--import-arrays", metavar="DAT", help="rewrite tools/graal_tile_lists.txt from a Graal arrays.dat, then stop")
     a = ap.parse_args()
+    if a.import_arrays:
+        import_arrays(a.import_arrays)
+        print(f"wrote {LISTS_FILE}", file=sys.stderr)
+        return 0
     if a.check:
         ok = check(a.out)
         print("assets/default is up to date" if ok else "assets/default differs from the generator", file=sys.stderr)
