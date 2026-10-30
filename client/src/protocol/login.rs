@@ -193,26 +193,67 @@ pub fn login_props_message(info: &LoginInfo, own_props: &[u8], account: &str, ac
 
 /// The first `PLI_PLAYERPROPS` of a gen-2 build (1.33 to 1.39), sent once
 /// the first level has loaded: `NICKNAME` (0), `HEADGIF` (11), `COLORS`
-/// (13), `STATUS` (18), `ADDITFLAGS` (33). Live runs of 1.33 and 1.39
-/// (Graal_analysis `version-profiles/1.33-1.39.md`). Head, colours and
-/// status are copied from the server's own props as they came, so a
-/// numbered default head goes back as `c(number)`. The real clients also
-/// send `UDPPORT` (31) before `ADDITFLAGS`; as in
+/// (13), `STATUS` (18), `ADDITFLAGS` (33). The values follow lab runs of the
+/// real 1.33 and 1.39 against a stub that varied the server's props
+/// (`documentation/login-burst.md`):
+///
+/// * the nickname is the server's (prop 0), not the account;
+/// * colours go back as they came;
+/// * the status keeps only bits 16 and 64 of the server's (the others are
+///   the client's own state, all clear at login);
+/// * a numbered head (`c(n)`) goes back as it came. 1.39 sends a
+///   `head<N>.gif` name as `c(N)` and any other name as it came. 1.33 sends
+///   `c(0)` for any name (it has no image heads).
+///
+/// The real clients also send `UDPPORT` (31) before `ADDITFLAGS`; as in
 /// [`login_props_message`], Seihai binds no UDP socket and leaves it out.
-pub fn classic_login_props_message(own_props: &[u8], account: &str, accepted: Option<&IdSet>) -> Vec<u8> {
+pub fn classic_login_props_message(version: super::ClientVersion, own_props: &[u8], account: &str, accepted: Option<&IdSet>) -> Vec<u8> {
     let props = parse_player_props_in(own_props, false, accepted);
+    let raw_of = |id: u8| props.iter().find(|p| p.id == id).map(|p| p.raw.as_slice());
     let mut m = vec![PLI_PLAYERPROPS + 0x20];
     m.push(0x20);
-    gstring(&mut m, account);
-    for id in [11u8, 13, 18] {
-        if let Some(p) = props.iter().find(|p| p.id == id) {
-            m.push(id + 0x20);
-            m.extend(&p.raw);
-        }
+    match raw_of(0) {
+        Some(nick) => m.extend(nick),
+        None => gstring(&mut m, account),
+    }
+    if let Some(head) = raw_of(11) {
+        m.push(11 + 0x20);
+        m.extend(classic_head(version, head));
+    }
+    if let Some(colors) = raw_of(13) {
+        m.push(13 + 0x20);
+        m.extend(colors);
+    }
+    if let Some(&b) = raw_of(18).and_then(|r| r.first()) {
+        m.extend([18 + 0x20, (b.saturating_sub(0x20) & CLASSIC_STATUS_KEPT) + 0x20]);
     }
     m.extend([33 + 0x20, 0x20]);
     m.push(b'\n');
     m
+}
+
+/// The server's status bits a gen-2 client sends back at login (lab, 1.39:
+/// 1, 2, 4, 8 and 32 came back clear, 16 and 64 as sent).
+const CLASSIC_STATUS_KEPT: u8 = 16 | 64;
+
+/// The head value of [`classic_login_props_message`] for the server's
+/// `HEADGIF` bytes: `c(n)` for a numbered head, else `c(len + 100)` + name.
+fn classic_head(version: super::ClientVersion, raw: &[u8]) -> Vec<u8> {
+    let Some(&first) = raw.first() else { return vec![0x20] };
+    let n = first.saturating_sub(0x20);
+    if n < 100 {
+        return vec![first];
+    }
+    if version != super::ClientVersion::V139 {
+        return vec![0x20];
+    }
+    let name = raw.get(1..).unwrap_or_default();
+    let lower = name.to_ascii_lowercase();
+    let num = lower.strip_prefix(b"head").and_then(|r| r.strip_suffix(b".gif")).filter(|d| !d.is_empty() && d.iter().all(u8::is_ascii_digit));
+    match num.and_then(|d| std::str::from_utf8(d).ok()?.parse::<u8>().ok()).filter(|&v| v < 100) {
+        Some(v) => vec![v + 0x20],
+        None => raw.to_vec(),
+    }
 }
 
 /// Whether `version` sends [`classic_login_props_message`] once its first
@@ -370,20 +411,52 @@ mod tests {
         assert_eq!(&m[m.len() - 4..m.len() - 1], &[0x20, 0x29, 0x84]);
     }
 
+    /// The server's props of the lab runs: nick `stubnick`, head, colours,
+    /// status.
+    fn classic_server_props(head: &[u8], status: u8) -> Vec<u8> {
+        let mut p = vec![0x20, 0x28];
+        p.extend(b"stubnick");
+        p.extend([1 + 0x20, 3 + 0x20, 2 + 0x20, 6 + 0x20, 11 + 0x20]);
+        p.extend(head);
+        p.extend([13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32, 18 + 0x20, status + 0x20, 15 + 0x20, 60 + 0x20, 16 + 0x20, 60 + 0x20]);
+        p
+    }
+
+    fn image_head(name: &[u8]) -> Vec<u8> {
+        let mut h = vec![name.len() as u8 + 100 + 0x20];
+        h.extend(name);
+        h
+    }
+
+    /// Lab, 2026-10-30: the real clients' first id 2 against the stub,
+    /// without the `UDPPORT` (31) prop, which Seihai leaves out.
     #[test]
-    fn classic_login_props_are_nick_head_colours_status_additflags() {
-        use crate::protocol::ClientVersion;
-        let v = ClientVersion::V139;
-        let ids = v.profile().props.own.clone();
-        // A numbered default head (c(0+32)): it goes back as it came.
-        let own = [11 + 0x20, 0x20, 13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32, 18 + 0x20, 0x21];
-        let m = classic_login_props_message(&own, "acct", Some(&ids));
-        let mut want = vec![PLI_PLAYERPROPS + 0x20, 0x20, 0x24];
-        want.extend(b"acct");
-        want.extend([11 + 0x20, 0x20, 13 + 0x20, 0x22, 0x20, 0x2a, 0x24, 0x32, 18 + 0x20, 0x21, 33 + 0x20, 0x20, b'\n']);
-        assert_eq!(m, want);
-        assert!(sends_classic_login_props(ClientVersion::V133) && sends_classic_login_props(v));
-        assert!(!sends_classic_login_props(ClientVersion::V141) && !sends_classic_login_props(ClientVersion::V205));
+    fn classic_login_props_match_the_real_1_33_and_1_39() {
+        use crate::protocol::ClientVersion::{V133, V139};
+        let real = |hex: &str| {
+            let mut v = vec![PLI_PLAYERPROPS + 0x20];
+            v.extend((0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()));
+            v.extend([33 + 0x20, 0x20, b'\n']);
+            v
+        };
+        let cases: &[(crate::protocol::ClientVersion, Vec<u8>, u8, &str)] = &[
+            (V139, image_head(b"head3.png"), 20, "2028737475626e69636b2b8d68656164332e706e672d22202a24323230"),
+            (V133, image_head(b"head3.png"), 20, "2028737475626e69636b2b202d22202a24323230"),
+            (V139, image_head(b"head1.gif"), 0, "2028737475626e69636b2b212d22202a24323220"),
+            (V133, image_head(b"head1.gif"), 0, "2028737475626e69636b2b202d22202a24323220"),
+            (V139, image_head(b"head1.gif"), 4, "2028737475626e69636b2b212d22202a24323220"),
+            (V139, image_head(b"head1.gif"), 64, "2028737475626e69636b2b212d22202a24323260"),
+            (V139, image_head(b"head3.png"), 0, "2028737475626e69636b2b8d68656164332e706e672d22202a24323220"),
+            (V133, vec![5 + 0x20], 16, "2028737475626e69636b2b252d22202a24323230"),
+            (V139, vec![5 + 0x20], 16, "2028737475626e69636b2b252d22202a24323230"),
+        ];
+        for (v, head, status, hex) in cases {
+            let ids = v.profile().props.own.clone();
+            let m = classic_login_props_message(*v, &classic_server_props(head, *status), "acct", Some(&ids));
+            assert_eq!(m, real(hex), "{} status {status}", v.label());
+        }
+        assert!(sends_classic_login_props(V133) && sends_classic_login_props(V139));
+        assert!(!sends_classic_login_props(crate::protocol::ClientVersion::V141));
     }
 
     #[test]
