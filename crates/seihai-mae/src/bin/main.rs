@@ -3428,6 +3428,12 @@ fn main() {
                 },
             );
         }
+        if session.life.is_dead() {
+            if let Some(l) = &letters_sheet {
+                let at = player_box_origin(&session, view_w, view_h);
+                seihai::render::signs::draw_end_scroll(&mut frame, &pose_sheet(l), at);
+            }
+        }
         if let Some(text) = &session.reading {
             match &letters_sheet {
                 Some(l) => {

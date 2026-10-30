@@ -143,6 +143,33 @@ pub fn draw_sign(fb: &mut Framebuffer, sheet: &Sheet, text: &str, first: usize, 
     }
 }
 
+/// The width in pixels of `line` as [`draw_line`] draws it (letters only;
+/// `#` codes are not counted).
+pub fn line_width(line: &str) -> i32 {
+    line.chars().filter_map(|c| ALPHABET.find(c).filter(|_| c.is_ascii())).map(|g| advance(g as u8)).sum()
+}
+
+/// The death scroll: a one-line sign panel, 7 by 5 cells, reading "End".
+/// The 2.00 and 2.22 clients show it while the player is dead, under the
+/// player, on a black board (lab, 2026-10-30; the size is read off the
+/// 2.22 screenshot, one line of the sign panel).
+pub const END_TEXT: &str = "End";
+pub const END_COLS: i32 = 7;
+pub const END_ROWS: i32 = PANEL_ROWS - 4;
+
+/// Top-left of the death scroll for a player whose 48x48 box starts at
+/// `player_box`: centred on the box, its top at the box's bottom.
+pub fn end_scroll_origin(player_box: (i32, i32)) -> (i32, i32) {
+    (player_box.0 + 24 - END_COLS * 8, player_box.1 + 48)
+}
+
+/// Draw the death scroll under the player.
+pub fn draw_end_scroll(fb: &mut Framebuffer, sheet: &Sheet, player_box: (i32, i32)) {
+    let (x, y) = end_scroll_origin(player_box);
+    draw_frame(fb, sheet, x, y, END_ROWS, END_COLS);
+    draw_line(fb, sheet, END_TEXT, x + (END_COLS * 16 - line_width(END_TEXT)) / 2, y + 16);
+}
+
 /// The page after the one starting at `first`, or None when the sign ends
 /// there and reading stops.
 pub fn next_page(text: &str, first: usize) -> Option<usize> {
@@ -222,6 +249,21 @@ mod tests {
     fn at(fb: &Framebuffer, x: i32, y: i32) -> [u8; 3] {
         let i = (y as usize * fb.width as usize + x as usize) * 3;
         [fb.pixels[i], fb.pixels[i + 1], fb.pixels[i + 2]]
+    }
+
+    #[test]
+    fn end_scroll_sits_under_the_player_with_the_word_centred() {
+        assert_eq!(line_width("End"), 12 + 12 + 12);
+        assert_eq!(end_scroll_origin((100, 50)), (100 + 24 - 56, 98));
+        let px = sheet();
+        let sh = Sheet { px: &px, w: 256, bpp: 4 };
+        let mut fb = Framebuffer::new(320, 240);
+        draw_end_scroll(&mut fb, &sh, (100, 50));
+        // The top-left frame corner (glyph 96) at the origin, and the E
+        // (glyph 4) one cell down, centred: (112 - 36) / 2 = 38 in.
+        assert_eq!(at(&fb, 68, 98)[0], 96);
+        assert_eq!(at(&fb, 68 + 38, 98 + 16)[0], 4);
+        assert_eq!(at(&fb, 0, 0), [0, 0, 0], "nothing outside the scroll");
     }
 
     #[test]

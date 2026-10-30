@@ -297,8 +297,12 @@ pub fn render_view(
     let (ox, oy) = (cam_x.div_euclid(t), cam_y.div_euclid(t));
     let (sub_x, sub_y) = (cam_x.rem_euclid(t), cam_y.rem_euclid(t));
 
+    // While the player is dead the board is black: the 2.00 and 2.22
+    // clients draw only the objects, the players and the HUD (lab,
+    // 2026-10-30). Chests are drawn from their records and stay.
+    let board = !session.life.is_dead();
     // One extra row and column cover the sub-tile scroll.
-    for ty in 0..=view_tiles_h as i32 {
+    for ty in (0..=view_tiles_h as i32).filter(|_| board) {
         for tx in 0..=view_tiles_w as i32 {
             let lx = ox + tx;
             let ly = oy + ty;
@@ -664,6 +668,17 @@ mod tests {
         assert_eq!(drawn_at(&s, 12, 12), [829, 830, 845, 846]);
         // Beside the chests the board is untouched.
         assert_eq!(drawn_at(&s, 14, 12), [1, 1, 1, 1]);
+    }
+
+    /// While the player is dead the board is black; chests stay.
+    #[test]
+    fn a_dead_player_sees_a_black_board() {
+        let mut s = chest_session(vec![chest(12, 12, false)]);
+        s.life.set_rules(Some(crate::protocol::DEATH_205));
+        s.life.tick(0, true);
+        assert!(s.life.is_dead());
+        assert_eq!(drawn_at(&s, 14, 12), [0, 0, 0, 0], "no board");
+        assert_eq!(drawn_at(&s, 12, 12), [1784, 1785, 1800, 1801], "the chest is still drawn");
     }
 
     /// The client draws a chest only for x and y from 0 to 62.
