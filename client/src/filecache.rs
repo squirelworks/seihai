@@ -588,6 +588,67 @@ pub struct FileSession {
 /// second). `(step number, names)`.
 pub const FIRST_STEP_REQUESTS: &[(u32, &[&str])] = &[(1, &["steps.wav", "walk.gani"]), (2, &["steps2.wav"])];
 
+/// What kind of file a [`BASE_FILES`] entry is, and where it is looked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseKind {
+    /// An image, by stem: the build's image extension is added. The
+    /// category is the folder it is looked for in first (`"bodies"`, ...).
+    Image(&'static str),
+    /// A `.gani`, by stem. Builds without GANIs skip it.
+    Gani,
+    /// A `.wav`, by stem.
+    Sound,
+}
+
+/// Files every install of the real client ships with, that Seihai draws
+/// or plays from the moment it is in a level. The tile sheet comes first:
+/// it is the one a stand-in shows most (a level of a server's own tiles is
+/// a purple checker on the built-in sheet).
+///
+/// The real client never asks a server for these: it has them. Seihai asks
+/// for one only when it has no copy of its own ([`FileSession::request_base_files`]).
+pub const BASE_FILES: &[(BaseKind, &str)] = &[
+    (BaseKind::Image(""), "pics1"),
+    (BaseKind::Image(""), "sprites"),
+    (BaseKind::Image(""), "state"),
+    (BaseKind::Image(""), "letters"),
+    (BaseKind::Image("bodies"), "body"),
+    (BaseKind::Image("heads"), "head0"),
+    (BaseKind::Image("swords"), "sword1"),
+    (BaseKind::Image("shields"), "shield1"),
+    (BaseKind::Gani, "idle"),
+    (BaseKind::Gani, "walk"),
+    (BaseKind::Gani, "swim"),
+    (BaseKind::Gani, "sword"),
+    (BaseKind::Gani, "hurt"),
+    (BaseKind::Gani, "sit"),
+    (BaseKind::Gani, "carry"),
+    (BaseKind::Gani, "carrystill"),
+    (BaseKind::Gani, "dead"),
+    (BaseKind::Sound, "steps"),
+    (BaseKind::Sound, "steps2"),
+    (BaseKind::Sound, "sword"),
+    (BaseKind::Sound, "water"),
+];
+
+/// The [`BASE_FILES`] entry a received file is, by its name with any
+/// extension (a server may send `pics1.gif` for `pics1.png`).
+pub fn base_file_of(name: &str) -> Option<(BaseKind, &'static str)> {
+    let base = name.trim().rsplit('/').next()?.to_ascii_lowercase();
+    let (stem, ext) = match base.rfind('.') {
+        Some(i) if i > 0 => (&base[..i], &base[i..]),
+        _ => (base.as_str(), ""),
+    };
+    BASE_FILES.iter().copied().find(|(kind, s)| {
+        *s == stem
+            && match kind {
+                BaseKind::Image(_) => is_image_name(&base),
+                BaseKind::Gani => ext == ".gani",
+                BaseKind::Sound => ext == ".wav",
+            }
+    })
+}
+
 impl FileSession {
     pub fn new(resolver: AssetResolver, save_to_disk: bool) -> Self {
         let requests = FileRequester::new(resolver.profile());
@@ -617,6 +678,53 @@ impl FileSession {
         let local = self.store.local_mod_time(&clean);
         let local = local.or_else(|| self.store.memory_file(&clean).map(|m| m.mod_time.unwrap_or(0)));
         self.requests.need(name, local).iter().map(FileRequest::message).collect()
+    }
+
+    /// Ask the server for the [`BASE_FILES`] that Seihai has no copy of.
+    /// Returns the messages to send now (the rest wait in the request list).
+    ///
+    /// This goes beyond the real client, which ships these files and never
+    /// asks for them. So it is a fallback only:
+    ///
+    /// * A file found in the user's folder or the cache (a download from an
+    ///   earlier run) is not asked about at all, not even with
+    ///   `UPDATEFILE`: with a full Graal folder the wire is the same as
+    ///   before.
+    /// * A file only the built-in set has, or no layer has, is asked for
+    ///   with `WANTFILE` (as [`need`](Self::need) does for any built-in-only
+    ///   file). The server's copy goes to the cache and wins over the
+    ///   built-in one from then on.
+    /// * A `FILESENDFAILED`, or no reply at all, leaves the built-in file in
+    ///   use. GServer-v2 answers every `WANTFILE` with the file or
+    ///   `FILESENDFAILED`, and before 2.14 it fails any file over 64000
+    ///   bytes (no large-file packets), which a real `pics1.png` is.
+    ///
+    /// Builds without `WANTFILE` ask for nothing; builds without GANIs skip
+    /// the GANIs.
+    pub fn request_base_files(&mut self) -> Vec<Vec<u8>> {
+        let resolver = self.store.resolver();
+        let profile = resolver.profile();
+        if !profile.protocol.pli.contains(23) {
+            return Vec::new();
+        }
+        let mut names = Vec::new();
+        for (kind, stem) in BASE_FILES {
+            let (name, found) = match kind {
+                BaseKind::Image(cat) => (format!("{stem}{}", profile.files.image_ext), resolver.image_in(cat, stem)),
+                BaseKind::Gani if !profile.ui.ganis => continue,
+                BaseKind::Gani => (format!("{stem}.gani"), resolver.gani(stem)),
+                BaseKind::Sound => (format!("{stem}.wav"), resolver.sound(stem)),
+            };
+            let own_copy = found.is_some_and(|p| resolver.layer_of(&p).is_some_and(|l| l != Layer::Builtin));
+            if !own_copy && self.store.memory_file(&name).is_none() {
+                names.push(name);
+            }
+        }
+        let mut out = Vec::new();
+        for name in names {
+            out.extend(self.need(&name));
+        }
+        out
     }
 
     /// The player took a step. On the first two steps of a connection the
@@ -977,6 +1085,57 @@ mod tests {
         assert!(st.file_requests.is_empty());
         assert!(fs_.need("head0.png").is_empty());
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn base_files_are_asked_for_only_when_the_built_in_set_has_them() {
+        let builtin = tmp("base-builtin");
+        fs::write(builtin.join("pics1.png"), b"B").unwrap();
+        fs::write(builtin.join("state.png"), b"B").unwrap();
+        let user = tmp("base-user");
+        fs::write(user.join("state.png"), b"U").unwrap();
+        let resolver = AssetResolver::empty(ClientVersion::V222.profile())
+            .with_assets(Some(AssetRoot::new(&user)))
+            .with_builtin(Some(builtin.clone()));
+        let mut fs_ = FileSession::new(resolver, true);
+        let sent = fs_.request_base_files();
+        // pics1 (built-in only) goes first; state.png (the user's) is not asked about.
+        assert_eq!(sent.len(), WINDOW);
+        assert_eq!(sent[0], wantfile_message("pics1.png"));
+        assert!(!sent.contains(&wantfile_message("state.png")));
+        assert!(sent.iter().all(|m| m[0] == 23 + 0x20));
+        // Asked once a connection.
+        assert!(fs_.request_base_files().is_empty());
+        fs::remove_dir_all(&builtin).ok();
+        fs::remove_dir_all(&user).ok();
+    }
+
+    #[test]
+    fn a_full_folder_asks_for_no_base_file() {
+        let user = tmp("base-full");
+        for (kind, stem) in BASE_FILES {
+            let (dir, ext) = match kind {
+                BaseKind::Image(c) => (*c, ".png"),
+                BaseKind::Gani => ("levels/ganis", ".gani"),
+                BaseKind::Sound => ("sounds", ".wav"),
+            };
+            let d = user.join(dir);
+            fs::create_dir_all(&d).unwrap();
+            fs::write(d.join(format!("{stem}{ext}")), b"U").unwrap();
+        }
+        let mut fs_ = FileSession::new(AssetResolver::new(AssetRoot::new(&user), ClientVersion::V222.profile()), true);
+        assert!(fs_.request_base_files().is_empty());
+        fs::remove_dir_all(&user).ok();
+    }
+
+    #[test]
+    fn a_received_file_is_matched_to_its_base_entry() {
+        assert_eq!(base_file_of("pics1.png"), Some((BaseKind::Image(""), "pics1")));
+        assert_eq!(base_file_of("PICS1.GIF"), Some((BaseKind::Image(""), "pics1")));
+        assert_eq!(base_file_of("sword.gani"), Some((BaseKind::Gani, "sword")));
+        assert_eq!(base_file_of("sword.wav"), Some((BaseKind::Sound, "sword")));
+        assert_eq!(base_file_of("sword.png"), None);
+        assert_eq!(base_file_of("pics2.png"), None);
     }
 
     #[test]
