@@ -69,7 +69,11 @@ fn run(version: ClientVersion) -> String {
     let server = std::thread::spawn(move || serve(version, listener));
     let login = Login { account: "lab".into(), password: "pw".into(), nick: "lab".into(), language: "English".into() };
     let mut out = Vec::new();
-    online::run(&addr, version, &login, None, true, &mut out).unwrap();
+    let mut levels = Vec::new();
+    online::run(&addr, version, &login, None, true, &mut out, &mut |l, a| levels.push((l.clone(), a.clone()))).unwrap();
+    // The level handed to the view is the one logged, built from the board.
+    assert_eq!(levels.len(), 1);
+    assert_eq!(levels[0].0.tile_id_at(10, 10), Some(0x1FF));
     server.join().unwrap();
     String::from_utf8(out).unwrap()
 }

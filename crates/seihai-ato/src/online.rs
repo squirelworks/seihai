@@ -7,7 +7,7 @@
 //! the real client sends once the board is in (file checks and props,
 //! `protocol::login::LoginBurst`) is not sent yet.
 
-use crate::level::LevelStore;
+use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
 use seihai_core::net::{login_gserver, random_key};
 use seihai_core::protocol::{ClientVersion, SessionState};
@@ -34,7 +34,8 @@ const SETTLE: Duration = Duration::from_millis(300);
 /// Log in at `addr` and log every level the server sends to `out`, until
 /// the server closes the connection or, with `first_level_only`, the first
 /// level is stored. `assets` is an asset folder whose levels may stand in
-/// for the board at the server's mod time.
+/// for the board at the server's mod time. `shown` gets each level as it
+/// is logged (the game view draws it).
 pub fn run(
     addr: &str,
     version: ClientVersion,
@@ -42,6 +43,7 @@ pub fn run(
     assets: Option<PathBuf>,
     first_level_only: bool,
     out: &mut impl Write,
+    shown: &mut dyn FnMut(&Level, &Arrival),
 ) -> Result<(), String> {
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
@@ -65,14 +67,14 @@ pub fn run(
                 let before = st.current_level_name();
                 // A new level ends the one owed: log it as it stood.
                 if owed && store.level_name().is_some_and(|n| before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))) {
-                    log_level(&store, &st, out);
+                    log_level(&store, &st, out, shown);
                     owed = false;
                 }
                 owed |= store.update(&mut st, local);
             }
             Ok(Err(e)) => {
                 if owed {
-                    log_level(&store, &st, out);
+                    log_level(&store, &st, out, shown);
                 }
                 let why = st.disconnect_message.take().unwrap_or_else(|| e.to_string());
                 let _ = writeln!(out, "connection closed: {why}");
@@ -80,7 +82,7 @@ pub fn run(
             }
             Err(RecvTimeoutError::Timeout) => {
                 if owed {
-                    log_level(&store, &st, out);
+                    log_level(&store, &st, out, shown);
                     owed = false;
                     if first_level_only {
                         let _ = s.conn.shutdown();
@@ -93,8 +95,9 @@ pub fn run(
     }
 }
 
-fn log_level(store: &LevelStore, st: &SessionState, out: &mut impl Write) {
-    if let Some(a) = store.arrival(st) {
+fn log_level(store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
+    if let (Some(a), Some(level)) = (store.arrival(st), store.level.as_ref()) {
         let _ = writeln!(out, "{}", a.line());
+        shown(level, &a);
     }
 }

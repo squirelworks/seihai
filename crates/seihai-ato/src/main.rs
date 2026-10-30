@@ -5,14 +5,14 @@
 //!   seihai-ato --version 3.04 --online host:port --account A --password-env VAR
 //!              [--assets DIR] [--no-window] [--first-level]
 //!
-//! With `--online`, Start (or `--no-window`) logs in at that game server and
-//! logs each level the server sends: its name, the start position and the
-//! NPC count. Nothing is drawn yet.
+//! With `--online`, Start logs in at that game server, logs each level the
+//! server sends (its name, the start position and the NPC count) and draws
+//! it flat; the arrow keys walk it. `--no-window` only logs.
 //!
 //! `seihai-launcher` starts this binary for a 3.x `--version` and passes the
 //! user's arguments through; flags meant for `seihai-mae` are ignored.
 
-use seihai_ato::{args, online, start_window, torque, wire::Wire};
+use seihai_ato::{args, game, online, start_window, torque, wire::Wire};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -40,26 +40,23 @@ fn main() -> ExitCode {
     };
     let account = a.account.unwrap_or_default();
     let nick = a.nick.unwrap_or_else(|| account.clone());
-    let login = if a.no_window {
-        if a.online.is_none() {
-            eprintln!("seihai-ato: --no-window needs --online host:port");
-            return ExitCode::from(2);
-        }
-        online::Login { account, password, nick, language: "English".into() }
-    } else {
+    if !a.no_window {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
-        match start_window::run(w) {
-            Ok(Some(l)) => l,
-            Ok(None) => return ExitCode::SUCCESS,
+        return match game::run(version, w, a.assets.map(Into::into)) {
+            Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("seihai-ato: could not open the start window: {e}");
-                return ExitCode::FAILURE;
+                eprintln!("seihai-ato: could not open the window: {e}");
+                ExitCode::FAILURE
             }
-        }
+        };
+    }
+    let Some(addr) = a.online else {
+        eprintln!("seihai-ato: --no-window needs --online host:port");
+        return ExitCode::from(2);
     };
-    let Some(addr) = a.online else { return ExitCode::SUCCESS };
-    match online::run(&addr, version, &login, a.assets.map(Into::into), a.first_level, &mut std::io::stdout()) {
+    let login = online::Login { account, password, nick, language: "English".into() };
+    match online::run(&addr, version, &login, a.assets.map(Into::into), a.first_level, &mut std::io::stdout(), &mut |_, _| {}) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("seihai-ato: {e}");

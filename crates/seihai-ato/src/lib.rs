@@ -5,12 +5,16 @@
 //! ([`torque`]) and the start window ([`start_window`]).
 //!
 //! Stage 2: log in to a game server ([`online`]), read what it sends with
-//! the core readers, and keep and log the level ([`level`]). Nothing is
-//! drawn yet.
+//! the core readers, and keep and log the level ([`level`]).
+//!
+//! Stage 3: draw the level flat as `seihai-mae` draws its tiles
+//! ([`render`]) and walk it with the arrow keys ([`game`]).
 
 pub mod args;
+pub mod game;
 pub mod level;
 pub mod online;
+pub mod render;
 pub mod start_window;
 pub mod torque;
 pub mod wire;
