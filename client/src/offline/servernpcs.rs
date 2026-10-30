@@ -10,7 +10,11 @@
 //! * After `canbepushed`, `canbepulled` or `dontblock`, the NPC's BLOCKFLAGS.
 //! * VISFLAGS for every NPC once its script has run (`hide`, `drawoverplayer`
 //!   and `drawunderplayer` change it later), IMAGE after `setimg`, and
-//!   MESSAGE after `message`.
+//!   MESSAGE after `message` (or `setcharprop #c`).
+//! * A character NPC (`showcharacter`, `setcharani`): IMAGE `#c#`, its
+//!   GANI, SPRITE (its `dir`), COLORS, HEAD, BODY and GANI attributes;
+//!   NICKNAME after `setcharprop #n`, character or not. `#1` (sword) and
+//!   `#2` (shield) are not sent.
 //!
 //! Seihai may also have the level file. An NPC of the file that has the
 //! server NPC's image and position *is* that NPC and takes its id; a server
@@ -21,8 +25,9 @@ use std::collections::HashMap;
 use super::OfflineSession;
 use crate::assets::{DrawLayer, Level, Npc};
 use crate::protocol::npcprops::{
-    half_tiles, npc_props_message, NpcProps, PropValue, BLOCK_DONTBLOCK, BLOCK_PULLABLE, BLOCK_PUSHABLE, NPCPROP_BLOCKFLAGS, NPCPROP_IMAGE,
-    NPCPROP_MESSAGE, NPCPROP_VISFLAGS, NPCPROP_X, NPCPROP_Y, VIS_CLIENT, VIS_DEFAULT, VIS_OVER, VIS_UNDER, VIS_VISIBLE,
+    half_tiles, npc_props_message, Head, NpcProps, PropValue, BLOCK_DONTBLOCK, BLOCK_PULLABLE, BLOCK_PUSHABLE, CHARACTER_IMAGE, DEFAULT_NPC_COLORS,
+    NPCPROP_BLOCKFLAGS, NPCPROP_BODY, NPCPROP_COLORS, NPCPROP_GANI, NPCPROP_GATTRIB1, NPCPROP_HEAD, NPCPROP_IMAGE, NPCPROP_MESSAGE, NPCPROP_NICKNAME,
+    NPCPROP_SPRITE, NPCPROP_VISFLAGS, NPCPROP_X, NPCPROP_Y, VIS_CLIENT, VIS_DEFAULT, VIS_OVER, VIS_UNDER, VIS_VISIBLE,
 };
 
 const OUR_BITS: u8 = BLOCK_DONTBLOCK | BLOCK_PULLABLE | BLOCK_PUSHABLE;
@@ -60,9 +65,41 @@ pub fn vis_flags(n: &Npc, base: u8) -> u8 {
     f
 }
 
+/// The character props `n` would report, if it is a character NPC: GANI,
+/// SPRITE, COLORS, HEAD, BODY and the five GANI attributes.
+struct CharProps {
+    gani: String,
+    sprite: u8,
+    colors: [u8; 5],
+    head: Head,
+    body: String,
+    attrs: [String; 5],
+}
+
+fn char_props(n: &Npc) -> Option<CharProps> {
+    let gani = n.ani.clone()?;
+    let mut colors = DEFAULT_NPC_COLORS;
+    for (i, c) in colors.iter_mut().enumerate() {
+        if let Some(v) = n.props.get(&format!("#C{i}")).and_then(|v| crate::looks::color_value(v)) {
+            *c = v;
+        }
+    }
+    let head = match n.head.as_deref().map(str::trim).filter(|h| !h.is_empty()) {
+        Some(h) => Head::Name(h.to_string()),
+        None => Head::Index(0),
+    };
+    let body = n.body.clone().filter(|b| !b.trim().is_empty()).unwrap_or_else(|| "body.png".into());
+    let attrs = [1, 2, 3, 4, 5].map(|i| n.props.get(&format!("#P{i}")).cloned().unwrap_or_default());
+    Some(CharProps { gani, sprite: n.dir, colors, head, body, attrs })
+}
+
 /// Put the props a server record carries on a level NPC.
 fn apply(n: &mut Npc, p: &NpcProps) {
-    if let Some(image) = &p.image {
+    if p.image.as_deref() == Some(CHARACTER_IMAGE) {
+        if n.ani.is_none() {
+            n.ani = Some("idle".into());
+        }
+    } else if let Some(image) = &p.image {
         if !n.image.eq_ignore_ascii_case(image) {
             n.image = image.clone();
             n.image_part = None;
@@ -82,6 +119,39 @@ fn apply(n: &mut Npc, p: &NpcProps) {
     }
     if let Some(m) = &p.message {
         n.message = m.clone();
+    }
+    if let Some(g) = &p.gani {
+        let g = g.trim_end_matches(".gani").to_ascii_lowercase();
+        if !g.is_empty() && n.ani.as_deref() != Some(g.as_str()) {
+            n.ani = Some(g);
+            n.ani_frame = 0;
+            n.ani_ms = 0;
+        }
+    }
+    if let Some(d) = p.sprite {
+        n.dir = d % 4;
+    }
+    if let Some(c) = p.colors {
+        for (i, v) in c.iter().enumerate() {
+            n.props.insert(format!("#C{i}"), v.to_string());
+        }
+    }
+    if let Some(nick) = &p.nickname {
+        n.props.insert("#n".into(), nick.clone());
+    }
+    match &p.head {
+        Some(Head::Name(h)) => n.head = Some(h.clone()),
+        Some(Head::Index(0)) => n.head = None,
+        Some(Head::Index(i)) => n.head = Some(format!("head{i}.png")),
+        None => {}
+    }
+    if let Some(b) = &p.body {
+        n.body = Some(b.clone());
+    }
+    for (i, a) in p.attrs.iter().enumerate() {
+        if let Some(a) = a {
+            n.props.insert(format!("#P{}", i + 1), a.clone());
+        }
     }
     if let Some(x) = p.x {
         n.x = x;
@@ -150,6 +220,13 @@ struct Known {
     vis_base: u8,
     image: String,
     message: String,
+    nickname: String,
+    gani: String,
+    sprite: u8,
+    colors: Option<[u8; 5]>,
+    head: Option<Head>,
+    body: String,
+    attrs: [String; 5],
 }
 
 /// The values the server last had for each linked NPC. Anything the
@@ -175,6 +252,13 @@ impl ServerNpcSync {
             vis_base: VIS_DEFAULT,
             image: n.image.clone(),
             message: String::new(),
+            nickname: String::new(),
+            gani: String::new(),
+            sprite: 2,
+            colors: None,
+            head: None,
+            body: String::new(),
+            attrs: Default::default(),
         });
         if let Some(x) = p.x {
             k.x = half_tiles(x);
@@ -195,6 +279,29 @@ impl ServerNpcSync {
         if let Some(m) = &p.message {
             k.message = m.clone();
         }
+        if let Some(v) = &p.nickname {
+            k.nickname = v.clone();
+        }
+        if let Some(v) = &p.gani {
+            k.gani = v.clone();
+        }
+        if let Some(v) = p.sprite {
+            k.sprite = v;
+        }
+        if p.colors.is_some() {
+            k.colors = p.colors;
+        }
+        if p.head.is_some() {
+            k.head = p.head.clone();
+        }
+        if let Some(v) = &p.body {
+            k.body = v.clone();
+        }
+        for (k, a) in k.attrs.iter_mut().zip(&p.attrs) {
+            if let Some(a) = a {
+                *k = a.clone();
+            }
+        }
     }
 
     /// `PLI_NPCPROPS` messages for every linked NPC of `level` whose props
@@ -205,10 +312,11 @@ impl ServerNpcSync {
             let Some(id) = n.server_id else { continue };
             let Some(k) = self.known.get_mut(&id) else { continue };
             let mut props = Vec::new();
-            // A character NPC's image is its animation; that is not sent.
-            if n.ani.is_none() && !n.image.eq_ignore_ascii_case(&k.image) {
-                k.image = n.image.clone();
-                props.push((NPCPROP_IMAGE, PropValue::Text(n.image.clone())));
+            let ch = char_props(n);
+            let image = if ch.is_some() { CHARACTER_IMAGE } else { n.image.as_str() };
+            if !image.eq_ignore_ascii_case(&k.image) {
+                k.image = image.to_string();
+                props.push((NPCPROP_IMAGE, PropValue::Text(image.to_string())));
             }
             for (prop, now, was) in [(NPCPROP_X, half_tiles(n.x), &mut k.x), (NPCPROP_Y, half_tiles(n.y), &mut k.y)] {
                 if now != *was {
@@ -230,6 +338,45 @@ impl ServerNpcSync {
                 k.message = n.message.clone();
                 props.push((NPCPROP_MESSAGE, PropValue::Text(n.message.clone())));
             }
+            if let Some(c) = &ch {
+                if !c.gani.eq_ignore_ascii_case(k.gani.trim_end_matches(".gani")) {
+                    k.gani = c.gani.clone();
+                    props.push((NPCPROP_GANI, PropValue::Text(c.gani.clone())));
+                }
+            }
+            if let Some(c) = &ch {
+                if c.sprite != k.sprite {
+                    k.sprite = c.sprite;
+                    props.push((NPCPROP_SPRITE, PropValue::Byte(c.sprite)));
+                }
+                if k.colors.unwrap_or(DEFAULT_NPC_COLORS) != c.colors {
+                    k.colors = Some(c.colors);
+                    props.push((NPCPROP_COLORS, PropValue::Bytes(c.colors.to_vec())));
+                }
+            }
+            let nick = n.props.get("#n").cloned().unwrap_or_default();
+            if nick != k.nickname {
+                k.nickname = nick.clone();
+                props.push((NPCPROP_NICKNAME, PropValue::Text(nick)));
+            }
+            if let Some(c) = ch {
+                if k.head.as_ref() != Some(&c.head) {
+                    k.head = Some(c.head.clone());
+                    props.push((NPCPROP_HEAD, PropValue::Head(c.head)));
+                }
+                if !c.body.eq_ignore_ascii_case(&k.body) {
+                    k.body = c.body.clone();
+                    props.push((NPCPROP_BODY, PropValue::Text(c.body)));
+                }
+                for (i, (now, was)) in c.attrs.into_iter().zip(k.attrs.iter_mut()).enumerate() {
+                    if now != *was {
+                        *was = now.clone();
+                        props.push((NPCPROP_GATTRIB1 + i as u8, PropValue::Text(now)));
+                    }
+                }
+            }
+            // The 2.05 client sends props in id order.
+            props.sort_by_key(|(p, _)| *p);
             if !props.is_empty() {
                 out.push(npc_props_message(id, &props));
             }

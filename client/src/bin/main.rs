@@ -1181,6 +1181,7 @@ fn main() {
             seihai::render::draw_throw_layer(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
+        seihai::render::draw_npc_messages(&mut fb, session, &npc_art, chat_font.as_ref(), cam_x, cam_y);
         ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
         if let Some(nick) = my_nick {

@@ -237,6 +237,17 @@ impl SessionScripts {
     /// Apply the world's pending effects to the session. What the session
     /// has no place for goes to [`SessionScripts::unhandled`].
     pub fn apply(&mut self, s: &mut OfflineSession) {
+        // The scripts' `dir` of each NPC (character NPCs face it; online
+        // it goes to the server as SPRITE).
+        if let Some(level) = s.current_level.as_mut() {
+            for id in self.world.ids() {
+                if let Some(o) = self.world.obj(id).filter(|o| o.kind == ObjKind::Npc) {
+                    if let (Some(n), Some(d)) = (level.npcs.get_mut(o.tag), o.vars.get("dir")) {
+                        n.dir = (d.num().round() as i64).rem_euclid(4) as u8;
+                    }
+                }
+            }
+        }
         for e in self.world.take_effects() {
             match e {
                 Effect::Message { obj, text } => {
@@ -502,6 +513,10 @@ impl SessionScripts {
                             "#3" => n.head = Some(value),
                             "#8" => n.body = Some(value),
                             "#2" => n.shield = Some(value),
+                            "#c" => {
+                                n.message = value.clone();
+                                n.props.insert(code, value);
+                            }
                             _ => { n.props.insert(code, value); }
                         }
                     }

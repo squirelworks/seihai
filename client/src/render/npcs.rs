@@ -9,8 +9,8 @@ use crate::assets::{DrawLayer, Gani, ImageEffect, Npc, SCREEN_HEIGHT};
 use crate::looks;
 use crate::offline::OfflineSession;
 
-/// The facing an animated NPC is drawn with (down; NPCs have no direction
-/// of their own in Seihai yet).
+/// The facing an NPC starts with (down) until its script or the server
+/// turns it (`Npc::dir`).
 pub const NPC_DIR: u8 = 2;
 
 /// What the NPC drawing reads from: the decoded NPC images by file name
@@ -192,6 +192,35 @@ pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, c
     }
 }
 
+/// Draw the `message` of each visible NPC of the session's level in the
+/// chat style ([`super::chattext::draw_npc_message`]): centred over the
+/// NPC's picture, the top of its last line one tile above the NPC. The
+/// picture is the image part (or the whole image) for an image NPC and the
+/// 48-pixel player box for a character, as for players. Checked against the
+/// 2.05 rev 2 client: a 32-pixel crate and a 64-pixel image part both get
+/// their text centred over them, glyphs just clear of the top edge.
+pub fn draw_npc_messages(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, font: Option<&super::chattext::ChatFont>, cam_x: i32, cam_y: i32) {
+    let Some(level) = &session.current_level else { return };
+    let tile = TILE_PX as i32;
+    for npc in level.npcs.iter().filter(|n| n.visible && !n.message.is_empty()) {
+        let dx = (npc.x * TILE_PX as f32) as i32 - cam_x;
+        let dy = (npc.y * TILE_PX as f32) as i32 - cam_y;
+        super::chattext::draw_npc_message(fb, font, &npc.message, dx + message_width(npc, art) / 2, dy - tile);
+    }
+}
+
+/// The width the NPC's message is centred over.
+fn message_width(npc: &Npc, art: &NpcArt) -> i32 {
+    if npc.ani.is_some() {
+        return TILE_PX as i32 * 3;
+    }
+    let Some(w) = art.images.get(&npc.image).map(|i| i.0 as i32) else { return TILE_PX as i32 * 2 };
+    match npc.image_part {
+        Some((x, _, pw, _)) => pw.clamp(0, w - x.clamp(0, w)),
+        None => w,
+    }
+}
+
 /// Draw the NPC as its animation. False when it has none, or the animation
 /// or the sheets it needs are not loaded (the image is drawn then).
 fn draw_animation(fb: &mut Framebuffer, session: &OfflineSession, npc: &Npc, art: &NpcArt, dx: i32, dy: i32) -> bool {
@@ -204,12 +233,38 @@ fn draw_animation(fb: &mut Framebuffer, session: &OfflineSession, npc: &Npc, art
     // A character with `setcoloreffect` or `setzoomeffect`: the whole figure
     // is coloured and zoomed about its centre, as an image is.
     if npc.effect.is_on() {
-        if let Some((ox, oy, w, px)) = compose_gani_frame(gani, npc.ani_frame, NPC_DIR, &sheets) {
+        if let Some((ox, oy, w, px)) = compose_gani_frame(gani, npc.ani_frame, npc.dir, &sheets) {
             let h = (px.len() / (w as usize * 4)) as i32;
             blit_effect(fb, &px, w as i32, (0, 0, w as i32, h), dx + ox, dy + oy, npc.effect, npc.layer == DrawLayer::Light);
         }
         return true;
     }
-    draw_gani_frame(fb, gani, npc.ani_frame, NPC_DIR, &sheets, dx, dy);
+    draw_gani_frame(fb, gani, npc.ani_frame, npc.dir, &sheets, dx, dy);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_centres_over_the_image_part_or_the_character_box() {
+        let mut images = HashMap::new();
+        images.insert("crate.gif".to_string(), (32u32, vec![0u8; 32 * 32 * 4]));
+        images.insert("bomb1.png".to_string(), (128u32, vec![0u8; 128 * 16 * 4]));
+        let art = NpcArt { images: &images, sheets: PoseSheets::default(), gani_attrs: true };
+        let mut npc = Npc::new("crate.gif".into(), 30.0, 25.0, String::new());
+        assert_eq!(message_width(&npc, &art), 32);
+        npc.image = "bomb1.png".into();
+        npc.image_part = Some((0, 0, 64, 16));
+        assert_eq!(message_width(&npc, &art), 64);
+        // A part running off the image is cut at its edge.
+        npc.image_part = Some((100, 0, 64, 16));
+        assert_eq!(message_width(&npc, &art), 28);
+        npc.image = "missing.png".into();
+        npc.image_part = None;
+        assert_eq!(message_width(&npc, &art), 32);
+        npc.ani = Some("idle".into());
+        assert_eq!(message_width(&npc, &art), 48);
+    }
 }

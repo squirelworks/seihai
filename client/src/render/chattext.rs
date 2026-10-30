@@ -309,6 +309,14 @@ pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str,
     draw_label(fb, font, text, CHAT_RGB, dx + tile * 3 / 2, top);
 }
 
+/// Draw an NPC's `message` centred on `cx` with the top of its last line at
+/// `top`, in the chat colour and style.
+pub fn draw_npc_message(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, cx: i32, top: i32) {
+    if !text.is_empty() {
+        draw_label(fb, font, text, CHAT_RGB, cx, top);
+    }
+}
+
 /// The nickname colour for a player with `ap` alignment points, the ramp
 /// every build from 1.31 to 2.31 uses (and 6.x, per the v6 notes). Read
 /// from 2.05 rev 2 and checked live for AP 0, 20, 40, 50, 58, 65, 85, 100.
