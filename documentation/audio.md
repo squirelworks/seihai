@@ -52,7 +52,8 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
   sets the pan, so a wrong guess moves it a little.
 - **Missing files online.** A sound that is in no folder is asked for with
   `PLI_WANTFILE` by its raw name (as written, without `+`), once per name
-  (`FileSession::need`). It is saved to the cache's `sounds` folder, which is
+  (`FileSession::need_missing`: not from a build without `WANTFILE`, and not
+  when a download of this session already holds it). It is saved to the cache's `sounds` folder, which is
   one of the engine's folders, and plays on the next trigger, as in 2.05.
 - **Folder.** `<assets>/sounds`, else `<assets>/levels/sounds`. File names
   match without regard to case or path, as on Windows.

@@ -25,11 +25,17 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
 
 * `walk.gani`, `steps.wav`, `steps2.wav` (and `idle.gani` at login on 2.17/2.22): the real client's clean
   folder has none of them, and it asks at the first step (2.31 `gmap_cross`: `steps.wav` and `walk.gani` in
-  one frame, `steps2.wav` 100 ms later, i.e. at the second step). Seihai's lab asset folder has none of them
-  either, but Seihai has no request path for a missing GANI or sound (the sound `WANTFILE` is an open item of
-  the audio work), so it asks for none. The names and the timing are known from the capture; where the
-  request belongs in Seihai's loop (and what a sound name is before the GANI that names it has arrived) is
-  not decided, so this is skipped, not invented.
+  one frame, `steps2.wav` 100 ms later, i.e. at the second step). Done: `idle.gani` goes in the login frame
+  where the build asks for it (`LoginInfo::idle_gani`), and the three first-step names go with the first and
+  second step when Seihai has no copy at all (`FileSession::on_step`, the maintainer answer below). A
+  built-in copy counts, so a default run still asks for none of them; `--no-builtin` runs Seihai without the
+  built-in set, as the real client's clean folder, so the lab can compare the two. The path behind it,
+  `FileSession::need_missing`, is also used for a sound a script or a GANI cue plays and for the GANI an NPC
+  names (`setcharani`, `setani`), gated by the profile (`pli` 23, and `ui.ganis` for a GANI). A sound named by
+  a GANI that has not arrived yet is not asked for: its name is only known once the GANI is read, and then it
+  goes through the same path when the cue plays. Not lab-checked yet against the real client with
+  `--no-builtin`; a GANI named by another player's `GANI` prop that Seihai does not draw is not asked for
+  (Seihai draws only its pose set for others; not captured).
 * `lv_*.nw`, `gm_nw.nw`, `gm2x2.gmap`: Seihai asks for the level files it enters, because it starts
   with none; the real client had them cached (it sent `UPDATEFILE gm2x2.gmap` instead). A cache-state
   difference of the lab, not a wire rule.

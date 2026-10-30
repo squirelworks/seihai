@@ -353,6 +353,35 @@ fn the_first_step_messages_are_plain_wantfiles() {
     assert_eq!(m[1], FileRequest::Want("walk.gani".into()).message());
 }
 
+#[test]
+fn a_missing_gani_or_sound_is_asked_for_only_when_no_copy_exists() {
+    let (base, bdir) = builtin_dir("missing");
+    let empty = tmp("missing-empty");
+
+    // A clean client: an NPC's GANI and a script's sound, once each while pending.
+    let mut s = step_session(ClientVersion::V231, Some(&empty), None, None);
+    assert_eq!(sent(s.need_missing("bomy_idle.gani")), ["23:bomy_idle.gani"]);
+    assert!(s.need_missing("BOMY_IDLE.GANI").is_empty());
+    assert_eq!(sent(s.need_missing("thunder.wav")), ["23:thunder.wav"]);
+
+    // A built-in copy counts as present here, unlike `need`.
+    let mut s = step_session(ClientVersion::V231, Some(&empty), None, Some(&bdir));
+    assert!(s.need_missing("idle.gani").is_empty() && s.need_missing("steps.wav").is_empty());
+    assert_eq!(sent(s.need("idle.gani")), ["23:idle.gani"]);
+
+    // Gated by the profile: no GANI from a build without GANIs, nothing
+    // from a build that does not send WANTFILE.
+    for v in [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222] {
+        let p = v.profile();
+        let mut s = step_session(v, Some(&empty), None, None);
+        let wants = p.protocol.pli.contains(23);
+        assert_eq!(!s.need_missing("bomy_idle.gani").is_empty(), wants && p.ui.ganis, "{v:?} gani");
+        assert_eq!(!s.need_missing("thunder.wav").is_empty(), wants, "{v:?} sound");
+    }
+    let _ = fs::remove_dir_all(&base);
+    let _ = fs::remove_dir_all(&empty);
+}
+
 // ---- the offline starter level -------------------------------------------------
 
 fn offline_session(bdir: &Path) -> (OfflineSession, AssetResolver) {

@@ -628,29 +628,45 @@ impl FileSession {
     /// The player took a step. On the first two steps of a connection the
     /// real client asks for `steps.wav`, `walk.gani` and `steps2.wav`
     /// ([`FIRST_STEP_REQUESTS`]); Seihai asks for one **only if it has no
-    /// copy at all**: a copy in the cache, in the user's folder, in the
-    /// built-in set or already received counts as having it. The built-in set
+    /// copy at all** ([`need_missing`](Self::need_missing)). The built-in set
     /// has all three, so in practice a normal run asks for none of them; the
-    /// request is for a client whose built-in layer is unavailable. Builds
-    /// without GANIs, and builds that do not send `WANTFILE`, ask for none
-    /// (not captured for them).
+    /// request is for a client run without its built-in layer
+    /// (`--no-builtin`). Builds without GANIs, and builds that do not send
+    /// `WANTFILE`, ask for none (not captured for them).
     pub fn on_step(&mut self) -> Vec<Vec<u8>> {
         self.steps = self.steps.saturating_add(1);
-        let profile = self.store.resolver().profile();
-        if !profile.ui.ganis || !profile.protocol.pli.contains(23) {
+        // The step sounds are cues of walk.gani: no GANIs, none of the three.
+        if !self.store.resolver().profile().ui.ganis {
             return Vec::new();
         }
         let Some((_, names)) = FIRST_STEP_REQUESTS.iter().find(|(n, _)| *n == self.steps) else {
             return Vec::new();
         };
-        let mut out = Vec::new();
-        for name in *names {
-            if self.store.has_any_copy(name) {
-                continue;
-            }
-            out.extend(self.need(name));
+        names.iter().flat_map(|name| self.need_missing(name)).collect()
+    }
+
+    /// A GANI or a sound the client went to use and has **no copy of at
+    /// all**: a copy in the cache, in the user's folder, in the built-in set
+    /// or already received this session counts as having it. Returns the
+    /// `WANTFILE` to send, as the real GANI and sound loaders do for a name
+    /// they cannot find (`file-cache.md`, "Who asks for what?"). Gated by the
+    /// profile: no request from a build that does not send `WANTFILE`
+    /// (`pli` 23), and none for a GANI from a build without GANIs. Unlike
+    /// [`need`](Self::need), a built-in copy counts as present, so this never
+    /// asks the server to replace one.
+    pub fn need_missing(&mut self, name: &str) -> Vec<Vec<u8>> {
+        let profile = self.store.resolver().profile();
+        if !profile.protocol.pli.contains(23) {
+            return Vec::new();
         }
-        out
+        let lower = name.trim().to_ascii_lowercase();
+        if lower.ends_with(".gani") && !profile.ui.ganis {
+            return Vec::new();
+        }
+        if self.store.has_any_copy(name) {
+            return Vec::new();
+        }
+        self.need(name)
     }
 
     /// Apply what the server sent since the last call: save finished

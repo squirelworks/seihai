@@ -134,6 +134,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
 | `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `sounds/` in the server cache, `<assets>` or the built-in set (first that has the file), if a sound device opens. Otherwise sound is silent and everything else runs the same |
 | `--sound` | Play sound effects even if the settings file turns them off |
+| `--no-builtin` | Run without the built-in assets, as the real client's clean folder. A GANI or sound found in no other folder is asked for from the server (`walk.gani`, `steps.wav` and `steps2.wav` at the first steps). Needs `--assets` with `pics1.png`. For lab comparisons (`documentation/file-cache.md`) |
 | `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the server's cache folder, in the place the real client uses (`documentation/file-cache.md`) |
 
 ### Capture viewer
