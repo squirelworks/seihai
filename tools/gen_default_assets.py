@@ -482,6 +482,20 @@ def build_sheet(rng):
     return sheet, pal
 
 
+def id_ranges(ids):
+    """Sorted ids as space-separated `a-b` ranges (`708-711`)."""
+    out, ids = [], sorted(set(ids))
+    start = prev = None
+    for i in ids + [None]:
+        if start is not None and i == prev + 1:
+            prev = i
+            continue
+        if start is not None:
+            out.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = i
+    return " ".join(out)
+
+
 def tiledefs_text():
     """All 4096 types as a flat list, 16 per line: line n holds ids 16n to
     16n + 15 (one row of one 256 px block of the sheet)."""
@@ -492,6 +506,9 @@ def tiledefs_text():
         "# From arrays 0 to 6 of the Graal 2.22 arrays.dat (tools/graal_tile_lists.txt):",
         "# 0 open, 3 chair, 4 bed top, 5 bed bottom, 11 water, 12 lava, 13 lava floor,",
         "# 20 wall that thrown objects fly over, 22 wall. documentation/tile-types.md.",
+        "# Bed tops are walls in arrays.dat, so they keep 22 and are listed here too",
+        "# (the sleep pose asks this list; documentation/sitting.md).",
+        "bedtop: " + id_ranges(read_lists()["bed_top"]),
     ]
     for n in range(256):
         if n % 32 == 0:

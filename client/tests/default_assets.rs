@@ -298,6 +298,12 @@ fn tile_types_contract() {
     }
     // a plain wall
     assert_eq!(types.raw(4), Some(22));
+    // bed tops are walls and still bed tops (the `bedtop:` line), so the
+    // sleep pose works with only the built-in table loaded
+    for id in 708..=711 {
+        assert!(types.is_wall(id) && types.is_bed_top(id), "{id}");
+    }
+    assert!(!types.is_bed_top(724) && !types.is_bed_top(707));
     // what a cut or lift leaves is open, and so is tall grass
     for t in [677, 679, 1770, 1802, 1834, TALL_GRASS] {
         assert_eq!(kind(t), TileKind::Open, "{t}");

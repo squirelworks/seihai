@@ -50,7 +50,9 @@ a wall.
   carrying clears both. Seihai has no horse.
 * `TileTypes` keeps the bed tops of `arrays.dat` in their own sorted list
   (`bed_tops`), because those tiles keep their wall type byte. A text tiledefs
-  file or a tileset of the new kind marks a bed top with type byte 4.
+  file lists them on a `bedtop:` line (the built-in `tiledefs.txt` has
+  `bedtop: 708-711`), or marks an open bed top with type byte 4, as a tileset
+  of the new kind does.
 * `pose::current_pose` draws `sit.gani` or `sleep.gani` step 0 while the flag
   is set, walking or not, after the sword, hurt, grab, pull and carry poses.
 * The default set has an original `sleep.gani` (from
