@@ -130,7 +130,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--check-assets` | Resolve and load the files a version uses from the `--assets` folder (or from the built-in set when none is given) and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
 | `--level-info FILE` | Print sizes, section offsets and record counts of a binary `.graal` / `.zelda` level (no content); repeat for more files. Exit code 1 if a file does not parse, or if a `Z3-V1` file does not read to its end with no anomaly |
 | `--version-chain` | Print what each client build changed against the build before it (all builds, or the one given with `--version`). `--chain-format text\|md\|tsv` picks the form (`documentation/version-chain.md`) |
-| `--version` | Client version (`1.33`, `1.39`, `2.05`, `2.17`, `2.22`, `2.31`, `3.04`, `3.153`). Wins over the version the launcher saved, even when it is the default `2.05`; the saved one applies only when the flag is absent |
+| `--version` | Client version (`1.21`, `1.28 beta 2`, `1.3 test`, `1.31`, `1.32`, `1.33`, `1.39`, `2.05`, `2.17`, `2.22`, `2.31`, `3.04`, `3.153`). Wins over the version the launcher saved, even when it is the default `2.05`; the saved one applies only when the flag is absent |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |

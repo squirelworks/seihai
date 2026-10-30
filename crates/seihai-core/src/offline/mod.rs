@@ -831,7 +831,7 @@ impl OfflineSession {
     /// Interact with what the player faces: throw, lift, grab, or open a
     /// closed chest (2×2 tiles) from below.
     pub fn interact(&mut self) -> Interaction {
-        if self.life.is_dead() || self.jumping() {
+        if self.life.is_dead() || self.jumping() || self.reading.is_some() {
             return Interaction::Nothing;
         }
         // The A key tries to lift first, then reads a sign or opens a chest.
@@ -1715,6 +1715,23 @@ impl OfflineSession {
         }
     }
 
+    /// Whether `(fx, fy)` is off the board with no level there: the wall
+    /// test when there are no tile types (`--no-builtin` with nothing
+    /// cached). The 2.22 client's wall test checks the bounds before the
+    /// tile, so the edge is a wall whatever the tiles are; on a gmap a loaded
+    /// neighbour is open ground.
+    fn off_board(&self, fx: f32, fy: f32) -> bool {
+        let side = crate::gmap::CELL_TILES as f32;
+        let (kx, ky) = ((fx / side).floor() as i32, (fy / side).floor() as i32);
+        if (kx, ky) == (0, 0) {
+            return false;
+        }
+        match &self.gmap {
+            Some(w) => !w.levels.contains_key(&(w.cell.0 + kx, w.cell.1 + ky)),
+            None => true,
+        }
+    }
+
     /// Whether a sprite position (current-cell tiles) is a legal place to be
     /// as far as the gmap goes: inside the cell, or across an edge into a
     /// loaded level. A step that would cross both edges at once is refused
@@ -1785,10 +1802,11 @@ impl OfflineSession {
         if self.npc_blocks_at(px as f32, py as f32, except) {
             return true;
         }
-        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-            if self.kind_at_point(level, types, (px + WALK_FLOOR_EPS) as f32, (py + WALK_FLOOR_EPS) as f32) == TileKind::Blocking {
-                return true;
-            }
+        let (fx, fy) = ((px + WALK_FLOOR_EPS) as f32, (py + WALK_FLOOR_EPS) as f32);
+        match (&self.current_level, &self.tiletypes) {
+            (Some(level), Some(types)) if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking => return true,
+            (Some(_), None) if self.off_board(fx, fy) => return true,
+            _ => {}
         }
         match &self.current_level {
             Some(level) => level.chests.iter().any(|c| {
@@ -1890,7 +1908,8 @@ impl OfflineSession {
     /// do nothing.
     /// Returns the emitted `PlayerUpdate` if the position changed.
     pub fn try_move(&mut self, dx: f32, dy: f32) -> Option<PlayerUpdate> {
-        if dx == 0.0 && dy == 0.0 || self.life.is_dead() || self.jumping() {
+        // An open sign takes the arrows (2.05): no step and no turn.
+        if dx == 0.0 && dy == 0.0 || self.life.is_dead() || self.jumping() || self.reading.is_some() {
             return None;
         }
         // Hurt: the arrows are ignored for the first ticks; after that a
@@ -1989,10 +2008,10 @@ impl OfflineSession {
         if self.dev.wallhack() {
             return false;
         }
-        if let (Some(level), Some(types)) = (&self.current_level, &self.tiletypes) {
-            if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking {
-                return true;
-            }
+        match (&self.current_level, &self.tiletypes) {
+            (Some(level), Some(types)) if self.kind_at_point(level, types, fx, fy) == TileKind::Blocking => return true,
+            (Some(_), None) if self.off_board(fx, fy) => return true,
+            _ => {}
         }
         match &self.current_level {
             Some(level) => level.chests.iter().any(|c| fx >= c.x as f32 && fx < c.x as f32 + 2.0 && fy >= c.y as f32 && fy < c.y as f32 + 2.0),
@@ -2234,6 +2253,32 @@ mod tests {
         s.player_dir = DIR_NORTH;
         assert!(s.try_move(0.0, -0.5).is_none());
         assert_eq!(s.reading.as_deref(), Some("Hello"));
+    }
+
+    #[test]
+    fn an_open_sign_takes_the_walk_the_a_key_and_hiding() {
+        // 2.05: walking and the A / S / D handler are only reached outside
+        // reading (Graal_analysis `client-internals/sign-panel.md`).
+        let mut s = sign_on_wall();
+        s.player_x = 29.0;
+        s.player_y = 10.0;
+        s.player_dir = DIR_NORTH;
+        s.reading = Some("Hello".into());
+        assert!(s.try_move(0.5, 0.0).is_none(), "no step");
+        assert_eq!((s.player_x, s.player_y, s.player_dir), (29.0, 10.0, DIR_NORTH), "nor a turn");
+        assert!(!s.walking);
+        // The wall ahead would be grabbed outside reading.
+        assert_eq!(s.interact(), Interaction::Nothing);
+        assert!(s.pushpull.grab.is_none());
+        s.carried = Some(Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+        assert!(!s.toggle_hide(), "D does not hide");
+        assert!(!s.hidden);
+        assert_eq!(s.interact(), Interaction::Nothing, "A does not throw");
+        assert!(s.carried.is_some());
+        // Closed, the same keys act again.
+        s.reading = None;
+        assert!(s.toggle_hide());
+        assert!(matches!(s.interact(), Interaction::Thrown { kind: 0 }));
     }
 
     #[test]
@@ -3258,6 +3303,50 @@ mod tests {
         assert_eq!(edge_link_arrival(&m, "mid.nw", &link("ne.nw", 63, 0, 1, 64, Some(0.0), None), 63.5, 5.0), None);
     }
 
+    /// Laundry item 9: walking east to the edge link of `mid.nw` on a big
+    /// map, `e.nw` is asked for while the player is still well inside the
+    /// level, and nothing more is asked when the link fires. Each tick does
+    /// what the main loop does: step, check the links, then the ahead
+    /// request (so a request in the link's own tick would count as late).
+    #[test]
+    fn a_big_map_neighbour_is_asked_for_before_its_edge_link_fires() {
+        let mut lvl = level(|_, _| OPEN);
+        lvl.links.push(link("e.nw", 63, 0, 1, 64, Some(0.0), None));
+        let mut s = session_at(lvl, 30.0, 20.0);
+        s.loaded_file = Some("mid.nw".into());
+        let map = big3();
+        let mut asked = std::collections::HashSet::new();
+        let (mut asked_at, mut link_at) = (None, None);
+        for step in 0..200 {
+            s.try_move(0.5, 0.0);
+            if s.check_links() {
+                link_at = Some(step);
+                assert_eq!(s.pending_link.as_ref().map(|l| l.0.as_str()), Some("e.nw"));
+                assert!(map.big_map_ahead("mid.nw", s.player_x, s.player_y, &mut asked).is_empty(), "nothing new at the link");
+                break;
+            }
+            let ahead = map.big_map_ahead("mid.nw", s.player_x, s.player_y, &mut asked);
+            if !ahead.is_empty() {
+                assert_eq!(ahead, ["e.nw"]);
+                assert!(asked_at.is_none(), "asked once");
+                asked_at = Some(step);
+            }
+        }
+        let (asked_at, link_at) = (asked_at.expect("asked ahead"), link_at.expect("the link fired"));
+        // Half-tile steps: at least five tiles (ten steps, 500 ms) ahead.
+        assert!(link_at - asked_at >= 10, "asked at step {asked_at}, link at {link_at}");
+    }
+
+    /// The ahead request covers the corner level too, and a bare big-map
+    /// name gets `.nw`.
+    #[test]
+    fn big_map_ahead_names_files_once() {
+        let map = crate::gmap::Gmap::parse_grid("\"mid\",\"e\"\r\n\"s\",\"se\"\r\n").unwrap();
+        let mut asked = std::collections::HashSet::new();
+        assert_eq!(map.big_map_ahead("mid", 60.0, 60.0, &mut asked), ["e.nw", "s.nw", "se.nw"]);
+        assert!(map.big_map_ahead("MID", 61.0, 61.0, &mut asked).is_empty());
+    }
+
     #[test]
     fn check_links_uses_the_big_map_rule_and_falls_back_without_one() {
         let mut lvl = level(|_, _| OPEN);
@@ -3270,6 +3359,44 @@ mod tests {
         s.big_map = Some(big3());
         assert!(s.check_links());
         assert_eq!(s.pending_link, Some(("e.nw".into(), -0.5, 17.25)));
+    }
+
+    /// The server's board with no tile types (`--no-builtin`, nothing
+    /// cached): off the board is still a wall, as in the 2.22 client's wall
+    /// test (bounds first). The Windows lab run walked to y 75 in `new1.nw`.
+    #[test]
+    fn off_the_board_is_a_wall_without_tile_types() {
+        let mut s = body_at(level(|_, _| OPEN), 30.0, 32.0);
+        s.tiletypes = None;
+        walk(&mut s, 0.0, 0.5, 200);
+        assert!(s.player_y <= 61.0, "south: stopped at the edge, got {}", s.player_y);
+        walk(&mut s, 0.5, 0.0, 200);
+        assert!(s.player_x <= 61.5, "east: got {}", s.player_x);
+        walk(&mut s, 0.0, -0.5, 200);
+        assert!(s.player_y >= -1.0, "north: got {}", s.player_y);
+        walk(&mut s, -0.5, 0.0, 200);
+        assert!(s.player_x >= -0.5, "west: got {}", s.player_x);
+    }
+
+    /// The lab's `new1.nw`: the server's board, its one west-edge link from
+    /// `PLO_LEVELLINK`, no tile types, 2.22 link boxes. Walking west from the
+    /// start fires the link, with the link's own arrival x.
+    #[test]
+    fn a_server_edge_link_fires_without_tile_types() {
+        let mut lvl = level(|_, _| OPEN);
+        lvl.add_server_links(&["testworld.nw 0 0 1 64 61 playery".to_string()]);
+        let mut s = body_at(lvl, 30.0, 32.0);
+        s.tiletypes = None;
+        s.link_boxes = true;
+        let mut fired = None;
+        for _ in 0..200 {
+            if s.try_move(-0.5, 0.0).is_some() && s.check_links() {
+                fired = s.pending_link.take();
+                break;
+            }
+        }
+        let (dest, x, y) = fired.expect("the west edge link fires");
+        assert_eq!((dest.as_str(), x, y), ("testworld.nw", 61.0, 32.0));
     }
 
     /// A Z3-V1 level read from disk drives the same link rules: a negative

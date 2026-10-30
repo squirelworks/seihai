@@ -141,3 +141,20 @@ Seihai (`offline::edge_link_arrival`, `OfflineSession::big_map`,
 * `new3.nw` (the laundry list's fixture) has no links, so it cannot show
   this on its own; it needs a big map naming it and links to its
   neighbours.
+
+## Off the board without tile types (2026-10-30)
+
+A Windows lab run with `--no-builtin` (no tile types, nothing cached) walked
+Seihai off the server's `new1.nw` to y 75. Seihai only treated off the board
+as a wall through the tile-type test, so without tile types the edge was open.
+The 2.22 client's wall test checks the bounds before the tile and calls off
+the board a wall (Graal_analysis
+`client-internals/decomp-findings-2026-10-28-b/01-tile-type-tests.md`), so the
+edge stops the player whatever the tiles are. Seihai now does the same when it
+has no tile types; on a gmap a loaded neighbour is still open ground.
+
+The edge links were not at fault. The lab level has one link, on the west
+edge; a test with that link as the server sends it (`PLO_LEVELLINK`), no tile
+types and the 2.22 link boxes shows it fires and arrives at the link's own x.
+The other edges have no links, so walking off them should not warp. Whether
+the run itself crossed the west edge is not in its log.

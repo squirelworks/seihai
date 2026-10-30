@@ -79,11 +79,51 @@ If the new build lands between two existing ones, the step after it must be re-c
 Generated; do not edit between the markers.
 
 <!-- version-chain:begin -->
-#### 1.33 (`GNW20020`, binary, linked 2000-02-21)
+#### 1.21 (`GSERV007`, binary, linked 1999-05-10)
 
 - start of the chain, written out in full as ORIGIN
 - unknown (levels): Z3-V1 (.zelda): every binary from 1st Graal to 2.31 compares the level magic with Z3-V1.03 and Z3-V1.04, so the column is yes for every build; whether a build also tries .zelda for a bare level name is in no binary (Seihai tries .graal, then .zelda)
-- source: origin row (binary of 1.33)
+- unknown (pli): the binaries 1.21 to 1.32 show only the send ids passed as constants; the ids below the highest one are taken as sent
+- unknown (other props): 1.21 to 1.32 have no separate parser for other players' props; 1.33's set is kept
+- unknown (live): not run: the 1.21 install is an InstallShield setup
+- source: origin row (binary of 1.21, Graal_analysis client-internals/version-profiles/v121-v132.toml): login id 0 with token, account and password; zlib on every flush; no UDP; default server www.graalonline.com:14804
+
+#### 1.28 beta 2 (`GSERV013`, binary, linked 1999-11-23)
+
+- protocol: **plo (server ids handled)**: +30 FILESENDFAILED, +35 RC_ADMINMESSAGE, +36 EXPLOSION, +37 PRIVATEMESSAGE, +38 PUSHAWAY (35 -> 40 ids)
+- protocol: **pli (client ids sent)**: +27 EXPLOSION, +28 PRIVATEMESSAGE, +29 NPCWEAPONDEL (27 -> 30 ids)
+- protocol: **udp**: no -> yes
+- props: **own-player props**: +25 APCOUNTER, +26 MAGICPOINTS, +27 KILLSCOUNT, +28 DEATHSCOUNT, +29 ONLINESECS, +30 IPADDR, +31 UDPPORT (25 -> 32 ids)
+- props: **npc_max**: 17 -> 32
+- ui: **gs1_commands**: 71 -> 84
+- source: binary: PLO 30 and 35-38, send ids to 29, player props to 31, NPC props to 32, direct data packages (UDP ids 0, 10-22), language files, GS1 table 71 to 84
+
+#### 1.3 test (`GSERV014`, binary, linked 1999-11-29)
+
+- protocol: **plo (server ids handled)**: +39 LEVELMODTIME (40 -> 41 ids)
+- protocol: **pli (client ids sent)**: +30 LEVELWARPMOD (30 -> 31 ids)
+- props: **own-player props**: +32 ALIGNMENT (32 -> 33 ids)
+- props: **npc_max**: 32 -> 34
+- ui: **gs1_commands**: 84 -> 85
+- source: binary: PLO 39, send id 30, player prop 32 (alignment), NPC props to 34, GS1 table 85 (setgifpart)
+
+#### 1.31 (`GSERV016`, binary, linked 1999-12-07)
+
+- protocol: **plo (server ids handled)**: +40 HURTPLAYER (41 -> 42 ids)
+- ui: **server_list**: direct (www.graalonline.com:14804) -> direct (www.graalonline.com:14900)
+- source: binary: PLO 40, default port 14900 (14804 before), noudp= and fixedudpport= options
+
+#### 1.32 (`GSERV018`, binary, linked 2000-01-12)
+
+- protocol: **plo (server ids handled)**: +41 STARTMESSAGE (42 -> 43 ids)
+- props: **own-player props**: +33 ADDITFLAGS (33 -> 34 ids)
+- source: binary and lab: PLO 41, player prop 33 (ADDITFLAGS); the real 1.32 logged in to the gen-2 stub with the login props of 1.33 (2026-10-30)
+
+#### 1.33 (`GNW20020`, binary, linked 2000-02-21)
+
+- protocol: **pli (client ids sent)**: +31 PACKETCOUNT (31 -> 32 ids)
+- ui: **gs1_commands**: 85 -> 88
+- source: binary of 1.33: send id 31, GS1 table 88, GNW tokens from here on
 
 #### 1.34 (`GNW22030`, binary, linked 2000-03-23)
 
@@ -167,20 +207,23 @@ Generated; do not edit between the markers.
 
 - protocol: **listserver**: listserver.graal.in:14923 (legacy, assumed), built in www.graalonline.com:14921, login shape A (login frame inferred, not captured) -> listserver.graal.in:14923 (legacy, assumed), built in www.graalonline.com:14921, login shape A (login frame captured from a real client)
 - protocol: **plo (server ids handled)**: +154 FREEZEPLAYER2, +155 UNFREEZEPLAYER (51 -> 53 ids)
+- life: **combat**: none -> 2.00 rules (raw sword power, fewer packet gates)
 - ui: **gs1_commands**: 134 -> 142
+- unknown (life): combat read in 2.00 r0 only (Graal_analysis client-internals/combat-200-204.md); r1 to r3 assumed the same. Not run against a real client
 - unknown (login): props sent at login (verified for 2.05 only)
 - unknown (listserver): Seihai now sends the real 2.00 frame (shape A, captured in the lab: id 0 `newmain` only, no account). That frame has not been run on the public service. The 2026-10-25 matrix used Seihai's older classic login (shape B), which 14923 answered with a plain zlib id-0 list (4 rows) while 14922 stayed silent; the port is assumed for shape A until a run. A real 2.00's reply was not captured
 - unknown (token): the token is not in gs2lib, so a stock GServer-v2 does not know it
-- source: binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142; list port 14923 from the public checks of 2026-10-25 (built-in www.graalonline.com:14921)
+- source: binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142, combat rules read in r0; list port 14923 from the public checks of 2026-10-25 (built-in www.graalonline.com:14921)
 
 #### 2.01 (`GNW23021`, binary, linked 2001-03-08)
 
 - protocol: **listserver**: listserver.graal.in:14923 (legacy, assumed), built in www.graalonline.com:14921, login shape A (login frame captured from a real client) -> listserver.graal.in:14923 (legacy, assumed), built in www.graalonline.com:14921, login shape A (login frame inferred, not captured)
 - protocol: **plo (server ids handled)**: +46 HITOBJECTS, +156 SETACTIVELEVEL (53 -> 55 ids)
 - protocol: **pli (client ids sent)**: +35 ADJACENTLEVEL, +36 HITOBJECTS (35 -> 37 ids)
+- life: **combat**: 2.00 rules (raw sword power, fewer packet gates) -> 2.01 rules (raw sword power)
 - ui: **gs1_commands**: 142 -> 144
 - unknown (listserver): 2.01 to 2.04 (and 2.02 rev 2): login frame inferred, not captured. Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; no real client of these builds was captured and no run on the public service has used shape A, so the port is assumed. The 2026-10-25 matrix used Seihai's older shape B: a legacy list on 14923, nothing on 14922. 14921, the port the build carries, is dead
-- source: binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144
+- source: binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144; the hurt packet gains the AP 100, no-kill and once-a-second gates
 
 #### 2.02 (`GNW15041`, binary, linked 2001-04-15)
 
@@ -201,8 +244,9 @@ Generated; do not edit between the markers.
 
 - protocol: **plo (server ids handled)**: +48 TRIGGERACTION, +165 MOVE (56 -> 58 ids)
 - protocol: **pli (client ids sent)**: +38 TRIGGERACTION (38 -> 39 ids)
+- life: **combat**: 2.01 rules (raw sword power) -> 2.05 rules
 - ui: **gs1_commands**: 146 -> 148
-- source: binary: TRIGGERACTION (38) sent, PLO 48 and 165, GS1 146 to 148
+- source: binary: TRIGGERACTION (38) sent, PLO 48 and 165, GS1 146 to 148; sword power stored limited to -20..20, as 2.05
 
 #### 2.04 (`GNW24061`, binary, linked 2001-06-25)
 
@@ -220,12 +264,11 @@ Generated; do not edit between the markers.
 - levels: **gmap**: no -> yes
 - levels: **cached_links**: no -> yes
 - life: **death**: none -> 2.05 rules (name-group test)
-- life: **combat**: none -> 2.05 rules
 - ui: **server_in_title**: no -> yes
 - ui: **gs1_commands**: 157 -> 161
 - mannerisms: **mannerisms**: NewMain 1.41 (pull lets go to grab, swim freezes when still, hide keeps the carry poses) -> 2.05 (hidden ganis, pull stays, swim runs on)
 - unknown (listserver): this profile now sends the real 2.05 frame (shape A, captured in the lab: id 0 `newmain` only). No public run has used it: the 2026-10-25 matrix binary sent the gen-5 login for 2.05 (the saved-version override, since fixed) and both 14922 and 14923 answered that. 14923 answered the older classic login (shape B) of every other classic profile, so 14923 is assumed here
-- source: binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death and combat rules traced here
+- source: binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death rules traced here (combat as 2.03, traced in both)
 
 #### 2.1 (`GNW31101`, inferred)
 
@@ -389,7 +432,6 @@ Generated; do not edit between the markers.
 - unknown (live): never run
 - unknown (listserver): shape D (id 7 and id 1 in one plain zlib frame at 78 9C) is 3.04's capture; the binary has the same G3D30123 token and gen-5 cipher
 - unknown (login): OSTYPE mac is from the binary; the code page (1250), the files in the first frame (bigmap.txt, minimap.txt) and the head and default-weapon checks are 3.04's
-- unknown (3d): the 3D mode (Torque GameConnection on port 28000) is not modelled
+- unknown (3d): the 3D mode (Torque GameConnection, Graal3D protocol 19, on UDP listed port + 1) is not modelled here; seihai-ato::torque has its profile
 - source: binary (Mac OS X PPC Mach-O), not run: OSTYPE mac; PLO 67, 74, 82, 104, 131-134, 187 and MOVE2 (189) in, 44 out; RC file browser, script upload and text request ids; X2/Y2/Z2; UDP off in the shipped prefs
-
 <!-- version-chain:end -->

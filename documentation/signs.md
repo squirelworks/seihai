@@ -57,6 +57,7 @@ While a sign is open the game keys work the sign and nothing else: the player do
 - Every other game key (Left, Down, Right, D, S, A, the item list key and pause) turns to the next three lines, unless the page on show is not full (the sign has fewer lines than the page's first line plus three); then reading ends. A sign of exactly three lines therefore shows an empty second page before it closes, as in the client.
 - A key counts only when no game key was down the frame before: the arrow that walked into the sign does nothing until it is let go, and keys do not repeat.
 - Esc also closes the sign in Seihai.
+- The lock is in the session too, not only in the key loop: while `reading` is set, `try_move` takes no step and no turn, `start_swing` refuses, `interact` does nothing (no lift, throw, grab or chest), and `toggle_hide` does nothing. A while hidden does not bring the player out either. Tests: `an_open_sign_takes_the_walk_the_a_key_and_hiding`, `no_swing_while_a_sign_is_open`.
 - The client plays a sound when the page turns and runs `playerendsreading` when reading ends. Neither is done in Seihai yet.
 
 ## Confirmed, inferred, not tested

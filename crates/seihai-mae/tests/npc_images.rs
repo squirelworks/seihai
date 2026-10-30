@@ -307,6 +307,80 @@ fn a_real_chest_script_opens_shows_its_key_and_hides_it() {
     assert!(s.current_level.as_ref().unwrap().npcs[0].images.is_empty());
 }
 
+/// The Hammer weapon from the NPC library (`npc-0565`, `hammer.txt`),
+/// unchanged. Fired, it runs ten 0.05 s steps: each of the first nine puts
+/// `wham<dir>.gif` up as image 1 next to the player, the tenth takes it
+/// down with `hideimg 1`.
+const HAMMER: &str = "if (playertouchsme) { toweapons Hammer; set gothammer; set alreadygothammer; destroy; } if (playerenters) { hideimg 1; this.step = 0; timeout = 0; show; } if (weaponfired && this.step<=0) { hideimg 1; hidesword 0.5; freezeplayer 0.5; timeout = 0.05; this.step = 0; } if (timeout) { this.step++; if (this.step<10) { if (this.step<3) { if (playerdir==0) playersprite = 11; else if (playerdir==2) playersprite = 6; else playersprite = 9; } else { if (playerdir==0) playersprite = 10; else if (playerdir==2) playersprite = 11; else playersprite = 11; } if (this.step==6) { set teststake; set testhurt; } if (playerdir==0) showimg 1,wham0.gif,playerx-0.75,playery-1.7; if (playerdir==1) showimg 1,wham1.gif,playerx-1.7,playery-0.2; if (playerdir==2) showimg 1,wham2.gif,playerx+0.6,playery-0.4; if (playerdir==3) showimg 1,wham3.gif,playerx+1.5,playery-0.2; timeout = 0.05; } else { playersprite = 0; hideimg 1; this.step = 0; } } if (teststake) { unset teststake; putx = playerx + 0.5; puty = playery + 2; if (playerdir==0) puty -= 3; if (playerdir==1) { putx -= 2; puty -= 0.5; } if (playerdir==2) { putx += 0.5; puty += 1; } if (playerdir==3) { putx += 2; puty -= 0.5; } putx = int(putx); puty = int(puty); set isstake; for (i=0; i<2; i++) for (j=0; j<2; j++) { b = board[putx+i+64*(puty+j)]; bx = b % 16; by = int(b / 16); if (!(bx==10+i && by==20+j) && !(bx==4+i && by==103+j)) unset isstake; } if (isstake) { unset isstake; board[putx+64*puty] = 10+112*16; board[putx+1+64*puty] = 11+112*16; board[putx+64*(puty+1)] = 10+113*16; board[putx+1+64*(puty+1)] = 11+113*16; updateboard putx,puty,2,2; play axe.wav; } else play arrowon.wav; } if (testhurt) { unset testhurt; testx = playerx+1.5; testy = playery+2; if (playerdir==0) testy-=2; if (playerdir==1) testx-=2; if (playerdir==2) testy+=2; if (playerdir==3) testx+=2; for (i=0; i<compuscount; i++) { if (abs(testx-(compus[i].x+1))<=1 && abs(testy-(compus[i].y+1))<=1.5 && compus[i].mode!=3 && compus[i].mode!=5) hitcompu i,3,testx,testy; } for (i=1; i<playerscount; i++) { if (abs(testx-(players[i].x+1.5))<=1 && abs(testy-(players[i].y+2))<=1.5) { hitplayer i,1,testx,testy; // putleaps 2,testx-1,testy-1; // unset gothammer; // destroy; } } }";
+
+#[test]
+fn a_real_hammer_weapon_swings_its_image_up_and_takes_it_down() {
+    use seihai::scripting::engine::host::WeaponScript;
+    let mut imgs = HashMap::new();
+    imgs.insert("wham2.gif".to_string(), solid(RED));
+    imgs.insert("wham3.gif".to_string(), solid(BLUE));
+    let (mut s, mut sc) = session("");
+    sc.sync_weapons(&mut s, &[WeaponScript { name: "Hammer", image: "", script: HAMMER }]);
+    s.player_x = 10.0;
+    s.player_y = 10.0;
+    s.player_dir = 2;
+    let fire = |s: &mut OfflineSession, sc: &mut SessionScripts| {
+        sc.sync_player(s);
+        sc.world.weapon_fired("Hammer");
+        sc.apply(s);
+    };
+    // Facing down the image is at (playerx + 0.6, playery - 0.4) = (10.6, 9.6).
+    let down = (10 * 16 + 10, 9 * 16 + 10);
+    fire(&mut s, &mut sc);
+    assert!(s.player_images.is_empty(), "nothing until the first step");
+    sc.tick(&mut s, 50);
+    assert!(sc.images_changed);
+    assert_eq!(s.player_images.len(), 1);
+    assert_eq!(s.player_images[0].file, "wham2.gif");
+    assert_eq!(at(&draw(&s, &imgs), down.0, down.1), RED, "drawn over the player at its place");
+    for _ in 0..8 {
+        sc.tick(&mut s, 50);
+    }
+    assert_eq!(s.player_images.len(), 1, "still up at step 9");
+    sc.tick(&mut s, 50);
+    assert!(s.player_images.is_empty(), "hideimg 1 at step 10");
+    assert_eq!(at(&draw(&s, &imgs), down.0, down.1), BLACK);
+    // Facing right: wham3.gif at (playerx + 1.5, playery - 0.2) = (11.5, 9.8).
+    s.player_dir = 3;
+    fire(&mut s, &mut sc);
+    sc.tick(&mut s, 50);
+    assert_eq!(s.player_images[0].file, "wham3.gif");
+    let fb = draw(&s, &imgs);
+    assert_eq!(at(&fb, 11 * 16 + 8 + 1, 9 * 16 + 13), BLUE);
+    assert_eq!(at(&fb, down.0, down.1), BLACK, "one image, moved: index 1 is reused");
+}
+
+/// The rat of `prtrain.graal` (NPC library `npc-0719`; the scrape's
+/// trailing `*=ratgf.gif`, the next record's header, is left off). A touch
+/// says sign 1 and `setgif`s the rat facing front; when the sign closes it
+/// `setgif`s it back.
+const RAT: &str = "if (playertouchsme) { say 1; setgif ratf.gif;} if (exploded || washit || wasshooted || waspelt) {hurt1} if (playerendsreading) {setgif ratb.gif}";
+
+#[test]
+fn a_real_setgif_level_npc_changes_its_picture_and_back() {
+    let mut imgs = HashMap::new();
+    imgs.insert("ratb.gif".to_string(), solid(RED));
+    imgs.insert("ratf.gif".to_string(), solid(BLUE));
+    let (mut s, mut sc) = session(&format!("NPC ratb.gif 15 10\n{RAT}\nNPCEND\nSIGN 1 1\nzero\nSIGNEND\nSIGN 2 2\nSqueak!\nSIGNEND\n"));
+    let px = (15 * 16 + 1, 10 * 16 + 1);
+    assert_eq!(at(&draw(&s, &imgs), px.0, px.1), RED);
+    touch_npc(&mut s, &mut sc, 15.0, 10.0);
+    assert_eq!(s.reading.as_deref(), Some("Squeak!"));
+    assert!(sc.images_changed);
+    assert_eq!(at(&draw(&s, &imgs), px.0, px.1), BLUE, "setgif ratf.gif");
+    // A frame with the sign open, then the player closes it.
+    sc.tick(&mut s, 50);
+    assert_eq!(at(&draw(&s, &imgs), px.0, px.1), BLUE);
+    s.reading = None;
+    sc.tick(&mut s, 50);
+    assert_eq!(at(&draw(&s, &imgs), px.0, px.1), RED, "setgif ratb.gif when the sign closes");
+}
+
 // ---- animations: setcharani idle <-> walk -----------------------------------
 
 fn root() -> PathBuf {
@@ -518,6 +592,39 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
         counts[4],
         counts[5]
     );
+    // The scripts that put images up on a weapon event, run as weapons:
+    // fired, then three seconds of ticks, watching the player's images.
+    use seihai::scripting::engine::host::WeaponScript;
+    let weapons: Vec<&str> = scripts.iter().copied().filter(|s| s.contains("weaponfired") && s.contains("showimg")).collect();
+    let mut wcounts = [0usize; 3]; // ran, an image was up, all down at the end
+    for era in [ClientVersion::V205, ClientVersion::V222] {
+        for src in &weapons {
+            let mut s = OfflineSession::new();
+            s.current_level = Some(Level::parse("GLEVNW01\n").unwrap());
+            s.player_x = 30.0;
+            s.player_y = 30.0;
+            let mut sc = SessionScripts::new(era);
+            sc.load_level(&mut s, "a.nw");
+            sc.sync_weapons(&mut s, &[WeaponScript { name: "W", image: "", script: src }]);
+            sc.sync_player(&s);
+            sc.world.weapon_fired("W");
+            sc.apply(&mut s);
+            let mut up = !s.player_images.is_empty();
+            for _ in 0..60 {
+                sc.tick(&mut s, 50);
+                up |= !s.player_images.is_empty();
+                let mut idx: Vec<i64> = s.player_images.iter().map(|i| i.index).collect();
+                let sorted = idx.windows(2).all(|w| w[0] < w[1]);
+                idx.dedup();
+                assert!(sorted && idx.len() == s.player_images.len(), "weapon image indexes are unique and sorted");
+            }
+            let _ = draw(&s, &images());
+            wcounts[0] += 1;
+            wcounts[1] += usize::from(up);
+            wcounts[2] += usize::from(up && s.player_images.is_empty());
+        }
+    }
+    eprintln!("{} weapon runs ({} scripts x 2 versions): an image went up {}, and was down again after 3 s {}", wcounts[0], weapons.len(), wcounts[1], wcounts[2]);
     assert!(counts[1] > 0, "some script changed an image");
 }
 

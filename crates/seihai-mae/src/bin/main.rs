@@ -939,6 +939,8 @@ fn main() {
     let mut cadence_clock = Instant::now();
     session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304);
     let mut held_boards: Vec<Vec<u8>> = Vec::new();
+    // A gmap crossing's 39 for the next tick frame (builds with a cadence).
+    let mut held_lead: Vec<Vec<u8>> = Vec::new();
 
     // Sound effects: optional. With no sounds folder, no audio device, or
     // `--no-sound`, the client runs the same and plays nothing.
@@ -2272,7 +2274,7 @@ fn main() {
         // D while carrying hides under the object (or comes out); A comes out
         // too. Others see STATUS bit 0x02 and the hidden sprites.
         let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
-        let unhide_key = session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
+        let unhide_key = !sign_was_open && session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
         let interact = interact && !unhide_key;
         // D with nothing carried fires the selected weapon: its script
         // gets `weaponfired`. Carrying, D hides instead (above).
@@ -2668,7 +2670,18 @@ fn main() {
                 net_state.set_gmap_cell(cx.to);
                 let now = net_state.current_level_name();
                 eprintln!("gmap crossing {:?} -> {:?} at {} {}", cx.from, cx.to, cx.local_x, cx.local_y);
-                if let Some(c) = conn.as_mut() {
+                if let (Some(_), Some(wc)) = (conn.as_ref(), walk_cadence.as_mut()) {
+                    // A build with a walk cadence (2.22): the 39 goes in this
+                    // step's tick frame, the cell prop with the next props
+                    // message the cadence sends (`protocol::walkcadence`).
+                    let lead = seihai::gmap::crossing_lead(version, tamper.as_mut());
+                    let sent46 = lead.iter().any(|m| m.first() == Some(&(seihai::net::PLI_ENTERLEVEL + 0x20)));
+                    held_lead.extend(lead);
+                    wc.cross(&cx);
+                    if let (Some(el), Some(n)) = (enter_level.as_mut(), now.as_deref()) {
+                        el.crossing(n, sent46);
+                    }
+                } else if let Some(c) = conn.as_mut() {
                     match c.send_gmap_crossing(version, &cx, tamper.as_mut()) {
                         Ok(sent46) => {
                             if let (Some(el), Some(n)) = (enter_level.as_mut(), now.as_deref()) {
@@ -2778,14 +2791,7 @@ fn main() {
         if let (Some(map), Some(here), true, true) =
             (session.big_map.as_ref(), net_state.current_level_name(), conn.is_some(), session.warp_pending.is_none())
         {
-            let ahead: Vec<String> = map
-                .neighbours_near_edge(&here, session.player_x, session.player_y)
-                .into_iter()
-                .filter(|n| gmap_asked.insert(format!("near:{}", n.to_ascii_lowercase())))
-                .map(str::to_string)
-                .collect();
-            for n in ahead {
-                let file = if n.contains('.') { n } else { format!("{n}.nw") };
+            for file in map.big_map_ahead(&here, session.player_x, session.player_y, &mut gmap_asked) {
                 // Logged even when the request waits for a free slot.
                 eprintln!("asking for {file} ahead (big map neighbour)");
                 send_file_msgs(conn.as_mut(), files.need(&file));
@@ -2901,6 +2907,7 @@ fn main() {
                         login_burst = LoginBurst::for_version(version);
                         classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
                         walk_cadence = seihai::protocol::walkcadence::WalkCadence::for_version(version);
+                        held_lead.clear();
                         tamper = sess.tamper.take();
                         tamper_clock = Instant::now();
                         enter_level = Some(sess.enter_level.clone());
@@ -3225,7 +3232,7 @@ fn main() {
             let props = if script_warp_sent { None } else { wc.tick(seihai::protocol::walkcadence::WalkState::new(upd.x, upd.y, sprite, gani)) };
             let mut all = std::mem::take(&mut held_boards);
             all.extend(boards);
-            if let Err(e) = c.send_tick_frame(all, props) {
+            if let Err(e) = c.send_tick_frame(std::mem::take(&mut held_lead), all, props) {
                 eprintln!("send failed: {e}");
                 conn = None;
             }

@@ -24,7 +24,7 @@
 use super::profile::{
     Basis, BuiltIn, ChatFace, ChatText, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
-    ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_217, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
+    ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_200, COMBAT_201, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_217, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304, LOGIN_3153};
@@ -314,27 +314,30 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
 /// server ids 0–41 and 100, client ids 0–31. Every field is written out so a
 /// reader sees one complete row before the deltas begin.
 pub const ORIGIN: VersionProfile = VersionProfile {
-    version: ClientVersion::V133,
-    label: "1.33",
-    token: "GNW20020",
-    date: "2000-02-21",
+    version: ClientVersion::V121,
+    label: "1.21",
+    token: "GSERV007",
+    date: "1999-05-10",
     basis: Basis::Binary,
     protocol: Protocol {
         client_type: 0,
         encryption: EncryptionGen::Gen2,
         listserver: None,
-        plo: IdSet::range(0, 41).with(100),
-        pli: IdSet::range(0, 31),
+        plo: IdSet::range(0, 29).with_range(31, 34).with(100),
+        // The highest send id the binary passes as a constant; the ids below it
+        // that it passes in a register are taken as sent (1.33 sends 0 to 31).
+        pli: IdSet::range(0, 26),
         sends_language: false,
         tampercheck: false,
         tamper: None,
         showimg: None,
         login: None,
-        udp: true,
+        // No direct data packages before 1.28 beta 2.
+        udp: false,
         udp_off_by_default: false,
     },
     props: Props {
-        own: IdSet::range(0, 33),
+        own: IdSet::range(0, 24),
         // The 2.05 other-player set cut to the own-prop range of 1.33, plus
         // 50 and 51 (read from the 1.33 binary).
         other: IdSet::EMPTY
@@ -345,7 +348,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
             .with(24)
             .with_range(30, 32)
             .with_all(&[50, 51]),
-        npc_max: 34,
+        npc_max: 17,
         bow_prop10: true,
         precise_pos: false,
     },
@@ -359,7 +362,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
     levels: Levels { graal: true, zelda: true, nw: false, gmap: false, heights: false, cached_links: false, link_boxes: false },
     life: Health { death: None, combat: None },
     ui: Ui {
-        server_list: ServerList::Direct { default: "www.graalonline.com:14900" },
+        server_list: ServerList::Direct { default: "www.graalonline.com:14804" },
         chat_recall: false,
         hud: HudArt::Letters,
         minimap: false,
@@ -371,7 +374,7 @@ pub const ORIGIN: VersionProfile = VersionProfile {
         ghost_mode: false,
         server_in_title: false,
         chat_text: ChatText { face: ChatFace::Dialog, height: 28 },
-        gs1_commands: 88,
+        gs1_commands: 71,
     },
     // Read in 1.39; 1.33 to 1.38 were not run and take its row.
     mannerisms: MANNER_139,
@@ -385,16 +388,88 @@ pub const ORIGIN: VersionProfile = VersionProfile {
 /// [`super::profile::PROFILES`] and of the version pickers.
 pub const CHAIN: &[Step] = &[
     Step {
+        version: ClientVersion::V121,
+        label: "1.21",
+        token: "GSERV007",
+        date: "1999-05-10",
+        basis: Basis::Binary,
+        delta: Delta::NONE,
+        source: "origin row (binary of 1.21, Graal_analysis client-internals/version-profiles/v121-v132.toml): login id 0 with token, account and password; zlib on every flush; no UDP; default server www.graalonline.com:14804",
+        unknown: &[
+            Unknown { area: "levels", what: "Z3-V1 (.zelda): every binary from 1st Graal to 2.31 compares the level magic with Z3-V1.03 and Z3-V1.04, so the column is yes for every build; whether a build also tries .zelda for a bare level name is in no binary (Seihai tries .graal, then .zelda)" },
+            Unknown { area: "pli", what: "the binaries 1.21 to 1.32 show only the send ids passed as constants; the ids below the highest one are taken as sent" },
+            Unknown { area: "other props", what: "1.21 to 1.32 have no separate parser for other players' props; 1.33's set is kept" },
+            Unknown { area: "live", what: "not run: the 1.21 install is an InstallShield setup" },
+        ],
+    },
+    Step {
+        version: ClientVersion::V128B2,
+        label: "1.28 beta 2",
+        token: "GSERV013",
+        date: "1999-11-23",
+        basis: Basis::Binary,
+        delta: Delta {
+            plo: IdDelta::plus(&[30, 35, 36, 37, 38]),
+            pli: IdDelta { plus_ranges: &[(27, 29)], ..IdDelta::NONE },
+            udp: Some(true),
+            own_props: IdDelta { plus_ranges: &[(25, 31)], ..IdDelta::NONE },
+            npc_max: Some(32),
+            gs1_commands: Some(84),
+            ..Delta::NONE
+        },
+        source: "binary: PLO 30 and 35-38, send ids to 29, player props to 31, NPC props to 32, direct data packages (UDP ids 0, 10-22), language files, GS1 table 71 to 84",
+        unknown: &[],
+    },
+    Step {
+        version: ClientVersion::V13T,
+        label: "1.3 test",
+        token: "GSERV014",
+        date: "1999-11-29",
+        basis: Basis::Binary,
+        delta: Delta {
+            plo: IdDelta::plus(&[39]),
+            pli: IdDelta::plus(&[30]),
+            own_props: IdDelta::plus(&[32]),
+            npc_max: Some(34),
+            gs1_commands: Some(85),
+            ..Delta::NONE
+        },
+        source: "binary: PLO 39, send id 30, player prop 32 (alignment), NPC props to 34, GS1 table 85 (setgifpart)",
+        unknown: &[],
+    },
+    Step {
+        version: ClientVersion::V131,
+        label: "1.31",
+        token: "GSERV016",
+        date: "1999-12-07",
+        basis: Basis::Binary,
+        delta: Delta {
+            plo: IdDelta::plus(&[40]),
+            server_list: Some(ServerList::Direct { default: "www.graalonline.com:14900" }),
+            ..Delta::NONE
+        },
+        source: "binary: PLO 40, default port 14900 (14804 before), noudp= and fixedudpport= options",
+        unknown: &[],
+    },
+    Step {
+        version: ClientVersion::V132,
+        label: "1.32",
+        token: "GSERV018",
+        date: "2000-01-12",
+        basis: Basis::Binary,
+        delta: Delta { plo: IdDelta::plus(&[41]), own_props: IdDelta::plus(&[33]), ..Delta::NONE },
+        source: "binary and lab: PLO 41, player prop 33 (ADDITFLAGS); the real 1.32 logged in to the gen-2 stub with the login props of 1.33 (2026-10-30)",
+        unknown: &[],
+    },
+    Step {
         version: ClientVersion::V133,
         label: "1.33",
         token: "GNW20020",
         date: "2000-02-21",
         basis: Basis::Binary,
-        delta: Delta::NONE,
-        source: "origin row (binary of 1.33)",
-        unknown: &[
-            Unknown { area: "levels", what: "Z3-V1 (.zelda): every binary from 1st Graal to 2.31 compares the level magic with Z3-V1.03 and Z3-V1.04, so the column is yes for every build; whether a build also tries .zelda for a bare level name is in no binary (Seihai tries .graal, then .zelda)" },
-        ],
+        delta: Delta { pli: IdDelta::plus(&[31]), gs1_commands: Some(88), ..Delta::NONE },
+        source: "binary of 1.33: send id 31, GS1 table 88, GNW tokens from here on",
+        unknown: &[],
     },
     Step {
         version: ClientVersion::V134,
@@ -549,11 +624,13 @@ pub const CHAIN: &[Step] = &[
                 Listserver::new(ListKind::Legacy, PortStatus::Assumed, Some(BUILT_IN_14921), None).shape(LoginShape::NewmainOnly, ShapeBasis::Captured),
             )),
             plo: IdDelta::plus(&[154, 155]),
+            combat: Some(Some(COMBAT_200)),
             gs1_commands: Some(142),
             ..Delta::NONE
         },
-        source: "binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142; list port 14923 from the public checks of 2026-10-25 (built-in www.graalonline.com:14921)",
+        source: "binary (2.00 r0 to r3, no differences): PLO 154/155, GS1 134 to 142, combat rules read in r0; list port 14923 from the public checks of 2026-10-25 (built-in www.graalonline.com:14921)",
         unknown: &[
+            Unknown { area: "life", what: "combat read in 2.00 r0 only (Graal_analysis client-internals/combat-200-204.md); r1 to r3 assumed the same. Not run against a real client" },
             Unknown { area: "login", what: "props sent at login (verified for 2.05 only)" },
             Unknown { area: "listserver", what: "Seihai now sends the real 2.00 frame (shape A, captured in the lab: id 0 `newmain` only, no account). That frame has not been run on the public service. The 2026-10-25 matrix used Seihai's older classic login (shape B), which 14923 answered with a plain zlib id-0 list (4 rows) while 14922 stayed silent; the port is assumed for shape A until a run. A real 2.00's reply was not captured" },
             Unknown { area: "token", what: "the token is not in gs2lib, so a stock GServer-v2 does not know it" },
@@ -573,10 +650,11 @@ pub const CHAIN: &[Step] = &[
             )),
             plo: IdDelta::plus(&[46, 156]),
             pli: IdDelta::plus(&[35, 36]),
+            combat: Some(Some(COMBAT_201)),
             gs1_commands: Some(144),
             ..Delta::NONE
         },
-        source: "binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144",
+        source: "binary: ADJACENTLEVEL (35) and HITOBJECTS (36) sent, PLO 46 and 156, GS1 142 to 144; the hurt packet gains the AP 100, no-kill and once-a-second gates",
         unknown: &[Unknown { area: "listserver", what: "2.01 to 2.04 (and 2.02 rev 2): login frame inferred, not captured. Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; no real client of these builds was captured and no run on the public service has used shape A, so the port is assumed. The 2026-10-25 matrix used Seihai's older shape B: a legacy list on 14923, nothing on 14922. 14921, the port the build carries, is dead" }],
     },
     Step {
@@ -615,10 +693,11 @@ pub const CHAIN: &[Step] = &[
         delta: Delta {
             plo: IdDelta::plus(&[48, 165]),
             pli: IdDelta::plus(&[38]),
+            combat: Some(Some(COMBAT_205)),
             gs1_commands: Some(148),
             ..Delta::NONE
         },
-        source: "binary: TRIGGERACTION (38) sent, PLO 48 and 165, GS1 146 to 148",
+        source: "binary: TRIGGERACTION (38) sent, PLO 48 and 165, GS1 146 to 148; sword power stored limited to -20..20, as 2.05",
         unknown: &[],
     },
     Step {
@@ -654,13 +733,12 @@ pub const CHAIN: &[Step] = &[
             gmap: Some(true),
             cached_links: Some(true),
             death: Some(Some(DEATH_205)),
-            combat: Some(Some(COMBAT_205)),
             server_in_title: Some(true),
             gs1_commands: Some(161),
             mannerisms: Some(MANNER_205),
             ..Delta::NONE
         },
-        source: "binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death and combat rules traced here",
+        source: "binary (rev 1 and rev 2) and lab: .nw and .gmap levels, PLO 168, server name in the title, GS1 157 to 161; death rules traced here (combat as 2.03, traced in both)",
         unknown: &[
             Unknown { area: "listserver", what: "this profile now sends the real 2.05 frame (shape A, captured in the lab: id 0 `newmain` only). No public run has used it: the 2026-10-25 matrix binary sent the gen-5 login for 2.05 (the saved-version override, since fixed) and both 14922 and 14923 answered that. 14923 answered the older classic login (shape B) of every other classic profile, so 14923 is assumed here" },
         ],
@@ -949,7 +1027,7 @@ pub const CHAIN: &[Step] = &[
             Unknown { area: "live", what: "never run" },
             Unknown { area: "listserver", what: "shape D (id 7 and id 1 in one plain zlib frame at 78 9C) is 3.04's capture; the binary has the same G3D30123 token and gen-5 cipher" },
             Unknown { area: "login", what: "OSTYPE mac is from the binary; the code page (1250), the files in the first frame (bigmap.txt, minimap.txt) and the head and default-weapon checks are 3.04's" },
-            Unknown { area: "3d", what: "the 3D mode (Torque GameConnection on port 28000) is not modelled" },
+            Unknown { area: "3d", what: "the 3D mode (Torque GameConnection, Graal3D protocol 19, on UDP listed port + 1) is not modelled here; seihai-ato::torque has its profile" },
         ],
     },
 ];
@@ -1144,6 +1222,8 @@ fn combat_text(c: &Option<super::profile::CombatRules>) -> String {
     match c {
         None => "none".into(),
         Some(c) if *c == COMBAT_205 => "2.05 rules".into(),
+        Some(c) if *c == COMBAT_201 => "2.01 rules (raw sword power)".into(),
+        Some(c) if *c == COMBAT_200 => "2.00 rules (raw sword power, fewer packet gates)".into(),
         Some(_) => "custom".into(),
     }
 }
@@ -1352,6 +1432,9 @@ mod tests {
     /// (classic login 14923, gen-5 login 14922; the old rows had the bare port the
     /// build carries, mostly the dead 14921). 2.17 then got its id 24
     /// sender (lab, 2026-10-30, `documentation/difftest-217.md` item 3).
+    /// 2.00 to 2.04 then got combat rows read in their own binaries, and
+    /// every combat row two more fields (`sword_power_store`,
+    /// `packet_victim_gates`; Graal_analysis `client-internals/combat-200-204.md`).
     #[test]
     fn chain_equals_the_hand_written_rows() {
         let mut seen = 0;
@@ -1446,7 +1529,8 @@ mod tests {
         for (s, v) in CHAIN.iter().zip(all.iter()) {
             assert_eq!(s.version, *v);
         }
-        assert_eq!(previous(ClientVersion::V133), None);
+        assert_eq!(previous(ClientVersion::V121), None);
+        assert_eq!(previous(ClientVersion::V133), Some(ClientVersion::V132));
         assert_eq!(previous(ClientVersion::V217), Some(ClientVersion::V216));
         assert_eq!(previous(ClientVersion::V231), Some(ClientVersion::V230));
         assert_eq!(ORIGIN, RESOLVED[0]);
