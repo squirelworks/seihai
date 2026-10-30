@@ -85,6 +85,12 @@ impl WalkCadence {
         Some(Self { sent: None, tick: 0, sent_tick: None, pos: (0, 0), moved_tick: 0, idle_after })
     }
 
+    /// The last props sent had `walk` as the GANI: the server knows the
+    /// player is walking.
+    pub fn walk_sent(&self) -> bool {
+        self.sent.as_ref().is_some_and(|s| s.gani == Some("walk"))
+    }
+
     /// One 50 ms tick: the props message to send in this tick's frame, if
     /// anything changed since the last one and two ticks have passed since
     /// it. The first call only records the state: the client sends nothing
@@ -178,6 +184,21 @@ mod tests {
                 (12, "*$idle".to_string()),
             ]
         );
+    }
+
+    /// `walk_sent` turns on with the frame that tells the server `walk`,
+    /// and off with the one that tells it `idle`.
+    #[test]
+    fn walk_sent_follows_the_sent_gani() {
+        let mut c = WalkCadence::for_version(ClientVersion::V222).unwrap();
+        c.tick(WalkState::new(30.0, 30.0, 3, Some("idle")));
+        assert!(!c.walk_sent());
+        assert!(c.tick(WalkState::new(30.5, 30.0, 3, Some("walk"))).is_some());
+        assert!(c.walk_sent());
+        for _ in 0..4 {
+            c.tick(WalkState::new(30.5, 30.0, 3, Some("idle")));
+        }
+        assert!(!c.walk_sent());
     }
 
     /// Graal the Adventure: the last step on a tick between two sends; the
