@@ -61,6 +61,9 @@ hearts) are on the HUD, not in it.
   have it.
 * stderr prints `item list opened (N entries)`, `item list: selected NAME`
   and `item list closed`.
+* The pick becomes the selected weapon (the one beside the D button), as
+  in 2.05. D with nothing carried fires it: the weapon's script gets
+  `weaponfired` (stderr: `weapon fired: NAME`). Carrying, D still hides.
 
 Checked in the lab: offline (`--level onlinestartlocal.nw`, no weapons) and
 online as 2.22 against the lab GServer (bomb and bow listed, the hidden
@@ -71,8 +74,12 @@ weapon left out, the arrows select, A closes). Screens:
 ## Not done
 
 * Weapon images in the cells, folders, scroll arrows, mouse clicks.
-* Firing the selected weapon with D (the weapon system is item 2 of
-  `02-weapons-combat`), and Delete with `PLI_NPCWEAPONDEL`.
+* The built-in weapons (Bow, Bomb and the rest) have no script in Seihai
+  yet, so D on them does nothing. In 2.00 and 2.05 each is a short GS1
+  weapon script that fires only with ammo (`playerdarts>0`,
+  `playerbombs>0`) and uses `shootarrow` / `putbomb`, which Seihai does
+  not run yet (the weapon system is item 2 of `02-weapons-combat`).
+* Delete with `PLI_NPCWEAPONDEL`.
 * The flag that can forbid opening the list was not identified; Seihai
   always allows it.
 * 2.22 and 2.31 were not read; the 2.05 rules are used for every build. The

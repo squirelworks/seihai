@@ -2056,6 +2056,11 @@ fn main() {
                 if item_list.selected != before {
                     if let Some(n) = item_list.selected.and_then(|i| entries.get(i)) {
                         eprintln!("item list: selected {n}");
+                        // The pick is the weapon D fires and the HUD draws.
+                        if weapon_bar.select_name(n) {
+                            scripts.world.core.player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
+                            weapon_recheck = true;
+                        }
                     }
                 }
                 if !item_list.open {
@@ -2222,12 +2227,24 @@ fn main() {
         let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
         let unhide_key = session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
         let interact = interact && !unhide_key;
+        // D with nothing carried fires the selected weapon: its script
+        // gets `weaponfired`. Carrying, D hides instead (above).
+        let fire_key = hide_key && session.carried.is_none() && !session.hidden && !session.life.is_dead();
         let hide_changed = if unhide_key {
             session.leave_hiding();
             true
         } else {
             hide_key && session.toggle_hide()
         };
+        if fire_key && !no_scripts {
+            if let Some(name) = weapon_bar.current().map(|e| e.name.clone()) {
+                eprintln!("weapon fired: {name}");
+                scripts.sync_player(&session);
+                scripts.world.weapon_fired(&name);
+                scripts.apply(&mut session);
+                dirty = true;
+            }
+        }
         dirty |= hide_changed;
         // P pauses (a sign turns its page with it instead), and a window
         // without the focus is paused too. Others see STATUS bit 0x01 and

@@ -101,6 +101,19 @@ impl WeaponBar {
         self.selected = Some(pick.unwrap_or(start));
     }
 
+    /// Select the weapon the item list picked, by name. The list names
+    /// built-in weapons in lower case (`bow`), the bar as `Bow`, so the
+    /// match ignores case. Returns false when the bar has no such weapon.
+    pub fn select_name(&mut self, name: &str) -> bool {
+        match self.entries.iter().position(|e| e.name.eq_ignore_ascii_case(name)) {
+            Some(i) => {
+                self.selected = Some(i);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn current(&self) -> Option<&Entry> {
         self.selected.and_then(|i| self.entries.get(i))
     }
@@ -136,6 +149,18 @@ mod tests {
         // A weapon that arrives after login is selected too.
         bar.sync(&[8, 7], [w("Lantern", Some("lantern"))], ".png");
         assert_eq!(bar.current_image(), Some("lantern.gif"));
+    }
+
+    #[test]
+    fn the_item_list_pick_becomes_the_d_weapon() {
+        let mut bar = WeaponBar::default();
+        bar.sync(&[8, 7], [w("-gr_movement", Some("wbomb1.png"))], ".png");
+        // The hidden weapon came last, so the selection wrapped to Bomb.
+        assert_eq!(bar.current().unwrap().name, "Bomb");
+        assert!(bar.select_name("bow"));
+        assert_eq!(bar.current().unwrap().name, "Bow");
+        assert!(!bar.select_name("Lantern"));
+        assert_eq!(bar.current().unwrap().name, "Bow");
     }
 
     #[test]
