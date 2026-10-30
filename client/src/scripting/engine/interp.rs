@@ -333,7 +333,13 @@ impl<'a> Run<'a> {
         }
     }
 
+    /// Set a flag. The server is told only when the value changes: a script
+    /// that sets the same value every frame (`-System3`'s `lastweapon`) must
+    /// not send a `FLAGSET` every frame.
     fn write_flag(&mut self, name: &str, value: String) {
+        if self.core.flags.get(name) == Some(&value) {
+            return;
+        }
         self.core.flags.insert(name.to_string(), value.clone());
         if !name.starts_with("local.") {
             self.core.effects.push(Effect::SetFlag { name: name.to_string(), value: Some(value) });
@@ -621,7 +627,12 @@ impl<'a> Run<'a> {
             "strtofloat" => Val::Num(s(0).trim().parse().unwrap_or(0.0)),
             "hasweapon" => Val::Num(0.0),
             "keydown" | "keydown2" => Val::Num(0.0),
-            "sarraylen" => Val::Num(split_list(&s(0)).len() as f64),
+            // The argument names the list (a flag), as in `#I(list,i)`.
+            "sarraylen" => {
+                let list = s(0);
+                let text = self.core.flags.get(&list.trim().to_ascii_lowercase()).cloned().unwrap_or(list);
+                Val::Num(split_list(&text).len() as f64)
+            }
             "onwall" => {
                 let (x, y) = (n(0).floor(), n(1).floor());
                 let blocked = match &self.core.walls {
@@ -659,7 +670,7 @@ impl<'a> Run<'a> {
     // ---- message codes ----
 
     /// Replace message codes in `s`: `#c` chat, `#n` nickname, `#a`
-    /// account, `#L`/`#F` level, `#v(expr)`, `#s(name)`, and from 2.02
+    /// account, `#w` selected weapon, `#L`/`#F` level, `#v(expr)`, `#s(name)`, and from 2.02
     /// `#t(i)`, `#e(start,len,text)`, `#T(text)`, and from 2.03 `#p(n)`.
     /// Anything else stays as written.
     fn expand(&mut self, s: &str, depth: usize) -> String {
@@ -719,6 +730,7 @@ impl<'a> Run<'a> {
                 ('c', None) => Some(self.core.player.chat.clone()),
                 ('n', None) => Some(self.core.player.nick.clone()),
                 ('a', None) => Some(self.core.player.account.clone()),
+                ('w', None) => Some(self.core.player.weapon.clone()),
                 ('L', None) | ('F', None) => Some(self.core.level.clone()),
                 ('v', Some(x)) => match parse_expr(x, era) {
                     Some(e) => Some(self.eval(&e).text()),

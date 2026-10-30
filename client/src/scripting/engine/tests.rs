@@ -1073,3 +1073,44 @@ fn a_list_entry_with_a_comma_is_quoted() {
     assert_eq!(split_list(&text), items);
     assert!(split_list("").is_empty());
 }
+
+// ---- `-System3`'s lastweapon list (2gta, 2026-10-30 capture) ----
+
+#[test]
+fn lastweapon_list_is_set_once_per_weapon_and_capped() {
+    // As the server's -System3 weapon script: add the selected weapon to the
+    // list when it is not the last entry, keeping at most 10.
+    let src = "if (timeout || created) {\n  if(!strequals(#w,#I(lastweapon,sarraylen(lastweapon) - 1))){\n    if (sarraylen(lastweapon) == 10) deletestring lastweapon,0;\n    addstring lastweapon,#w;\n  }\n}";
+    let (mut w, id) = npc(src);
+    w.core.player.weapon = "Bow".into();
+    w.fire(id, "created", &[]);
+    assert_eq!(w.flag("lastweapon"), Some("Bow"));
+    w.take_effects();
+    // Same weapon on the next frames: no change, nothing for the server.
+    for _ in 0..5 {
+        w.fire(id, "timeout", &[]);
+    }
+    assert_eq!(w.flag("lastweapon"), Some("Bow"));
+    assert!(!w.take_effects().iter().any(|e| matches!(e, Effect::SetFlag { .. })));
+    // Twelve weapon changes keep the last ten.
+    for i in 0..12 {
+        w.core.player.weapon = format!("W{i}");
+        w.fire(id, "timeout", &[]);
+    }
+    let list = w.flag("lastweapon").unwrap().to_string();
+    assert_eq!(list.split(',').count(), 10, "{list}");
+    assert!(list.ends_with("W11"), "{list}");
+    // One FLAGSET a change, and one more for each `deletestring` at the cap
+    // (Bow and W0 to W8 fill it; W9 to W11 each delete one).
+    assert_eq!(w.take_effects().iter().filter(|e| matches!(e, Effect::SetFlag { .. })).count(), 15);
+}
+
+#[test]
+fn a_flag_set_to_its_value_again_is_not_sent() {
+    let (mut w, id) = npc("if (created) { setstring a,x; }\nif (playerenters) { setstring a,x; setstring a,y; }");
+    w.fire(id, "created", &[]);
+    w.take_effects();
+    w.fire(id, "playerenters", &[]);
+    let sets: Vec<_> = w.take_effects().into_iter().filter(|e| matches!(e, Effect::SetFlag { .. })).collect();
+    assert_eq!(sets.len(), 1);
+}

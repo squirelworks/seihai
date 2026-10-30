@@ -1236,6 +1236,8 @@ fn main() {
     // The weapon list and the selected weapon (the HUD's D slot), and whether
     // a file arrived that may be its image.
     let mut weapon_bar = seihai::weaponbar::WeaponBar::default();
+    // The looks last sent to the server (none yet on this connection).
+    let mut looks_sent: Option<seihai::looks::Looks> = None;
     let mut weapon_asked: HashSet<String> = HashSet::new();
     let mut weapon_recheck = true;
     // Our own nickname shows for 60 frames after the start, a change of our
@@ -2571,6 +2573,7 @@ fn main() {
                         gmap_asked.clear();
                         // The request lists belong to one connection.
                         files.new_connection();
+                        looks_sent = None;
                         // The new server has its own cache folder, searched first.
                         let warp_cache = cache_for(&a, Some(&w.display_name()));
                         let warp_game_cache = game_cache_for(&a);
@@ -2822,6 +2825,8 @@ fn main() {
                 profile.files.image_ext,
             );
             let now = weapon_bar.current_image().map(str::to_string);
+            // `#w` in scripts: the selected weapon's name.
+            scripts.world.core.player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
             if now != before {
                 dirty = true;
                 weapon_recheck = true;
@@ -2844,10 +2849,13 @@ fn main() {
         }
         // A script changed our looks (`sethead`, `setcoatcolor` …): the
         // server and the other players see it from our props.
-        if std::mem::take(&mut session.looks_changed) {
+        // Only a real change is sent: a script that sets the same head every
+        // frame must not send PLAYERPROPS every frame.
+        if std::mem::take(&mut session.looks_changed) && looks_sent.as_ref() != Some(&session.looks) {
             if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks, &profile.props.own)) {
                 eprintln!("looks send failed: {e}");
             }
+            looks_sent = Some(session.looks.clone());
             dirty = true;
         }
         // Server NPCs a push, a pull or a script changed: the 2.05 client
