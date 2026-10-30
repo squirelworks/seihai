@@ -68,6 +68,12 @@ use crate::sound::SoundEvent;
 /// One GANI tick: a step is shown for `1 + WAIT` of these.
 pub const GANI_STEP_MS: u64 = 50;
 
+/// Ticks after a hit before a held arrow walks again (and the walk
+/// replaces the hurt pose): 12 in 2.05 rev 2 and 2.22, read live
+/// (Graal_analysis `player-mannerisms-live.md`, "Walking again with an
+/// arrow held"). The pose lasts its full 31 ticks only with no arrow held.
+pub const HURT_WALK_AFTER_TICKS: u64 = 12;
+
 /// The 1.39 hurt pose, built into the client: about 10 ticks (video, ±1).
 /// Used for the blink of a build that blinks after the hurt pose when no
 /// `hurt.gani` is loaded.
@@ -260,6 +266,9 @@ impl OfflineSession {
     /// the swim stroke (moving or not) and the lift. Each swim step entered
     /// queues its `PLAYSOUND` cues. True if the drawn pose may have changed.
     pub fn tick_poses(&mut self, ms: u64) -> bool {
+        if !self.combat.is_hurt() {
+            self.hurt_walked = false;
+        }
         // Empty hands: no hiding place.
         if self.carried.is_none() {
             self.hidden = false;
@@ -347,7 +356,7 @@ impl OfflineSession {
                 return Some(p);
             }
         }
-        if let Some(p) = self.combat.hurt_elapsed_ms().and_then(|ms| hurt_step(&self.poses.hurt, ms)) {
+        if let Some(p) = self.combat.hurt_elapsed_ms().filter(|_| !self.hurt_walked).and_then(|ms| hurt_step(&self.poses.hurt, ms)) {
             return Some(p);
         }
         // Holding a wall with A: the grab pose, or the pull once the arrow

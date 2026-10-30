@@ -12,7 +12,7 @@ A GANI step is shown for `1 + WAIT` ticks, where `WAIT n` is the line after the 
 |---|---|---|
 | push | from the 18th blocked step, 5 steps × 4 ticks (`WAIT 3`), back to step 0 when the count wraps 38 → 18 | same; the sprite the others see (S 11, 12, 13, 11, 12) follows the same step |
 | pull | 3 steps × 2 ticks (`WAIT 1`); stays on, looping, after the arrow and A are let go, until a key moves the player | same; a swing, a hit, a lift, death or a jump also end it |
-| hurt | 31 ticks (`WAIT 30`), then idle | by the file's waits; the default `hurt.gani` now has `WAIT 30` |
+| hurt | 31 ticks (`WAIT 30`), then idle; the arrows are ignored for 11 ticks, and from the 12th a held arrow walks and `walk` replaces `hurt` (2.05 and 2.22) | by the file's waits; the default `hurt.gani` now has `WAIT 30`; arrows ignored for 11 ticks, then a step ends the hurt pose for the rest of hurt mode (`HURT_WALK_AFTER_TICKS`) |
 | lift | 6 ticks (`WAIT 5`), then carrystill | `lift.gani` by its waits, then the carry poses; without the file, carrystill at once |
 | swim | 8 steps × 2 ticks, **animating while still**; 0.5 tile a tick, the walking pace | runs on the tick clock, moving or not; `SWIM_STEP_MS` is 50 (was 100, with no source) |
 | spin | S pressed again during a swing, with the has-spin status (STATUS 0x40): the swing is cut off, then `spin` plays 13 × 1 tick, then idle. A press during the spin is ignored, and holding S does nothing (seen live online) | same (`CombatState::start_spin`); the length comes from `spin.gani`'s waits, or 13 ticks without it |
