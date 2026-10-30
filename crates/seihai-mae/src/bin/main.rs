@@ -2371,6 +2371,9 @@ fn main() {
                 dirty = true;
             }
         }
+        if hide_changed {
+            eprintln!("{}", if session.hidden { "hidden under the carried object" } else { "out of hiding" });
+        }
         dirty |= hide_changed;
         // P pauses (a sign turns its page with it instead), and a window
         // without the focus is paused too. Others see STATUS bit 0x01 and
