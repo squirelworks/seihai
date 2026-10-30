@@ -57,14 +57,13 @@ without a recorded frame send nothing.
 
 The `-.gif` request seen in these frames is a weapon image: the lab server gave a
 weapon the image `-`, and the clients add `.gif` to an image name with no extension.
-Seihai does the same for weapon images (it first asked for `-`). What is still
-different: the real clients also ask for `wbowi1.png`, which no weapon of the lab
-server names (the server sends the default-weapon ids 7 and 8 as well); which
-default weapon gives which image is not known, so Seihai does not ask for it.
-Evidence for a later decision, not used: the server source numbers the default
-items bow 7 and bomb 8, the 2.22 item-name table is in the same order, and the
-real 2.22 and 2.31 logins ask `wbomb1.png` before `wbowi1.png`, as a walk over
-default weapons 8 then 7 would. No mapping is wired (`file-cache.md`).
+Seihai does the same for weapon images (it first asked for `-`). The real clients
+also ask for `wbowi1.png`, which no weapon of the lab server names: it comes from
+the default-weapon ids the server sends (8 then 7). Seihai asks the image of each
+default weapon in arrival order: id 7 `wbowi1.png` (lab, real 2.22 with the ids
+filtered to 7 alone) and id 8 `wbomb1.png` (the 2.05 rev 2 item table), which
+gives the real 2.22 and 2.31 order, `wbomb1.png` before `wbowi1.png`
+(`file-cache.md`, `weapon-images.md`).
 
 ## Gen-2 builds (1.33 to 1.39)
 
