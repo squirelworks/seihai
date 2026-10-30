@@ -17,7 +17,7 @@ Seihai is expanding into systematic differential testing against real clients. T
 1. **CI check** — Turn the existing public frames into a CI job that fails on unexpected drift. Even a subset of the sixty-odd real frames would lock the parity already achieved.
 2. **2.17 client** — The real 2.17 launcher needs its own UI steps. Document the exact sequence and add it to the lab runner.
 3. **Server-side warp scenario** — The roadmap lists it as not yet covered. A short scripted scenario that forces a `PLO_SERVERWARP` and checks the reconnect would close the gap.
-4. **Gmap remaining fields** — 185 board heights, `gr.x`/`gr.y`, neighbour NPCs/links/chests, cached-level crossings. The analysis notes already describe the expected behaviour; the testing space needs the corresponding lab cases.
+4. **Gmap remaining fields** — 185 board heights, neighbour NPCs/links/chests drawn across the seam, and a `35` with a warm cache. (Cached-level crossings are settled: `protocol.md` "Gmaps". `gr.x`/`gr.y`: `gr-flags.md`.) The analysis notes already describe the expected behaviour; the testing space needs the corresponding lab cases.
 5. **Public-server game checks** — List checks are done. The remaining read-only game-server checks are listed in `documentation/public-checks.md`. Adding them as tracked scenarios keeps the approval gate visible.
 
 ## Relationship to the analysis archive
