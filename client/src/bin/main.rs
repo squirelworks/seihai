@@ -1031,6 +1031,8 @@ fn main() {
     session.life.set_rules(profile.life.death);
     session.combat.set_rules(profile.life.combat);
     session.set_mannerisms(profile.mannerisms);
+    // Who drops bush and pot items: the 1.x roll, or the server.
+    session.set_drops(profile.drops);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -1094,6 +1096,10 @@ fn main() {
             gani_attrs,
         };
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
+        // The items on the floor, under the players.
+        if let Some(sp) = &sprites {
+            seihai::render::draw_floor_items(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
+        }
         // On a gmap another player's position is local to its own cell.
         let own_cell = session.gmap.as_ref().map(|w| w.cell);
         let others: Vec<seihai::protocol::OtherPlayer> = others
@@ -1760,6 +1766,17 @@ fn main() {
                 if let Some(g) = net_state.own_glove_power.take() {
                     session.glove_power = g;
                 }
+                // Rupees, bombs and arrows: the server's count (a pickup
+                // online from 1.38 is given this way).
+                if let Some(v) = net_state.own_rupees.take() {
+                    session.rupees = v as i32;
+                }
+                if let Some(v) = net_state.own_bombs.take() {
+                    session.bombs = i32::from(v);
+                }
+                if let Some(v) = net_state.own_darts.take() {
+                    session.darts = i32::from(v);
+                }
                 // Developer option: the account's maximum is 0, so the server
                 // holds 0 hearts and every respawn gets 0. Send our own
                 // maximum once per connection; the server answers with CURPOWER.
@@ -1826,6 +1843,14 @@ fn main() {
                                 }
                             }
                         }
+                    }
+                }
+                // Items the server put down or took away (after a level
+                // change above cleared the old level's).
+                for it in std::mem::take(&mut net_state.items) {
+                    match it {
+                        seihai::protocol::ServerItem::Add(it) => session.add_server_item(it),
+                        seihai::protocol::ServerItem::Del(x, y) => session.remove_server_item(x, y),
                     }
                 }
                 // Another player threw what they carried: the object flies
@@ -2040,6 +2065,11 @@ fn main() {
             if session.tick_throw_with(dt, &|x, y| scripts.world.npc_at(f64::from(x), f64::from(y))) {
                 dirty = true;
             }
+            // The items on the floor: bounce, blink, pickup and timeout.
+            if !session.floor_items.is_empty() {
+                dirty = true;
+            }
+            session.tick_items(dt, conn.is_some());
             for id in session.take_pelts() {
                 scripts.pelt(&mut session, id);
             }
@@ -2973,6 +3003,11 @@ fn main() {
             dirty = true;
             boards.push(seihai::net::board_modify_message(b.x as u8, b.y as u8, b.width as u8, b.height as u8, &b.tiles));
         }
+        // What the floor items tell the server, by the build: a 1.38 to 1.41
+        // roll (PLI_ITEMADD), a pickup (PLI_ITEMTAKE, or ITEMDEL before
+        // 1.38) and a timeout (ITEMDEL from 1.38). After the cut's
+        // BOARDMODIFY, as 1.39 sends them.
+        boards.extend(session.take_item_messages(conn.is_some()));
         // A build with a walk cadence sends on its 50 ms tick only: the tile
         // changes, the flags and that tick's walk props in one frame, as the
         // real 2.22 sends a bush cut with its sword GANI.
