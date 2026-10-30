@@ -422,8 +422,10 @@ pub enum HudArt {
     Letters,
     /// 1.35–1.37: as `Letters` with a CHAT label.
     LettersChat,
-    /// 1.38+: 224×97, blank item buttons (keys are configurable) and the
-    /// digits moved into `state.png`. [later builds inferred]
+    /// 1.38+: blank item buttons (keys are configurable) and the digits
+    /// moved into `state.png`. 1.38–1.39 ship it at 224×97; 1.41 to 2.31
+    /// ship a 224×145 sheet with the same layout plus the AP and MP bar
+    /// frames, which the HUD draws only when the sheet has them.
     BlankButtons,
 }
 

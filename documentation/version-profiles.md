@@ -94,6 +94,9 @@ behaviour.
 
 ## Not yet per version
 
+Graal_analysis `version-profiles/matrix/` has the cross-era matrix (1998 to
+6.11) and `seihai-gaps.md` there lists what these rows do not model yet.
+
 - HUD drawing: the row says which `state.png` layout a build ships, but the
   HUD is still Seihai's own bar until the sheet is drawn.
 - Key bindings, emoticons, ganis, log window and ghost mode are recorded but
