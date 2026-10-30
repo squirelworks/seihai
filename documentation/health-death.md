@@ -109,7 +109,7 @@ in that order, each only when it changed (`life::PowerReporter`,
 | When | Sent | Source |
 |---|---|---|
 | A hit (sword, packet 40/46, thrown object) | CURPOWER, GANI `hurt`, SPRITE (the hurt sprite), in the frame of the hit | 2.05 lab run 1 (`22 25 2A 24 hurt 31 A0`) and the 2.22 lab |
-| Hurt mode ends | GANI `idle` | 2.05 lab run 1 (`2A 24 idle`, 1.5 s after the hit) |
+| The hurt pose ends (31 ticks, or the first step; hurt mode and its sprite run on to 40 ticks) | GANI `idle` | 2.05 lab run 1 (`2A 24 idle`, 1.5 s after the hit); real 2.00, 2026-10-30 run 2 and lan-200i (`idle` at 1.35 to 1.55 s, plain SPRITE at about 2 s) |
 | A killing hit | CURPOWER 0, GANI `dead` | 2.22 lab |
 | The server set hearts to 0 | GANI `dead` | 2.22 lab |
 | Respawn | CURPOWER by the AP table, GANI `idle` | 2.22 lab; 2.05 live run 2026-10-29 (CURPOWER, `idle`, X, Y and STATUS in one props message after the level warp) |
