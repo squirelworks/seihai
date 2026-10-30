@@ -288,11 +288,13 @@ fn ganis_parse_with_the_documented_structure() {
     let (hw, hh, _) = read_png_rgba(&read("heads/head0.png")).unwrap();
     let (spw, sph, _) = read_png_rgba(&read("sprites.png")).unwrap();
     let (sww, swh, _) = read_png_rgba(&read("swords/sword1.png")).unwrap();
+    let (shw, shh, _) = read_png_rgba(&read("shields/shield1.png")).unwrap();
     let sheet_size = |s: &str| match s {
         "BODY" => (bw, bh),
         "HEAD" => (hw, hh),
         "SPRITES" => (spw, sph),
         "SWORD" => (sww, swh),
+        "SHIELD" => (shw, shh),
         // The hat: Seihai ships none; the stock hat sheet is 192x144.
         "ATTR1" => (192, 144),
         other => panic!("unexpected sheet {other}"),
@@ -354,12 +356,25 @@ fn ganis_parse_with_the_documented_structure() {
         }
     }
     // idle uses body pose 0 (ids 200..203) and heads 100..103, as draw_player_sprites does,
-    // then the hat (ids 40..43) as the stock idle.gani does
+    // then the hat (ids 40..43); the shield (ids 10..13) is behind the body, or in front
+    // facing down, at the stock idle.gani places against the head
     let idle = Gani::load(root().join("gani/idle.gani")).unwrap();
     assert_eq!(idle.default_attrs, <[Option<String>; 5]>::default(), "Seihai ships no hat");
+    let shield_at = [(36, 16), (6, 16), (8, 24), (34, 16)];
     for dir in 0..4usize {
-        let ids: Vec<u32> = idle.frames[0].rows[dir].iter().map(|p| p.sprite_id).collect();
-        assert_eq!(ids, vec![0, 200 + dir as u32, 100 + dir as u32, 40 + dir as u32]);
+        let row = &idle.frames[0].rows[dir];
+        let ids: Vec<u32> = row.iter().map(|p| p.sprite_id).collect();
+        let (d, s) = (dir as u32, 10 + dir as u32);
+        let want = if dir == 2 { vec![0, 200 + d, 100 + d, 40 + d, s] } else { vec![0, s, 200 + d, 100 + d, 40 + d] };
+        assert_eq!(ids, want);
+        let sh = row.iter().find(|p| p.sprite_id == s).unwrap();
+        assert_eq!((sh.x, sh.y), shield_at[dir]);
+    }
+    // the shield is in idle, walk and sword only, as in the stock GANIs
+    for (name, has) in [("idle", true), ("walk", true), ("sword", true), ("sit", false), ("swim", false), ("hurt", false), ("carry", false), ("dead", false)] {
+        let g = Gani::load(root().join("gani").join(format!("{name}.gani"))).unwrap();
+        let any = g.frames.iter().flat_map(|f| &f.rows).flatten().any(|p| (10..14).contains(&p.sprite_id));
+        assert_eq!(any, has, "{name} shield");
     }
     // sword.gani: five steps that play once and go back to idle; every step has
     // a body pose 9 or 10 and a sword sprite; sit and hurt use their own body poses

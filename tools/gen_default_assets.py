@@ -925,6 +925,50 @@ def with_hats(text):
     return "\n".join(out)
 
 
+# The shield (SHIELD, the 38x20 sheet: up 6x18 at x 0, left 8x20 at 6, down
+# 16x20 at 14, right 8x20 at 30), placed against the head. Measured on the
+# stock 2.22 player GANIs, step by step: (sprite, dx, dy) from the head per
+# direction (up, left, down, right); None where no shield is drawn. Facing
+# down the shield is drawn last (in front); otherwise right after the shadow.
+# Sit, swim, hurt, carry and dead draw no shield, as the stock ones.
+SHIELD_SPRITES = [f"SPRITE {10 + f} SHIELD {x} 0 {w} {h} shield {n}" for f, (x, w, h, n) in
+                  enumerate(((0, 6, 18, "up"), (6, 8, 20, "left"), (14, 16, 20, "down"), (30, 8, 20, "right")))]
+IDLE_SHIELD = [[(10, 28, 14), (11, -6, 14), (12, 0, 22), (13, 30, 14)]]
+WALK_SHIELD = [[(10, 28, a), (11, b, c), (12, 0, d), (13, e, f)] for a, b, c, d, e, f in (
+    (14, -6, 14, 24, 30, 14), (14, -6, 12, 22, 30, 12), (14, -6, 14, 24, 30, 14), (10, -6, 14, 24, 30, 14),
+    (14, -6, 14, 24, 30, 14), (14, -4, 12, 22, 28, 12), (14, -6, 14, 24, 30, 14), (10, -6, 14, 24, 30, 14))]
+# During the swing the shield is held to the side: the right-facing sprite
+# when facing up, the left-facing one when facing down, none left or right.
+SWORD_SHIELD = [[(13, 32, a), None, (11, -6, b), None] for a, b in ((18, 10), (16, 10), (18, 4), (22, 10), (16, 12))]
+SHIELDS = {"idle": IDLE_SHIELD, "walk": WALK_SHIELD, "sword": SWORD_SHIELD}
+
+
+def with_shields(text, table):
+    """Add the SHIELD sprites and a shield placement to every direction row
+    of a GANI, from `table[step][direction]` (see SHIELD_SPRITES)."""
+    out, row = [], 0
+    for line in text.split("\n"):
+        if line.startswith("SPRITE 100 HEAD"):
+            out += SHIELD_SPRITES
+        elif line and line[0].isdigit():
+            step, dr = divmod(row, 4)
+            row += 1
+            place = table[step][dr]
+            if place:
+                parts = line.split(", ")
+                head = next(p for p in parts if 100 <= int(p.split()[0]) <= 103)
+                hx, hy = (int(v) for v in head.split()[1:])
+                sid, dx, dy = place
+                pl = f"{sid} {hx + dx} {hy + dy}"
+                if dr == 2 and sid == 12:
+                    parts.append(pl)
+                else:
+                    parts.insert(1, pl)
+                line = ", ".join(parts)
+        out.append(line)
+    return "\n".join(out)
+
+
 def gani_header(title):
     return [
         f"// {title}",
@@ -1340,7 +1384,7 @@ def write_all(out):
     for name, text in (("idle", idle_gani()), ("walk", walk_gani()), ("swim", swim_gani()),
                        ("sword", sword_gani()), ("sit", sit_gani()), ("hurt", hurt_gani()), ("dead", dead_gani()),
                        ("carrystill", carrystill_gani()), ("carry", carry_gani())):
-        open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(with_hats(text))
+        open(os.path.join(out, "gani", name + ".gani"), "w", newline="\n").write(with_shields(with_hats(text), SHIELDS[name]) if name in SHIELDS else with_hats(text))
 
     # the default sheet is the only tile sheet: one line, image,prefix,type,x,y
     open(os.path.join(out, "levels", "tiledefs", "tiledefsOffline.txt"), "w", newline="\n").write("pics1.png,,0,0,0\n")
@@ -1392,6 +1436,7 @@ def gani_frame_into(out, tile, name, step, dr):
         "HEAD": Image.open(os.path.join(out, "heads", "head0.png")).convert("RGBA"),
         "SPRITES": Image.open(os.path.join(out, "sprites.png")).convert("RGBA"),
         "SWORD": Image.open(os.path.join(out, "swords", "sword1.png")).convert("RGBA"),
+        "SHIELD": Image.open(os.path.join(out, "shields", "shield1.png")).convert("RGBA"),
     }
     defs, rows, cur = {}, [], []
     in_ani = False
