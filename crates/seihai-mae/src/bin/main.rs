@@ -702,6 +702,9 @@ fn main() {
     // Buddy, ignore and mute lists from the settings directory.
     let mut lists = seihai::chatlists::ChatLists::load_default();
     let mut conn: Option<Connection> = None;
+    // The arrows and bombs the server last heard of, (ARROWSCOUNT,
+    // BOMBSCOUNT): what it gave us, or what we sent after a shot or a bomb.
+    let mut told_counts: (Option<i32>, Option<i32>) = (None, None);
     // Opt-in tamper check (`--send-tampercheck`): the build's constant.
     let mut tamper: Option<TamperSender> = None;
     let mut tamper_clock = Instant::now();
@@ -1861,9 +1864,11 @@ fn main() {
                 }
                 if let Some(v) = net_state.own_bombs.take() {
                     session.bombs = i32::from(v);
+                    told_counts.1 = Some(session.bombs);
                 }
                 if let Some(v) = net_state.own_darts.take() {
                     session.darts = i32::from(v);
+                    told_counts.0 = Some(session.darts);
                 }
                 // Developer option: the account's maximum is 0, so the server
                 // holds 0 hearts and every respawn gets 0. Send our own
@@ -2230,6 +2235,22 @@ fn main() {
                         conn = None;
                     }
                 }
+            }
+            // A shot or a bomb used one up: the new count goes out after the
+            // ARROWADD or BOMBADD, as real 2.05 sends ARROWSCOUNT and
+            // BOMBSCOUNT with them (lab, 2026-10-30).
+            let arrows_now = told_counts.0.filter(|&n| n != session.darts).map(|_| session.darts);
+            let bombs_now = told_counts.1.filter(|&n| n != session.bombs).map(|_| session.bombs);
+            if arrows_now.is_some() || bombs_now.is_some() {
+                if let Some(c) = conn.as_mut() {
+                    let to_u8 = |n: i32| n.clamp(0, 99) as u8;
+                    eprintln!("counts: arrows {arrows_now:?} bombs {bombs_now:?}");
+                    if let Err(e) = c.send_messages(&[seihai::net::count_props_message(arrows_now.map(to_u8), bombs_now.map(to_u8))]) {
+                        eprintln!("send failed: {e}");
+                        conn = None;
+                    }
+                }
+                told_counts = (arrows_now.or(told_counts.0), bombs_now.or(told_counts.1));
             }
             // The items on the floor: bounce, blink, pickup and timeout.
             if !session.floor_items.is_empty() {
