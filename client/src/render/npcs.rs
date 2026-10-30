@@ -4,8 +4,9 @@
 
 use std::collections::HashMap;
 
-use super::tiles::{compose_gani_frame, draw_gani_frame, Framebuffer, PoseSheets, TILE_PX};
-use crate::assets::{DrawLayer, ImageEffect, Npc, SCREEN_HEIGHT};
+use super::tiles::{compose_gani_frame, draw_gani_frame, Framebuffer, PoseSheets, Sheet, TILE_PX};
+use crate::assets::{DrawLayer, Gani, ImageEffect, Npc, SCREEN_HEIGHT};
+use crate::looks;
 use crate::offline::OfflineSession;
 
 /// The facing an animated NPC is drawn with (down; NPCs have no direction
@@ -18,6 +19,33 @@ pub const NPC_DIR: u8 = 2;
 pub struct NpcArt<'a> {
     pub images: &'a HashMap<String, (u32, Vec<u8>)>,
     pub sheets: PoseSheets<'a>,
+    /// The build draws GANI attributes (`ATTR1` … `ATTR5`, from 2.02).
+    pub gani_attrs: bool,
+}
+
+/// The sheets a character NPC is drawn with: the head, body, shield, sword
+/// and attributes its `setcharprop` set, when those pictures are loaded,
+/// else `art.sheets`. The body is the one recoloured in the NPC's colours
+/// (`looks::colored_body_key`) when that is loaded.
+pub fn npc_sheets<'a>(npc: &Npc, gani: &Gani, art: &NpcArt<'a>) -> PoseSheets<'a> {
+    let images = art.images;
+    let sheet = |n: Option<&str>| n.and_then(|n| images.get(n)).map(|i| Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 });
+    let l = looks::npc_looks(npc);
+    let colored = sheet(Some(&looks::colored_body_key(l.body_name(), &l.colors)));
+    let mut attrs = PoseSheets::default().attrs;
+    if art.gani_attrs {
+        for (i, a) in attrs.iter_mut().enumerate() {
+            *a = sheet(looks::attr_image(&l.attrs, gani, i));
+        }
+    }
+    PoseSheets {
+        body: colored.or(sheet(l.body.as_deref())).or(art.sheets.body),
+        head: sheet(l.head.as_deref()).or(art.sheets.head),
+        sprites: art.sheets.sprites,
+        sword: sheet(npc.props.get("#1").map(String::as_str)).or(art.sheets.sword),
+        shield: sheet(npc.shield.as_deref()).or(art.sheets.shield),
+        attrs,
+    }
 }
 
 /// Blit an RGBA image, or a part `(x, y, w, h)` of it, with its top-left at
@@ -169,18 +197,19 @@ pub fn draw_npcs(fb: &mut Framebuffer, session: &OfflineSession, art: &NpcArt, c
 fn draw_animation(fb: &mut Framebuffer, session: &OfflineSession, npc: &Npc, art: &NpcArt, dx: i32, dy: i32) -> bool {
     let Some(name) = &npc.ani else { return false };
     let Some(gani) = session.npc_ganis.get(name) else { return false };
-    if gani.frame_count() == 0 || art.sheets.body.is_none() || art.sheets.head.is_none() {
+    let sheets = npc_sheets(npc, gani, art);
+    if gani.frame_count() == 0 || sheets.body.is_none() || sheets.head.is_none() {
         return false;
     }
     // A character with `setcoloreffect` or `setzoomeffect`: the whole figure
     // is coloured and zoomed about its centre, as an image is.
     if npc.effect.is_on() {
-        if let Some((ox, oy, w, px)) = compose_gani_frame(gani, npc.ani_frame, NPC_DIR, &art.sheets) {
+        if let Some((ox, oy, w, px)) = compose_gani_frame(gani, npc.ani_frame, NPC_DIR, &sheets) {
             let h = (px.len() / (w as usize * 4)) as i32;
             blit_effect(fb, &px, w as i32, (0, 0, w as i32, h), dx + ox, dy + oy, npc.effect, npc.layer == DrawLayer::Light);
         }
         return true;
     }
-    draw_gani_frame(fb, gani, npc.ani_frame, NPC_DIR, &art.sheets, dx, dy);
+    draw_gani_frame(fb, gani, npc.ani_frame, NPC_DIR, &sheets, dx, dy);
     true
 }

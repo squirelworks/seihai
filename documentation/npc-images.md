@@ -49,7 +49,7 @@ So the square is gone: `render_view` draws chests and then nothing for NPCs, and
 - `showimg` in **weapon** scripts (all the `showimg` calls found in the private collection are in weapon scripts): the weapon object has no image list, so those calls are accepted and nothing is drawn.
 - Layers other than "over", colours, zoom, the `@text` images, screen-layer images.
 - Walk animations of the local player (item 22 left that open too).
-- NPC directions, `setcharprop` heads and bodies.
+- NPC directions. (`setcharprop` heads, bodies, colours and hats are drawn now; see `appearance.md`.)
 
 ## Tests
 

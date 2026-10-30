@@ -1051,6 +1051,9 @@ fn main() {
     }
 
     let profile = version.profile();
+    // GANI attributes (`ATTR1` … `ATTR5`, the hat) exist from 2.02, the
+    // build that added props 37 to 41; before it they draw nothing.
+    let gani_attrs = profile.props.own.contains(37);
     // The readme keys; from 1.38 `keyset_<action>` lines in the settings
     // file replace them.
     let keymap = KeyMap::for_version(profile.ui.key_config, &Settings::load().keysets);
@@ -1135,6 +1138,7 @@ fn main() {
                 shield: None,
                 attrs: Default::default(),
             },
+            gani_attrs,
         };
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::BelowPlayers);
         // On a gmap another player's position is local to its own cell.
@@ -1175,7 +1179,7 @@ fn main() {
                             Some(_) => own(&l.sword).or(sword_sheet.as_ref().map(pose_sheet)),
                         },
                         shield: own(&l.shield),
-                        attrs: attr_sheets(&l.attrs, gani, npc_imgs),
+                        attrs: if gani_attrs { attr_sheets(&l.attrs, gani, npc_imgs) } else { Default::default() },
                     };
                     let (ox, oy) = ((other.x * 16.0) as i32 - cam_x, (other.y * 16.0) as i32 - cam_y);
                     seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
@@ -1225,7 +1229,7 @@ fn main() {
                     sword: sword_sheet.as_ref().map(pose_sheet),
                     // The default shield of the player's shield power.
                     shield: npc_imgs.get(&local_shield_image(session.shield_power)).map(pose_sheet),
-                    attrs: pose.map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs)).unwrap_or_default(),
+                    attrs: pose.filter(|_| gani_attrs).map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs)).unwrap_or_default(),
                 };
                 if let Some(p) = pose {
                     seihai::render::draw_gani_frame(&mut fb, p.gani, p.frame, session.player_dir, &sheets, dx, dy);
@@ -2912,7 +2916,7 @@ fn main() {
         // A script changed our looks (`sethead`, `setcoatcolor` …): the
         // server and the other players see it from our props.
         if std::mem::take(&mut session.looks_changed) {
-            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks)) {
+            if let Some(Err(e)) = conn.as_mut().map(|c| c.send_looks(&session.looks, &profile.props.own)) {
                 eprintln!("looks send failed: {e}");
             }
             dirty = true;
@@ -2948,19 +2952,36 @@ fn main() {
                 wanted.push(("shields", own_shield));
             }
             wanted.push(("heads", session.looks.head_name().to_string()));
-            // GANI attribute pictures (the hat): everyone's own, and the
-            // defaults of the player GANIs.
-            for attrs in net_state.others.iter().map(|o| &o.looks.attrs).chain([&session.looks.attrs]) {
-                for (i, a) in attrs.iter().enumerate() {
-                    if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
-                        wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+            // The character NPCs' own pictures (`setcharprop`).
+            let npc_looks: Vec<(seihai::looks::Looks, Option<String>, Option<String>)> = session
+                .current_level
+                .iter()
+                .flat_map(|l| &l.npcs)
+                .filter(|n| n.ani.is_some())
+                .map(|n| (seihai::looks::npc_looks(n), n.shield.clone(), n.props.get("#1").cloned()))
+                .collect();
+            for (l, shield, sword) in &npc_looks {
+                for (dir, n) in [("heads", &l.head), ("bodies", &l.body), ("shields", shield), ("swords", sword)] {
+                    if let Some(n) = n.as_deref().filter(|n| !n.is_empty()) {
+                        wanted.push((dir, n.to_string()));
                     }
                 }
             }
-            for g in session.poses.all().chain(session.walk_gani.as_ref().map(|w| &w.gani)) {
-                for (i, a) in g.default_attrs.iter().enumerate() {
-                    if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
-                        wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+            // GANI attribute pictures (the hat): everyone's own, and the
+            // defaults of the player GANIs, for a build that has them.
+            if gani_attrs {
+                for attrs in net_state.others.iter().map(|o| &o.looks.attrs).chain([&session.looks.attrs]).chain(npc_looks.iter().map(|l| &l.0.attrs)) {
+                    for (i, a) in attrs.iter().enumerate() {
+                        if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
+                            wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+                        }
+                    }
+                }
+                for g in session.poses.all().chain(session.walk_gani.as_ref().map(|w| &w.gani)).chain(session.npc_ganis.values()) {
+                    for (i, a) in g.default_attrs.iter().enumerate() {
+                        if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
+                            wanted.push((seihai::looks::attr_dir(i), a.to_string()));
+                        }
                     }
                 }
             }
@@ -2974,6 +2995,7 @@ fn main() {
                 .map(|o| (o.looks.body.clone().unwrap_or_else(|| seihai::looks::DEFAULT_BODY.into()), o.looks.colors.unwrap_or(seihai::looks::DEFAULT_COLORS)))
                 .collect();
             bodies.push((session.looks.body_name().to_string(), session.looks.colors));
+            bodies.extend(npc_looks.iter().map(|(l, _, _)| (l.body_name().to_string(), l.colors)));
             if colored_body_pass(&bodies, &resolver, &mut files, &mut body_raw, &mut look_tried, &mut npc_images) {
                 dirty = true;
             }

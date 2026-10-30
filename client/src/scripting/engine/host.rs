@@ -417,7 +417,7 @@ impl SessionScripts {
                         }
                         c if c.len() == 3 && c.starts_with("#C") => {
                             let slot = usize::from(c.as_bytes()[2].wrapping_sub(b'0'));
-                            let color = crate::looks::color_by_name(v).or_else(|| v.parse::<f64>().ok().map(f64::round).filter(|n| (0.0..20.0).contains(n)).map(|n| n as u8));
+                            let color = crate::looks::color_value(v);
                             match (s.looks.colors.get_mut(slot), color) {
                                 (Some(old), Some(c)) => {
                                     *old = c;

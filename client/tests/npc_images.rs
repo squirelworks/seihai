@@ -67,7 +67,7 @@ fn draw(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>) -> Framebuff
 
 fn draw_with(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, sheets: PoseSheets) -> Framebuffer {
     let mut fb = Framebuffer::new(320, 320);
-    draw_both(&mut fb, s, &NpcArt { images: imgs, sheets });
+    draw_both(&mut fb, s, &NpcArt { images: imgs, sheets, gani_attrs: true });
     fb
 }
 
@@ -166,7 +166,7 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     assert_eq!(level.npcs[0].images.iter().map(|i| (i.index, i.file.as_str())).collect::<Vec<_>>(), [(3, "blue.png"), (4, "red.png")]);
     assert!(sc.images_changed);
     let mut fb = Framebuffer::new(500, 300);
-    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() });
+    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
     let px = |x: u32, y: u32| {
         let i = ((y * fb.width + x) * 3) as usize;
         [fb.pixels[i], fb.pixels[i + 1], fb.pixels[i + 2]]
@@ -180,7 +180,7 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     let level = s.current_level.as_ref().unwrap();
     assert_eq!(level.npcs[0].images.len(), 1);
     let mut fb = Framebuffer::new(500, 300);
-    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default() });
+    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
     let i = ((12 * 16 + 1) * fb.width + 20 * 16 + 1) as usize * 3;
     assert_eq!(&fb.pixels[i..i + 3], &BLACK);
 }
@@ -430,7 +430,7 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
 /// One pass of the level's NPCs on a fresh picture.
 fn draw_pass(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, pass: NpcPass) -> Framebuffer {
     let mut fb = Framebuffer::new(320, 320);
-    draw_npcs(&mut fb, s, &NpcArt { images: imgs, sheets: PoseSheets::default() }, 0, 0, pass);
+    draw_npcs(&mut fb, s, &NpcArt { images: imgs, sheets: PoseSheets::default(), gani_attrs: true }, 0, 0, pass);
     fb
 }
 
@@ -516,7 +516,7 @@ fn seteffect_shades_the_map_under_the_lights() {
     );
     assert_eq!(s.screen_effect, [0.0, 0.0, 1.0, 0.5]);
     let mut fb = Framebuffer::new(320, 320);
-    let art = NpcArt { images: &imgs, sheets: PoseSheets::default() };
+    let art = NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true };
     draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::BelowPlayers);
     draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::AbovePlayers);
     // The default NPC is under the shading: red halfway to blue.
@@ -553,6 +553,49 @@ fn a_character_npc_takes_its_colour_and_zoom_effect() {
     // Zoom 2: the figure covers more of the picture.
     let count = |fb: &Framebuffer| fb.pixels.chunks(3).filter(|p| *p != [0, 0, 0]).count();
     assert!(count(&pic("setzoomeffect 2;")) > 3 * count(&plain));
+}
+
+// ---- a character NPC's own looks (setcharprop) -------------------------------------
+
+/// A character at (10, 10) in the default idle animation, facing down: its
+/// box starts at (160, 160), the head (32x32) at (168, 162), the body at
+/// (168, 176) and the hat (48x48) at (160, 144), drawn after the head.
+fn character_picture(props: &str, gani_attrs: bool) -> Framebuffer {
+    let a = art();
+    let mut imgs = HashMap::new();
+    imgs.insert("ghead.png".to_string(), image(32, 128, |_, _| GREEN));
+    imgs.insert("bluehat.png".to_string(), image(192, 144, |_, _| BLUE));
+    let colors = [2, 10, 18, 5, 18];
+    imgs.insert(seihai::looks::colored_body_key("body.png", &colors), image(128, 32, |_, _| RED));
+    let (mut s, _sc) = session(&format!("NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {props} }}\nNPCEND\n"));
+    with_default_ganis(&mut s);
+    let mut fb = Framebuffer::new(320, 320);
+    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: sheets(&a), gani_attrs });
+    fb
+}
+
+#[test]
+fn a_character_npc_draws_its_own_head_body_colours_and_hat() {
+    let props = "setcharprop #3,ghead.png; setcharprop #C1,blue; setcharprop #P1,bluehat.png;";
+    let fb = character_picture(props, true);
+    assert_eq!(at(&fb, 184, 193), GREEN, "its own head");
+    assert_eq!(at(&fb, 184, 205), RED, "its body in its own colours");
+    assert_eq!(at(&fb, 184, 150), BLUE, "its hat, over the head");
+    assert_eq!(at(&fb, 184, 180), BLUE, "the hat is drawn after the head");
+    // A build without GANI attributes (before 2.02) draws no hat.
+    let fb = character_picture(props, false);
+    assert_eq!(at(&fb, 184, 150), [0, 0, 0]);
+    assert_eq!(at(&fb, 184, 180), GREEN);
+}
+
+#[test]
+fn a_character_npc_without_setcharprop_keeps_the_default_pictures() {
+    let a = art();
+    let with = character_picture("", true);
+    let (mut s, _sc) = session("NPC - 10 10\nif (playerenters) { showcharacter; setcharani idle,; }\nNPCEND\n");
+    with_default_ganis(&mut s);
+    let plain = draw_with(&s, &HashMap::new(), sheets(&a));
+    assert_eq!(with.pixels, plain.pixels);
 }
 
 // ---- changeimgvis ----------------------------------------------------------------

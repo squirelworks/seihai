@@ -47,6 +47,27 @@ These are server commands, not client ones.
   props 37 to 41 (GATTRIB1 to 5, which 2.05 reads for other players), for
   us and for others, and from `setplayerprop #P1,<image>` … `#P5`. Online,
   the attributes we have set go out as props 37 and up with the looks.
+- **Character NPCs** (`showcharacter`). `setcharprop` codes are drawn
+  as 2.05 lists them: `#3` head, `#8` body, `#2` shield, `#1` sword,
+  `#C0` … `#C4` colours (name or number) and `#P1` … `#P5` attributes.
+  The body is recoloured in the NPC's colours. A colour the NPC has not set
+  is the new-player one (`DEFAULT_COLORS`), which is inferred: the 2.05
+  start value of a character's colours was not read. A picture not here
+  yet is asked for from the server, and the default is drawn meanwhile.
+- **Per build.** GANI attributes exist from 2.02, the build that added
+  props 37 to 41 (`chain.rs`; Graal_analysis `141-217.md`). For 2.00 and
+  2.01 the `ATTR` sprites draw nothing, no attribute picture is asked for,
+  and `send_looks` leaves props 37 to 41 out (it sends only the attributes
+  in the build's own prop set). GServer-v2 sends no props past 36 to a
+  pre-2.1 client, so online on 2.02 to 2.05 other players' hats come only
+  from a server that does.
+- **Seihai's own GANIs** now place the hat (`ATTR1`, a 48x48 cell of a
+  192x144 sheet) after every head, at the stock offset from the head for
+  its facing: (-8, -18) up, (-12, -18) left, (-8, -18) down, (-4, -18)
+  right. Those numbers were measured on the 2.22 player GANIs, where every
+  facing-head row of idle, walk, sword, sit, swim and carry has them. Seihai
+  ships no hat and no `DEFAULTATTR1`, so a player wears one only when
+  prop 37 or `#P1` gives it.
 - `setplayerprop` also takes the looks codes `#3` (head), `#8` (body) and
   `#C0` … `#C4` (colours, by name or number), the same as the commands.
 - Seihai's own `body.png` was re-laid to the 2.05 palette layout, so the
@@ -59,8 +80,12 @@ These are server commands, not client ones.
 - Only PNG bodies and heads are drawn; a `.gif` or `.mng` name is asked
   for but not decoded.
 - Attributes other than the hat are looked for where other images are;
-  where 2.05 looks for them is not checked. Seihai's default GANIs have no
-  `ATTR` sprites, so hats show only with a data folder whose GANIs do.
+  where 2.05 looks for them is not checked. Seihai's default GANIs have
+  only the hat (`ATTR1`).
+- Attributes 6 to 30 (2.14 and later: `#P1` … `#P9`, then props 54 to 74
+  from 2.16) are not kept; only 1 to 5 are.
+- The stock `dead.gani` puts a lying hat (cell 48) on a lying head; Seihai's
+  own lying step keeps the upright head, so it keeps the upright hat.
 - Not run against a server. The online send of props 11, 35 and 13 is
   inferred from the PLAYERPROPS layout, not from a capture of 2.05 sending
   it.
