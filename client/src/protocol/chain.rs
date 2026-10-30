@@ -24,7 +24,7 @@
 use super::profile::{
     Basis, BuiltIn, ChatFace, ChatText, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol, ServerList, ShapeBasis, Ui,
     BUILT_IN_14921, BUILT_IN_14922,
-    Mannerisms, VersionProfile, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
+    ItemDrops, Mannerisms, VersionProfile, DROPS_133, DROPS_138, DROPS_142, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, DEATH_205, DEATH_21, SHOWIMG_222, SHOWIMG_231, TAMPER_217, TAMPER_222,
     TAMPER_230, TAMPER_231,
 };
 use super::login::{LoginInfo, LOGIN_217, LOGIN_222, LOGIN_231, LOGIN_304};
@@ -152,6 +152,8 @@ pub struct Delta {
     pub gs1_commands: Option<u16>,
     // How the player moves and looks.
     pub mannerisms: Option<Mannerisms>,
+    // Who drops bush and pot items.
+    pub drops: Option<ItemDrops>,
 }
 
 impl Delta {
@@ -202,6 +204,7 @@ impl Delta {
         server_in_title: None,
         gs1_commands: None,
         mannerisms: None,
+        drops: None,
     };
 }
 
@@ -301,6 +304,7 @@ pub const fn apply(prev: VersionProfile, s: &Step) -> VersionProfile {
     p.ui.chat_text = pick(p.ui.chat_text, d.chat_text);
     p.ui.gs1_commands = pick(p.ui.gs1_commands, d.gs1_commands);
     p.mannerisms = pick(p.mannerisms, d.mannerisms);
+    p.drops = pick(p.drops, d.drops);
     p
 }
 
@@ -371,6 +375,8 @@ pub const ORIGIN: VersionProfile = VersionProfile {
     },
     // Read in 1.39; 1.33 to 1.38 were not run and take its row.
     mannerisms: MANNER_139,
+    // The roll is in every build from the 4th alpha; 1.3 read.
+    drops: DROPS_133,
 };
 
 // -- The chain. -------------------------------------------------------------
@@ -443,9 +449,10 @@ pub const CHAIN: &[Step] = &[
             emoticons: Some(true),
             key_config: Some(true),
             gs1_commands: Some(109),
+            drops: Some(DROPS_138),
             ..Delta::NONE
         },
-        source: "binary: PLO 43, PLI ITEMTAKE/WEAPONADD (32, 33) in and 25 out, configurable keys and emotions, GS1 106 to 109",
+        source: "binary: PLO 43, PLI ITEMTAKE/WEAPONADD (32, 33) in and 25 out, configurable keys and emotions, GS1 106 to 109; bush rolls sent with PLI_ITEMADD and pickups with ITEMTAKE (1.39 lab capture)",
         unknown: &[],
     },
     Step {
@@ -493,6 +500,7 @@ pub const CHAIN: &[Step] = &[
         },
         source: "binary: gen 3 (key byte + LCG insertion), server-list window, PLI 31 gone, props to 36, GS1 111 to 126",
         unknown: &[
+            Unknown { area: "drops", what: "the roll and PLI_ITEMADD were read in the 1.41 binary; that its pickup and timeout go through ITEMTAKE and ITEMDEL as in 1.39 is assumed, not traced" },
             Unknown { area: "listserver", what: "original host and port; the only surviving 1.41 copy is patched for listserver.graal.in and carries 14923. Seihai's classic login got a legacy list on 14923 on 2026-10-25 (14922 stayed silent); a real 1.41 client was not captured" },
             Unknown { area: "listserver", what: "login frame inferred, not captured, and no evidence for its shape: Seihai keeps shape B (id 0 `newmain`, then id 1 with the account), what it sent before the lab captures; whether a real 1.41 sends the account to the listserver is unknown" },
             Unknown { area: "life", what: "death and combat rules come from the 2.05 template, no 1.41 handler was traced (1.42 clears them)" },
@@ -519,9 +527,10 @@ pub const CHAIN: &[Step] = &[
             chat_text: Some(ChatText { face: ChatFace::TempusSans, height: 24 }),
             gs1_commands: Some(134),
             mannerisms: Some(MANNER_141),
+            drops: Some(DROPS_142),
             ..Delta::NONE
         },
-        source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, chat font Tempus Sans ITC 24, GS1 126 to 134",
+        source: "binary (NewMain 1.42): ganis, PLO 42/44/45/150/151/153, UPDATEFILE (34) sent, chat font Tempus Sans ITC 24, GS1 126 to 134; no client drop roll (bush rupees and pot hearts are server-side, newfeatures142.txt)",
         unknown: &[
             Unknown { area: "listserver", what: "built-in port 14921 is dead; Seihai's classic login got a legacy list on 14923 on 2026-10-25 (14922 stayed silent); a real 1.42 client was not captured" },
             Unknown { area: "listserver", what: "login frame inferred, not captured: Seihai sends shape A (id 0 `newmain` only), the shape of the real 2.00 and 2.05, as a best guess; a real 1.42 frame was never captured, and no run on the public service has used shape A, so the port is assumed" },
@@ -1187,7 +1196,17 @@ pub fn diff(a: &VersionProfile, b: &VersionProfile) -> Vec<Change> {
     value_change(&mut o, "ui", "chat_text", &ua.chat_text, &ub.chat_text, dbg);
     value_change(&mut o, "ui", "gs1_commands", &ua.gs1_commands, &ub.gs1_commands, dbg);
     value_change(&mut o, "mannerisms", "mannerisms", &a.mannerisms, &b.mannerisms, manner_text);
+    value_change(&mut o, "drops", "drops", &a.drops, &b.drops, drops_text);
     o
+}
+
+fn drops_text(d: &ItemDrops) -> String {
+    match *d {
+        DROPS_133 => "client rolls bush and pot drops, applies pickups itself".into(),
+        DROPS_138 => "client rolls, tells the server (PLI_ITEMADD), pickups go through PLI_ITEMTAKE".into(),
+        DROPS_142 => "server drops (PLO_ITEMADD), pickups go through PLI_ITEMTAKE".into(),
+        _ => format!("{d:?}"),
+    }
 }
 
 fn manner_text(m: &Mannerisms) -> String {

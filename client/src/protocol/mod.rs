@@ -28,7 +28,7 @@ mod version;
 pub use board::BoardModify;
 pub use compress::{bz2_compress, bz2_decompress};
 pub use dispatch::{
-    latin1, read_gint3, read_gshort, script_text, split_messages, sword_power_from_wire, ChatKind, ChatLine, IncomingFile, Message, OtherLooks, OtherPlayer, SessionState, Splitter,
+    latin1, read_gint3, read_gshort, script_text, split_messages, sword_power_from_wire, ChatKind, ChatLine, IncomingFile, Message, OtherLooks, OtherPlayer, ServerItem, SessionState, Splitter,
 };
 pub use extras::MapSpec;
 pub use frame::{read_zlib_frame, write_zlib_frame, write_zlib_frame_best, zlib_compress, zlib_compress_best, zlib_decompress};
@@ -40,7 +40,7 @@ pub use props::{
 };
 pub use profile::{
     by_label, profile, Basis, BuiltIn, ChatFace, ChatText, CombatRules, DeathRules, Files, Health, HudArt, IdSet, Levels, ListKind, Listserver, LoginShape, PortStatus, Props, Protocol,
-    ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, Blink, HidePose, Mannerisms, PullRelease, SwimStill, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
+    ServerList, ShapeBasis, Ui, VersionProfile, BUILT_IN_14921, BUILT_IN_14922, COMBAT_205, MANNER_139, MANNER_141, MANNER_205, MANNER_222, Blink, HidePose, Mannerisms, ItemDrops, DROPS_133, DROPS_138, DROPS_142, PullRelease, SwimStill, DEATH_205, DEATH_21, DEAD_LIST_PORT, LEGACY_LIST_PORT, LISTSERVER_HOST,
     PROFILES, SUPPORTED_LIST_PORT,
 };
 pub use showimg::{

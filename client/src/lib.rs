@@ -11,6 +11,7 @@ pub mod gui;
 pub mod keys;
 pub mod help;
 pub mod inventory;
+pub mod items;
 pub mod life;
 pub mod looks;
 pub mod net;

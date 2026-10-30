@@ -688,6 +688,33 @@ pub const MANNER_205: Mannerisms =
 /// 2.22.
 pub const MANNER_222: Mannerisms = Mannerisms { swim_still: SwimStill::Restarts, ..MANNER_205 };
 
+/// Who puts down the items a bush or a pot leaves, and what the client
+/// tells the server about floor items (Graal_analysis
+/// `client-internals/item-drops.md`, lab runs with 1.39, 2.05 and 2.22).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ItemDrops {
+    /// The client rolls the drop itself (1.33 to 1.41): one `Random(100)`
+    /// per cut or lifted bush, and a heart for every lifted pot. From 1.42
+    /// the server drops them.
+    pub client_roll: bool,
+    /// A rolled item is told to the server with `PLI_ITEMADD` (1.38 to 1.41).
+    pub add_to_server: bool,
+    /// Online, a pickup is sent as `PLI_ITEMTAKE` and the server gives the
+    /// item with props (1.38 on); before, the client applies it and sends
+    /// `PLI_ITEMDEL`.
+    pub server_take: bool,
+    /// Online, a timed-out item is sent as `PLI_ITEMDEL` (1.38 on); before,
+    /// it goes silently.
+    pub del_on_expiry: bool,
+}
+
+/// 1.33 to 1.37.
+pub const DROPS_133: ItemDrops = ItemDrops { client_roll: true, add_to_server: false, server_take: false, del_on_expiry: false };
+/// 1.38 to 1.41.
+pub const DROPS_138: ItemDrops = ItemDrops { client_roll: true, add_to_server: true, server_take: true, del_on_expiry: true };
+/// 1.42 on: the server drops.
+pub const DROPS_142: ItemDrops = ItemDrops { client_roll: false, add_to_server: false, server_take: true, del_on_expiry: true };
+
 /// Everything that makes one client version itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VersionProfile {
@@ -706,6 +733,7 @@ pub struct VersionProfile {
     pub life: Health,
     pub ui: Ui,
     pub mannerisms: Mannerisms,
+    pub drops: ItemDrops,
 }
 
 impl VersionProfile {
