@@ -1085,6 +1085,28 @@ impl Connection {
         Ok(rx)
     }
 
+    /// As [`Self::spawn_reader`], with the time each frame was read off the
+    /// socket, so a timer that counts from a server message (the post-login
+    /// frame, 240 ms after the level) does not start late when the game loop
+    /// is slow to take it.
+    pub fn spawn_reader_timed(&mut self) -> io::Result<Receiver<(Instant, io::Result<Vec<u8>>)>> {
+        let mut stream = self.stream.try_clone()?;
+        stream.set_read_timeout(None)?;
+        let mut cipher = self.gen5_in.take();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || loop {
+            let frame = match cipher.as_mut() {
+                Some(g) => crate::protocol::read_frame(&mut stream, g),
+                None => read_zlib_frame(&mut stream),
+            };
+            let stop = frame.is_err();
+            if tx.send((Instant::now(), frame)).is_err() || stop {
+                break;
+            }
+        });
+        Ok(rx)
+    }
+
     /// Read one server frame and apply its messages to `state`.
     ///
     /// Uses [`Self::read_body`], then `SessionState::apply_body`. Returns

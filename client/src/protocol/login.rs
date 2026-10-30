@@ -22,6 +22,7 @@
 use super::dispatch::{latin1, Weapon};
 use super::props::parse_player_props_in;
 use super::{IdSet, SessionState};
+use std::time::{Duration, Instant};
 
 /// `PLI_PLAYERPROPS`.
 pub const PLI_PLAYERPROPS: u8 = 2;
@@ -311,13 +312,15 @@ pub struct LoginBurst {
     sent: bool,
     /// `idle.gani` is still to be checked ([`LoginInfo::idle_gani`]).
     idle_owed: bool,
+    /// When the first level arrived from the server ([`Self::note_level`]).
+    level_at: Option<Instant>,
 }
 
 /// How long after the level the real 2.22 and 2.31 sent their post-login
 /// frame when the server sent no `PLO_LISTPROCESSES` (lab, 2026-10-30, stock
-/// GServer beta4: about 240 ms in every run). Seihai sends `idle.gani` alone
-/// then if its frame is not due ([`LoginBurst::take_idle_gani_late`]).
-pub const IDLE_GANI_AFTER_LEVEL: std::time::Duration = std::time::Duration::from_millis(240);
+/// GServer beta4: 236 to 246 ms in four runs). A 2.x build's frame is due
+/// then if no 182 came first ([`LoginBurst::due_at`]).
+pub const FRAME_AFTER_LEVEL: Duration = Duration::from_millis(240);
 
 impl LoginBurst {
     /// `None` for a profile without a recorded post-login frame.
@@ -325,7 +328,7 @@ impl LoginBurst {
         let p = version.profile();
         let info = p.protocol.login?;
         let can = p.protocol.pli.contains(PLI_PLAYERPROPS) && (!info.full || p.protocol.pli.contains(PLI_PROCESSLIST));
-        can.then_some(Self { info, sent: false, idle_owed: info.idle_gani })
+        can.then_some(Self { info, sent: false, idle_owed: info.idle_gani, level_at: None })
     }
 
     pub fn info(&self) -> LoginInfo {
@@ -338,15 +341,22 @@ impl LoginBurst {
         !self.sent
     }
 
-    /// The `idle.gani` check on its own, once the level has been in for
-    /// [`IDLE_GANI_AFTER_LEVEL`] and the frame that would carry it is still
-    /// not due (a server that sends no `PLO_LISTPROCESSES`). Once.
-    pub fn take_idle_gani_late(&mut self, level_age: Option<std::time::Duration>, mut check: impl FnMut(&str) -> Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-        if !self.idle_owed || self.sent || !level_age.is_some_and(|a| a >= IDLE_GANI_AFTER_LEVEL) {
-            return Vec::new();
-        }
-        self.idle_owed = false;
-        check("idle.gani")
+    /// The first level arrived from the server at `at` (the time the frame
+    /// was read off the socket, not when the game loop got to it). Later
+    /// calls keep the first time.
+    pub fn note_level(&mut self, at: Instant) {
+        self.level_at.get_or_insert(at);
+    }
+
+    /// The frame is due at `now` without a 182: a 2.x build whose first level
+    /// has been in for [`FRAME_AFTER_LEVEL`].
+    fn late_at(&self, now: Instant) -> bool {
+        self.info.full && self.level_at.is_some_and(|t| now.saturating_duration_since(t) >= FRAME_AFTER_LEVEL)
+    }
+
+    /// [`Self::due`], or the frame is late at `now` ([`FRAME_AFTER_LEVEL`]).
+    pub fn due_at(&self, state: &SessionState, now: Instant) -> bool {
+        self.due(state) || (!self.sent && self.late_at(now))
     }
 
     /// The 2.x builds answer the burst's end (`PLO_LISTPROCESSES`); 3.04,
@@ -369,17 +379,21 @@ impl LoginBurst {
         &mut self,
         state: &SessionState,
         account: &str,
+        now: Instant,
         mut check: impl FnMut(&str) -> Vec<Vec<u8>>,
         enter_level: impl FnOnce() -> Vec<Vec<u8>>,
         flags: impl FnOnce() -> Vec<Vec<u8>>,
     ) -> Vec<Vec<u8>> {
-        if !self.due(state) {
+        if !self.due_at(state, now) {
             return Vec::new();
         }
         self.sent = true;
         let mut out = Vec::new();
         if std::mem::take(&mut self.idle_owed) {
             out.extend(check("idle.gani"));
+        }
+        if self.info.full && state.process_list_requests == 0 {
+            return self.late_frame(out, state, account, check, enter_level, flags);
         }
         let mut names = if self.info.full {
             let mut n = wear_images(&state.player_props, state.own_prop_ids.as_ref());
@@ -425,6 +439,42 @@ impl LoginBurst {
             out.push(process_list_message(&["seihai"]));
         }
         out.push(login_props_message(&self.info, &state.player_props, account, state.own_prop_ids.as_ref()));
+        out
+    }
+
+    /// The 2.x frame with no 182 (lab, 2026-10-30, stock beta4, real 2.22 and
+    /// 2.31): the status icon checks, the login 46 (2.31), the props; no
+    /// process list. The worn images (sword, shield, body: the head is never
+    /// checked) and the weapon images are checked after the icons, so with
+    /// four icons in flight they go out in later frames as replies come;
+    /// any the window lets out now follow the props.
+    fn late_frame(
+        &self,
+        mut out: Vec<Vec<u8>>,
+        state: &SessionState,
+        account: &str,
+        mut check: impl FnMut(&str) -> Vec<Vec<u8>>,
+        enter_level: impl FnOnce() -> Vec<Vec<u8>>,
+        flags: impl FnOnce() -> Vec<Vec<u8>>,
+    ) -> Vec<Vec<u8>> {
+        let icons: Vec<String> = if self.info.status_icons { state.status_list.iter().map(|s| status_icon(s)).collect() } else { Vec::new() };
+        let [sword, shield, _head, body] = worn_images(&state.player_props, state.own_prop_ids.as_ref());
+        let mut images: Vec<String> = [sword, shield, body].into_iter().flatten().collect();
+        images.extend(weapon_images(&state.weapons));
+        for n in state.default_weapons.iter().filter_map(|&id| default_weapon_image(id)) {
+            if !images.iter().any(|i| i == n) {
+                images.push(n.to_string());
+            }
+        }
+        for n in &icons {
+            out.extend(check(n));
+        }
+        out.extend(enter_level());
+        out.extend(flags());
+        out.push(login_props_message(&self.info, &state.player_props, account, state.own_prop_ids.as_ref()));
+        for n in &images {
+            out.extend(check(n));
+        }
         out
     }
 }
@@ -588,7 +638,7 @@ mod tests {
         st.process_list_requests = 1;
         assert!(!b.due(&st), "3.04 does not wait for 182; it waits for the board");
         st.board = Some(vec![0; 4096]);
-        let msgs = b.take(&st, "Lab304", |n| vec![n.as_bytes().to_vec()], Vec::new, || vec![b"flag".to_vec()]);
+        let msgs = b.take(&st, "Lab304", Instant::now(), |n| vec![n.as_bytes().to_vec()], Vec::new, || vec![b"flag".to_vec()]);
         let names: Vec<&[u8]> = msgs.iter().map(|m| m.as_slice()).collect();
         assert_eq!(&names[..6], [&b"head0.png"[..], b"wbomb1.png", b"wbowi1.png", b"flag", b"plisticoneating.png", b"plisticonno pms.png"]);
         let mut want = vec![0x22, 0x20, 0x26];
@@ -619,7 +669,7 @@ mod tests {
         st.default_weapons = vec![8, 7];
         st.process_list_requests = 1;
         let mut asked = Vec::new();
-        b.take(&st, "acct", |n| {
+        b.take(&st, "acct", Instant::now(), |n| {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
         }, Vec::new, Vec::new);
@@ -632,7 +682,7 @@ mod tests {
         st.default_weapons = vec![8, 7];
         st.process_list_requests = 1;
         let mut asked = Vec::new();
-        b.take(&st, "acct", |n| {
+        b.take(&st, "acct", Instant::now(), |n| {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
         }, Vec::new, Vec::new);
@@ -650,7 +700,7 @@ mod tests {
         st.default_weapons = vec![8, 7];
         st.process_list_requests = 1;
         let mut asked = Vec::new();
-        b.take(&st, "acct", |n| {
+        b.take(&st, "acct", Instant::now(), |n| {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
         }, Vec::new, Vec::new);
@@ -675,11 +725,11 @@ mod tests {
         let mut st = burst_state();
         assert!(b.pending());
         assert!(!b.due(&st));
-        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
+        assert!(b.take(&st, "acct", Instant::now(), |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
         st.process_list_requests = 1;
         assert!(b.due(&st));
         let mut asked = Vec::new();
-        let out = b.take(&st, "acct", |n| {
+        let out = b.take(&st, "acct", Instant::now(), |n| {
             asked.push(n.to_string());
             vec![n.as_bytes().to_vec()]
         }, || vec![b"enter".to_vec()], || vec![b"flag".to_vec()]);
@@ -695,33 +745,46 @@ mod tests {
         assert_eq!(out[asked.len() + 3][0], PLI_PLAYERPROPS + 0x20);
         assert!(!b.pending(), "sent");
         assert!(!b.due(&st), "once");
-        assert!(b.take(&st, "acct", |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
+        assert!(b.take(&st, "acct", Instant::now(), |_| vec![b"x".to_vec()], Vec::new, Vec::new).is_empty());
     }
 
-    /// The 2.22 `idle.gani` check: in the frame when it goes; alone, once,
-    /// when the level has been in for 240 ms and the frame is not due; never
-    /// for 2.31.
+    /// No 182 (stock beta4): a 2.x frame goes 240 ms after the level, in the
+    /// shape the real 2.22 and 2.31 sent then: `idle.gani` (2.22), the icon
+    /// checks, the 46 (2.31), the props, no process list; the sword, shield,
+    /// body (no head) and weapon images after, as the request window allows.
     #[test]
-    fn idle_gani_goes_with_the_frame_or_late_alone() {
-        use std::time::Duration;
+    fn without_a_process_list_request_the_frame_goes_240_ms_after_the_level() {
+        let st = burst_state();
+        let t0 = Instant::now();
+        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
         let check = |n: &str| vec![n.as_bytes().to_vec()];
-        let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
-        assert!(b.take_idle_gani_late(None, check).is_empty(), "no level yet");
-        assert!(b.take_idle_gani_late(Some(Duration::from_millis(239)), check).is_empty());
-        assert_eq!(b.take_idle_gani_late(Some(IDLE_GANI_AFTER_LEVEL), check), [b"idle.gani".to_vec()]);
-        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty(), "once");
-        let mut st = burst_state();
-        st.process_list_requests = 1;
-        let out = b.take(&st, "acct", check, Vec::new, Vec::new);
-        assert_ne!(out[0], b"idle.gani", "not again in the frame");
+        assert!(!b.due_at(&st, t0 + Duration::from_secs(5)), "no level yet");
+        b.note_level(t0);
+        b.note_level(t0 + Duration::from_secs(1));
+        assert!(!b.due_at(&st, t0 + Duration::from_millis(239)));
+        assert!(b.take(&st, "acct", t0 + Duration::from_millis(239), check, Vec::new, Vec::new).is_empty());
+        let out = b.take(&st, "acct", t0 + FRAME_AFTER_LEVEL, check, || vec![b"enter".to_vec()], Vec::new);
+        let names: Vec<&[u8]> = out.iter().map(|m| m.as_slice()).collect();
+        assert_eq!(&names[..4], [&b"idle.gani"[..], b"plisticononline.png", b"plisticonno pms.png", b"enter"]);
+        assert_eq!(out[4][0], PLI_PLAYERPROPS + 0x20);
+        assert_eq!(&names[5..], [&b"sword1.png"[..], b"shield1.png", b"body.png", b"wbomb1.png", b"wbowi1.png"]);
+        assert!(!out.iter().any(|m| m.first() == Some(&(PLI_PROCESSLIST + 0x20))), "no process list");
+        assert!(!out.iter().any(|m| m == b"head0.png"), "the head is not checked");
+        assert!(b.take(&st, "acct", t0 + Duration::from_secs(9), check, Vec::new, Vec::new).is_empty(), "once");
 
+        // A 182 first keeps the burst shape, with idle.gani at its head.
         let mut b = LoginBurst::for_version(super::super::ClientVersion::V222).unwrap();
-        assert_eq!(b.take(&st, "acct", check, Vec::new, Vec::new)[0], b"idle.gani");
-        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty(), "the frame took it");
+        let mut st182 = burst_state();
+        st182.process_list_requests = 1;
+        let out = b.take(&st182, "acct", t0, check, Vec::new, Vec::new);
+        assert_eq!(out[0], b"idle.gani");
+        assert_eq!(out[1], b"sword1.png");
 
+        // 2.31 does not check idle.gani.
         let mut b = LoginBurst::for_version(super::super::ClientVersion::V231).unwrap();
-        assert!(b.take_idle_gani_late(Some(Duration::from_secs(1)), check).is_empty());
-        assert!(!b.take(&st, "acct", check, Vec::new, Vec::new).iter().any(|m| m == b"idle.gani"));
+        b.note_level(t0);
+        let out = b.take(&st, "acct", t0 + FRAME_AFTER_LEVEL, check, Vec::new, Vec::new);
+        assert_eq!(out[0], b"plisticononline.png");
     }
 
     #[test]

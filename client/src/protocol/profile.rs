@@ -810,6 +810,10 @@ pub(super) const TAMPER_230: TamperInfo = TamperInfo { words: None, resend: Tamp
 // player is in the level, 2.31 every 5.13 s always.
 pub(super) const SHOWIMG_222: ShowImgInfo = ShowImgInfo { period: Duration::from_millis(5100), needs_others: true };
 pub(super) const SHOWIMG_231: ShowImgInfo = ShowImgInfo { period: Duration::from_millis(5130), needs_others: false };
+// 2.17.1 (lab, 2026-10-30, `documentation/difftest-217.md` item 3): alone in the
+// level on both lab servers, the first one in the post-login frame, then 5.07
+// to 5.11 s apart while idle (median 5.10 s over the five runs).
+pub(super) const SHOWIMG_217: ShowImgInfo = ShowImgInfo { period: Duration::from_millis(5100), needs_others: false };
 
 /// Every version Seihai can present as, oldest first. Resolved from
 /// [`super::chain::CHAIN`]: each row is the row before it plus that build's

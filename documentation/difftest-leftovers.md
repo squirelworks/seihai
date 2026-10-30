@@ -61,9 +61,10 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
   * Real 2.22 `idle.gani` is the **first** message of the post-login frame: `WANTFILE idle.gani`, the
     icon checks, the login `PLAYERPROPS`, `SHOWIMGPLAYER`. That frame went at +250 ms, about 240 ms
     after the level (stock beta4 sends no `PLO_LISTPROCESSES`; 2.31's frame had the same gap). Seihai
-    asked at +18 ms, alone, after the level. **Fixed:** the check is now the first message of
-    `LoginBurst::take`, and if that frame is not due 240 ms after the first level
-    (`IDLE_GANI_AFTER_LEVEL`) it goes alone then (`take_idle_gani_late`).
+    asked at +18 ms, alone, after the level. **Fixed:** the check is the first message of
+    `LoginBurst::take`, and that frame now goes 240 ms after the level when no 182 comes (next item).
+    The rerun of #184 sent it alone at +871 ms because the timer started when the game loop took
+    the level, not when it was read; the timer now starts at the read (`spawn_reader_timed`).
   * `steps2.wav` usually goes at the second step, but in one 2.31 run it went in the step-1 frame. So the
     second step is the usual case, not a rule.
   * `hat0.png`: a **lab-folder difference, not a wire rule**. Every real client folder had
@@ -72,10 +73,11 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
     `pics1.png`, so it asked for the missing picture with `WANTFILE`, as the loaders do. With the file
     present Seihai sends nothing for it either (`look_image_pass` asks only for a missing picture). No
     code change. A fair rerun puts `hats/hat0.png` in Seihai's folder too.
-  * Not fixed, seen in the same captures: on stock beta4 (no `PLO_LISTPROCESSES`), Seihai 2.22 and 2.31
-    send no post-login frame at all, while the real clients send theirs about 240 ms after the level
-    without the process list. That frame's content without a 182 (which checks, which props) is not
-    decoded here. Seihai 2.22 also sent an empty frame at +3022 ms where 2.31 sends `ENTERLEVEL` alone.
+  * On stock beta4 (no `PLO_LISTPROCESSES`), Seihai 2.22 and 2.31 sent no post-login frame at all,
+    while the real clients sent theirs 236 to 246 ms after the level. **Fixed:** the frame is due then
+    (`FRAME_AFTER_LEVEL`), in the shape decoded from those captures (`login-burst.md`, "Without
+    `PLO_LISTPROCESSES`"). Seihai 2.22 also sent an empty frame at +3022 ms: the late login 46, which
+    2.22 does not owe, went out with no messages. **Fixed:** nothing goes when there is nothing to send.
 * `lv_*.nw`, `gm_nw.nw`, `gm2x2.gmap`: Seihai asks for the level files it enters, because it starts
   with none; the real client had them cached (it sent `UPDATEFILE gm2x2.gmap` instead). A cache-state
   difference of the lab, not a wire rule.
@@ -94,7 +96,9 @@ Decoded from the real traces (`gmap_cross`, `door_warp`):
 |---|---|---|---|---|
 | 2.22 | `GANI=walk, X (or Y), SPRITE` | `X` (or `Y`) alone, one tile further each message | `GANI=idle` | one message per 100 ms (every second 50 ms step); the `gr` flags go per step |
 | 2.31 | `GANI=walk, SPRITE, X2` (or `Y2`) | `X2` (or `Y2`) alone, half a tile | `GANI=idle` | one message per 50 ms |
+| 2.17 | as 2.22 | as 2.22 | a half-tile stop: the last position and `GANI=idle` in one message; a whole-tile stop: `GANI=idle` alone | as 2.22 (`difftest-217.md` item 4) |
 | Seihai 2.22 | as the real 2.22 | as the real 2.22 | the last position, then `GANI=idle` | as the real 2.22 (`protocol/walkcadence.rs`) |
+| Seihai 2.17 | as the real 2.17 | as the real 2.17 | as the real 2.17 (3.04's one-tick stop) | as the real 2.22 (`protocol/walkcadence.rs`) |
 | Seihai, other builds | `X, Y, SPRITE` | `X, Y, SPRITE` | nothing | one message per step (50 ms after `walk-pace.md`) |
 
 2.22 is now done. Lab, 2026-10-30, on the lab GServer-v2: the real 2.22 walked
