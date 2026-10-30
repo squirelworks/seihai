@@ -123,17 +123,21 @@ fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
 
 /// For each NPC image of a level: ask the server for a missing file or, if
 /// the file is there, check it (the file-cache rules decide which), and
-/// load the image we have.
+/// load the image we have. A name that could not be loaded goes into
+/// `not_received` and is not looked for again until a file arrives: each
+/// look searches the folders of every layer, and a script that sets an image
+/// every frame runs this pass every frame.
 fn npc_image_pass(
     level: &Level,
     files: &mut FileSession,
     conn: Option<&mut Connection>,
     npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
+    not_received: &mut HashSet<String>,
 ) {
     let mut msgs = Vec::new();
     // Each NPC's image and the images its script put up with showimg.
     for name in level.npcs.iter().flat_map(|n| n.image_names()) {
-        if npc_images.contains_key(name) {
+        if npc_images.contains_key(name) || not_received.contains(name) {
             continue;
         }
         let m = files.need(name);
@@ -141,9 +145,12 @@ fn npc_image_pass(
             eprintln!("requesting {name}");
         }
         msgs.extend(m);
-        if let Some(data) = files.store.read(name) {
-            if let Ok((w, _, px)) = read_png_rgba(&data) {
+        match files.store.read(name).and_then(|data| read_png_rgba(&data).ok()) {
+            Some((w, _, px)) => {
                 npc_images.insert(name.to_string(), (w, px));
+            }
+            None => {
+                not_received.insert(name.to_string());
             }
         }
     }
@@ -183,7 +190,12 @@ fn look_image_pass(
         if tried.insert(name.clone()) {
             got = resolver.image_in(dir, name).and_then(|p| std::fs::read(p).ok()).and_then(read);
         }
-        if got.is_none() && !not_received.contains(name) {
+        // Asked for already and nothing arrived since: asking again would
+        // search the folders again for nothing.
+        if got.is_none() && not_received.contains(name) {
+            continue;
+        }
+        if got.is_none() {
             got = files.store.read(name).and_then(read);
         }
         match got {
@@ -1479,7 +1491,7 @@ fn main() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
                                     if let Some(level) = session.current_level.clone() {
-                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                                        npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                     }
                                 }
                                 eprintln!("loaded {name}");
@@ -1506,7 +1518,7 @@ fn main() {
                                 // ignores case).
                                 if let Some(level) = session.current_level.clone() {
                                     npc_images.retain(|k, _| k == name || !k.eq_ignore_ascii_case(name));
-                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                                 }
                             }
                         }
@@ -1619,7 +1631,7 @@ fn main() {
                         loaded_level = Some(name.clone());
                         // Request missing NPC images.
                         if let Some(level) = session.current_level.clone() {
-                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                            npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                         }
                     }
                 }
@@ -1774,7 +1786,7 @@ fn main() {
                             // one, hurt mode still shows in the sprite.
                             if !send_power_report(&mut conn, &mut session, version) {
                                 if let Some(c) = conn.as_mut() {
-                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                                         eprintln!("send failed: {e}");
                                         conn = None;
                                     }
@@ -2033,7 +2045,7 @@ fn main() {
             if sprite_changed {
                 dirty = true;
                 if let Some(c) = conn.as_mut() {
-                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                    if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                         eprintln!("send failed: {e}");
                         conn = None;
                     }
@@ -2078,7 +2090,7 @@ fn main() {
             if let Some(c) = conn.as_mut() {
                 let sent = c
                     .send_messages(&[seihai::life::status_message(status_base | last_hide_status)])
-                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                 if let Err(e) = sent {
                     eprintln!("send failed: {e}");
                     conn = None;
@@ -2105,7 +2117,7 @@ fn main() {
                     if let Some(c) = conn.as_mut() {
                         let sent = c
                             .send_carry_sprite(seihai::throwing::carry_sprite(kind))
-                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                            .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                         if let Err(e) = sent {
                             eprintln!("send failed: {e}");
                             conn = None;
@@ -2120,7 +2132,7 @@ fn main() {
                                 eprintln!("thrown object {kind}: PLI_THROWCARRIED sent");
                                 let sent = c
                                     .send_carry_sprite(None)
-                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value()));
+                                    .and_then(|()| c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)));
                                 if let Err(e) = sent {
                                     eprintln!("send failed: {e}");
                                     conn = None;
@@ -2275,7 +2287,7 @@ fn main() {
                             if !no_scripts && scripts_serial == session.level_serial {
                                 scripts.add_npc(&mut session, i);
                             }
-                            npc_image_pass(&session.current_level.clone().unwrap(), &mut files, conn.as_mut(), &mut npc_images);
+                            npc_image_pass(&session.current_level.clone().unwrap(), &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                             i
                         }
                         seihai::offline::Linked::None => continue,
@@ -2300,7 +2312,7 @@ fn main() {
                 // Pictures of this level's NPCs (online they were asked for when the
                 // level arrived; a second pass asks for nothing twice).
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }
@@ -2385,7 +2397,7 @@ fn main() {
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images);
+                    npc_image_pass(&level, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
                 }
                 dirty = true;
             }
@@ -2437,7 +2449,7 @@ fn main() {
                 send_world_requests(conn.as_mut(), req, &mut files);
             } else if let (Some(c), false) = (conn.as_mut(), script_warp_sent) {
                 // Online: send the new position as PLI_PLAYERPROPS.
-                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value()) {
+                if let Err(e) = c.send_walk_sprite(&session.player_update(), session.sprite_value_for(profile.ui.ganis)) {
                     eprintln!("send failed: {e}");
                     conn = None;
                 }
@@ -3102,6 +3114,11 @@ impl FrameTimes {
 #[derive(Default)]
 struct SlowFrameLog {
     last: Option<Instant>,
+    /// With `SEIHAI_FRAME_LOG` set, every pass's parts are summed and their
+    /// averages logged every five seconds.
+    sums: Vec<(&'static str, Duration)>,
+    passes: u32,
+    since: Option<Instant>,
 }
 
 impl SlowFrameLog {
@@ -3109,6 +3126,25 @@ impl SlowFrameLog {
 
     fn report(&mut self, ft: &FrameTimes) {
         let total = ft.began.elapsed();
+        if std::env::var_os("SEIHAI_FRAME_LOG").is_some() {
+            self.passes += 1;
+            for (i, (n, d)) in ft.parts.iter().enumerate() {
+                match self.sums.get_mut(i) {
+                    Some(s) => s.1 += *d,
+                    None => self.sums.push((n, *d)),
+                }
+            }
+            let since = *self.since.get_or_insert_with(Instant::now);
+            if since.elapsed() >= Duration::from_secs(5) {
+                let secs = since.elapsed().as_secs_f64();
+                let parts: Vec<String> =
+                    self.sums.iter().map(|(n, d)| format!("{n} {:.1}", d.as_secs_f64() * 1000.0 / self.passes as f64)).collect();
+                eprintln!("frames: {:.1} fps, average ms ({})", self.passes as f64 / secs, parts.join(", "));
+                self.sums.clear();
+                self.passes = 0;
+                self.since = Some(Instant::now());
+            }
+        }
         if total < Self::SLOW || self.last.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
             return;
         }
