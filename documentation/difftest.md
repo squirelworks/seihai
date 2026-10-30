@@ -50,7 +50,7 @@ level links of `lv_a.nw`. No public server was involved.
 | 2.22 | gmap_cross | yes | yes | yes | 3 / 10 / 8 |
 | 2.22 | chat | yes | yes | yes | 3 / 9 / 2 |
 | 2.22 | door_warp | yes | yes | yes | 4 / 13 / 24 |
-| 2.17 | login | **no** | yes | yes | not comparable (see below) |
+| 2.17 | login, gmap_cross | yes (2026-10-30) | yes | yes | see `difftest-217.md` |
 | any | serverwarp | not run | not run | not run | needs an injection forwarder |
 
 The low counts for 2.31 are mostly one root cause counted many times (the extra
@@ -183,9 +183,8 @@ Things that are the lab and not the client, found and fixed or noted:
 ## Not covered yet
 
 * **2.17 real client.** Its launcher is a different window (Training / Start /
-  Options), so the fixed-coordinate UI steps do not log it in and the real
-  capture is empty. Seihai's 2.17 login (gen3 client cipher) completes. Needs
-  its own UI steps.
+  Options). The 2026-10-30 run has its UI steps and results: `difftest-217.md`.
+  `lab.sh` still has only the 2.22/2.31 steps.
 * **serverwarp**: the scenario file exists; it needs a proxy that injects a
   server-side warp into both sessions.
 * **Longer sessions**, weapons, NPC scripts, and PM/guild chat.
