@@ -33,9 +33,32 @@ of the login frame (part 1), the icons, `head0.png`, `wbomb1.png` and `-.gif`. W
   `FileSession::need_missing`, is also used for a sound a script or a GANI cue plays and for the GANI an NPC
   names (`setcharani`, `setani`), gated by the profile (`pli` 23, and `ui.ganis` for a GANI). A sound named by
   a GANI that has not arrived yet is not asked for: its name is only known once the GANI is read, and then it
-  goes through the same path when the cue plays. Not lab-checked yet against the real client with
-  `--no-builtin`; a GANI named by another player's `GANI` prop that Seihai does not draw is not asked for
-  (Seihai draws only its pose set for others; not captured).
+  goes through the same path when the cue plays. A GANI named by another player's `GANI` prop that Seihai
+  does not draw is not asked for (Seihai draws only its pose set for others; not captured).
+
+  Lab check, 2026-10-30, on Windows (stock GServer beta4 with the 2.22 distro's GANIs, sounds, heads and
+  bodies copied into its world, the lab `listserver.py`, all on 127.0.0.1). Seihai main `a0e4ce4`,
+  `--no-builtin`, against the real 2.22 and 2.31 clients. Every run used a fresh folder without the four
+  files, a fresh account and a short walk right. Times are from login.
+
+  | run | `idle.gani` | `steps.wav` + `walk.gani` | `steps2.wav` |
+  |---|---|---|---|
+  | real 2.31, run 1 | none | step-1 frame | in the step-1 frame too |
+  | real 2.31, run 2 | none | step-1 frame | +69 ms, step-2 frame |
+  | Seihai 2.31 (2 runs) | none | own frame, step 1 in the next frame (same ms) | +98 / +118 ms, own frame |
+  | real 2.22 (2 runs) | frame 2, ~+250 ms, with the login `PLAYERPROPS` | step-1 frame | +68 / +69 ms, own frame |
+  | Seihai 2.22 | frame 2, +18 ms, alone | own frame, then step 1 | +60 ms, own frame |
+
+  The same four names, in the same order, at the same steps. Still different (not fixed):
+
+  * The real client puts the first-step `WANTFILE`s in the step's `PLAYERPROPS` frame. Seihai sends
+    them in a frame of their own, just before.
+  * 2.22 `idle.gani`: Seihai asks 18 ms after login, before the server's data has arrived. The real
+    client asks at ~250 ms, in the frame with the login `PLAYERPROPS`.
+  * `steps2.wav` usually goes at the second step, but in one 2.31 run it went in the step-1 frame. So the
+    second step is the usual case, not a rule.
+  * Seihai also asks for `hat0.png` (2.31: ~100 ms after step 1; 2.22: at login), and the real client
+    never does. Probably the `DEFAULTATTR` of the server's GANI (inferred, not traced).
 * `lv_*.nw`, `gm_nw.nw`, `gm2x2.gmap`: Seihai asks for the level files it enters, because it starts
   with none; the real client had them cached (it sent `UPDATEFILE gm2x2.gmap` instead). A cache-state
   difference of the lab, not a wire rule.
