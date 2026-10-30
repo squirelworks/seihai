@@ -45,6 +45,17 @@ pub const IMAGE_CATEGORIES: &[&str] = &[
     "horses", "backpals", "smilies", "letters", "snapshot", "webgifs", "tutorial",
 ];
 
+/// The player-art folders a GIF build reads as `.gif` first.
+pub const PLAYER_ART: &[&str] = &["heads", "bodies", "swords", "shields"];
+
+/// `rel` with its image extension (if any) replaced by `ext`.
+fn with_ext(rel: &str, ext: &str) -> String {
+    match ext_of(rel) {
+        Some(e) => format!("{}{ext}", &rel[..rel.len() - e.len()]),
+        None => format!("{rel}{ext}"),
+    }
+}
+
 /// Where a download is saved, and where a downloaded file is looked for
 /// first. This is `levels/`, as `main.rs` writes files there.
 const DOWNLOADS: &str = "levels";
@@ -321,14 +332,34 @@ impl AssetResolver {
     /// is tried with the other extension: the 2.22 folder ships PNG only,
     /// and a pre-2.1 server names images `.gif`. (Seihai's reading; the
     /// real clients' fallback is not captured.)
+    ///
+    /// **Player art in a GIF build.** A build whose `image_ext` is `.gif`
+    /// (up to 2.05) looks for heads, bodies, swords and shields as `.gif`
+    /// first in every layer, whatever extension the name has. The real
+    /// 2.05 rev 2 reads `.gif` only: given the 2.22 folder (PNG only) it
+    /// finds nothing and draws no body (Graal_analysis
+    /// `player-mannerisms-live.md`, "Asset gotcha"). Seihai then falls back
+    /// to the usual names on purpose, so the player is never invisible.
     pub fn image_in(&self, category: &str, name: &str) -> Option<PathBuf> {
         let rel = clean_name(name)?;
-        let candidates = self.image_names(&rel);
+        let all = self.image_names(&rel);
+        let gif = self.gif_first_player_art(category).then(|| vec![with_ext(&rel, ".gif")]);
+        // GIF player art in any layer first, then the usual names.
+        let passes: Vec<&Vec<String>> = gif.iter().chain(std::iter::once(&all)).collect();
         let cat = if category.is_empty() { None } else { Some(clean_name(category)?) };
+        for candidates in passes {
+            if let Some(p) = self.image_pass(cat.as_deref(), candidates) {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    fn image_pass(&self, cat: Option<&str>, candidates: &[String]) -> Option<PathBuf> {
         for (_, root) in self.roots(false) {
             let r = &root.root;
             let mut dirs: Vec<PathBuf> = Vec::new();
-            if let Some(cat) = &cat {
+            if let Some(cat) = cat {
                 dirs.push(r.join(cat));
                 dirs.push(r.join(DOWNLOADS).join(cat));
             }
@@ -345,11 +376,16 @@ impl AssetResolver {
             for c in IMAGE_CATEGORIES {
                 dirs.push(r.join(c));
             }
-            if let Some(p) = first_in(&dirs, &candidates) {
+            if let Some(p) = first_in(&dirs, candidates) {
                 return Some(p);
             }
         }
         None
+    }
+
+    /// See [`image_in`](Self::image_in): player art of a GIF build.
+    fn gif_first_player_art(&self, category: &str) -> bool {
+        self.profile.files.image_ext.eq_ignore_ascii_case(".gif") && PLAYER_ART.iter().any(|c| c.eq_ignore_ascii_case(category))
     }
 
     fn image_names(&self, rel: &str) -> Vec<String> {
@@ -719,6 +755,26 @@ mod tests {
         // `.gif` asked, `.png` shipped.
         assert_eq!(r.image("door.gif"), Some(d.join("levels/images/door.png")));
         assert_eq!(r.image("nothere.png"), None);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_gif_build_reads_player_art_as_gif_first() {
+        let d = tmp("gifart");
+        touch(&d, "levels/heads/head0.png");
+        touch(&d, "levels/heads/head0.gif");
+        touch(&d, "levels/bodies/body.png");
+        touch(&d, "levels/images/door.png");
+        touch(&d, "levels/images/door.gif");
+        let old = resolver(&d, ClientVersion::V205);
+        // 2.05 asks for head0.png and gets the GIF, as the real client reads.
+        assert_eq!(old.image_in("heads", "head0.png"), Some(d.join("levels/heads/head0.gif")));
+        // No GIF body: the real 2.05 draws none; Seihai falls back to the PNG.
+        assert_eq!(old.image_in("bodies", "body.png"), Some(d.join("levels/bodies/body.png")));
+        // Only player art: other images keep the name's extension.
+        assert_eq!(old.image_in("images", "door.png"), Some(d.join("levels/images/door.png")));
+        let new = resolver(&d, ClientVersion::V222);
+        assert_eq!(new.image_in("heads", "head0.png"), Some(d.join("levels/heads/head0.png")));
         let _ = fs::remove_dir_all(&d);
     }
 
