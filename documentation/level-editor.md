@@ -76,7 +76,7 @@ The suggested profile fields: formats read, formats written by extension, has ch
 | 1st to 2nd Graal and earlier | no level class, no character dialog before 1.28b2; 1st Graal has no chests or NPC dialog | "not yet" |
 | New World betas | no chests, no baddies; heights and a map in beta 1; the text format is described by the beta's own format file | "not yet" |
 | 2.1 test builds | merged NPC dialog, predefined NPCs, no sign-code window | "not yet" |
-| 2.31 and GraalEditor 2.3.1.1 | the editor is a separate program; writes text with `HEIGHTS`; an older note claims the board there is decimal (unchecked) | "not yet" |
+| 2.31 and GraalEditor 2.3.1.1 | the editor is a separate program (the 2.31 client has no editor forms; its start screen's *Editor* button launches `GraalEditor.exe`, seen live); writes text with `HEIGHTS`; an older note claims the board there is decimal (unchecked) | "not yet" |
 
 2.05 is the first one worth doing: the board rules are the same, so the difference is mostly what the editor must refuse to write (a `HEIGHTS` block).
 
@@ -87,6 +87,8 @@ The suggested profile fields: formats read, formats written by extension, has ch
 - Tile definition type 4 and its x/y values.
 - Whether arrival offsets such as `playery+10` in a link are evaluated at warp time (the editor only stores the text).
 - The GraalEditor board format (decimal or base64) against a real file.
+
+Closed since the first slice (live checks in Graal_analysis `client-internals/live-checks-editor-offline-sound.md`, 2026-10-30): pressing *Play* on a named, modified level saves it first, as the 2.22 notes say; *Generate map* walks the loaded big map's level list and does not follow links; *Edit flags* edits the in-memory flag list only and is never written to disk. None of these changes the CLI.
 
 ## Notes found while doing this
 
