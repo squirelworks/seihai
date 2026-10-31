@@ -1482,6 +1482,10 @@ fn main() {
         fb
     };
     let mut npc_images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
+    // `.mng` images in `npc_images`, played: the frame due is put into the
+    // map before each draw (lamps, glares, emoticons; assets::mng).
+    let mut image_anims = seihai::assets::ImageAnimations::new();
+    let anim_clock = Instant::now();
     let mut look_tried = std::collections::HashSet::new();
     let mut look_not_received: HashSet<String> = HashSet::new();
     // Body pictures as read, for drawing them in other colours.
@@ -1835,6 +1839,7 @@ fn main() {
                                     match read_png_rgba(&data) {
                                         Ok((w, _, px)) => {
                                             npc_images.insert(name.clone(), (w, px));
+                                            image_anims.forget(name);
                                             eprintln!("image {name}");
                                         }
                                         Err(e) => eprintln!("image {name} not read: {e}"),
@@ -3980,6 +3985,13 @@ fn main() {
             }
         }
         ft.mark("look images");
+        // Animated `.mng` pictures: the frame due now. The bytes come from
+        // the file store (downloads, the user's folder, the built-in set),
+        // else the asset folders, as the image passes read them.
+        let anim_now = anim_clock.elapsed().as_millis() as u64;
+        if image_anims.update(&mut npc_images, anim_now, |n| files.store.read(n).or_else(|| resolver.image(n).and_then(|p| std::fs::read(p).ok()))) {
+            dirty = true;
+        }
         if dirty {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
             let own_failed = (files.requests.has_failed(session.looks.body_name()), files.requests.has_failed(session.looks.head_name()));

@@ -863,3 +863,68 @@ fn an_image_of_an_npc_over_the_player_sits_one_higher() {
     // drawoverplayer is height 1: showimg gives 2, changeimgvis 0 gives 0.
     assert_eq!((imgs[0].height, imgs[1].height), (2, 0));
 }
+
+/// An MNG made the way Graal's `gif2mng` writes them (as in the 2.22
+/// `bluelampani.mng`): `MHDR`, `TERM` (repeat for ever), then a `FRAM`
+/// and one PNG stream per frame. Each frame is a solid colour.
+fn lamp_mng(w: u32, h: u32, colours: &[[u8; 3]], delays: &[u32]) -> Vec<u8> {
+    fn chunk(out: &mut Vec<u8>, tag: &[u8; 4], body: &[u8]) {
+        out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        let mut c = tag.to_vec();
+        c.extend_from_slice(body);
+        out.extend_from_slice(&c);
+        out.extend_from_slice(&seihai::assets::crc32(&c).to_be_bytes());
+    }
+    let mut out = vec![0x8A, b'M', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    let mut mhdr = Vec::new();
+    for v in [w, h, 1000, 3, 5, 0, 1] {
+        mhdr.extend_from_slice(&v.to_be_bytes());
+    }
+    chunk(&mut out, b"MHDR", &mhdr);
+    chunk(&mut out, b"TERM", &[3, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
+    for (c, d) in colours.iter().zip(delays) {
+        let mut fram = vec![2, 0, 2, 0, 0, 0];
+        fram.extend_from_slice(&d.to_be_bytes());
+        chunk(&mut out, b"FRAM", &fram);
+        let mut png = Vec::new();
+        let px: Vec<u8> = (0..w * h).flat_map(|_| *c).collect();
+        seihai::assets::write_png_rgb(&mut png, w, h, &px).unwrap();
+        out.extend_from_slice(&png[8..]);
+    }
+    chunk(&mut out, b"MEND", &[]);
+    out
+}
+
+/// The lamps of Graal the Adventure (`bluelampani.mng`, three frames with
+/// delays 100, 0, 0) drew nothing: the image reader took PNG and GIF only.
+/// Now the first frame is read like any picture, and `ImageAnimations`
+/// plays the frames in the image map, so the drawn NPC changes colour on
+/// the MNG's clock, a 0 delay lasting `ZERO_DELAY_MS`.
+#[test]
+fn mng_npc_draws_and_animates() {
+    use seihai::assets::{mng::ZERO_DELAY_MS, ImageAnimations};
+    let data = lamp_mng(32, 64, &[RED, GREEN, BLUE], &[100, 0, 0]);
+    let (s, _sc) = session("NPC lamp.mng 2 2\nNPCEND\n");
+    let mut imgs = images();
+    let (w, _, px) = read_png_rgba(&data).expect("an MNG reads as its first frame");
+    imgs.insert("lamp.mng".into(), (w, px));
+    assert_eq!(at(&draw(&s, &imgs), 40, 40), RED);
+
+    let mut anims = ImageAnimations::new();
+    let read = |_: &str| Some(data.clone());
+    anims.update(&mut imgs, 0, read);
+    assert_eq!(anims.len(), 1);
+    assert_eq!(at(&draw(&s, &imgs), 40, 40), RED);
+    assert!(anims.update(&mut imgs, 100, read));
+    assert_eq!(at(&draw(&s, &imgs), 40, 40), GREEN);
+    assert!(!anims.update(&mut imgs, 100 + u64::from(ZERO_DELAY_MS) - 1, read));
+    assert!(anims.update(&mut imgs, 100 + u64::from(ZERO_DELAY_MS), read));
+    assert_eq!(at(&draw(&s, &imgs), 40, 40), BLUE);
+    // Loops: back to the first frame after one pass.
+    assert!(anims.update(&mut imgs, 100 + 2 * u64::from(ZERO_DELAY_MS), read));
+    assert_eq!(at(&draw(&s, &imgs), 40, 40), RED);
+    // The whole 32 x 64 picture is drawn, the NPC at tile (2, 2).
+    let fb = draw(&s, &imgs);
+    assert_eq!(at(&fb, 32 + 31, 32 + 63), RED);
+    assert_eq!(at(&fb, 32 + 32, 32 + 63), BLACK);
+}
