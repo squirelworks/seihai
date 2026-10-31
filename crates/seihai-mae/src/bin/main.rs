@@ -1528,6 +1528,10 @@ fn main() {
     // Where our own link request lands the player, held by the destination's
     // name until the server names that level (see `LinkArrival`).
     let mut link_arrival: Option<seihai::net::LinkArrival> = None;
+    // The server warp last followed, kept so a login the new server turns
+    // away with "Account is already in use." can be tried again
+    // (`seihai::net::warp_retry`).
+    let mut warp_retry: Option<seihai::net::warp_retry::WarpRetry> = None;
     let mut was_online = false;
     let mut frames_seen = 0usize;
     let mut fps = 0.0f32;
@@ -1721,6 +1725,26 @@ fn main() {
                         changed = true;
                     }
                     Ok((_, Err(e))) => {
+                        // A warp's login refused because the old session still
+                        // holds the account: wait and log in there again.
+                        let wait = warp_retry
+                            .as_mut()
+                            .and_then(|r| r.on_closed(Instant::now(), net_state.disconnect_message.as_deref()));
+                        if let Some(wait) = wait {
+                            let m = net_state.disconnect_message.take().unwrap_or_default();
+                            eprintln!(
+                                "server warp refused ({}); logging in again in {} s",
+                                m.trim(),
+                                wait.as_secs_f32()
+                            );
+                            net_state.push_chat(
+                                ChatKind::Admin,
+                                "Seihai".into(),
+                                format!("account still in use on the new server, trying again in {} s", wait.as_secs()),
+                            );
+                            conn = None;
+                            break;
+                        }
                         // The server's own reason, when it sent one.
                         let why = match &net_state.disconnect_message {
                             Some(m) => format!("disconnected: {m}"),
@@ -3123,18 +3147,39 @@ fn main() {
         // no listserver step), as the real client does. A text whose host
         // and port cannot be read gives a failed connection, as it did in
         // the real client.
-        if let Some(w) = net_state.server_warp.take() {
+        // A warp login that was refused because the account was still in use
+        // is tried again here once its wait is over.
+        let fresh_warp = net_state.server_warp.take();
+        let retry_warp = if fresh_warp.is_none() && conn.is_none() {
+            warp_retry.as_mut().and_then(|r| r.take_due(Instant::now()))
+        } else {
+            None
+        };
+        if fresh_warp.is_some() {
+            warp_retry = None;
+        }
+        let retrying = retry_warp.is_some();
+        if let Some(w) = fresh_warp.or(retry_warp) {
             if !follow_serverwarp {
                 eprintln!("server warp to {:?} not followed (--no-serverwarp or follow_serverwarp=0)", w.display_name());
-            } else if let Some(old) = conn.as_ref() {
-                let _ = old.shutdown();
+            } else if conn.is_some() || retrying {
+                if let Some(old) = conn.as_ref() {
+                    let _ = old.shutdown();
+                }
                 conn = None;
                 frames = None;
                 session.cancel_warp();
                 warp_since = None;
                 link_arrival = None;
                 let target = w.address();
-                eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
+                if retrying {
+                    let n = warp_retry.as_ref().map_or(0, |r| r.retries());
+                    eprintln!("server warp to {:?}: retry {n} of {}", w.display_name(), seihai::net::warp_retry::RETRY_DELAYS.len());
+                } else {
+                    eprintln!("server warp to {:?}: {}", w.display_name(), target.as_deref().unwrap_or("no usable host and port"));
+                    // The first try goes at once, as the real clients do.
+                    warp_retry = Some(seihai::net::warp_retry::WarpRetry::new(w.clone(), Instant::now()));
+                }
                 let result = match target {
                     Some(a) => seihai::net::login_gserver_with(
                         &a,
@@ -3208,9 +3253,10 @@ fn main() {
                 }
             }
         }
-        // Developer mode does not survive a lost connection.
+        // Developer mode does not survive a lost connection. A warp login
+        // waiting to be tried again is not lost yet.
         was_online |= conn.is_some();
-        if was_online && conn.is_none() {
+        if was_online && conn.is_none() && !warp_retry.as_ref().is_some_and(|r| r.pending()) {
             was_online = false;
             session.cancel_warp();
             if session.dev.reset() {
