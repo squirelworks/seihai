@@ -62,7 +62,8 @@ turns a token into a version id is in gs2lib, which was not in the source
 tarball, so where GServer-v2 places 3.153 was not read. It cannot be at or
 past 4.0211 by the list's order, so a stock GServer-v2 sends a 3.153 login
 GS1 only. Stage F's lab check needs a lab server that sends 131 to this
-login (see the PR). **[src]/[inf]**
+login. The lab run with such a server is in `gs2-lab-stage-f.md`.
+**[src]/[inf]**
 
 ## What Seihai does
 
