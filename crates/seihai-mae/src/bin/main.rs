@@ -1470,8 +1470,9 @@ fn main() {
     let mut confirm_quit = false;
     // The first line of the sign page on show.
     let mut sign_page = 0usize;
-    // Some game key was down last frame (the 2.05 sign debounce).
-    let mut game_keys_held = false;
+    // The 2.05 sign debounce, and the game keys kept off the player until
+    // they are let go after reading.
+    let mut sign_keys = seihai::render::signs::SignKeys::default();
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
@@ -1565,9 +1566,11 @@ fn main() {
                 show_help = false;
             } else if item_list.open {
                 item_list.open = false;
-            } else if session.reading.take().is_none() {
+            } else {
+                // 2.05 (`TAdventure::FormKeyDown`): Escape asks whether to
+                // quit, with or without a sign open; it does not close the
+                // sign, which is still there if the answer is no.
                 confirm_quit = true;
-                dirty = true;
             }
             dirty = true;
         }
@@ -2106,10 +2109,14 @@ fn main() {
         // back a page, the map key closes it, any other game key turns to
         // the next page or closes it on the last. The player does not walk,
         // swing, lift or open the item list meanwhile.
-        let sign_was_open = session.reading.is_some();
-        if sign_was_open && !input.is_open() && !confirm_quit {
-            use seihai::render::signs::{next_page, previous_page, sign_key, SignKey};
-            match sign_key(|a| keymap.pressed(&window, a), game_keys_held) {
+        // `sign_was_open` also holds the game keys back after reading ends,
+        // until they are let go (`SignKeys`).
+        let (sign_key, sign_was_open) = sign_keys.frame(session.reading.is_some(), !input.is_open() && !confirm_quit, |a| {
+            keymap.down(&window, a) || keymap.pressed(&window, a)
+        });
+        if session.reading.is_some() {
+            use seihai::render::signs::{next_page, previous_page, SignKey};
+            match sign_key {
                 Some(SignKey::Close) => session.reading = None,
                 Some(SignKey::Back) => sign_page = previous_page(sign_page).unwrap_or(sign_page),
                 Some(SignKey::Next) => match session.reading.as_deref().and_then(|t| next_page(t, sign_page)) {
@@ -2120,7 +2127,6 @@ fn main() {
             }
             dirty = true;
         }
-        game_keys_held = Action::ALL.iter().any(|&a| a != Action::SwitchToChat && keymap.down(&window, a));
 
         // The item list (Q). While it is open the arrows move its
         // selection and the game keys close it; none of them reach the

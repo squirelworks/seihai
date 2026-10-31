@@ -38,7 +38,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("Enter / T / Tab", &["Enter", "NumPadEnter", "T", "Tab"], "open the chat bar; Enter sends what you typed"),
     k("Backspace", &["Backspace"], "delete a typed letter"),
     k("Up / Down", &[], "in the chat bar: earlier lines (1.39 and later)"),
-    k("Esc", &["Escape"], "close the chat bar or a sign; else ask to quit"),
+    k("Esc", &["Escape"], "close the chat bar; else ask to quit (a sign stays open)"),
     k("Y / N", &["Y", "N"], "answer the quit question (Enter = yes, Esc = no)"),
     k("F2", &["F2"], "private message to the nearest player"),
     k("Q", &["Q"], "open or close the item list; arrows pick a weapon, Esc/D/S/A/Enter close it"),
