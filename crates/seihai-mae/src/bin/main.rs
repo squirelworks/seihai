@@ -374,6 +374,9 @@ fn main() {
     let mut chain_format = seihai::protocol::chain::Format::Text;
     let mut version_given = false;
     let mut account_given = false;
+    // The nickname a 4.x build sends in its own props (the real client's
+    // start-screen field); `None`: the settings file, else the account.
+    let mut cli_nickname: Option<String> = None;
     let mut send_tampercheck = false;
     let mut send_showimg = false;
     let mut no_scripts = false;
@@ -412,6 +415,10 @@ fn main() {
                 i += 1;
                 online = args.get(i).cloned();
                 cli_mode = true;
+            }
+            "--nick" => {
+                i += 1;
+                cli_nickname = args.get(i).cloned();
             }
             "--account" => {
                 i += 1;
@@ -506,6 +513,7 @@ fn main() {
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
                 println!("         --password-env VAR  read the password from environment variable VAR");
+                println!("         --nick NAME  the nickname a 4.x build sends (default: the account)");
                 println!("                             (keeps it off the command line)");
                 println!("       seihai --online host:port --list-only [--account A --password-env VAR] [--version 2.22]");
                 println!("         --list-only         fetch and print the server list from a listserver,");
@@ -629,6 +637,7 @@ fn main() {
             password = p.clone();
         }
     }
+    let nickname_setting = cli_nickname.or_else(|| settings.nickname.clone()).filter(|n| !n.trim().is_empty());
     // Print what each build changed against the one before, then exit.
     if version_chain {
         let only = version_given.then_some(version);
@@ -841,8 +850,17 @@ fn main() {
         }
 
         if let Some(addr) = &online {
-            match seihai::net::login_gserver_with(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck, |n| {
-                first_frame_check(assets.as_deref(), n)
+            // The server's caches, for a 4.x build's update-package check.
+            let login_caches = [
+                seihai::servercache::seihai_dir().and_then(|d| seihai::servercache::game_cache_dir_for(&d, addr)),
+                seihai::servercache::cache_dir_for(
+                    &cli_cache_dir.clone().or_else(|| Settings::load().cache_dir).unwrap_or_else(seihai::servercache::default_cache_root),
+                    addr,
+                    None,
+                ),
+            ];
+            match seihai::net::login_gserver_with(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck, true, |n| {
+                login_file_check(assets.as_deref(), &login_caches, version, n)
             }) {
                 Ok(mut sess) => {
                     eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
@@ -980,6 +998,9 @@ fn main() {
     // (the idle.gani check where the build asks, image checks, process
     // list, props).
     let mut login_burst = conn.as_ref().and_then(|_| LoginBurst::for_version(version));
+    // The same for a 4.x build: idle.gani, the PM and lister setup, 46, the
+    // window list and the own props (see `protocol::lobby::LobbyBurst`).
+    let mut lobby_burst = conn.as_ref().and_then(|_| seihai::protocol::lobby::LobbyBurst::for_version(version));
     // A gen-2 build (1.33 to 1.39) sends its own props once the first level
     // has loaded instead (see `classic_login_props_message`).
     let mut classic_props_owed = conn.is_some() && seihai::protocol::login::sends_classic_login_props(version);
@@ -987,7 +1008,7 @@ fn main() {
     // tick, with the tile changes of the tick (see `protocol::walkcadence`).
     let mut walk_cadence = conn.as_ref().and_then(|_| seihai::protocol::walkcadence::WalkCadence::for_version(version));
     let mut cadence_clock = Instant::now();
-    session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304);
+    session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304) || seihai::protocol::lobby::LobbyBurst::for_version(version).is_some();
     let mut held_boards: Vec<Vec<u8>> = Vec::new();
     // A gmap crossing's 39 for the next tick frame (builds with a cadence).
     let mut held_lead: Vec<Vec<u8>> = Vec::new();
@@ -1660,6 +1681,9 @@ fn main() {
                         if let (Some(lb), Some(_)) = (login_burst.as_mut(), net_state.current_level_name()) {
                             lb.note_level(read_at);
                         }
+                        if let (Some(lb), Some(_)) = (lobby_burst.as_mut(), net_state.current_level_name()) {
+                            lb.note_level(read_at);
+                        }
                         // Save completed files by the clients' folder rules,
                         // settle the replies, and reload levels.
                         let got = files.process(&mut net_state);
@@ -1786,6 +1810,29 @@ fn main() {
                         if let Err(e) = c.send_messages(&msgs) {
                             eprintln!("login frame send failed: {e}");
                         }
+                    }
+                }
+            }
+            // A 4.x build: its after-burst frames, the last with the first
+            // id 24 when that is on (the real 4.04r2 sent it there).
+            if let (Some(lb), Some(c)) = (lobby_burst.as_mut(), conn.as_mut()) {
+                let title = profile.window_title(lobby_server.as_deref());
+                let mut frames = lb.take(
+                    &net_state,
+                    nickname_setting.as_deref().unwrap_or(&account),
+                    Instant::now(),
+                    |n| files.need(n),
+                    || enter_level.as_mut().map(|el| el.take_login()).unwrap_or_default(),
+                    &[title.as_str()],
+                );
+                if let (Some(last), Some(t)) = (frames.last_mut(), showimg.as_mut()) {
+                    if t.advance(Duration::ZERO, !net_state.others.is_empty()) {
+                        last.push(showimg_message());
+                    }
+                }
+                for f in frames {
+                    if let Err(e) = c.send_messages(&f) {
+                        eprintln!("login frame send failed: {e}");
                     }
                 }
             }
@@ -2570,7 +2617,10 @@ fn main() {
         session.set_focused(window.is_active() || !seihai::offline::focus_pauses(version));
         // The hidden and paused bits go out whenever they change (D, A, a
         // throw from hiding, which is seen one frame later, P, or focus).
-        if session.hide_status() | session.pause_status() != last_hide_status {
+        // A 4.x build tells nothing before its after-burst frames (the
+        // server's STATUS is not in yet).
+        let burst_owed = lobby_burst.as_ref().is_some_and(|lb| lb.pending());
+        if !burst_owed && session.hide_status() | session.pause_status() != last_hide_status {
             last_hide_status = session.hide_status() | session.pause_status();
             if let Some(c) = conn.as_mut() {
                 let (status, with_pos) = seihai::offline::pause_message_bits(version, status_base, last_hide_status);
@@ -3068,7 +3118,7 @@ fn main() {
                 }
             }
         }
-        if !login_burst.as_ref().is_some_and(|lb| lb.pending()) {
+        if !login_burst.as_ref().is_some_and(|lb| lb.pending()) && !lobby_burst.as_ref().is_some_and(|lb| lb.pending()) {
             if let Some(c) = conn.as_mut() {
                 if let Err(e) = c.send_stale_flags(Duration::from_millis(60)) {
                     eprintln!("send failed: {e}");
@@ -3133,7 +3183,7 @@ fn main() {
             // Not before the post-login frame: an id 24 ahead of the server's login
             // burst made the lab server warp the player to its online start level
             // first (documentation/early-enter-level.md).
-            let held = login_burst.as_ref().is_some_and(|lb| lb.pending()) && login_since.elapsed() <= LATE_LOGIN_46;
+            let held = (login_burst.as_ref().is_some_and(|lb| lb.pending()) || lobby_burst.as_ref().is_some_and(|lb| lb.pending())) && login_since.elapsed() <= LATE_LOGIN_46;
             if let (Some(t), Some(c), false) = (showimg.as_mut(), conn.as_mut(), held) {
                 if t.advance(dt, !net_state.others.is_empty()) {
                     if let Err(e) = c.send_messages(&[showimg_message()]) {
@@ -3188,7 +3238,8 @@ fn main() {
                         &account,
                         &password,
                         send_tampercheck,
-                        |n| first_frame_check(resolver.user_root().map(|r| r.root.as_path()), n),
+                        false,
+                        |n| login_file_check(resolver.user_root().map(|r| r.root.as_path()), &[game_cache_for(&a), cache_for(&a, Some(&w.display_name()))], version, n),
                     )
                     .map(|s| (a, s))
                     .map_err(|e| e.to_string()),
@@ -3228,6 +3279,7 @@ fn main() {
                         files.store.set_caches(warp_game_cache, warp_cache, Some(seihai::servercache::meta_text(&a, Some(&w.display_name()))));
                         sound.set_dirs(resolver.sound_dirs());
                         login_burst = LoginBurst::for_version(version);
+                        lobby_burst = seihai::protocol::lobby::LobbyBurst::for_version(version);
                         classic_props_owed = seihai::protocol::login::sends_classic_login_props(version);
                         walk_cadence = seihai::protocol::walkcadence::WalkCadence::for_version(version);
                         held_lead.clear();
@@ -3611,7 +3663,11 @@ fn main() {
             });
             let sprite = if gani == Some("sword") { session.player_dir % 4 } else { session.sprite_value_for(true) };
             let upd = session.player_update();
-            let props = if script_warp_sent { None } else { wc.tick(seihai::protocol::walkcadence::WalkState::new(upd.x, upd.y, sprite, gani)) };
+            // A 4.x build sends no walk props before its after-burst frames
+            // (the real 4.04r2 sent none), and the cadence starts from where
+            // the server put the player, not from the default spot.
+            let held_for_burst = lobby_burst.as_ref().is_some_and(|lb| lb.pending());
+            let props = if script_warp_sent || held_for_burst { None } else { wc.tick(wc.state(upd.x, upd.y, sprite, gani)) };
             let mut all = std::mem::take(&mut held_boards);
             all.extend(boards);
             if let Err(e) = c.send_tick_frame(std::mem::take(&mut held_lead), all, props) {
@@ -3974,6 +4030,21 @@ fn attr_sheets<'a>(
 /// exist: `PLI_UPDATEFILE` with the mod time of `<assets>/maps/<name>` or
 /// `<assets>/<name>` (the 3.04 install keeps its map files in `maps/`),
 /// `PLI_WANTFILE` when neither is there.
+/// [`first_frame_check`], except that an update package (`.gupd`) a server
+/// cache in `caches` holds is checked with `PLI_VERIFYWANTSEND` (47) and its
+/// CRC-32, and one none holds is asked with `PLI_WANTFILE` (23), as the real
+/// 4.04r2 and 5.00r7 do.
+fn login_file_check(assets: Option<&std::path::Path>, caches: &[Option<PathBuf>], version: ClientVersion, name: &str) -> Vec<u8> {
+    if !name.to_ascii_lowercase().ends_with(".gupd") {
+        return first_frame_check(assets, name);
+    }
+    let roots: Vec<&std::path::Path> = caches.iter().flatten().map(PathBuf::as_path).collect();
+    match seihai::filecache::cached_crc32(&roots, version.profile(), name) {
+        Some(crc) => seihai::net::verify_want_message(crc, name),
+        None => seihai::net::wantfile_message(name),
+    }
+}
+
 fn first_frame_check(assets: Option<&std::path::Path>, name: &str) -> Vec<u8> {
     let found = assets.and_then(|a| [a.join("maps").join(name), a.join(name)].into_iter().find(|p| p.is_file()));
     match found.and_then(|p| seihai::filecache::mod_time_of(&p)) {

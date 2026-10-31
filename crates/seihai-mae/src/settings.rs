@@ -18,6 +18,9 @@ pub struct Settings {
     pub cache_dir: Option<PathBuf>,
     pub account: Option<String>,
     pub password: Option<String>,
+    /// The nickname the 4.x builds send in their own props, as the real
+    /// client's start-screen field (`nickname=`). `None`: the account.
+    pub nickname: Option<String>,
     pub version: Option<String>,
     pub last_server: Option<String>,
     pub listserver: Option<String>,
@@ -71,6 +74,7 @@ impl Settings {
                     "cache_dir" => s.cache_dir = Some(PathBuf::from(v)),
                     "account" => s.account = Some(v),
                     "password" => s.password = Some(v),
+                    "nickname" => s.nickname = Some(v),
                     "version" => s.version = Some(v),
                     "last_server" => s.last_server = Some(v),
                     "listserver" => s.listserver = Some(v),
@@ -117,6 +121,9 @@ impl Settings {
         }
         if let Some(p) = &self.password {
             out.push_str(&format!("password={p}\n"));
+        }
+        if let Some(n) = &self.nickname {
+            out.push_str(&format!("nickname={n}\n"));
         }
         if let Some(v) = &self.version {
             out.push_str(&format!("version={v}\n"));
