@@ -48,12 +48,18 @@ PLO_BADDYPROPS / PLI_BADDYPROPS (15): `id`, then `prop, value` pairs.
   * it then hunts with counter 16, counting down to 5 without moving;
   * then the counter goes to 0, and the baddy moves half a tile a think while the counter cycles 3, 2, 1, 0.
 * The same capture shows the touch damage: 1 half heart, and 2 from the gold soldier (baddy 6, type 7).
-* In 2.00 the touches come 2 s apart (the player's 40-tick hurt time), as in Seihai.
+* In 2.00 and in most of the 2.22 runs, the touches come 2 s apart (the player's 40-tick hurt time), as in Seihai.
 * The player's knockback from a touch is 1.0 tile a tick for 5 ticks, away from the baddy. The real 2.22 shows this in the lab's position log (`lab-baddies.md`), and it is the same knockback Seihai already uses for sword hits.
-* The 2.22 position log shows knockbacks about 0.6 to 1 s apart, which is shorter than 2 s. That has not been checked against the wire.
+* One 2.22 run has hits 0.6 to 1.1 s apart: run 16-20 in `lab-baddies-20261031T032657-c861.md`.
+  * It happened while the player was swinging at a soldier.
+  * In the client, a sword clash puts the player into a pushed state, and Seihai does not do that yet. That is the likely cause, but it is not proven.
 * That capture has no baddy getting hurt, so it says nothing about the knockback.
 * The leader stores each baddy's props on its first think and sends only the changed props after that.
 * For a custom image the leader sends the type's default image name. GServer notes "client resets the custom image when the baddy is hurt".
+
+PLI_ARROWADD (9): the leader sends each baddy shot as `x * 2`, `y * 2`, `dir`, `sprite`, `kind + 1`. The real 2.22 sends `87 79 20 8b 21` for an arrow facing north (sprite 107 + dir).
+* The octopus's rock (sprite 131) goes through the same function in the client, so Seihai sends it the same way.
+* A rock has not been seen on the wire.
 
 PLI_BADDYHURT (16) → PLO_BADDYHURT (27): `id`, `floor((dx + 4) * 16)`, `floor((dy + 4) * 16)`, `power`. `dx, dy` is the player's centre minus the baddy's centre, clamped to ±4. A follower that hits a baddy sends this message, and the leader applies the hurt. **The byte order is from the code and has not been seen on the wire.**
 
@@ -84,7 +90,6 @@ PLI_BADDYHURT (16) → PLO_BADDYHURT (27): `id`, `floor((dx + 4) * 16)`, `floor(
 ## Not done yet
 
 * Arrows and bombs hurting baddies.
-* Baddy shots online: arrows and rocks are local only.
 * The clash pushing the player back.
 * The swamp splash.
 * The terrain sprites drawn over a baddy that stands in grass or water.
