@@ -17,6 +17,7 @@ Sources, all in Graal_analysis: `protocol/v5x-clients.md`, `protocol/v6x-clients
 | 6.015 | `G3D3007A` | 91 (Linux 6.01r1's, inferred) | Linux 6.01r1's (inferred) | **no binary**: the token 6.00r7 and 6.01r5 send, from GServer-v2's `allowedversions.txt`; stock gs2lib knows it |
 | 6.034 | `G3D2505C` | 92 (Linux 6.03r7's, inferred) | Linux 6.03r7's (inferred) | **no binary**: the token 6.03r4 sends, from the same file; stock gs2lib knows it |
 | 6.03r7 | `G3D0311C` | 92 | Linux 6.03r7's (60) | Tempus Sans ITC 24 |
+| 6.03r7 Linux | `G3D0511C` | 92 | Linux 6.03r7's (60) | the same release as 6.03r7; logs in with `linux` and four machine ids (all sent as `""`) |
 | 6.036 | **missing** | – | – | no binary and no token: **no row**. It is only named by 5.00r7's updater packages (`Graal6.exe` 6.036, probably 6.03r6). |
 
 Every row is client type 5, gen 5, no tamper check, no showimg timer, and follows 4.20r8 in the version chain (the 4.x rows, `documentation/v4-profiles.md`, came later the same day; the lobby, the list and the chat are now set there) (`documentation/version-chain.md` lists each step's changes and unknowns).
@@ -89,3 +90,11 @@ A login to the public `2gta.home.eevul.net:14913` (which lists `5.07` as allowed
 - No public check: this session's network could not resolve `listserver.graal.in`, so which port the public service takes 5.x/6.x logins on was not checked. Use `--online host:port` or the launcher's direct box.
 - Public allowed lists: Graal the Adventure allows only 5.00r7 among these rows (`Allowed: 2.22, 5.07`). A gs2 server's range `1.41r1 - iPhone Belote 1.5` should take every row but 5.24r4 (inferred from gs2lib's table). See Graal_analysis `server-notes/public-allowed-versions.md`.
 - The chat bar on these builds is the server's GUI script; Seihai keeps its own.
+
+## 6.03r7 Linux (2026-10-31)
+
+The Linux x64 6.03r7 is the build the Windows 6.03r7 row's send ids and long frame length were read from (Graal_analysis `protocol/v6x-clients.md`), so its row is 6.03r7's with two changes: the token `G3D0511C` (gs2lib: `6.037 (Linux)`) and the login list, `linux` followed by four machine ids (MD5 of the `eth0` MAC, MD5 of the `/etc` inode, an empty field, the kernel release and version). Seihai sends all four as `""`; the kernel string was never captured, so it is not made up. The real Linux client was not run.
+
+Lab check, cloud container, loopback only: the prebuilt lab pack started with `./run-lab.sh stock` (stock gs2lib, which already knows the token), `G3D0511C` added to `allowedversions.txt`, the 6.x lab's `warpproxy.py` in front injecting 178 after 5 s. The server logged `Version: G3D0511C (6.037 (Linux))` and `Identity: linux,"","","",""` for both logins; Seihai drew only the level before the warp and the player, HUD and chests after it (window as for the Windows 6.03r7 run). C→S after each login: 37, 46 (and 2, 23 on the first).
+
+GServer-v2's default `allowedversions.txt` lists the other 5.x/6.x tokens gs2lib knows: `G3D3007A` (6.0.0.7 and 6.0.1.5, gs2lib `6.015`) and `G3D2505C` (6.0.3.4). Neither has a row yet and no binary of either is in the project.
