@@ -131,4 +131,4 @@ Otherwise: update Placement in `INVENTORY.md` and stop. **Do not** open a seihai
 | Ghidra | `ghidra-analysis/<tool>/` markdown + optional private DB | fill Placement using this doc |
 | Salvage / rewrite | clean-room Rust only | branch in `/workspace/seihai-servertools`, cores first |
 
-**Concrete placements assigned this turn:** none (no completed `INVENTORY.md` candidates; `ghidra-analysis/` empty). Bridge is ready for the next agent drop.
+**Concrete placements (2026-10-31 inventory pass):** see [`INVENTORY.md`](./INVENTORY.md). Summary — Server Lister / GS2 Compiler / gserver sources → `analysis-only` (never commit binaries/GPL); Auto Key / Digger → `out-of-scope`; Character Designer / charactergenerator → `out-of-scope / seihai (client)`; DClientSetup1198.zip → `stay-staged (bad archive)`. Ghidra batch under `ghidra-analysis/` (ListServer, gserver13 done; more running).
