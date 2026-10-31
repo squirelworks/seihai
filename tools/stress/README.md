@@ -17,7 +17,7 @@ contacts a public server. Every client connects to `127.0.0.1`, and
 | `faultproxy/` | A proxy between Seihai and the gserver. It decodes server frames with Seihai's own codecs, changes them, and re-encodes them with a fresh cipher. Modes: `mutate` (replays recent server messages with bytes flipped, cut or grown), `inject` and `oversize` (hostile messages such as huge boards, lying raw-data lengths, long strings and out-of-range warps), `bomb` (zlib/bz2 bodies of 8–256 MB), `framing` (zero-length, junk and cut frames, bad compression byte, 2 GB long length), `flood` (one message repeated thousands of times). `fuzzcore` is a second binary that feeds mutated input in-process to `SessionState`, every message id, the protocol parsers, level, gani, PNG/GIF, GS1 and GS2 readers. |
 | `fz.py`, `fzservers.sh` | Runs the fault proxy: one client session per version, mode and seed. A second gserver pair (14803, and a lobby on 14804 that points at the proxy on 15803) keeps it apart from `run.sh`. |
 | `linktest.sh` | Logs one client in and walks it east into the hub's edge link. Set `DEBUG=1` to get `_debug/*/packets.log`. |
-| `gserver-lab-patch/` | The lab-only changes to GServer-v2 `efb5b90` and its gs2lib (`b839106`). With `GS_LAB_NOLIST=1` the server accepts any account with no listserver. `GS_LAB_SERVERWARP` makes it act as the Login lobby. 2.05 (`GNW03081`) and 5.24r4 (`G3D15010`) are mapped to known protocol IDs, and an unknown token no longer aborts the server. Do not use these changes outside the lab. |
+| `gserver-lab-patch/` | The lab-only changes to GServer-v2 `efb5b90` and its gs2lib (`b839106`). With `GS_LAB_NOLIST=1` the server accepts any account with no listserver. `GS_LAB_SERVERWARP` makes it act as the Login lobby. 2.05 (`GNW03081`) and 5.24r4 (`G3D15010`) are mapped to known protocol IDs, and an unknown token no longer aborts the server. With `GS_LAB_512_ROUNDDOWN=1` the server steps 5.12's (`G3D14097`) compressed gen-5 bodies `len / 4` times, rounded down, as 5.12 does; stock gs2lib rounds up, so 5.12's short bodies throw the two ciphers out of step and the server stops reading it. Do not use these changes outside the lab. |
 
 ## Setup (Linux)
 
@@ -29,7 +29,9 @@ cd $SEIHAI_LAB/gs-main && git checkout efb5b90
 git submodule update --init dependencies/gs2lib dependencies/gs2compiler
 (cd dependencies/gs2compiler && git submodule update --init --recursive)
 git apply --ignore-whitespace <repo>/tools/stress/gserver-lab-patch/gserver-v2-lab-login.patch
-(cd dependencies/gs2lib && git apply --ignore-whitespace <repo>/tools/stress/gserver-lab-patch/gs2lib-lab-tokens.patch)
+git apply --ignore-whitespace <repo>/tools/stress/gserver-lab-patch/gserver-v2-lab-512-rounddown.patch
+(cd dependencies/gs2lib && git apply --ignore-whitespace <repo>/tools/stress/gserver-lab-patch/gs2lib-lab-tokens.patch \
+  && git apply --ignore-whitespace <repo>/tools/stress/gserver-lab-patch/gs2lib-lab-512-rounddown.patch)
 cmake -GNinja -S. -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTESTS=OFF -DUPNP=OFF -DV8NPCSERVER=OFF && cmake --build build
 mkdir -p $SEIHAI_LAB/run && cp -r bin $SEIHAI_LAB/run/gs
 ```

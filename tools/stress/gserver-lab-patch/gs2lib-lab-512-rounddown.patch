@@ -1,0 +1,79 @@
+diff --git a/include/CEncryption.h b/include/CEncryption.h
+index 90eafdc..3afe7af 100644
+--- a/include/CEncryption.h
++++ b/include/CEncryption.h
+@@ -55,12 +55,17 @@ class CEncryption
+ 		int limitFromType(uint8_t type);
+ 		void setGen(uint32_t gen)		{ m_gen = gen; if (m_gen > 6) m_gen = 6; }
+ 		uint32_t getGen()				{ return m_gen; }
++		// Lab-only: step compressed gen-5 bodies len/4 times, rounded down (5.12).
++		void setRoundDown(bool r)		{ m_roundDown = r; }
+ 
+ 	private:
+ 		uint8_t		m_key;
+ 		uint32_t	m_iterator;
+ 		int32_t		m_limit;
+ 		uint32_t	m_gen;
++		bool		m_roundDown = false;
++		bool		m_compressed = false;
++		void roundDownLimit(int32_t len);
+ };
+ 
+ #endif
+diff --git a/include/CFileQueue.h b/include/CFileQueue.h
+index d864d96..135cd09 100644
+--- a/include/CFileQueue.h
++++ b/include/CFileQueue.h
+@@ -35,6 +35,7 @@ class CFileQueue
+ 		void addPacket(CString pPacket);
+ 		void clearBuffers();
+ 		void setSocket(CSocket* pSock)		{ sock = pSock; }
++		void setRoundDown(bool r)	{ out_codec.setRoundDown(r); }
+ 		void setCodec(unsigned int gen, unsigned char key)
+ 		{
+ 			out_codec.setGen(gen);
+diff --git a/src/CEncryption.cpp b/src/CEncryption.cpp
+index 002f26d..35af113 100644
+--- a/src/CEncryption.cpp
++++ b/src/CEncryption.cpp
+@@ -62,6 +62,7 @@ void CEncryption::decrypt(CString& pBuf) {
+ 		case ENCRYPT_GEN_4:
+ 		case ENCRYPT_GEN_5:
+ 		{
++			roundDownLimit(pBuf.length());
+ 			const uint8_t* iterator = reinterpret_cast<const uint8_t*>(&m_iterator);
+ 
+ 			for (int32_t i = 0; i < pBuf.length(); ++i)
+@@ -112,6 +113,7 @@ CString CEncryption::encrypt(CString pBuf)
+ 		case ENCRYPT_GEN_4:
+ 		case ENCRYPT_GEN_5:
+ 		{
++			roundDownLimit(pBuf.length());
+ 			const uint8_t* iterator = reinterpret_cast<const uint8_t*>(&m_iterator);
+ 
+ 			for (int32_t i = 0; i < pBuf.length(); ++i)
+@@ -133,6 +135,15 @@ CString CEncryption::encrypt(CString pBuf)
+ 	return pBuf;
+ }
+ 
++// Lab-only. 5.12 steps a zlib or bz2 body once per whole 4-byte group
++// (len/4, rounded down) and leaves a partial last group as it is.
++void CEncryption::roundDownLimit(int32_t len)
++{
++	if (!m_roundDown || !m_compressed) return;
++	int32_t groups = len / 4;
++	if (m_limit < 0 || groups < m_limit) m_limit = groups;
++}
++
+ void CEncryption::limit(int32_t limit)
+ {
+ 	m_limit = limit;
+@@ -140,6 +151,8 @@ void CEncryption::limit(int32_t limit)
+ 
+ int CEncryption::limitFromType(uint8_t type)
+ {
++	m_compressed = (type == 0x04 || type == 0x06);
++
+ 	// { type, limit, type2, limit2, ... }
+ 	static int limits[] = { 0x02, 0x0C, 0x04, 0x04, 0x06, 0x04 };
+ 	for (unsigned int i = 0; i < sizeof(limits) / sizeof(int); i+=2)
