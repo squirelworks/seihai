@@ -790,6 +790,9 @@ fn main() {
         scripts = SessionScripts::new(version);
         scripts_serial = u64::MAX;
         npc_link_serial = u64::MAX;
+        // 2.31 sends no NPC props for what a script set on entry; 2.22
+        // and the older builds do.
+        npc_sync.settle_first = version == ClientVersion::V231;
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.

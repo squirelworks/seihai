@@ -111,9 +111,17 @@ differs from the server's copy. Two Mirae captures of the real 2.22 settle it:
   `created` sets their looks and message (63 and 71 bytes).
 
 #261 had turned the first round off for 2.22 from the first capture alone; that is reverted, and 2.22
-keeps the 2.05 rule like the other builds. The test `npc_entry_222` feeds the server's two records from
+keeps the 2.05 rule like the other builds. The test `npc_entry` feeds the server's two records from
 `lan-222g` and checks that Seihai sends the real client's two messages byte for byte, in the server's order
 (warp NPC, then clothes NPC).
+
+**2.31 is different** (Mirae, 2026-10-31, `lan-231c`). On the same link into `testworld`, with the
+server's copy still lacking the looks and message, the real 2.31 sent no `PLI_NPCPROPS` anywhere in the
+run; its first frame after the level held only `TAMPERCHECK` and `PLAYERPROPS X2`. So on 2.31
+`ServerNpcSync::settle_first` is on: the first round after an NPC links only learns what its script set.
+Later changes (a push, `setimg`) still go out under the 2.05 rule; that part is not captured for 2.31.
+Tests: `npc_entry` (both builds, from the captured server records) and
+`on_2_31_the_first_round_after_linking_sends_nothing`.
 
 Still different:
 
