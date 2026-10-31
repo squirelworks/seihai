@@ -375,10 +375,6 @@ impl eframe::App for Launcher {
                 self.connect_list();
             }
             ui.label(&self.status);
-            ui.separator();
-            if offline_build.is_none() && ui.button("Connect to listserver").clicked() {
-                self.connect_list();
-            }
         });
 
         egui::SidePanel::right("servers")
@@ -601,5 +597,14 @@ mod tests {
         assert!(!l.port_user_set);
         assert_eq!(l.addr(V200), "listserver.graal.in:14923");
         assert_eq!(l.addr(V222), "listserver.graal.in:14922");
+    }
+
+    /// The launcher has one "Connect to listserver" button. A second copy
+    /// under the status line went unnoticed for a while (2026-10-31).
+    #[test]
+    fn one_connect_to_listserver_button() {
+        let src = include_str!("gui.rs");
+        let label = concat!("button(\"Connect to ", "listserver\")");
+        assert_eq!(src.matches(label).count(), 1);
     }
 }
