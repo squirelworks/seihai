@@ -82,6 +82,10 @@ pub fn other_pose<'a>(session: &'a OfflineSession, o: &OtherPlayer, clock_ms: u6
             "lift" => looped(p.lift.as_ref()).or_else(|| first(p.carrystill.as_ref(), 0)),
             "carry" => looped(p.carry.as_ref()),
             "dead" => first(p.dead.as_ref(), usize::MAX),
+            // Reading the M map (2.01+): `maps1` goes on to the looping
+            // `maps2`; `maps3` when the map closes. Standing without them.
+            "maps1" | "maps2" => looped(p.maps2.as_ref()).or_else(|| first(p.maps1.as_ref(), 0)).or_else(|| first(p.idle.as_ref(), 0)),
+            "maps3" => first(p.maps3.as_ref(), 0).or_else(|| first(p.idle.as_ref(), 0)),
             _ => None,
         };
         if named.is_some() {
@@ -185,6 +189,18 @@ mod tests {
         assert!(is(other_pose(&s, &other(2 + 4 * 32, Some("dance")), 0), s.poses.hurt.as_ref().unwrap(), 0));
         // Nothing loaded: none.
         assert!(other_pose(&OfflineSession::default(), &other(2, None), 0).is_none());
+    }
+
+    #[test]
+    fn a_player_reading_the_map_shows_maps2_then_maps3() {
+        let mut s = session();
+        // Without the files: standing.
+        assert!(is(other_pose(&s, &other(2, Some("maps1")), 0), s.poses.idle.as_ref().unwrap(), 0));
+        s.set_pose_gani(PoseKind::Maps1, gani(2));
+        s.set_pose_gani(PoseKind::Maps2, gani(3));
+        s.set_pose_gani(PoseKind::Maps3, gani(2));
+        assert!(is(other_pose(&s, &other(2, Some("maps1")), 4 * OTHER_STEP_MS), s.poses.maps2.as_ref().unwrap(), 1));
+        assert!(is(other_pose(&s, &other(2, Some("maps3")), 0), s.poses.maps3.as_ref().unwrap(), 0));
     }
 
     #[test]

@@ -1,12 +1,13 @@
 # Listserver login: what real clients send and what Seihai sends
 
-Source: lab captures of real clients against a private loopback listserver (2.05, 2.17.1, 2.22, 2.31), a lab capture of a real 2.00 (client side only), and the public-listserver matrix of 2026-10-25 (Seihai only). The derived note is Graal_analysis `login-frames-by-version`. No account, password, key byte or raw frame is kept here.
+Source: lab captures of real clients against a private loopback listserver (1.41 rev 1, NewMain 1.42, 2.05, 2.17.1, 2.22, 2.31), a lab capture of a real 2.00 (client side only), and the public-listserver matrix of 2026-10-25 (Seihai only). The derived note is Graal_analysis `login-frames-by-version`. No account, password, key byte or raw frame is kept here.
 
-The listserver login differs by client **generation**, in four shapes. Inside a generation every observed build sends the same bytes. The per-build token (`GNW24011` for 2.00, `GNW22122` for 2.17.1, and so on) goes to the game server, not the listserver; only shape C carries a token to the listserver, and it is one shared token.
+The listserver login differs by client **generation**, in four shapes, plus 1.41's silence (S). Inside a generation every observed build sends the same bytes. The per-build token (`GNW24011` for 2.00, `GNW22122` for 2.17.1, and so on) goes to the game server, not the listserver; only shape C carries a token to the listserver, and it is one shared token.
 
 | Shape | Real client (captured) | Frames to the listserver |
 |---|---|---|
-| A | 2.00, 2.05 | One plain zlib frame: id 0, list name `newmain`, LF. 9 bytes decoded, a 17-byte zlib stream. No account, password, token or key. |
+| S | 1.41 rev 1 | Nothing. The client connects and waits; the listserver sends the list first (Graal_analysis `client-internals/version-profiles/README.md`, lab 2026-10-30). |
+| A | 1.42 (NewMain 26), 2.00, 2.05 | One plain zlib frame: id 0, list name `newmain`, LF. 9 bytes decoded, a 17-byte zlib stream. No account, password, token or key. |
 | B | 2.17.1 | One plain zlib frame: id 0 `newmain`, then id 1 (account, password), LF. No token, key or cipher. |
 | C | 2.22, 2.31 | A plain zlib frame: id 7, key byte, `GNW30123`, `newmain`, LF. Then a gen-5 frame with id 1 (account, password), XOR-ciphered with the key. |
 | D | 3.04 | One plain zlib frame at the default level (`78 9C`): id 7, key byte, `G3D30123`, `newmain`, LF, then id 1 (account, password), LF. The replies are gen 5, as for C. |
@@ -18,8 +19,8 @@ The real clients compress at zlib's best level (`78 DA`). Seihai now does the sa
 | Profile | Shape | Basis |
 |---|---|---|
 | 1.33 to 1.39 | A (no listserver of its own; fetches the list as 2.05) | 2.05's, captured |
-| 1.41 | B | **inferred, not captured; no evidence for it** (what Seihai sent before) |
-| 1.42 | A | **inferred, not captured** (best guess from 2.00; the build's host and list name are known) |
+| 1.41 | S | captured (real 1.41 rev 1, lab). When no list arrives within 3 s (`SILENT_LIST_WAIT`), Seihai sends shape B, which 14923 answered on 2026-10-25; the real client has no such fallback |
+| 1.42 | A | captured (real NewMain 26, lab) |
 | 2.00 | A | captured (real 2.00, lab) |
 | 2.01, 2.02, 2.02 rev2, 2.03, 2.04 | A | **inferred, not captured** (best guess from 2.00 and 2.05) |
 | 2.05 | A | captured (real 2.05, lab) |
@@ -34,6 +35,7 @@ The real clients compress at zlib's best level (`78 DA`). Seihai now does the sa
 
 ## What is not known
 
+- Whether the public service speaks first to a silent 1.41 is unobserved; Seihai's fallback to shape B covers it either way.
 - No profile that sends shape A has been run on the public service. Its port is `assumed` (14923) until it is. The matrix of 2026-10-25 ran Seihai's older shape B for 2.00 and the other classic profiles, with the `78 9C` header; 14923 answered those and 14922 stayed silent.
 - The matrix's 2.05 rows are not a classic 2.05 login: the saved-version override (fixed here, `--version` now wins) made them run as a gen-5 profile.
 - Whether the public service answers shape A, or checks the zlib header, is unobserved. See `public-checks.md`, "Next matrix run".

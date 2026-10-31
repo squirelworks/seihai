@@ -210,6 +210,34 @@ impl MapFiles {
     }
 }
 
+/// Ctrl+click on the open map (2.05: the game window's mouse-down handler
+/// calls the map-click routine when Ctrl is held): the level under the pointer and the spot in
+/// it, `pixel_in_cell * 64 / cell_size` (whole tiles, as the client's
+/// integer maths gives). `None` off the grid or on an empty cell.
+/// Offline the client goes there; online it says `warpto x y level`.
+pub fn click_target(files: &MapFiles, screen: &MapScreen, (mx, my): (i32, i32)) -> Option<(String, i32, i32)> {
+    let grid = files.grid.as_ref()?;
+    let (cw, ch) = files.cell_px()?;
+    let (px, py) = (mx + screen.scroll.0, my + screen.scroll.1);
+    if px < 0 || py < 0 {
+        return None;
+    }
+    let (cx, cy) = ((px as f32 / cw).floor() as i32, (py as f32 / ch).floor() as i32);
+    let level = grid.level_at(cx, cy)?;
+    if level.eq_ignore_ascii_case("x") {
+        return None;
+    }
+    let lx = ((px as f32 - cx as f32 * cw) * 64.0 / cw) as i32;
+    let ly = ((py as f32 - cy as f32 * ch) * 64.0 / ch) as i32;
+    Some((level.to_string(), lx.clamp(0, 63), ly.clamp(0, 63)))
+}
+
+/// The chat line 2.05 sends for a Ctrl+click online (a staff command; the
+/// server ignores it from a player without the right).
+pub fn warpto_line(level: &str, x: i32, y: i32) -> String {
+    format!("warpto {x} {y} {level}")
+}
+
 /// Draw the open map over the whole of `fb`. `others` is `Some(count)`
 /// online (the "Others:" line); `pic` is `None` while the picture has not
 /// arrived (the view is black, with the title).
@@ -390,6 +418,20 @@ mod tests {
         f.sync(&MapSource::new("t.txt", "").with_off_map(1.5, 3.8), None, &read);
         assert_eq!(f.spot("elsewhere.nw", 0.0, 0.0), Some((84, 213)));
         assert_eq!(f.spot("e.nw", 0.0, 0.0), Some((56, 56)));
+    }
+
+    #[test]
+    fn ctrl_click_names_the_level_and_spot_under_the_pointer() {
+        let read = |n: &str| (n == "t.txt").then(|| b"\"a.nw\",\"b.nw\"\n\"x\",\"d.nw\"\n".to_vec());
+        let mut f = MapFiles::default();
+        f.sync(&MapSource::new("t.txt", ""), None, &read);
+        let screen = MapScreen { open: true, scroll: (0, 0) };
+        // 56 pixels a level: (84, 28) is the middle of b.nw.
+        assert_eq!(click_target(&f, &screen, (84, 28)), Some(("b.nw".into(), 32, 32)));
+        assert_eq!(click_target(&f, &MapScreen { open: true, scroll: (56, 56) }, (0, 0)), Some(("d.nw".into(), 0, 0)));
+        assert_eq!(click_target(&f, &screen, (10, 60)), None, "an empty cell");
+        assert_eq!(click_target(&f, &screen, (200, 10)), None, "off the grid");
+        assert_eq!(warpto_line("b.nw", 32, 32), "warpto 32 32 b.nw");
     }
 
     #[test]

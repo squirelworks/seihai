@@ -7,14 +7,14 @@ Code: `crates/seihai-mae/src/mapscreen.rs`, wired in `crates/seihai-mae/src/bin/
 ## Which builds have it
 
 Every 1.x and 2.x build. The 1.21 readme lists "Show Map or Cancel Reading: 'M'", 1.37 and earlier have it
-on a fixed key, 1.38 to 2.31 make it the configurable action `map` (action 7). 2.17 adds `enablefeatures`,
-whose bit 1 turns the M key off (not done in Seihai). Seihai shows it for every `seihai-mae` build.
+on a fixed key, 1.38 to 2.31 make it the configurable action `map` (action 7). `enablefeatures` (2.1+
+scripts) can turn the M key off. Seihai shows it for every `seihai-mae` build.
 
 ## What the real client does
 
 Read from the 2.05 rev 2 executable (the Ghidra export in the project's `graal-decompile/v205-delphi/`):
-the key handler at `004fc39c`, the draw routine `00502ecc`, the scroll clamp `004ff314`, the click-to-warp
-`004edd60`, the map loader `00540650` and the training-mode defaults `00535c34`. Release notes from the 2.22
+the game key handler, the map draw routine, the scroll clamp, the map-click routine called from the game
+window's mouse-down handler, the map loader and the training-mode defaults. Release notes from the 2.22
 folder (`newfeatures141.txt`, `newfeatures2001.txt`, `newfeatures2002.txt`).
 
 * **M** opens the map (overlay state 1, mode 1) or closes it when it is open. M while the item list is
@@ -33,12 +33,22 @@ folder (`newfeatures141.txt`, `newfeatures2001.txt`, `newfeatures2002.txt`).
   his nickname displayed on the M map"). "Map" is written at (20, 20) with a blue copy at (22, 22)
   under it; online, "Others: n" at (485, 25). Both texts come from the language file (`MapString1`,
   `MapString2`).
-* **Click** (2.05): offline, clicking a level on the map loads it with the player at the clicked spot;
-  online it sends `warpto x y level` (a staff command). Not done in Seihai.
+* **Ctrl+click** (2.05): the game window's mouse-down handler calls the map-click routine only while the
+  map is open and Ctrl is held (Delphi's `ssCtrl` shift bit); a plain click does nothing. Offline it loads
+  the clicked level with the player at the clicked spot (`pixel_in_cell * 64 / 56`, whole tiles); online it
+  says `warpto x y level` as chat, a staff command the server ignores from a player without the right.
+  Seihai does the same (`mapscreen::click_target`). The map stays open.
 * **Animation** (2.01 and later): opening the map while standing still or sitting sets the `maps1` gani
-  (which goes on to the looping `maps2`), so others see the player reading; closing sets `maps3`, which
-  goes back to `idle`. 2.17 removed it on Graal Kingdoms only. Not done in Seihai (no `maps*.gani` in the
-  built-in set; follow-up).
+  (which goes on to the looping `maps2` by its `SETBACKTO`), so others see the player reading; closing sets
+  `maps3`, which goes back to `idle`. In 2.05 the open sets it only from idle, walk, walkslow or sit, and the
+  close only from `maps1` or `maps2`. 2.17 removed it on Graal Kingdoms only. Seihai: `pose::MapPose`, for
+  2.01 and later, drawn when `maps1.gani` (and `maps2`/`maps3`) is in the assets or downloaded; the built-in
+  set has none, so offline without a Graal folder nothing changes. The GANI prop carries `maps1` and then
+  `maps3` on the builds with a walk cadence sender (2.17, 2.22); 2.01 to 2.05 do not send pose ganis in
+  Seihai yet. Walking, carrying, dying or being hurt ends it.
+* **`enablefeatures bits`** (2.1+ vocabulary): bit 1 off makes M do nothing (an open map still closes).
+  Seihai honours bit 1 (`OfflineSession::features`); the other bits (P, Q, R, S+A, S+D, Tab) are not
+  applied yet.
 
 ### Picture and grid
 
@@ -75,7 +85,9 @@ cache, where the real clients keep and save them (`filecache::find_in_root`).
 ## Checked
 
 * Unit tests: `mapscreen::tests` (cell size, spots, centring, the clamp, the 8-pixel scroll, drawing, file
-  loading and the off-map point), `host::tests::setmap_names_the_m_maps_picture_and_grid`,
+  loading, the off-map point, the Ctrl+click target), `host::tests::setmap_names_the_m_maps_picture_and_grid`,
+  `host::tests::enablefeatures_without_bit_1_turns_the_map_key_off`,
+  `offline::tests::the_map_reading_pose_runs_maps1_maps2_then_maps3`,
   `filecache::tests::map_level_lists_are_found_in_the_maps_folder`.
 * Offline, 2.05 under Xvfb: an assets folder with the 2.22 folder's `maps/map.png` and a 20×21 `bigmap.txt`
   with `new1.nw` at cell (5, 8). M opened the map centred on the player's head, Right scrolled it, M closed

@@ -303,6 +303,22 @@ pub fn render_view(
     view_tiles_w: u32,
     view_tiles_h: u32,
 ) -> Framebuffer {
+    render_view_tiles(session, sheet, sheet_w, sheet_h, view_tiles_w, view_tiles_h, true)
+}
+
+/// [`render_view`], with the board's tiles left out when `tiles` is false:
+/// the board is black and only the chests are drawn. 5.31r4 and 6.03r7 do
+/// that in Login mode, before their first server warp
+/// (`seihai::protocol::lobby::Lobby::login_tiles`).
+pub fn render_view_tiles(
+    session: &OfflineSession,
+    sheet: &[u8],
+    sheet_w: u32,
+    sheet_h: u32,
+    view_tiles_w: u32,
+    view_tiles_h: u32,
+    tiles: bool,
+) -> Framebuffer {
     let mut fb = Framebuffer::new(view_tiles_w * TILE_PX, view_tiles_h * TILE_PX);
     let level = match &session.current_level {
         Some(l) => l,
@@ -316,7 +332,7 @@ pub fn render_view(
     // While the player is dead the board is black: the 2.00 and 2.22
     // clients draw only the objects, the players and the HUD (lab,
     // 2026-10-30). Chests are drawn from their records and stay.
-    let board = !session.life.is_dead();
+    let board = tiles && !session.life.is_dead();
     // One extra row and column cover the sub-tile scroll.
     for ty in (0..=view_tiles_h as i32).filter(|_| board) {
         for tx in 0..=view_tiles_w as i32 {

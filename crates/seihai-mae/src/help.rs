@@ -35,6 +35,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("A", &["A"], "read a sign, open a chest, close a sign, lift a bush or rock, throw what you carry"),
     k("S / Space", &["S", "Space"], "swing the sword (others judge the hit); while carrying, throw instead"),
     k("M", &["M"], "open or close the map (arrows scroll it); close a sign"),
+    k("Ctrl+click", &["LeftCtrl", "RightCtrl"], "on the open map: go there (online: says warpto)"),
     k("Enter / T / Tab", &["Enter", "NumPadEnter", "T", "Tab"], "open the chat bar; Enter sends what you typed"),
     k("Backspace", &["Backspace"], "delete a typed letter"),
     k("Up / Down", &[], "in the chat bar: earlier lines (1.39 and later)"),
