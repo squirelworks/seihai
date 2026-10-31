@@ -59,7 +59,7 @@ This creates the binary at:
 
 A plain `cargo build --release` builds every package: `seihai`, `seihai-mae`, `seihai-ato` and the level editor. `cargo build --release -p seihai` builds only the `seihai` launcher, which cannot play anything without `seihai-mae` beside it, so use the plain command.
 
-`seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client) or `seihai-ato` (the Torque / 3.x line, which does not draw yet and says so), passing every argument through. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. Picking 3.04 or 3.153 in `seihai-mae`'s start window (under "All versions") closes it and opens `seihai-ato`'s 3.x start window with the account and password filled in. Keep the three binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
+`seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client) or `seihai-ato` (the Torque / 3.x line, which does not draw yet and says so), passing every argument through. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. The start window's Version list shows the major versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22, 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7); "All versions" adds every other build and the offline-only ones. Picking a 3.x or later build there closes it and opens `seihai-ato`'s 3.x start window with the account and password filled in. Keep the three binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
 
 `cargo build` only builds. It does not start the program. To build and run in one step:
 

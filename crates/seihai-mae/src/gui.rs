@@ -124,7 +124,7 @@ impl Launcher {
             servers: Vec::new(),
             selected: None,
             error,
-            show_advanced: false,
+            show_advanced: s.version.as_deref().is_some_and(needs_all_versions),
             direct: s
                 .direct_server
                 .clone()
@@ -302,7 +302,7 @@ impl eframe::App for Launcher {
             let shown: &[ClientVersion] = if self.show_advanced {
                 ClientVersion::all_versions()
             } else {
-                ClientVersion::main_versions()
+                ClientVersion::reborn_versions()
             };
             egui::ComboBox::from_id_salt("version")
                 .selected_text(&self.version)
@@ -519,9 +519,31 @@ pub fn pick_level(start: &std::path::Path, exts: &[&str]) -> Option<std::path::P
     picked
 }
 
+/// A saved version the default list does not show (a minor or
+/// offline-only build): the launcher opens with "All versions" ticked so
+/// the pick is still in the list.
+fn needs_all_versions(label: &str) -> bool {
+    ClientVersion::from_label(label).is_none_or(|v| !v.listed_by_default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A saved Reborn version opens the short list; a minor, offline-only or
+    /// unknown one opens "All versions".
+    #[test]
+    fn saved_minor_version_opens_all_versions() {
+        for l in ["1.39", "2.05", "2.22", "3.04", "5.00r7", "6.03r7"] {
+            assert!(!needs_all_versions(l), "{l}");
+        }
+        for l in ["2.00", "2.1", "3.153", "5.24r4", "6.03r7 Linux", "no such build"] {
+            assert!(needs_all_versions(l), "{l}");
+        }
+        if let Some(b) = offline_builds::OFFLINE_BUILDS.first() {
+            assert!(needs_all_versions(b.label), "{}", b.label);
+        }
+    }
 
     const V200: ClientVersion = ClientVersion::V200;
     const V205: ClientVersion = ClientVersion::V205;
