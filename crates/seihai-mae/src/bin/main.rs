@@ -1528,6 +1528,11 @@ fn main() {
     } else {
         None
     };
+    // The messages sent go to the same log (the login line itself is not
+    // written: it has the password).
+    if let (Some(c), Some(f)) = (conn.as_mut(), packet_log.as_ref().and_then(|f| f.try_clone().ok())) {
+        c.set_send_log(Box::new(f));
+    }
     // Each unique script diagnostic is written once. The same unhandled
     // effect otherwise fills the file every tick.
     let mut seen_debug: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1671,8 +1676,8 @@ fn main() {
                         frames_seen += 1;
                         if let Some(f) = packet_log.as_mut() {
                             use std::io::Write;
-                            let id = body.first().copied().unwrap_or(0);
-                            let _ = writeln!(f, "recv id {id} len {}", body.len());
+                            // The frame's first message, as the sends are logged.
+                            let _ = writeln!(f, "recv frame len {}: {}", body.len(), seihai::net::describe_message(&body));
                             let _ = f.flush();
                         }
                         net_state.apply_body(&body);
@@ -2617,10 +2622,18 @@ fn main() {
         session.set_focused(window.is_active() || !seihai::offline::focus_pauses(version));
         // The hidden and paused bits go out whenever they change (D, A, a
         // throw from hiding, which is seen one frame later, P, or focus).
-        // A 4.x build tells nothing before its after-burst frames (the
-        // server's STATUS is not in yet).
+        // Online, not before the server has sent the level: a window that
+        // opens without the focus sent STATUS (paused, on a zero base) and
+        // the default X/Y in the frames right after the login line, before
+        // the server had accepted it. No real client sends anything there
+        // (the real 2.05 sends nothing until the server's burst), and it came
+        // just before 2.05 kicks for invalid packets on public servers
+        // (2026-10-31). The bits go out once the level is in. A 4.x build
+        // also waits for its after-burst frames (the server's STATUS is not
+        // in yet).
+        let status_ready = conn.is_none() || net_state.current_level_name().is_some();
         let burst_owed = lobby_burst.as_ref().is_some_and(|lb| lb.pending());
-        if !burst_owed && session.hide_status() | session.pause_status() != last_hide_status {
+        if status_ready && !burst_owed && session.hide_status() | session.pause_status() != last_hide_status {
             last_hide_status = session.hide_status() | session.pause_status();
             if let Some(c) = conn.as_mut() {
                 let (status, with_pos) = seihai::offline::pause_message_bits(version, status_base, last_hide_status);
@@ -3289,6 +3302,9 @@ fn main() {
                         login_since = Instant::now();
                         showimg = if send_showimg { ShowImgSender::for_version(version) } else { None };
                         showimg_clock = Instant::now();
+                        if let Some(f) = packet_log.as_ref().and_then(|f| f.try_clone().ok()) {
+                            sess.conn.set_send_log(Box::new(f));
+                        }
                         match sess.conn.spawn_reader_timed() {
                             Ok(rx) => frames = Some(rx),
                             Err(e) => eprintln!("reader failed: {e}"),
