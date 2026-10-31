@@ -54,6 +54,11 @@ PLO_BADDYPROPS / PLI_BADDYPROPS (15): `id`, then `prop, value` pairs.
   * It happened while the player was swinging at a soldier.
   * In the client, a sword clash puts the player into a pushed state, and Seihai does not do that yet. That is the likely cause, but it is not proven.
 * That capture has no baddy getting hurt, so it says nothing about the knockback.
+* The real 2.22 leader's sword kill (`lan-222kill-baddy.txt`, testbaddy) matches Seihai byte for byte (test `the_kill_matches_the_2_22_leader`):
+  * Each hurt message carries the new power with an empty image, mode 3 and counter 7. The baddy has already taken its first knockback step in that think.
+  * Then 5 more steps follow, 100 ms apart.
+  * After those comes counter 1, then mode 5 with counter 14, counting down to 0.
+  * The leader sends nothing after that. The server sends mode 9 about 1.2 s later.
 * The leader stores each baddy's props on its first think and sends only the changed props after that.
 * For a custom image the leader sends the type's default image name. GServer notes "client resets the custom image when the baddy is hurt".
 
@@ -74,7 +79,7 @@ PLI_BADDYHURT (16) → PLO_BADDYHURT (27): `id`, `floor((dx + 4) * 16)`, `floor(
 * **Touching the player** costs 1 half heart, or 2 for the gold soldier. The player's hurt time stops a second hit straight away.
 * **Sword:** the sword's power, tested while the swing is 50 to 200 ms old. A soldier (types 0, 1, 2, 7) that faces the player within 2 to 5 tiles blocks it. That is a clash: the sound is `swordon.wav`, the baddy is pushed at 0.8, and it takes no damage.
 * **Thrown objects:** `2 * 3`, or `2 * 1` for a bush or a bomb.
-* **Knockback:** a hurt pushes the baddy 2.0 tiles a think while its counter is above 2, which is 6 thinks. A step into a wall is undone. **To be checked in the lab:** the client's constant is 2.0, but on open ground this flings the baddy about 12 tiles.
+* **Knockback:** a hurt pushes the baddy 2.0 tiles a think while its counter is above 2, which is 6 thinks. A step into a wall is undone. The 2.22 kill capture confirms it: 6 steps of +3 or +4 half tiles in x and −2 or −3 in y.
 
 ## Drawing
 
