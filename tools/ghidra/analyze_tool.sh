@@ -163,6 +163,23 @@ get_stat() {
   echo '```'
   echo
 
+  # Seihai binding rules: no FUN_/binary offsets/public hosts in committed docs.
+  # Local artifacts under this out dir may still carry addresses; SUMMARY.md must not.
+  scrub_host() {
+    sed -E \
+      -e 's#[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]"]*[Gg][Rr][Aa][Aa][Ll][^[:space:]"]*#<public-url>#g' \
+      -e 's#\b[[:alnum:]._-]*graalonline\.com\b#<public-host>#gI'
+  }
+  names_only_from_stat() {
+    # "name@addr(sz=N) | ..." -> backtick-quoted unique names, drop FUN_/entry
+    local raw="$1"
+    [[ -z "$raw" ]] && return 0
+    echo "$raw" | tr '|' '\n' | sed -E 's/@[0-9A-Fa-f]+.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+      | grep -Ev '^(FUN_|FID_conflict:|entry$|thunk_)' | grep -E '^[A-Za-z_~]' \
+      | awk '!seen[$0]++' | head -n 25 \
+      | sed 's/.*/`&`/' | paste -sd ', ' -
+  }
+
   if [[ -f "$STATS" ]]; then
     echo "## Ghidra program"
     echo
@@ -171,7 +188,6 @@ get_stat() {
     echo "| Format | $(get_stat executable_format) |"
     echo "| Language | $(get_stat language) |"
     echo "| Compiler | $(get_stat compiler) |"
-    echo "| Image base | $(get_stat image_base) |"
     echo "| Functions | $(get_stat function_count) (internal $(get_stat internal_function_count)) |"
     echo "| Imports | $(get_stat import_count) |"
     echo "| Exports / entries | $(get_stat export_count) |"
@@ -185,26 +201,28 @@ get_stat() {
     echo
   fi
 
-  echo "## Top / key functions"
+  echo "## Notable symbols (names only)"
   echo
-  if [[ -n "$(get_stat top_functions)" ]]; then
-    echo "**Largest internal:** $(get_stat top_functions)"
+  _names="$(names_only_from_stat "$(get_stat key_functions)")"
+  if [[ -z "$_names" ]]; then
+    _names="$(names_only_from_stat "$(get_stat top_functions)")"
+  fi
+  if [[ -n "$_names" ]]; then
+    echo "Observed application/helper symbols (no addresses): ${_names}."
+    echo
+  else
+    echo "Most symbols were anonymous compiler stubs; prefer imports and strings for behaviour."
     echo
   fi
-  if [[ -n "$(get_stat key_functions)" ]]; then
-    echo "**Decompile targets:** $(get_stat key_functions)"
-    echo
-  fi
-  if [[ -f "$OUT_DIR/functions.txt" ]]; then
-    echo "See \`functions.txt\` / \`functions.csv\` for the full list."
-    echo
-  fi
+  echo "Full local function lists stay in untracked \`functions.txt\` / \`functions.csv\` under the analysis dir."
+  echo
 
   echo "## Imports"
   echo
   if [[ -f "$OUT_DIR/imports.txt" && -s "$OUT_DIR/imports.txt" ]]; then
     echo '```'
-    head -n 80 "$OUT_DIR/imports.txt"
+    # Strip Ghidra external addresses / ordinals from committed SUMMARY lines.
+    head -n 80 "$OUT_DIR/imports.txt" | sed -E 's/ @ EXTERNAL:[0-9A-Fa-f]+//; s/ @[0-9A-Fa-f]{4,}//g'
     echo '```'
     echo
     local_count=$(wc -l <"$OUT_DIR/imports.txt" | tr -d ' ')
@@ -221,7 +239,7 @@ get_stat() {
   echo
   if [[ -f "$OUT_DIR/exports.txt" && -s "$OUT_DIR/exports.txt" ]]; then
     echo '```'
-    head -n 40 "$OUT_DIR/exports.txt"
+    head -n 40 "$OUT_DIR/exports.txt" | sed -E 's/ @[0-9A-Fa-f]+ / /g; s/\bFUN_[0-9A-Fa-f]+\b//g'
     echo '```'
     echo
   else
@@ -235,14 +253,14 @@ get_stat() {
   echo
   if [[ -f "$OUT_DIR/strings_interesting.txt" && -s "$OUT_DIR/strings_interesting.txt" ]]; then
     echo '```'
-    head -n 60 "$OUT_DIR/strings_interesting.txt"
+    head -n 60 "$OUT_DIR/strings_interesting.txt" | sed -E 's/^[0-9A-Fa-f]{4,}[[:space:]]+//' | scrub_host
     echo '```'
     echo
   elif [[ -f "$PRELIM/strings_interesting_raw.txt" && -s "$PRELIM/strings_interesting_raw.txt" ]]; then
     echo "_Ghidra string pass empty; raw \`strings\` filter:_"
     echo
     echo '```'
-    head -n 60 "$PRELIM/strings_interesting_raw.txt"
+    head -n 60 "$PRELIM/strings_interesting_raw.txt" | scrub_host
     echo '```'
     echo
   else
@@ -250,20 +268,12 @@ get_stat() {
     echo
   fi
 
-  echo "## Decompiled C"
+  echo "## Decompile note"
+  echo
+  echo "Decompiled C may be produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour."
   echo
   if [[ -f "$OUT_DIR/decompiled/INDEX.txt" && -s "$OUT_DIR/decompiled/INDEX.txt" ]]; then
-    echo "| File | Function | Address |"
-    echo "| --- | --- | --- |"
-    while IFS=$'\t' read -r fn name addr; do
-      [[ -z "${fn:-}" ]] && continue
-      echo "| \`$fn\` | \`$name\` | \`$addr\` |"
-    done <"$OUT_DIR/decompiled/INDEX.txt"
-    echo
-    echo "Read these for CLI parsing, config paths, and protocol handlers when rebuilding/rehosting."
-    echo
-  else
-    echo "_No decompilation output. Check script log._"
+    echo "_Local \`decompiled/\` present (gitignored) — do not paste into MIT crates or this SUMMARY._"
     echo
   fi
 

@@ -36,20 +36,17 @@ Client **auto-dig / AFK shovel helper** (howto by Selzar). Identical truncated U
 | Format | Portable Executable (PE) |
 | Language | x86:LE:32:default |
 | Compiler | windows |
-| Image base | 00400000 |
 | Functions | 1 (internal 1) |
 | Imports | 0 |
 | Exports / entries | 2 |
 | Interesting strings | 0 |
 | Decompiled funcs | 1 |
 
-## Top / key functions
+## Notable symbols (names only)
 
-**Largest internal:** entry@0044a6b0(sz=66)
+Most symbols were anonymous compiler stubs; prefer imports and strings for behaviour.
 
-**Decompile targets:** entry@0044a6b0
-
-See `functions.txt` / `functions.csv` for the full list.
+Full local function lists stay in untracked `functions.txt` / `functions.csv` under the analysis dir.
 
 ## Imports
 
@@ -58,8 +55,8 @@ _None exported (static binary, failed analysis, or no externals)._
 ## Exports / entry points
 
 ```
-entry @ 0044a6b0 [Function]
-entry @ 0044a6b0 [function]
+entry [Function]
+entry [function]
 ```
 
 ## Interesting strings
@@ -83,13 +80,9 @@ OSTYPf._XP'VERSION7
 /mVirmVir&d
 ```
 
-## Decompiled C
+## Decompile note
 
-| File | Function | Address |
-| --- | --- | --- |
-| `entry_0044a6b0.c` | `entry` | `0044a6b0` |
-
-Read these for CLI parsing, config paths, and protocol handlers when rebuilding/rehosting.
+Decompiled C was produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour.
 
 ## Rebuild / rehost checklist
 
