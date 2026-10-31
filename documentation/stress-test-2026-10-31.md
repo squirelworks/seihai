@@ -164,15 +164,19 @@ may be caches filling; I did not trace it further.
 
 ### Reported, not fixed
 
-7. **5.12 level links go unanswered on GServer-v2 (`warp not answered`,
-   15 times in b2).** With item 6 fixed, the capture shows a well-formed
-   `LEVELWARP` to `st_r0.nw`, but the server never answers. 5.00r7, 5.24r4
-   and 6.03r7 take the same link. The likely cause: Seihai steps the 5.12
-   cipher with the round-down count, as recorded for the real 5.12, but
-   gs2lib's gen-5 codec always rounds up. The two sides then drift on the
-   first short compressed frame, and the server drops what follows. If the
-   real 5.12 does round down, the real 5.12 should fail the same way on
-   GServer-v2. A real 5.12 against the lab GServer would settle it.
+7. **5.12 level links went unanswered on GServer-v2 (`warp not answered`,
+   15 times in b2). Fixed in a follow-up.** 5.12 sends every body
+   zlib-compressed and steps the cipher once per whole 4-byte group
+   (`len / 4`), while gs2lib steps once per started group. The two agree
+   only when the body is a multiple of 4 or 16 bytes or longer. The first
+   short body with any other length put the server's cipher a step ahead,
+   and it could read nothing after that. Seihai now pads 5.12's zlib
+   streams to a multiple of 4 with empty stored blocks, which any zlib
+   reader inflates the same and which a round-down server reads as before.
+   In the lab, the old build's link walk got 2 `warp not answered`. The
+   fixed build followed the link at once, and a 4-minute run of four 5.12
+   clients with churn had none. The real 5.12 has no such padding, so it
+   would still fail this way on GServer-v2.
 8. **Each client uses about 25–30 % of a core** at 60 fps under Xvfb. Most
    of it is the software draw at 2x and `present`, so about 10 clients fill
    a 4-core VM. Past that, frames go over 100 ms: 174 times in b1–b4, and
