@@ -75,6 +75,12 @@ impl Game {
         }
     }
 
+    /// The player's position in tiles, for the view, once a level is in.
+    pub fn position(&self) -> Option<String> {
+        self.session.current_level.as_ref()?;
+        Some(format!("{:.1}, {:.1}", self.session.player_x, self.session.player_y))
+    }
+
     /// One walk step for the arrows held, at the session's pace. `(dx, dy)`
     /// are -1, 0 or 1 per axis.
     pub fn walk(&mut self, dx: i8, dy: i8, now: Instant) {
@@ -119,6 +125,10 @@ impl Game {
             let bar = egui::Rect::from_min_size(origin, egui::vec2(CANVAS.0, 18.0));
             ui.painter().rect_filled(bar, 0.0, egui::Color32::from_black_alpha(160));
             ui.put(bar, egui::Label::new(egui::RichText::new(&self.status).color(egui::Color32::WHITE).size(12.0)));
+            if let Some(pos) = self.position() {
+                let at = egui::Rect::from_min_size(origin + egui::vec2(0.0, 18.0), egui::vec2(CANVAS.0 - 6.0, 16.0));
+                ui.painter().text(at.right_top(), egui::Align2::RIGHT_TOP, pos, egui::FontId::monospace(12.0), egui::Color32::WHITE);
+            }
         });
         // Walking needs frames while a key is held; otherwise poll the
         // network now and then.
@@ -236,6 +246,7 @@ mod tests {
         g.poll();
         assert_eq!((g.session.player_x, g.session.player_y), (12.5, 40.0));
         assert!(g.status.starts_with("level lab3x.nw"));
+        assert_eq!(g.position().as_deref(), Some("12.5, 40.0"));
         tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), arrival(None))).unwrap();
         g.poll();
         assert_eq!((g.session.player_x, g.session.player_y), NO_START);
@@ -256,6 +267,11 @@ mod tests {
         assert_eq!(g.session.player_x, x);
         g.walk(0, 1, t0 + g.session.step_interval());
         assert!(g.session.player_y > 30.0);
+    }
+
+    #[test]
+    fn no_position_before_a_level() {
+        assert_eq!(game().0.position(), None);
     }
 
     #[test]
