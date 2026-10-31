@@ -191,8 +191,18 @@ may be caches filling; I did not trace it further.
    no exits, stalls or log lines of note. The arena clients stay near
    23 %: their NPCs change the picture about 16 times a second, close to
    the 2.x 50 ms game frame, and each frame sent is still a full
-   `XPutImage` (44 % of that client's CPU). Going lower needs a window
-   backend that uses shared memory (MIT-SHM) instead of minifb's X11 path.
+   `XPutImage` (44 % of that client's CPU).
+   **Then on X11 the frames go through shared memory.** `ShmWindow` hands
+   them to the window minifb opened through softbuffer's X11 backend,
+   which uses MIT-SHM (or a plain `PutImage` when the server has none);
+   input still comes through minifb. Seihai does the scaling itself, and
+   it picks the same pixels as minifb (screenshots of both paths match
+   exactly). On Wayland minifb already uses `wl_shm`, so it keeps
+   minifb's path there, as do Windows and macOS. `SEIHAI_NO_SHM=1`
+   turns it off. Offline, a walking client went from 17 % to 7 %. In the
+   same lab run the mean went from 16 % to 11 %, and the arena clients
+   from 23 % to 15–16 %. RSS is about 4 MB higher, which is the shared
+   segment, and each client holds one more fd.
 9. **The 1.41r1, 2.22 and 5.31r4 leaders send `BADDYPROPS` for every baddy
    every think, even when unchanged.** At 12 baddies that is 120 msgs/s
    from one client. **Checked since: this is what the real clients do.**
