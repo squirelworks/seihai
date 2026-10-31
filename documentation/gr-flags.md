@@ -57,6 +57,16 @@ Lab check of Seihai 2.22, same server, same walk, 2026-10-30:
 The profile field `protocol.gr_flags`, `protocol/grflags.rs` and its per-tick
 tracker are gone. The flag messages are built in `protocol/flagset.rs`.
 
+## 2.31 and the 4.x builds send `client.` flags only
+
+The real 2.31 (cloud lab, 2026-10-31, `lab-231-walk.md`) had `-gr_movement` and
+sent no `FLAGSET` while walking. A probe weapon (`setstring gr.probe,1`,
+`setstring client.probe,2`, `set probeflag` on `playerenters`) got only
+`client.probe=2` from it, the same as from the real 4.04r2 (`v4-profiles.md`).
+So Seihai 2.3, 2.31 and the Login-lobby builds drop every flag that does not
+start with `client.` (`net::sends_client_flags_only`). 2.22 and older, and the
+3.x builds (not probed), still send every flag.
+
 ## Still different from the real client
 
 * **One tick late.** The real 2.22 runs the weapon's timeout before it sends that
