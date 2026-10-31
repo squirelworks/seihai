@@ -5,6 +5,9 @@ speak its protocol generation. Each version has one row in
 `client/src/protocol/profile.rs` (`PROFILES`, resolved from `chain.rs`), and the rest of the client reads
 that row instead of matching on versions.
 
+The builds before 1.21 and the NewWorld betas have no row; they are listed as
+offline-only builds (`offline-only-builds.md`).
+
 ## What a row holds
 
 | Group | Fields | Used by |

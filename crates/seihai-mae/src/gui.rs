@@ -1,6 +1,7 @@
 //! Settings and connect window.
 
 use crate::net::Connection;
+use crate::protocol::offline_builds::{self, OfflineBuild};
 use crate::protocol::{ClientVersion, ServerList};
 use crate::settings::Settings;
 use eframe::egui;
@@ -106,7 +107,7 @@ impl Launcher {
         Self {
             list: ListEndpoint::from_saved(
                 s.listserver.as_deref(),
-                s.version.as_deref().and_then(ClientVersion::from_label).unwrap_or(ClientVersion::V205),
+                s.version.as_deref().and_then(ClientVersion::from_label_or_offline).unwrap_or(ClientVersion::V205),
             ),
             account: s.account.clone().unwrap_or_default(),
             password: s.password.clone().unwrap_or_default(),
@@ -133,9 +134,9 @@ impl Launcher {
 
     /// Load the per-version asset folder for the selected version.
     fn with_version_assets(mut self) -> Self {
-        let label = self.version_enum().label();
+        let label = self.assets_label().to_string();
         self.version_assets = Settings::load()
-            .assets_for(label)
+            .assets_for(&label)
             .map(|p| p.display().to_string())
             .unwrap_or_default();
         self
@@ -143,6 +144,10 @@ impl Launcher {
 
     /// Save the form and the chosen server, then close.
     fn join(&self, ctx: &egui::Context, name: &str, addr: String) {
+        // An offline-only build never joins a server (its row is only `plays_as`).
+        if self.offline_build().is_some() {
+            return;
+        }
         let mut s = Settings::load();
         s.account = Some(self.account.clone());
         s.password = Some(self.password.clone());
@@ -178,10 +183,25 @@ impl Launcher {
     }
 
     fn version_enum(&self) -> ClientVersion {
-        ClientVersion::from_label(&self.version).unwrap_or(ClientVersion::V205)
+        ClientVersion::from_label_or_offline(&self.version).unwrap_or(ClientVersion::V205)
+    }
+
+    /// The selected offline-only build, if one is picked.
+    fn offline_build(&self) -> Option<&'static OfflineBuild> {
+        offline_builds::by_label(&self.version)
+    }
+
+    /// The label the per-version asset folder is saved under: the offline
+    /// build's own, so it never shares its `plays_as` row's folder.
+    fn assets_label(&self) -> &str {
+        self.offline_build().map_or(self.version_enum().label(), |b| b.label)
     }
 
     fn connect_list(&mut self) {
+        if let Some(b) = self.offline_build() {
+            self.status = b.reason();
+            return;
+        }
         let version = self.version_enum();
         let list_version = version.list_version();
         if list_version != version {
@@ -287,25 +307,38 @@ impl eframe::App for Launcher {
                         };
                         ui.selectable_value(&mut self.version, p.label.to_string(), text);
                     }
+                    if self.show_advanced {
+                        ui.separator();
+                        for b in offline_builds::OFFLINE_BUILDS {
+                            ui.selectable_value(&mut self.version, b.label.to_string(), b.display());
+                        }
+                    }
                 });
             ui.checkbox(&mut self.show_advanced, "All versions");
             if self.version != before {
                 let v = self.version_enum();
                 self.list.follow_version(v);
-                let label = v.label();
+                let label = self.assets_label().to_string();
                 self.version_assets = Settings::load()
-                    .assets_for(label)
+                    .assets_for(&label)
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
-                if crate::ato::runs_in_ato(v) {
+                if self.offline_build().is_none() && crate::ato::runs_in_ato(v) {
                     self.hand_to_ato(ctx, v);
                 }
             }
             let profile = self.version_enum().profile();
-            ui.small(profile.summary());
-            ui.label(format!("Assets for {} only (optional)", profile.label));
+            let offline_build = self.offline_build();
+            if let Some(b) = offline_build {
+                ui.small(format!("{} Reads {}; plays offline with the {} rules.", b.reason(), b.levels, profile.label));
+                ui.label(format!("Assets for {} only (point this at its install)", b.label));
+            } else {
+                ui.small(profile.summary());
+                ui.label(format!("Assets for {} only (optional)", profile.label));
+            }
             ui.text_edit_singleline(&mut self.version_assets);
-            if let ServerList::Direct { default } = profile.ui.server_list {
+            let direct = if offline_build.is_some() { None } else { Some(profile.ui.server_list) };
+            if let Some(ServerList::Direct { default }) = direct {
                 ui.separator();
                 ui.label(format!("{} connects straight to a game server (default was {default})", profile.label));
                 ui.horizontal(|ui| {
@@ -326,16 +359,16 @@ impl eframe::App for Launcher {
                 s.offline = Some(true);
                 s.version = Some(self.version.clone());
                 s.assets = Some(self.assets.clone().into());
-                s.set_assets_for(self.version_enum().label(), &self.version_assets);
+                s.set_assets_for(self.assets_label(), &self.version_assets);
                 s.save();
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
-            if ui.button("Connect to listserver").clicked() {
+            if offline_build.is_none() && ui.button("Connect to listserver").clicked() {
                 self.connect_list();
             }
             ui.label(&self.status);
             ui.separator();
-            if ui.button("Connect to listserver").clicked() {
+            if offline_build.is_none() && ui.button("Connect to listserver").clicked() {
                 self.connect_list();
             }
         });

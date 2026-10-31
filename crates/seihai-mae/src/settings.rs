@@ -173,7 +173,7 @@ impl Settings {
     /// `--version` was given, even if it names the default.
     pub fn version_with(&self, cli: Option<crate::protocol::ClientVersion>) -> crate::protocol::ClientVersion {
         use crate::protocol::ClientVersion;
-        cli.or_else(|| self.version.as_deref().and_then(ClientVersion::from_label)).unwrap_or(ClientVersion::V205)
+        cli.or_else(|| self.version.as_deref().and_then(ClientVersion::from_label_or_offline)).unwrap_or(ClientVersion::V205)
     }
 
     /// Whether sound effects are on. The command line wins over the
