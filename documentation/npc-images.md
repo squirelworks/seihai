@@ -178,9 +178,9 @@ frame.
 Every client from 1.34 to 2.22 (1.34, 1.38, 1.39, 2.05 rev 2 and 2.22
 checked: the same `TMNGAnimation` unit, the same step and tick code) and
 `gif2mng.exe` read `.mng` with Graal's own loader, not with libmng. Read
-from `Graal_222.exe` (loader 0x58A3E4, step 0x58ACEC, frame draw 0x58AE60,
-tick 0x585083) and `gif2mng.exe` (loader 0x4146A4). `assets::mng` now
-follows it; the first version (PR #322) read the files as standard MNG.
+from `Graal_222.exe` (the loader, the step to the next frame, the frame
+draw, and the game-tick handler that counts frames down) and from
+`gif2mng.exe` (the same loader). `assets::mng` now follows it; the first version (PR #322) read the files as standard MNG.
 
 | | Standard MNG | Graal |
 |---|---|---|
