@@ -2,8 +2,9 @@
 # Seihai: one online run with a packet capture. Linux.
 # The Windows equivalent is tools/capture-run.ps1; keep the two in step.
 #
-# Usage: tools/capture-run.sh [options] [-- extra seihai args]
-#   --target HOST:PORT    listserver or gserver (default listserver.graal.in:14922)
+# Usage: tools/capture-run.sh --target HOST:PORT [options] [-- extra seihai args]
+#   --target HOST:PORT    listserver or gserver (required; there is no default,
+#                         so a run never goes to a public server by accident)
 #   --version V           client version (default 2.22)
 #   --account A           account (default guest)
 #   --password-file F     read the password from F (first line); otherwise
@@ -11,7 +12,7 @@
 #   --seihai PATH         the binary (default target/release/seihai)
 #   --out DIR             parent folder for the output (default _debug)
 #
-# Example: tools/capture-run.sh --target listserver.graal.in:14922 --version 2.22
+# Example: tools/capture-run.sh --target 192.168.1.20:14802 --version 2.05
 #
 # Run it from the repo root. Needs tcpdump; sudo is used only when tcpdump
 # lacks capture rights. Seihai's debug folder (packets.log, script.log) is
@@ -20,7 +21,7 @@
 set -u
 umask 077
 
-TARGET="listserver.graal.in:14922"
+TARGET=""
 VERSION="2.22"
 ACCOUNT="guest"
 PWFILE=""
@@ -44,6 +45,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+[ -n "$TARGET" ] || { echo "--target HOST:PORT is required (try --help)"; exit 1; }
+case "$TARGET" in *:*) ;; *) echo "--target must be HOST:PORT"; exit 1 ;; esac
 HOST="${TARGET%%:*}"
 PORT="${TARGET##*:}"
 FILTER="tcp and (portrange $PORTRANGE or port $PORT)"
