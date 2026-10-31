@@ -66,7 +66,9 @@ PLI_ARROWADD (9): the leader sends each baddy shot as `x * 2`, `y * 2`, `dir`, `
 * The octopus's rock (sprite 131) goes through the same function in the client, so Seihai sends it the same way.
 * A rock has not been seen on the wire.
 
-PLI_BADDYHURT (16) → PLO_BADDYHURT (27): `id`, `floor((dx + 4) * 16)`, `floor((dy + 4) * 16)`, `power`. `dx, dy` is the player's centre minus the baddy's centre, clamped to ±4. A follower that hits a baddy sends this message, and the leader applies the hurt. **The byte order is from the code and has not been seen on the wire.**
+PLI_BADDYHURT (16) → PLO_BADDYHURT (27): `id`, `floor((dx + 4) * 16)`, `floor((dy + 4) * 16)`, `power`. `dx, dy` is the player's centre minus the baddy's centre, clamped to ±4. A follower that hits a baddy sends this message, and the leader applies the hurt. A real 2.22 follower sent `21 28 60 21` (`lan-222hurt`). It stood at 42, 45 facing east, and the baddy was at its spawn point 46, 46, so dx is −3.5 and dy is 0.
+* Next the follower sends PLI_BADDYPROPS `id, 4 power "" , 5 3` (`21 24 21 20 25 23`), which the server echoes to the others.
+* Seihai sends both, byte for byte (test `a_follower_hit_matches_the_2_22_capture`).
 
 ## Geometry and damage
 
