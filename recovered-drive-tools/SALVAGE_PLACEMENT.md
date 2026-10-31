@@ -131,4 +131,17 @@ Otherwise: update Placement in `INVENTORY.md` and stop. **Do not** open a seihai
 | Ghidra | `ghidra-analysis/<tool>/` markdown + optional private DB | fill Placement using this doc |
 | Salvage / rewrite | clean-room Rust only | branch in `/workspace/seihai-servertools`, cores first |
 
-**Concrete placements (2026-10-31 inventory pass):** see [`INVENTORY.md`](./INVENTORY.md). Summary — Server Lister / GS2 Compiler / gserver sources → `analysis-only` (never commit binaries/GPL); Auto Key / Digger → `out-of-scope`; Character Designer / charactergenerator → `out-of-scope / seihai (client)`; DClientSetup1198.zip → `stay-staged (bad archive)`. Ghidra batch under `ghidra-analysis/` (ListServer, gserver13 done; more running).
+**Concrete placements (2026-10-31 full corpus):** see [`INVENTORY.md`](./INVENTORY.md) (~308 downloaded / ~2.8 GiB staged).
+
+| Class | Placement |
+|---|---|
+| GServer / Server Lister / GS2 Compiler | `analysis-only` (never commit binaries/GPL into MIT) |
+| **RC** / **NC** | **`seihai-rc`** (and npcserver for NC DB) — analysis until clean-room; pin by tag for `lat-core` RemoteFiles |
+| **LAT** editors / converters / generators | offline → **`seihai`**; live → **`lat-core`** after shared drawing + RC |
+| Lab / status / start / config helpers | **`setup-core`** |
+| GAT / Gani / NW2PNG / viewers | **`seihai`** client/assets (mostly analysis-only binaries) |
+| Auto Key / Digger / cracked / packet loggers | `out-of-scope` |
+| Character Designer / charactergenerator / Main Client Archive | `out-of-scope / seihai (client)` |
+| DClientSetup1198.zip | `stay-staged (bad archive)` |
+
+Ghidra markdown under `ghidra-analysis/` (gserver family, ListServer/serverlist3, BytecodeViewer, GCD/GChar, DClient setup, trainers). Next thin notes: RC / NC PEs — static only, never execute.
