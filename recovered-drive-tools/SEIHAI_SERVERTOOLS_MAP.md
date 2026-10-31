@@ -190,3 +190,6 @@ Classic tool notes already extracted: `Graal_analysis/tools/{graaleditor,graalsh
 - **New LAT/live editors & world checks** → `crates/lat-core/` (+ CLI `check` / later editor commands, app Levels/NPCs/Ganis/Check pages)
 - **Parsers, offline editor, drawing, RC wire** → sibling `seihai` / `seihai-rc` first, consume by tag
 - **Raw Drive dumps** → stay in `/workspace/recovered-drive-tools/`; only clean-room rewrites land in the MIT repo
+
+**Operational bridge (decision tree, no-raw-binaries rule, inventory/ghidra checklist):**
+[`SALVAGE_PLACEMENT.md`](./SALVAGE_PLACEMENT.md). Prefer that file when assigning Placement for a new drop; keep this map as the structure reference.
