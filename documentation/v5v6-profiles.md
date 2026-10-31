@@ -63,6 +63,21 @@ Lab check, 2026-10-31, in the cloud container: the prebuilt lab pack (`seihai-la
 | 5 s | `disconnected: Account is already in use.` | refused at 0, 1 and 3 s; in on retry 3 (about 7 s) |
 | 40 s (longer than the whole schedule) | not run | refused five times; in on retry 5 (about 31 s), by the 30 s takeover |
 
+## 5.00r7 against stock gs2lib, real client beside it (2026-10-31)
+
+A second check of the 5.00r7 row only, run on top of #291. Server: the prebuilt lab pack (GServer-v2 `efb5b90`) started with `./run-lab.sh stock`, so the **unpatched** gs2lib `b839106` handled every login; the only config change was `G3D22067` in `allowedversions.txt`. A gen-5 logging proxy (the 6.x lab's `warpproxy.py`) sat in front and injected `0,Lab Server,127.0.0.1,<proxy port>` 5 s after the first login. Everything ran in a loopback-only network namespace in the cloud container. The real 5.00r7 (the `Graal5_rootdir_files` install, its `license.graal` pointed at the proxy) ran under Wine 9.0 on Xvfb with Mesa GL.
+
+- **Token and name.** In the stock library's version table `G3D22067` is entry 49, named `5.07`, between `G3D20126` (`4.208`) and `G3D14097` (`5.12`), read from the library's two parallel arrays. The server logged both clients as `Version: G3D22067 (5.07)`. "5.07" is gs2lib's name for 5.00 rev 7; there is no separate 5.07 build.
+- **Login line.** Real: `%` key `G3D22067` `%guest` `(7Y3bdzjf` `win,<md5>,"",<md5>` `\n`. Seihai: the same shape with its account and `win,"","",""` `\n`. Both were accepted. Then id 37 `English` in its own frame from both.
+- **Framing.** Every C→S frame of the real client was type 2 up to 38 bytes and type 4 (zlib) from 57 bytes, which fits Seihai's `< 0x30` raw / `< 0x1000` zlib rule. The proxy decoded every Seihai frame with the same gen-5 iterator.
+- **Login mode and 178.** Both drew only the level and chests before the warp, followed the 178 to the named host and port at once, logged in again with a new key, and then drew the player and HUD; the window title became "Lab Server" in both. The real client was a guest; Seihai used a named account and was not refused.
+- **File layout.** gs2lib puts `G3D22067` far above `CLVER_2_14`, so it sends the 2.1+ layout, and both clients took it. Small file: `102` = GINT5 modtime + name + data (`&w6t\x91*wbomb1.png\x89PNG…`). File over 64 KB (541,248 bytes): `68` name, `84` size, the data as `102` chunks each with the modtime and name, then `69`. The real client saved `state.png` and Seihai saved `wbomb1.png` byte for byte.
+- **Base files.** The real client asked for `basepackage.gupd` with **47** (with a CRC) on the Login connection and with **23** after the warp. Its install holds `updatepackages/basepackage.gupd` but no `updatepackages/Lab%032Server/` folder, so 47 is used when that server's copy is cached. Seihai still does not ask for base files (see the 5.00r7 unknowns).
+
+No profile field had to change. The only edit is the stale login unknown, which now says GServer-v2 accepts the three empty machine fields.
+
+A login to the public `2gta.home.eevul.net:14913` (which lists `5.07` as allowed) could not be tried from the cloud: the container has no DNS or raw TCP route out, only an HTTP proxy.
+
 ## Not done
 
 - Ids 109 and 198 (5.24 on) are in the server-id sets but not decoded. 111 (6.03r7) carries no fields: the client saves the whole body as `creationtime.dat` and sends nothing back (6.03 decompile), so Seihai drops it.
