@@ -8,8 +8,8 @@ press A alone to put it down in front of the player. Code:
 
 The 1.21 readme names it ("Laying Items: Select Item: hold Attack Button (S)
 \+ press Action Button (A); Lay Item: Action Button (A)"). The rules below
-were read in the **2.05 rev 2** binary **[bin]**. No real client was captured
-laying an item yet.
+were read in the **2.05 rev 2** binary **[bin]** and confirmed by a lab
+capture of the real 2.05 rev 2 client (below) **[cap]**.
 
 ## Per build
 
@@ -71,12 +71,32 @@ laying an item yet.
   (`item-drops.md`). That a lay goes the same way is **inferred**, not read.
   Seihai has no UDP, so these builds send nothing for a lay.
 
+## Lab capture (2.05 rev 2, 2026-10-31) **[cap]**
+
+Real 2.05 rev 2 on the Seihai LAN Test gserver, level `new1.nw`, account
+with 0 rupees, 3 bombs, 86 arrows and 20 hearts (so the first item offered
+was arrows, item 4; bombs were skipped with only 3). Client to server:
+
+| Facing, player | Final A sends | Then |
+|---|---|---|
+| south, (23, 31) | `2c 4f 64 24`: ITEMADD x 23.5, y 34, item 4 | `22 24 71`: ARROWSCOUNT 81 |
+| east, (24, 31) | `2c 55 60 24`: ITEMADD x 26.5, y 32, item 4 | `22 24 6c`: ARROWSCOUNT 76 |
+| north, (24, 30.5), S+A twice | `2c 51 59 25`: ITEMADD x 24.5, y 28.5, item 5 | `22 22 46`: CURPOWER 19 hearts |
+
+- Holding S sends the `sword` gani prop, releasing it `idle`. A with S held,
+  and the S+A that picks the next item (arrows to heart), send nothing.
+- About 8.15 s after each lay the client sends `PLI_ITEMDEL` (13) for the
+  item (`2d 4f 64`, `2d 55 60`, `2d 51 59`): the laid item times out like a
+  dropped one.
+- No `PLO_ITEMADD` echo was checked (the other client was on another level).
+- Seihai sends the same: the ITEMADD from the lay, the arrows and bombs
+  counts as after a shot, the hearts in its power report, and ITEMDEL on
+  the timeout.
+
 ## Not done
 
-- No real client was captured laying, so the bytes are from the binary only.
-  A lab run (hold S, press A, A) on 2.05 rev 2 and 2.22 would confirm them,
-  and show whether the server sends the new counts (rupees are not sent by
-  Seihai at all yet; bombs and arrows go out as counts as after a shot).
+- Only 2.05 rev 2 was captured, and not facing west, nor laying rupees
+  (Seihai does not send the rupee count yet), a glove, sword or shield.
 - Custom sword and shield images, the horse, the `playerlaysitem` event (it
   fires when an item's life reaches 140).
 - 3.x: Ato first needs items and an inventory.
