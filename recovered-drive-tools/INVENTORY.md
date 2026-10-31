@@ -120,10 +120,10 @@ Helper: `/workspace/tools/ghidra/analyze_tool.sh` (ready). Batch log: `ghidra-an
 |---|---|---|---|---|
 | high | `_inbox/extracted/Server Lister/ListServer.exe` | `ghidra-analysis/ListServer/` | **done** | analysis-only |
 | high | `_inbox/extracted/gserver_source/gserver13` | `ghidra-analysis/gserver13/` | **done** | analysis-only |
-| high | `_inbox/extracted/GServersource/gserver.exe` | `ghidra-analysis/gserver_pe_GServersource/` | **started** | analysis-only |
-| medium-high | `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` | `ghidra-analysis/BytecodeViewer/` | **queued** | analysis-only |
-| high | `_extracted/unpacked/ListServer.unpacked.exe` | `ghidra-analysis/ListServer/` | **started-by-sibling** | analysis-only |
-| medium | `_extracted/server-lister/Server Lister/slist/serverlist3` | `ghidra-analysis/serverlist3/` | **started-by-sibling** | analysis-only |
+| high | `_inbox/extracted/GServersource/gserver.exe` | `ghidra-analysis/gserver_pe_GServersource/` | **done** | analysis-only |
+| medium-high | `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` | `ghidra-analysis/BytecodeViewer/` | **done** | analysis-only |
+| high | `_extracted/unpacked/ListServer.unpacked.exe` | `ghidra-analysis/ListServer/` | **done (sibling)** | analysis-only |
+| medium | `_extracted/server-lister/Server Lister/slist/serverlist3` | `ghidra-analysis/serverlist3/` | **done (sibling)** | analysis-only |
 | medium | `_inbox/extracted/gserver_source/gserverstat` | `ghidra-analysis/gserverstat/` | **queued** | analysis-only |
 | medium | `_inbox/extracted/gserver_source/gserverstat2` | `ghidra-analysis/gserverstat2/` | **queued** | analysis-only |
 | low | `_extracted/dclient-setup/setup.exe` | `ghidra-analysis/DClient_setup/` | **queued** | out-of-scope (client installer fragment) |
@@ -131,15 +131,14 @@ Helper: `/workspace/tools/ghidra/analyze_tool.sh` (ready). Batch log: `ghidra-an
 | low | `_inbox/extracted/charactergenerator/charactergenerator/GChar.exe` | `ghidra-analysis/GChar/` | **queued** | out-of-scope / seihai (client) |
 | low | `_inbox/extracted/Graal_Auto_Key/Graal Auto Key.exe` | `ghidra-analysis/Graal_Auto_Key/` | **queued** | out-of-scope |
 | low | `_inbox/extracted/Graal_Digger/Graal Digger.exe` | `ghidra-analysis/Graal_Digger/` | **queued** | out-of-scope |
+### Analyses completed this pass
 
-### Analyses started / done this pass
-
-- `ListServer.exe` → `ghidra-analysis/ListServer/` (**done**, UPX-packed → limited funcs; sibling re-running unpacked)
+- `ListServer.exe` → `ghidra-analysis/ListServer/` (**done**; UPX-packed limited; sibling unpacked re-run also done)
 - `gserver13` → `ghidra-analysis/gserver13/` (**done**)
-- `gserver.exe` → `ghidra-analysis/gserver_pe_GServersource/` (**started**)
-- `BytecodeViewer.exe` → `ghidra-analysis/BytecodeViewer/` (**queued in same batch**)
-- `ListServer.unpacked.exe` → same ListServer out dir (**started by sibling**)
-- `serverlist3` → `ghidra-analysis/serverlist3/` (**started by sibling**)
+- `gserver.exe` → `ghidra-analysis/gserver_pe_GServersource/` (**done**; sibling also `gserver-win/`)
+- `BytecodeViewer.exe` → `ghidra-analysis/BytecodeViewer/` (**done**)
+- `serverlist3` → `ghidra-analysis/serverlist3/` (**done**, sibling)
+- sibling also wrote `ghidra-analysis/gserver-linux/`
 
 ## Extraction map
 
