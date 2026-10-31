@@ -8,8 +8,7 @@ press A alone to put it down in front of the player. Code:
 
 The 1.21 readme names it ("Laying Items: Select Item: hold Attack Button (S)
 \+ press Action Button (A); Lay Item: Action Button (A)"). The rules below
-were read in the **2.05 rev 2** binary (`Graal_v2.05_rev2.exe`, md5
-`f3fdf54d943fa91c89acba5bb695db99`) **[bin]**. No real client was captured
+were read in the **2.05 rev 2** binary **[bin]**. No real client was captured
 laying an item yet.
 
 ## Per build
@@ -22,28 +21,25 @@ laying an item yet.
 
 ## 2.05 rev 2 **[bin]**
 
-Addresses are in the 2.05 rev 2 image.
-
-- **Picking** (`0x4fde54`, action key path, then `0x4fcde8`): A does this only
+- **Picking**: A does this only
   after its other uses, so not when carrying, lifting or grabbing; then the
-  attack key must be held (key state byte `+0x281`, action index 5) and the
-  point in front of the player (`0x4f7918`: the facing table
-  `(1.5, 0)`, `(-0.5, 2)`, `(1.5, 4)`, `(3.5, 2)`) must be neither blocking nor
+  attack key must be held and the point in front of the player (by facing
+  north, west, south, east: `(1.5, 0)`, `(-0.5, 2)`, `(1.5, 4)`, `(3.5, 2)`) must be neither blocking nor
   water (type 11). The first item the player has in the lay order is picked;
   none, nothing happens. The player goes to mode 9 with the `idle` gani, and
   `sounds\item2.wav` plays at `(x + 1.5, y + 2)`.
-- **Lay order** (`0x54b478`): 0, 1, 2, 19, 3, 4, 5, 6, 16, 8, 12, 23, 7, 20,
+- **Lay order**: 0, 1, 2, 19, 3, 4, 5, 6, 16, 8, 12, 23, 7, 20,
   21, 22, 9, 15, 17, 10, 13, 18, 14, 24. The heart container (11) is not in it.
-- **Mode 9** (`0x4fc39c`): A with S held picks the next item the player has
+- **Mode 9**: A with S held picks the next item the player has
   (from the one after the current, wrapping) and plays `item2.wav`. A alone
   lays. Any other game key (arrows, D, S) goes back to mode 0 and idle.
-- **Drawn** (`0x50095c`): the item's sprite (2.05 item sprite table),
+- **Drawn**: the item's sprite (2.05 item sprite table),
   centred on `(x + 1.5, y)`, one tile higher on a horse.
 - **Laying**: if the player still has the item, it is added at
   `(x + 0.5 + dx, y + 1 + dy)` with `(dx, dy)` by facing north `(0, -3)`, west
-  `(-2, 0)`, south `(0, 2)`, east `(2, 0)` (`0x54b1f8`), life 164, then taken
+  `(-2, 0)`, south `(0, 2)`, east `(2, 0)`, life 164, then taken
   from the player, then `sounds\item.wav` at `(x + 1.5, y + 2)`.
-- **Who has what** (`0x4fe4cc`) and **what it costs** (`0x4ff0b8`):
+- **Who has what** and **what it costs**:
 
 | Item | Can lay when | Taken |
 |---|---|---|
@@ -59,12 +55,11 @@ Addresses are in the 2.05 rev 2 image.
   A custom sword or shield image (not `sword1` … `shield3`) can be laid as
   item 10 or 9 at any power; 2.05 then lays a special item carrying the
   picture. Seihai does not track the picture and skips this.
-- **Wire** (`0x53ec34` → `0x50c470`): online, the item add sends
+- **Wire**: online, the item add sends
   `PLI_ITEMADD` (12) `GCHAR x*2, GCHAR y*2, GCHAR item` (rounded halves) and
-  UDP 19, but **only for floor items** (the 25-byte table at `0x54807c`:
-  0 to 5, 7, 8, 19, 24). A laid glove, sword or shield is never sent.
-  Picking such an item up again sends nothing either (`0x53e7fc`: ITEMTAKE
-  only for floor items, else the item is applied locally); its timeout
+  UDP 19, but **only for floor items** (0 to 5, 7, 8, 19, 24). A laid glove, sword or shield is never sent.
+  Picking such an item up again sends nothing either (ITEMTAKE only for
+  floor items, else the item is applied locally); its timeout
   still sends `PLI_ITEMDEL`.
 
 ## Other builds
