@@ -362,6 +362,9 @@ fn main() {
     let mut account = String::from("player");
     let mut password = String::new();
     let mut version = ClientVersion::V205;
+    // An offline-only build (`protocol::offline_builds`): played offline
+    // with `version` set to its `plays_as` row.
+    let mut offline_build: Option<&'static seihai::protocol::offline_builds::OfflineBuild> = None;
     let mut i = 0;
     let mut cli_mode = false;
     let mut list_only = false;
@@ -483,7 +486,8 @@ fn main() {
                 version_given = true;
                 i += 1;
                 if let Some(v) = args.get(i) {
-                    version = ClientVersion::from_label(v).unwrap_or_else(|| {
+                    offline_build = seihai::protocol::offline_builds::by_label(v);
+                    version = ClientVersion::from_label_or_offline(v).unwrap_or_else(|| {
                         eprintln!("unknown version {v}; using 2.05");
                         ClientVersion::V205
                     });
@@ -745,6 +749,11 @@ fn main() {
     // GUI when no CLI mode is given. A failed connect or login goes back
     // to the GUI with the error, and a later Join tries again.
     let mut gui_error: Option<String> = None;
+    if let Some(b) = offline_build {
+        if online.take().is_some() {
+            eprintln!("{} is offline-only: {}", b.label, b.reason());
+        }
+    }
     loop {
         if !cli_mode {
             let pick = match gui_error.take() {
@@ -756,7 +765,8 @@ fn main() {
                 let s = Settings::load();
                 if s.offline == Some(true) {
                     online = None;
-                    if let Some(v) = s.version.as_deref().and_then(ClientVersion::from_label) {
+                    offline_build = s.version.as_deref().and_then(seihai::protocol::offline_builds::by_label);
+                    if let Some(v) = s.version.as_deref().and_then(ClientVersion::from_label_or_offline) {
                         version = v;
                     }
                     if let Some(a) = s.assets {
@@ -872,8 +882,16 @@ fn main() {
         break;
     }
 
+    // An offline-only build (picked here or in the launcher) never goes online.
+    if let Some(b) = offline_build {
+        eprintln!("{}: offline, with the {} rules", b.display(), version.label());
+        if level_name.is_none() {
+            level_name = b.start_level.map(str::to_string);
+        }
+    }
     // A version can have its own asset folder (its own install's images).
-    if let Some(p) = Settings::load().assets_for(version.label()) {
+    let assets_label = offline_build.map_or(version.label(), |b| b.label);
+    if let Some(p) = Settings::load().assets_for(assets_label) {
         assets = Some(p.to_path_buf());
     }
     // The layers, searched in this order: the server's cache (what it sent),
