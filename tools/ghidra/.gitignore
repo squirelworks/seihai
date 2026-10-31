@@ -1,0 +1,11 @@
+# Installed Ghidra distribution (download via install notes / README)
+ghidra_*_PUBLIC/
+current
+projects/
+*.rep/
+*.gpr
+*.lock
+*.log
+
+# Local analysis scratch
+/tmp/
