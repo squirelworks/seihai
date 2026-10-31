@@ -1,8 +1,9 @@
 //! Stage 3: the flat 2D fallback renderer. It draws the level's tiles the
 //! way `seihai-mae` does (`render::tiles::render_view`): 16-pixel tiles from
 //! a `pics1.png` sheet, the camera centred on the player's 48x48 box,
-//! chest records over the board, and the player as a plain marker. No
-//! NPCs, other players, GANI art or HUD.
+//! chest records over the board, each link as an outline of its rectangle,
+//! and the player as a plain marker. No NPCs, other players, GANI art or
+//! HUD.
 //!
 //! The 3.x clients drew their 2D levels from the same board and tile sheet
 //! as 2.x, so this is a stand-in until Ato has its own 3.x view. The tile
@@ -22,6 +23,9 @@ pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
 /// The player marker: red, blue in water.
 const MARKER: [u8; 3] = [0xFF, 0x40, 0x40];
 const MARKER_WATER: [u8; 3] = [0x40, 0x80, 0xFF];
+/// A link's outline. The real clients draw nothing for a link; this only
+/// shows where the level's links are.
+pub const LINK_OUTLINE: [u8; 3] = [0xFF, 0xE0, 0x40];
 
 /// An RGB tile sheet.
 pub struct Sheet {
@@ -96,6 +100,14 @@ impl Frame {
             }
         }
     }
+
+    /// A one-pixel outline of the rectangle, clipped.
+    fn stroke_rect(&mut self, x: i32, y: i32, w: i32, h: i32, rgb: [u8; 3]) {
+        self.fill_rect(x, y, w, 1, rgb);
+        self.fill_rect(x, y + h - 1, w, 1, rgb);
+        self.fill_rect(x, y, 1, h, rgb);
+        self.fill_rect(x + w - 1, y, 1, h, rgb);
+    }
 }
 
 /// Top-left of the view in level pixels: centred on the middle of the
@@ -151,6 +163,10 @@ pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Fram
             f.blit_tile(sheet, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
         }
     }
+    // Links over the tiles and chests, under the player.
+    for l in &level.links {
+        f.stroke_rect(l.x * t - cam_x, l.y * t - cam_y, l.width * t, l.height * t, LINK_OUTLINE);
+    }
     // The player's box starts at its tile position; the marker sits where
     // the body would be.
     let (bx, by) = ((s.player_x * t as f32) as i32 - cam_x, (s.player_y * t as f32) as i32 - cam_y);
@@ -200,6 +216,22 @@ mod tests {
         let f = draw(&session(0), &sheet, 40, 30);
         // The box (48x48) is centred; the marker is its middle-bottom 16x16.
         assert_eq!(px(&f, 320, 248), MARKER);
+    }
+
+    #[test]
+    fn a_link_is_outlined_on_its_rectangle() {
+        let sheet = Sheet::load(None).unwrap();
+        let mut s = session(0);
+        let level = s.current_level.as_mut().unwrap();
+        level.add_server_links(&["next.nw 20 25 2 3 30 30".to_string()]);
+        let f = draw(&s, &sheet, 40, 30);
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        let (x0, y0) = ((20 * 16 - cam_x) as u32, (25 * 16 - cam_y) as u32);
+        // Its corners and edges, 2 x 3 tiles; not its inside.
+        assert_eq!(px(&f, x0, y0), LINK_OUTLINE);
+        assert_eq!(px(&f, x0 + 31, y0 + 47), LINK_OUTLINE);
+        assert_eq!(px(&f, x0 + 16, y0), LINK_OUTLINE);
+        assert_ne!(px(&f, x0 + 16, y0 + 24), LINK_OUTLINE);
     }
 
     #[test]
