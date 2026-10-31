@@ -1,0 +1,20 @@
+diff --git a/server/src/TPlayer/TPlayer.cpp b/server/src/TPlayer/TPlayer.cpp
+index dc4566e3..e9f9a328 100644
+--- a/server/src/TPlayer/TPlayer.cpp
++++ b/server/src/TPlayer/TPlayer.cpp
+@@ -2353,6 +2353,15 @@ bool TPlayer::msgPLI_LOGIN(CString& pPacket)
+ 		// Read Client-Version
+ 		version = pPacket.readChars(8);
+ 		versionID = getVersionIDByVersion(version);
++
++		// Lab-only: 5.12 (G3D14097) steps compressed gen-5 bodies len/4
++		// times, rounded down. Without this, its short zlib bodies put the
++		// two ciphers out of step.
++		if (getenv("GS_LAB_512_ROUNDDOWN") && version == "G3D14097") {
++			in_codec.setRoundDown(true);
++			fileQueue.setRoundDown(true);
++			serverlog.out("[%s]    Lab: 5.12 gen-5 round-down on\n", server->getName().text());
++		}
+ 	}
+ 
+ 	// Read Account & Password
