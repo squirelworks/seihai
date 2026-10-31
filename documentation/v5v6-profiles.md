@@ -97,4 +97,4 @@ The Linux x64 6.03r7 is the build the Windows 6.03r7 row's send ids and long fra
 
 Lab check, cloud container, loopback only: the prebuilt lab pack started with `./run-lab.sh stock` (stock gs2lib, which already knows the token), `G3D0511C` added to `allowedversions.txt`, the 6.x lab's `warpproxy.py` in front injecting 178 after 5 s. The server logged `Version: G3D0511C (6.037 (Linux))` and `Identity: linux,"","","",""` for both logins; Seihai drew only the level before the warp and the player, HUD and chests after it (window as for the Windows 6.03r7 run). C→S after each login: 37, 46 (and 2, 23 on the first).
 
-GServer-v2's default `allowedversions.txt` lists the other 5.x/6.x tokens gs2lib knows: `G3D3007A` (6.0.0.7 and 6.0.1.5, gs2lib `6.015`) and `G3D2505C` (6.0.3.4). Neither has a row yet and no binary of either is in the project.
+GServer-v2's default `allowedversions.txt` lists the other 5.x/6.x tokens gs2lib knows: `G3D3007A` (6.0.0.7 and 6.0.1.5, gs2lib `6.015`) and `G3D2505C` (6.0.3.4). No binary of either is in the project; both now have inferred rows (6.015 and 6.034, see the table above), checked in the lab with stock gs2lib on 2026-10-31.
