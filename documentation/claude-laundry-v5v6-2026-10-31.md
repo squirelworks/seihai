@@ -2,7 +2,9 @@
 
 Date: 2026-10-31. Continue from main at `327371f`.
 
-listserver.graal.in accepts v5 and v6 clients. Seihai should speak those versions. Ato stopped at 3.153 because there is no 3.x Torque capture (only 5.12's). The flat path is enough for 3.x until that capture exists. Do not invent Torque bytes for 3.04 or 3.153.
+Public Reborn game servers can allow v5 and v6 clients, so Seihai should speak those versions.
+
+> **Correction (2026-10-31).** The listserver does not check the version; each game server's `allowedversions.txt` does. Two public lists are on record: Graal the Adventure allows `2.22, 5.07` (5.07 is 5.00r7), and a gs2 server allows `2.22, 1.41r1 - iPhone Belote 1.5`, a range that covers every 5.x/6.x token in gs2lib's table. Neither allows 5.24 (`G3D15010` is not in the table), and 6.036 has no token. No v5/v6 login has been made to a public server. Details in Graal_analysis `server-notes/public-allowed-versions.md`. Ato stopped at 3.153 because there is no 3.x Torque capture (only 5.12's). The flat path is enough for 3.x until that capture exists. Do not invent Torque bytes for 3.04 or 3.153.
 
 ## Why Ato is stuck
 
@@ -22,7 +24,7 @@ listserver.graal.in accepts v5 and v6 clients. Seihai should speak those version
 
 ### 1. Profile rows for the accepted builds
 
-Add profile rows for the builds listserver.graal.in lists as acceptable:
+Add profile rows for these builds (the original wording said listserver.graal.in lists them as acceptable; see the correction above):
 
 - 5.00r7, 5.12, 5.24r4, 5.30r3, 5.31r4
 - 6.00r2, 6.03r7, 6.036 (the ones named in the notes)
