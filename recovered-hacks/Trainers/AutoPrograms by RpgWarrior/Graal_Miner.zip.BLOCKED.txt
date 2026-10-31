@@ -1,0 +1,6 @@
+BLOCKED: Google Drive refused download.
+Drive file id: 131M_bfcLoRV1iOc3M-8Iv6snvYt5W1z3
+Error: 403 cannotDownloadAbusiveFile — "This file has been identified as malware or spam and cannot be downloaded."
+Reported size in Drive metadata: 39156 bytes
+MIME: application/zip
+Note: Same size as Trainers/Graal_Miner.zip; likely identical duplicate of the AutoPrograms set.

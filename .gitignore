@@ -21,3 +21,5 @@ __pycache__/
 /recovered-hacks/**
 !/recovered-hacks/**/
 !/recovered-hacks/**/*.md
+!/recovered-hacks/**/*.json
+!/recovered-hacks/**/*.BLOCKED.txt

@@ -3,7 +3,7 @@
 **Date:** 2026-10-31 (second pass; inventory + taxonomy backed)  
 **Audience:** operators of Seihai-stack worlds (`seihai-gserver` / `seihai-gserver-v2`, `seihai-listserver`, staff RC/NC) and maintainers of `seihai-servertools`.  
 **Method:** static analysis only (Drive listing, archive inventory, readmes, PE/UPX/strings). No hacks executed; no exploit PoCs.  
-**Companions:** [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) (Groups 1–5) · [`defense-checklist.md`](defense-checklist.md) · [`INVENTORY.md`](INVENTORY.md)
+**Companions:** [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) (Groups 1–5) · [`defense-checklist.md`](defense-checklist.md) · [`INVENTORY.md`](INVENTORY.md) · [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md)
 
 **Intended long-term home:** mirror under `seihai-servertools/docs/security/` (local draft prepared; that repo returned 403 to this environment’s push token).
 
