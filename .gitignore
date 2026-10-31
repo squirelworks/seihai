@@ -13,12 +13,11 @@ __pycache__/
 # Nested sibling clone for recovery work (own repo: squirelworks/seihai-servertools)
 /seihai-servertools/
 
-# Recovered Drive staging: commit bridge docs / analysis summaries only
+# Recovered Drive staging: commit bridge docs only; ignore raw dumps / DBs / binaries
 /recovered-drive-tools/**
 !/recovered-drive-tools/**/
 !/recovered-drive-tools/**/*.md
-
-# Recovered hacks staging: analysis docs/metadata only; ignore binaries / archives
+# Recovered hacks staging: commit analysis docs only; ignore binaries / archives
 /recovered-hacks/**
 !/recovered-hacks/**/
 !/recovered-hacks/**/*.md
