@@ -25,6 +25,18 @@ fn gani_name(o: &OtherPlayer) -> Option<String> {
     o.looks.gani.as_deref().map(|n| n.to_ascii_lowercase().trim_end_matches(".gani").trim_end_matches(".gif").to_string())
 }
 
+/// The hurt blink of another player: this tick only the shadow of the
+/// figure is drawn. The real 2.00 blinks a watched player while its GANI is
+/// `hurt` or `ridehurt`, and only then: no timer, and the hurt sprite does
+/// not start it. One 50 ms tick drawn, one tick shadow only (2.00 trace,
+/// 2026-10-30). A pre-2.1 build reads the name from the bow slot, where the
+/// server may add `.gif`.
+pub fn other_blink_off(o: &OtherPlayer, clock_ms: u64) -> bool {
+    let name = o.looks.gani.as_deref().or(o.looks.bow_slot_gani.as_deref()).map(|n| n.to_ascii_lowercase());
+    let hurt = name.as_deref().map(|n| n.trim_end_matches(".gani").trim_end_matches(".gif")).is_some_and(|n| n == "hurt" || n == "ridehurt");
+    hurt && (clock_ms / OTHER_STEP_MS) % 2 == 1
+}
+
 /// Another player is hidden under what they carry, and only the object is
 /// drawn, where they stand. The GANI prop says so (`hiddenstill` /
 /// `hidden`, as 2.22 sends), or the STATUS hidden bit (0x02) is set on a
@@ -175,6 +187,23 @@ mod tests {
         assert!(is(other_pose(&s, &other(2 + 4 * 32, Some("dance")), 0), s.poses.hurt.as_ref().unwrap(), 0));
         // Nothing loaded: none.
         assert!(other_pose(&OfflineSession::default(), &other(2, None), 0).is_none());
+    }
+
+    #[test]
+    fn a_hurt_gani_blinks_every_other_tick_and_nothing_else_does() {
+        let mut o = other(2 + 4 * 32, Some("hurt"));
+        let blinks: Vec<bool> = (0..4).map(|t| other_blink_off(&o, t * OTHER_STEP_MS)).collect();
+        assert_eq!(blinks, [false, true, false, true]);
+        // The bow slot of a pre-2.1 build, with the `.gif` GServer adds.
+        o.looks.gani = None;
+        o.looks.bow_slot_gani = Some("hurt.gif".into());
+        assert!(other_blink_off(&o, OTHER_STEP_MS));
+        o.looks.bow_slot_gani = Some("ridehurt".into());
+        assert!(other_blink_off(&o, OTHER_STEP_MS));
+        // The hurt sprite alone, or another GANI: no blink.
+        o.looks.bow_slot_gani = Some("idle".into());
+        assert!(!other_blink_off(&o, OTHER_STEP_MS));
+        assert!(!other_blink_off(&other(2 + 4 * 32, None), OTHER_STEP_MS));
     }
 
     #[test]

@@ -22,6 +22,8 @@ Another player is drawn through a GANI when Seihai has the pose loaded:
 2. Otherwise the pose the sprite number S (prop 17, `dir + 4 * S`) stands for: S 0 idle, 1 to 5 walk, 6 to 10 the sword steps, 18 carry still, 19 and 20 carry, 28 sit, 32 hurt. The walk frame is the inverse of the 2.05 step table (`WALK_S`). Any other S draws as idle.
 3. If no pose is loaded, it is the plain idle figure as before.
 
+**The hurt blink.** While another player's GANI is `hurt` or `ridehurt` (prop 10, or the bow slot of a pre-2.1 build, with or without the `.gif` GServer adds), every other 50 ms tick draws only the shadow, the `SPRITES` placements. The real 2.00 does exactly this (2.00 trace, 2026-10-30): the blink follows the GANI alone, with no timer, and the hurt sprite (S 32) never blinks another player. It stops when any other GANI arrives (`render::other_blink_off`).
+
 The GANI's `SWORD` and `SHIELD` sprites take the player's own sword and shield pictures, and `HEAD` and `BODY` take their own head and body. A picture is looked for in the asset folders first (`swords/`, `shields/`, `heads/`, `bodies/`), then asked of the server. Until it arrives, the default picture is used: Seihai's head, body and `sword1.png`. No shield is drawn without a shield picture. The local player's shield is `shieldN.png` for its shield power.
 
 `PoseSheets` gained `shield`, and `draw_gani_frame` draws `SHIELD` sprites. Seihai's own `idle`, `walk` and `sword` GANIs have `SHIELD` sprites at the stock places (`appearance.md`).

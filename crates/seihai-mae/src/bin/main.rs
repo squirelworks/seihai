@@ -1199,7 +1199,10 @@ fn main() {
                         attrs: if gani_attrs { attr_sheets(&l.attrs, gani, npc_imgs) } else { Default::default() },
                     };
                     let (ox, oy) = ((other.x * 16.0) as i32 - cam_x, (other.y * 16.0) as i32 - cam_y);
-                    seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, &sheets, ox, oy);
+                    // The hurt blink: on its off ticks only the shadow.
+                    let shadow_only = seihai::render::PoseSheets { sprites: sheets.sprites, ..Default::default() };
+                    let sheets = if seihai::render::other_blink_off(other, clock_ms) { &shadow_only } else { &sheets };
+                    seihai::render::draw_gani_frame(&mut fb, gani, frame, other.dir, sheets, ox, oy);
                     continue;
                 }
                 // Hidden under the carried object without its GANIs: only
