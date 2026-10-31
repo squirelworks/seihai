@@ -226,7 +226,7 @@ mod tests {
     }
 
     fn arrival(start: Option<(f32, f32)>) -> Arrival {
-        Arrival { name: "lab3x.nw".into(), source: crate::level::Source::Board, start, server_npcs: 0, file_npcs: 0 }
+        Arrival { name: "lab3x.nw".into(), source: crate::level::Source::Board, start, server_npcs: 0, file_npcs: 0, scripts: Vec::new() }
     }
 
     #[test]
