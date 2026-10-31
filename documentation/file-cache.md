@@ -264,6 +264,41 @@ requested for default weapons 8 and 7 (`weapon-images.md`).
 * Downloads go to the per-server cache folder (section above), never into the
   user's asset folder or the built-in set.
 
+### The file layout follows the server's token table (5.24, 2026-10-31)
+
+GServer picks the `PLO_FILE` layout, the "up to date" reply and the `.gif`
+defaults from **its own table of version tokens**, not from anything the
+client says about itself. A token missing from that table counts as
+`CLVER_UNKNOWN`, below 2.1, and gets the 2.05 forms. A stock gs2lib has no
+`G3D15010`, so it sends 5.24 (and 6.00 beta2) the reply without the GINT5
+modtime. The real 5.24 client reads it in the 2.1+ layout anyway: 5 bytes of
+the name become the modtime, the next byte becomes the name length, and the
+"name" runs into the PNG data ("Couldn't open …png‰PNG… for writing" in the
+lab). The lab fix was a gs2lib copy that knows the token.
+
+Seihai does not trust its profile here:
+
+* `files.modtime` is the first guess. When a `PLO_FILE` reads only in the
+  other layout (the 2.1+ guess gives a name with control bytes, no dot, or
+  more bytes than are there), Seihai takes the other layout and keeps it for
+  the rest of the connection (`SessionState::file_has_modtime`). A server
+  warp starts a fresh session with the profile's guess again.
+* A 5.x profile therefore asks with the build's own token and still saves
+  files under their real names on a server that does not know the token.
+* Tests: `file_524_capture_reads_with_its_modtime` (the lab bytes 5.24r4 got
+  from the patched server) and `stock_gs2lib_layout_is_not_read_as_a_png_name`
+  (the same reply in the layout `TPlayer::sendFile` uses below 2.1).
+
+What else the server does to a client it puts below 2.1, from GServer-v2
+`efb5b90`: it answers an up-to-date `UPDATEFILE` with `PLO_FILESENDFAILED`
+(30) instead of `PLO_FILEUPTODATE` (45); it refuses files over 64000 bytes
+(below 2.14, no large-file packets); it adds `.gif` to a requested name with
+no extension and to numbered head, body, sword and shield props; and it
+sends the level the 1.41 way, without `PLO_SETACTIVELEVEL`. Seihai settles
+the name on a 30 either way and keeps using a local copy, so the first point
+changes nothing for it. The other points are the server's fault and need a
+server that knows the token (Graal_analysis `protocol/file-transfer.md`).
+
 ### Seihai's own choices (not what the clients do)
 
 * A downloaded level file (`.nw`, `.graal`, `.gmap`) is always written, and
