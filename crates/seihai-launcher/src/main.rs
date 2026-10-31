@@ -14,6 +14,7 @@
 //!   seihai [ARGS...]                      seihai-mae ARGS...
 //!   seihai --version 2.22 [ARGS...]       seihai-mae --version 2.22 ARGS...
 //!   seihai --version 3.153 [ARGS...]      seihai-ato --version 3.153 ARGS...
+//!   seihai --version graal3d [ARGS...]    seihai-g3d --version graal3d ARGS...
 
 use seihai_core::protocol::{ClientVersion, VersionProfile};
 use std::path::PathBuf;
@@ -26,6 +27,8 @@ enum Line {
     Mae,
     /// Torque / 3.x: `seihai-ato`.
     Ato,
+    /// Graal3D (February 2000), the standalone 3D client: `seihai-g3d`.
+    G3d,
 }
 
 impl Line {
@@ -33,6 +36,7 @@ impl Line {
         match self {
             Line::Mae => "seihai-mae",
             Line::Ato => "seihai-ato",
+            Line::G3d => "seihai-g3d",
         }
     }
 }
@@ -61,9 +65,18 @@ fn version_arg(args: &[String]) -> Option<&str> {
         .map(String::as_str)
 }
 
+/// `--version` values for the February 2000 Graal3D. It has its own
+/// server and wire, so it is not a row of the profile table.
+fn is_graal3d(v: &str) -> bool {
+    matches!(v.to_ascii_lowercase().as_str(), "graal3d" | "g3d" | "gr3dv002")
+}
+
 /// The line to start for these arguments. An unknown version goes to
 /// `seihai-mae`, which says so and falls back to 2.05.
 fn pick(args: &[String]) -> (Line, Option<&'static VersionProfile>) {
+    if version_arg(args).is_some_and(is_graal3d) {
+        return (Line::G3d, None);
+    }
     let tool = args.first().map(String::as_str) == Some("capture") || args.iter().any(|a| MAE_TOOLS.contains(&a.as_str()));
     let profile = version_arg(args).and_then(ClientVersion::from_label).map(ClientVersion::profile);
     match profile {
@@ -113,7 +126,7 @@ fn main() {
     let err = run(cmd);
     eprintln!("seihai: cannot start {}: {err}", bin.display());
     eprintln!(
-        "seihai: build {} with `cargo build --release` from the seihai folder; it builds seihai, seihai-mae and seihai-ato together",
+        "seihai: build {} with `cargo build --release` from the seihai folder; it builds seihai, seihai-mae, seihai-ato and seihai-g3d together",
         line.binary()
     );
     std::process::exit(1);
@@ -163,6 +176,13 @@ mod tests {
         // The last --version wins, as in seihai-mae.
         assert_eq!(pick(&args("--version 2.22 --version 3.153")).0, Line::Ato);
         assert_eq!(pick(&args("--version 3.153 --version 2.22")).0, Line::Mae);
+    }
+
+    #[test]
+    fn graal3d_starts_g3d() {
+        assert_eq!(pick(&args("--version graal3d --online h")).0, Line::G3d);
+        assert_eq!(pick(&args("--version G3D")).0, Line::G3d);
+        assert_eq!(pick(&args("--version graal3d --version 2.22")).0, Line::Mae);
     }
 
     #[test]
