@@ -58,4 +58,5 @@ Run on 2026-10-31 against the commit merged in #281, all on loopback: a copy of 
 - The machine-field values (accepted empty by GServer-v2, untested elsewhere) and the base-file requests, above.
 - The warp reconnect does not wait or retry, as in 5.00r7, so on GServer-v2 a named account needs the old player to be gone first (lab check, above). 5.12's reconnect path was not read.
 - No public check: this session's network could not resolve `listserver.graal.in`, so which port the public service takes 5.x/6.x logins on was not checked. Use `--online host:port` or the launcher's direct box.
+- Public allowed lists: Graal the Adventure allows only 5.00r7 among these rows (`Allowed: 2.22, 5.07`). A gs2 server's range `1.41r1 - iPhone Belote 1.5` should take every row but 5.24r4 (inferred from gs2lib's table). See Graal_analysis `server-notes/public-allowed-versions.md`.
 - The chat bar on these builds is the server's GUI script; Seihai keeps its own.
