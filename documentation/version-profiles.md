@@ -45,8 +45,8 @@ The 3.x login and framing, locked against unknown, is in `3x-session.md`.
   settings file), so it can use that install's images.
 - **Game window**: the title follows the version (2.05+ add the server name).
   The minimap appears from 2.1 (set by the game server). Up/Down recall of
-  typed chat lines appears in 1.39. F4/F5 (editor and level loading) are gone in
-  2.3+, and F5 only lists the level formats the version can open. While online F4 and F5 are refused with a chat line (see `implementation.md`).
+  typed chat lines appears in 1.39. F4 (the editor) is gone in
+  2.3+, and F5 only lists the level formats the version can open. While online F4 is refused with a chat line; F5 is Seihai's level window in every build (see `implementation.md`).
 
 ## Basis
 

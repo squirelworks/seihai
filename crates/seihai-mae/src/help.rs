@@ -50,7 +50,7 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("PgUp / PgDn", &["PageUp", "PageDown"], "scroll the chat"),
     k("F3", &["F3"], "debug information"),
     k("F4", &["F4"], "level editor (not built yet)"),
-    k("F5", &["F5"], "open a level file (clients with an editor)"),
+    k("F5", &["F5"], "level window: the server's level, open a level offline, back to the server list"),
     k("F12", &["F12"], "save a screenshot to screenshots/"),
     KeyHelp {
         label: "F9",

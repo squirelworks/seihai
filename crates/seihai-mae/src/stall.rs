@@ -12,7 +12,7 @@
 //! freeze did not happen on Linux. A frozen loop says nothing on its own, so
 //! this watch is how the next run shows where it stopped.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -28,6 +28,9 @@ struct Shared {
     last_ms: AtomicU64,
     /// The part the last mark finished.
     part: Mutex<&'static str>,
+    /// The loop is waiting on the user (a modal window such as the F5
+    /// level picker): not a stall.
+    paused: AtomicBool,
 }
 
 /// The loop's side of the watch. Cloning it shares the same watch.
@@ -40,7 +43,7 @@ impl StallWatch {
     /// Start the watch thread. Each report goes to `report` as one line.
     /// The thread ends when the last `StallWatch` is dropped.
     pub fn spawn(limit: Duration, mut report: impl FnMut(&str) + Send + 'static) -> Self {
-        let shared = Arc::new(Shared { start: Instant::now(), last_ms: AtomicU64::new(0), part: Mutex::new("start") });
+        let shared = Arc::new(Shared { start: Instant::now(), last_ms: AtomicU64::new(0), part: Mutex::new("start"), paused: AtomicBool::new(false) });
         let weak = Arc::downgrade(&shared);
         let _ = std::thread::Builder::new().name("seihai-stall-watch".into()).spawn(move || {
             // The mark the current report is about, if one was made.
@@ -53,6 +56,9 @@ impl StallWatch {
                 if let Some(r) = reported.filter(|&r| r != last) {
                     report(&format!("main loop: moved on after {:.1} s", (last.saturating_sub(r)) as f64 / 1000.0));
                     reported = None;
+                }
+                if s.paused.load(Ordering::Acquire) {
+                    continue;
                 }
                 if reported.is_none() && now.saturating_sub(last) >= limit.as_millis() as u64 {
                     let part = *s.part.lock().unwrap_or_else(|e| e.into_inner());
@@ -72,6 +78,19 @@ impl StallWatch {
         *self.shared.part.lock().unwrap_or_else(|e| e.into_inner()) = part;
         let ms = self.shared.start.elapsed().as_millis() as u64;
         self.shared.last_ms.store(ms, Ordering::Release);
+    }
+
+    /// The loop is about to wait on the user (a modal window). Nothing is
+    /// reported until [`resume`](Self::resume).
+    pub fn pause(&self) {
+        self.shared.paused.store(true, Ordering::Release);
+    }
+
+    /// The modal window closed: `part` has just finished, and the watch
+    /// times from now.
+    pub fn resume(&self, part: &'static str) {
+        self.mark(part);
+        self.shared.paused.store(false, Ordering::Release);
     }
 }
 
@@ -114,6 +133,18 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(rx.try_recv().is_err());
+    }
+
+    /// Time spent paused (a modal window open) is not a stall.
+    #[test]
+    fn a_paused_loop_is_quiet() {
+        let (w, rx) = watch(100);
+        w.mark("scripts");
+        w.pause();
+        assert!(rx.recv_timeout(Duration::from_millis(500)).is_err());
+        w.resume("level picker");
+        assert!(rx.recv_timeout(Duration::from_millis(60)).is_err());
+        drop(w);
     }
 
     /// Dropping the watch ends its thread: the report sender goes away.

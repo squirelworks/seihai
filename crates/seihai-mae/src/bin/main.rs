@@ -398,6 +398,7 @@ fn main() {
     // with `version` set to its `plays_as` row.
     let mut offline_build: Option<&'static seihai::protocol::offline_builds::OfflineBuild> = None;
     let mut i = 0;
+    let mut launcher_error: Option<String> = None;
     let mut cli_mode = false;
     let mut list_only = false;
     let mut check_assets = false;
@@ -451,6 +452,12 @@ fn main() {
             "--nick" => {
                 i += 1;
                 cli_nickname = args.get(i).cloned();
+            }
+            // Internal: the server list opens with this line (a relaunch
+            // after a lost connection; see `relaunch_to_server_list`).
+            "--launcher-error" => {
+                i += 1;
+                launcher_error = args.get(i).cloned();
             }
             "--account" => {
                 i += 1;
@@ -789,7 +796,7 @@ fn main() {
 
     // GUI when no CLI mode is given. A failed connect or login goes back
     // to the GUI with the error, and a later Join tries again.
-    let mut gui_error: Option<String> = None;
+    let mut gui_error: Option<String> = launcher_error.take();
     if let Some(b) = offline_build {
         if online.take().is_some() {
             eprintln!("{} is offline-only: {}", b.label, b.reason());
@@ -1000,6 +1007,8 @@ fn main() {
     let cache_dir = online.as_deref().and_then(|a| cache_for(a, server_name(a).as_deref()));
     // The list name of the server we are about to join, if it was picked from a list.
     let picked_server_name = online.as_deref().and_then(server_name);
+    // The server's name for the F5 window (its address when not known).
+    let mut server_label: Option<String> = online.as_deref().map(|a| picked_server_name.clone().unwrap_or_else(|| a.to_string()));
     // The cache in the Seihai folder (`_cache/<host>_<port>`), searched and
     // written before the settings' one.
     let seihai_dir = seihai::servercache::seihai_dir();
@@ -1594,6 +1603,11 @@ fn main() {
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
     let mut confirm_quit = false;
+    // Set when the game ends to go back to the server list (S at the quit
+    // prompt, or the F5 window's button).
+    let mut back_to_list = false;
+    // Offline, a link to a level that is not on disk is told once.
+    let mut missing_level = ui::MissingLevelNotice::new();
     // The first line of the sign page on show.
     let mut sign_page = 0usize;
     // The 2.05 sign debounce, and the game keys kept off the player until
@@ -1711,8 +1725,13 @@ fn main() {
                 || window.is_key_pressed(minifb::Key::Enter, minifb::KeyRepeat::No);
             let no = window.is_key_pressed(minifb::Key::N, minifb::KeyRepeat::No);
             let escape = window.is_key_pressed(minifb::Key::Escape, minifb::KeyRepeat::No);
-            match ui::quit_key(quit_was_open, yes, no, escape) {
+            let list = window.is_key_pressed(minifb::Key::S, minifb::KeyRepeat::No);
+            match ui::quit_key_with_list(quit_was_open, yes, no, escape, list) {
                 ui::QuitKey::Quit => break,
+                ui::QuitKey::ServerList => {
+                    back_to_list = true;
+                    break;
+                }
                 ui::QuitKey::Cancel => {
                     confirm_quit = false;
                     dirty = true;
@@ -3140,9 +3159,15 @@ fn main() {
                 }
             }
             // Check links after every move, online or offline.
-            if session.check_links() {
+            let in_link = session.check_links();
+            if !in_link {
+                missing_level.clear();
+            }
+            if in_link {
                 if let Some((dest, x, y)) = session.pending_link.take() {
-                    eprintln!("link to {dest} at {x} {y}");
+                    if conn.is_some() {
+                        eprintln!("link to {dest} at {x} {y}");
+                    }
                     if let Some(c) = conn.as_mut() {
                         // Online: the server owns the warp. Ask once and
                         // wait; its reply moves the player.
@@ -3166,15 +3191,20 @@ fn main() {
                         }
                     } else {
                         // Offline: load the destination if it is local.
-                        let path = resolver.level_path(&dest);
-                        if session.load_level(&path).is_ok() {
+                        // A missing level is told once while the player
+                        // stands in its link, not on every step.
+                        let path = resolver.level(&dest);
+                        if let Some(path) = path.filter(|p| session.load_level(p).is_ok()) {
+                            missing_level.clear();
                             if session.arrive(x, y) {
                                 net_state.push_chat(ChatKind::Admin, "Seihai".into(), "developer mode off".into());
                             }
                             session.note_entry(&dest);
-                            eprintln!("warped to {dest}");
-                        } else {
-                            eprintln!("no local {dest}");
+                            eprintln!("link to {dest} at {x} {y}: warped from {}", path.display());
+                        } else if let Some(line) = missing_level.missing(&dest) {
+                            eprintln!("link to {dest} at {x} {y}: no local {dest}");
+                            net_state.push_chat(ChatKind::Admin, "Seihai".into(), line);
+                            dirty = true;
                         }
                     }
                 }
@@ -3334,6 +3364,7 @@ fn main() {
                         // The clients keep field 1 as the server's name (without
                         // the type prefix) and show it in the window title.
                         window.set_title(&profile.window_title(Some(&w.display_name())));
+                        server_label = Some(w.display_name());
                         // A lobby build leaves Login mode once the new name does not
                         // start with "login".
                         if lobby_server.is_some() {
@@ -3549,16 +3580,78 @@ fn main() {
                     }
                     ui::EditorKey::Run if is_f4 => eprintln!("F4: level editor not yet implemented"),
                     ui::EditorKey::Run => {
-                        let exts = profile.level_extensions();
-                        if let Some(path) =
-                            seihai::gui::pick_level(resolver.root().levels_dir().as_path(), &exts)
-                        {
-                            if let Err(e) = session.load_level(&path) {
-                                eprintln!("load failed: {e}");
-                            } else {
-                                eprintln!("loaded {}", path.display());
+                        let online_now = conn.is_some();
+                        let server = online_now.then(|| {
+                            let level = net_state.current_level_name();
+                            seihai::gui::ServerLevel {
+                                server: server_label.clone().unwrap_or_else(|| "the server".into()),
+                                cached: level.as_deref().and_then(|l| resolver.cached_level(l)),
+                                level,
+                            }
+                        });
+                        let levels_dir = resolver.root().levels_dir();
+                        let mut places = Vec::new();
+                        if let Some(r) = resolver.user_root() {
+                            places.push(("Your levels".to_string(), r.levels_dir()));
+                        }
+                        for r in resolver.cache_roots() {
+                            if !places.iter().any(|(_, d)| *d == r.root) {
+                                places.push(("Download cache".to_string(), r.root.clone()));
+                            }
+                        }
+                        if let Some(r) = resolver.builtin_root() {
+                            places.push(("Built-in levels".to_string(), r.levels_dir()));
+                        }
+                        let start = server
+                            .as_ref()
+                            .and_then(|s| s.cached.as_ref())
+                            .and_then(|p| p.parent())
+                            .map(std::path::Path::to_path_buf)
+                            .unwrap_or(levels_dir);
+                        let w = seihai::gui::LevelWindow {
+                            server,
+                            start,
+                            places,
+                            exts: profile.level_extensions().iter().map(|e| e.to_string()).collect(),
+                        };
+                        // The window is modal: its time is not the loop's.
+                        let choice = ft.modal("level window", || seihai::gui::level_window(w));
+                        match choice {
+                            Some(seihai::gui::LevelChoice::ServerList) => {
+                                back_to_list = true;
+                                break 'game;
+                            }
+                            Some(seihai::gui::LevelChoice::Open(path)) => {
+                                if let Some(old) = conn.take() {
+                                    // Leave the server and play on offline.
+                                    let _ = old.shutdown();
+                                    frames = None;
+                                    warp_retry = None;
+                                    warp_since = None;
+                                    link_arrival = None;
+                                    session.cancel_warp();
+                                    session.leave_gmap();
+                                    net_state = SessionState::for_version(version);
+                                    net_state.set_filter(lists.filter(&version.profile().protocol.pli));
+                                    loaded_level = None;
+                                    level_from_board = false;
+                                    eprintln!("left the server to play offline");
+                                }
+                                match session.load_level(&path) {
+                                    Ok(()) => {
+                                        eprintln!("loaded {}", path.display());
+                                        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                                        session.note_entry(&name);
+                                        net_state.push_chat(ChatKind::Admin, "Seihai".into(), format!("offline: {name}"));
+                                    }
+                                    Err(e) => {
+                                        eprintln!("load failed: {e}");
+                                        net_state.push_chat(ChatKind::Admin, "Seihai".into(), format!("could not open {}: {e}", path.display()));
+                                    }
+                                }
                                 dirty = true;
                             }
+                            None => {}
                         }
                     }
                 }
@@ -3912,7 +4005,7 @@ fn main() {
             }
         }
         if confirm_quit {
-            ui::draw_panel(&mut frame, "Quit", "Quit Seihai?  Y / Enter = yes,  N / Esc = no");
+            ui::draw_panel(&mut frame, "Quit", ui::QUIT_PROMPT);
         }
         if show_help {
             seihai::help::draw_help(&mut frame);
@@ -3969,9 +4062,52 @@ fn main() {
     // thread ends with the last handle), so an open error window is not
     // reported as a stuck loop.
     drop(stall);
+    if let Some(c) = conn.take() {
+        let _ = c.shutdown();
+    }
     close_window(window);
-    if let Some(why) = exit_error {
+    if back_to_list || (exit_error.is_some() && !cli_mode) {
+        // A fresh start of this program with the server list: nothing of
+        // this game (connection, window, level, scripts) is carried over.
+        let why = relaunch_to_server_list(exit_error.as_deref());
+        eprintln!("server list: could not restart Seihai ({why}); opening it here");
+        let _ = seihai::gui::run_with_error(exit_error.unwrap_or_else(|| format!("could not restart Seihai: {why}")));
+    } else if let Some(why) = exit_error {
         let _ = seihai::gui::run_with_error(why);
+    }
+}
+
+/// The arguments that start this program at the server list, with `error`
+/// shown there.
+fn server_list_args(error: Option<&str>) -> Vec<String> {
+    match error {
+        Some(e) => vec!["--launcher-error".to_string(), e.to_string()],
+        None => Vec::new(),
+    }
+}
+
+/// Start this program again at the server list. On Unix the process is
+/// replaced (so the server sees the connection close and the window goes);
+/// on Windows the new one is started and this one leaves. Returns only on
+/// failure, with the reason.
+fn relaunch_to_server_list(error: Option<&str>) -> std::io::Error {
+    let exe = match env::current_exe() {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(server_list_args(error));
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.exec()
+    }
+    #[cfg(not(unix))]
+    {
+        match cmd.spawn() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => e,
+        }
     }
 }
 
@@ -4001,6 +4137,20 @@ impl FrameTimes {
         let now = Instant::now();
         watch.mark("start of pass");
         Self { last: now, began: now, parts: Vec::new(), watch: watch.clone() }
+    }
+
+    /// Run a modal window (it blocks the loop until the user closes it).
+    /// Its time is left out of this pass's parts and the stall watch, so a
+    /// window left open is not reported as a slow frame or a stuck loop.
+    fn modal<T>(&mut self, part: &'static str, f: impl FnOnce() -> T) -> T {
+        self.watch.pause();
+        let t = Instant::now();
+        let out = f();
+        let open = t.elapsed();
+        self.began += open;
+        self.last += open;
+        self.watch.resume(part);
+        out
     }
 
     /// The time since the previous mark goes to `part`.
@@ -4191,5 +4341,17 @@ struct NoShm;
 impl NoShm {
     fn present(&mut self, _: &[u8], _: usize, _: usize, _: (usize, usize)) -> Result<(), String> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod relaunch_tests {
+    use super::server_list_args;
+
+    /// The restart carries no game arguments: only the error line, when there is one.
+    #[test]
+    fn server_list_restart_args() {
+        assert!(server_list_args(None).is_empty());
+        assert_eq!(server_list_args(Some("disconnected: bye")), ["--launcher-error", "disconnected: bye"]);
     }
 }
