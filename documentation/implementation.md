@@ -37,7 +37,9 @@ No system SDL2. The `render` module provides:
 - `seteffect`, `setcoloreffect`, `setzoomeffect`, `changeimgcolors` and `changeimgzoom` (`visual-effects.md`)
 - other players drawn through their GANI with their own sword, shield, head and body (`other-players-looks.md`)
 - windowed binary via `minifb` (`cargo run -p seihai-mae`)
-- F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
+- F5 opens Seihai's level window in every build, online or offline (a Seihai feature, not the real clients'): online it names the server's current level and opens the download cache's copy offline (leaving the server); its list (scrolls) has the levels the version opens, with jumps to your levels, the download cache and the built-in levels; "Return to server list" restarts Seihai at the server list. The window is modal and its time is left out of the slow-frame and stall reports. Online F4 prints the real client's "You cannot open the editor in the online mode."
+- Escape's quit prompt: Y / Enter quits, N / Esc plays on, S goes back to the server list (a fresh start of the program; a lost connection also restarts at the server list with the reason)
+- Offline, a link to a level that is not on disk is told once in chat while the player stands in it, not on every step
 - Play offline button in the GUI skips the connection
 
 The player sprite is shifted down 12 px so the feet sit on the collision tile.

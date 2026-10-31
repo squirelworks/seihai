@@ -132,6 +132,8 @@ pub enum QuitKey {
     Quit,
     /// N or Escape: close the prompt and play on.
     Cancel,
+    /// S: leave this server (or offline game) and go back to the server list.
+    ServerList,
     /// Nothing for the prompt.
     None,
 }
@@ -141,8 +143,15 @@ pub enum QuitKey {
 /// reads its keys in the same frame, and must not close it again (that left
 /// Escape doing nothing at all from 2026-10-23 until it was fixed).
 pub fn quit_key(was_open: bool, yes: bool, no: bool, escape: bool) -> QuitKey {
+    quit_key_with_list(was_open, yes, no, escape, false)
+}
+
+/// [`quit_key`] with the S key, which goes back to the server list.
+pub fn quit_key_with_list(was_open: bool, yes: bool, no: bool, escape: bool, list: bool) -> QuitKey {
     if yes {
         QuitKey::Quit
+    } else if list {
+        QuitKey::ServerList
     } else if no || (was_open && escape) {
         QuitKey::Cancel
     } else {
@@ -167,6 +176,74 @@ mod quit_key_tests {
         assert_eq!(quit_key(true, false, true, false), QuitKey::Cancel);
         assert_eq!(quit_key(true, true, false, false), QuitKey::Quit);
         assert_eq!(quit_key(true, false, false, false), QuitKey::None);
+    }
+
+    /// S answers it with the server list.
+    #[test]
+    fn s_goes_back_to_the_server_list() {
+        assert_eq!(quit_key_with_list(true, false, false, false, true), QuitKey::ServerList);
+        assert_eq!(quit_key_with_list(true, false, false, false, false), QuitKey::None);
+        // Y still wins if both are down.
+        assert_eq!(quit_key_with_list(true, true, false, false, true), QuitKey::Quit);
+    }
+}
+
+/// The text of the quit prompt.
+pub const QUIT_PROMPT: &str = "Quit Seihai?  Y / Enter = yes,  N / Esc = no,  S = server list";
+
+/// Offline, a link to a level that is not on disk is walked into on every
+/// step the player takes inside it. This says so once per link: again only
+/// after the player has stepped out of every link, or walked into another
+/// missing one.
+#[derive(Debug, Default)]
+pub struct MissingLevelNotice {
+    shown: Option<String>,
+}
+
+impl MissingLevelNotice {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The player is in a link to `dest`, which has no local file. Returns
+    /// the line to show, or `None` when it was already shown.
+    pub fn missing(&mut self, dest: &str) -> Option<String> {
+        if self.shown.as_deref().is_some_and(|s| s.eq_ignore_ascii_case(dest)) {
+            return None;
+        }
+        self.shown = Some(dest.to_string());
+        Some(format!("{dest} is not here offline (not in your levels or the download cache)"))
+    }
+
+    /// The player is in no link (or went through one): the next missing
+    /// level is told again.
+    pub fn clear(&mut self) {
+        self.shown = None;
+    }
+}
+
+#[cfg(test)]
+mod missing_level_tests {
+    use super::*;
+
+    #[test]
+    fn standing_in_the_link_tells_it_once() {
+        let mut n = MissingLevelNotice::new();
+        assert!(n.missing("level5.nw").unwrap().contains("level5.nw"));
+        for _ in 0..50 {
+            assert_eq!(n.missing("level5.nw"), None);
+        }
+        assert_eq!(n.missing("LEVEL5.NW"), None);
+    }
+
+    #[test]
+    fn stepping_out_or_another_link_tells_it_again() {
+        let mut n = MissingLevelNotice::new();
+        assert!(n.missing("level5.nw").is_some());
+        assert!(n.missing("house1newbie.nw").is_some());
+        assert!(n.missing("level5.nw").is_some());
+        n.clear();
+        assert!(n.missing("level5.nw").is_some());
     }
 }
 
@@ -537,21 +614,20 @@ pub enum EditorKey {
 
 /// Decide F4 (`is_f4`) or F5. Online the editor is refused with the real
 /// client's own text (`MainWindow-Error7`, seen in 2.00, 2.17.1, 2.22 and
-/// 2.31). The real 2.17.1 F5 opens a position window and never loads levels, so
-/// its online text for the older F5 level loader is not known: that line is
-/// inferred.
+/// 2.31). F5 is Seihai's level window, online or offline and in every
+/// build: it names the server's level, opens it (or a level file) offline,
+/// and goes back to the server list. (The real 2.17.1 F5 opened a position
+/// window instead.)
 pub fn editor_key(has_editor: bool, label: &str, online: bool, is_f4: bool) -> EditorKey {
+    if !is_f4 {
+        return EditorKey::Run;
+    }
     if !has_editor {
         // 2.3 moved the editor and level loading to GraalEditor.
         return EditorKey::Refuse(format!("{label} has no built-in editor"));
     }
     if online {
-        return EditorKey::Refuse(if is_f4 {
-            "You cannot open the editor in the online mode.".into()
-        } else {
-            // Inferred wording, not from a real client.
-            "You are online and this feature is not available".into()
-        });
+        return EditorKey::Refuse("You cannot open the editor in the online mode.".into());
     }
     EditorKey::Run
 }
@@ -685,26 +761,27 @@ mod editor_key_tests {
     use super::*;
 
     #[test]
-    fn online_refuses_both_keys() {
+    fn online_refuses_the_editor() {
         assert_eq!(
             editor_key(true, "2.17", true, true),
             EditorKey::Refuse("You cannot open the editor in the online mode.".into())
         );
-        assert_eq!(
-            editor_key(true, "2.17", true, false),
-            EditorKey::Refuse("You are online and this feature is not available".into())
-        );
+        assert_eq!(editor_key(false, "2.3", true, true), EditorKey::Refuse("2.3 has no built-in editor".into()));
     }
 
     #[test]
     fn offline_runs_and_no_editor_refuses() {
         assert_eq!(editor_key(true, "2.17", false, true), EditorKey::Run);
-        assert_eq!(editor_key(true, "2.17", false, false), EditorKey::Run);
-        for online in [false, true] {
-            assert_eq!(
-                editor_key(false, "2.3", online, false),
-                EditorKey::Refuse("2.3 has no built-in editor".into())
-            );
+        assert_eq!(editor_key(false, "2.3", false, true), EditorKey::Refuse("2.3 has no built-in editor".into()));
+    }
+
+    /// F5 opens the level window online and offline, editor or not.
+    #[test]
+    fn f5_always_opens_the_level_window() {
+        for has_editor in [false, true] {
+            for online in [false, true] {
+                assert_eq!(editor_key(has_editor, "2.22", online, false), EditorKey::Run);
+            }
         }
     }
 }

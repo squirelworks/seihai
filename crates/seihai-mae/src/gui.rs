@@ -444,77 +444,207 @@ fn run_inner(mut error: Option<String>) -> Option<String> {
     }
 }
 
-/// Pick a level file with one of `exts` (e.g. `.nw`). Returns the chosen
-/// path, if any.
-pub fn pick_level(start: &std::path::Path, exts: &[&str]) -> Option<std::path::PathBuf> {
-    use std::sync::{Arc, Mutex};
-    let chosen = Arc::new(Mutex::new(None));
-    let chosen2 = chosen.clone();
+/// The server's level, for the F5 window when online.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerLevel {
+    /// The server's name, else its address.
+    pub server: String,
+    /// The level the server has us in, if it said yet.
+    pub level: Option<String>,
+    /// Its copy in this server's download cache, if one was saved.
+    pub cached: Option<std::path::PathBuf>,
+}
+
+impl ServerLevel {
+    /// The line naming the server's level.
+    pub fn line(&self) -> String {
+        match &self.level {
+            Some(l) => format!("On {}: {l}", self.server),
+            None => format!("On {}: no level yet", self.server),
+        }
+    }
+
+    /// The text by the "open offline" button.
+    pub fn cache_line(&self) -> String {
+        match (&self.level, &self.cached) {
+            (Some(_), Some(p)) => format!("Saved copy: {}", p.display()),
+            (Some(l), None) => format!("{l} is not in the download cache (the server drew it without sending the file)"),
+            (None, _) => String::new(),
+        }
+    }
+}
+
+/// What the F5 window shows.
+#[derive(Debug, Clone)]
+pub struct LevelWindow {
+    /// Online: the server and its level.
+    pub server: Option<ServerLevel>,
+    /// The folder the list starts in.
+    pub start: std::path::PathBuf,
+    /// Folders to jump to (label, folder): the levels folder, the
+    /// download cache, the built-in levels.
+    pub places: Vec<(String, std::path::PathBuf)>,
+    /// The level extensions this version opens (".nw", ".graal", ...).
+    pub exts: Vec<String>,
+}
+
+/// What was picked in the F5 window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LevelChoice {
+    /// Play this level file offline (online: leave the server first).
+    Open(std::path::PathBuf),
+    /// Leave the server, or the offline game, for the server list.
+    ServerList,
+}
+
+/// The entries of `dir` for the F5 list: its folders (with a trailing `/`)
+/// and then its files with one of `exts` (any case), each part sorted.
+pub fn level_entries(dir: &std::path::Path, exts: &[String]) -> Vec<String> {
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if e.path().is_dir() {
+                dirs.push(format!("{name}/"));
+            } else {
+                let lower = name.to_ascii_lowercase();
+                if exts.iter().any(|x| lower.ends_with(&x.to_ascii_lowercase())) {
+                    files.push(name);
+                }
+            }
+        }
+    }
+    // Natural order: level2 before level10.
+    let key = |s: &String| {
+        let mut k = String::new();
+        let mut digits = String::new();
+        for c in s.to_ascii_lowercase().chars().chain(std::iter::once('\0')) {
+            if c.is_ascii_digit() {
+                digits.push(c);
+                continue;
+            }
+            if !digits.is_empty() {
+                k.push_str(&format!("{digits:0>12}"));
+                digits.clear();
+            }
+            if c != '\0' {
+                k.push(c);
+            }
+        }
+        k
+    };
+    dirs.sort_by_key(key);
+    files.sort_by_key(key);
+    dirs.extend(files);
+    dirs
+}
+
+/// The F5 window. Blocks until it closes; `None` when it was closed with
+/// nothing picked.
+pub fn level_window(w: LevelWindow) -> Option<LevelChoice> {
     struct Picker {
+        w: LevelWindow,
         dir: std::path::PathBuf,
         entries: Vec<String>,
-        out: Arc<Mutex<Option<std::path::PathBuf>>>,
-        exts: Vec<String>,
+        out: Arc<Mutex<Option<LevelChoice>>>,
     }
     impl Picker {
-        fn refresh(&mut self) {
-            self.entries.clear();
-            if let Ok(rd) = std::fs::read_dir(&self.dir) {
-                let mut dirs = Vec::new();
-                let mut files = Vec::new();
-                for e in rd.flatten() {
-                    let name = e.file_name().to_string_lossy().into_owned();
-                    if e.path().is_dir() {
-                        dirs.push(format!("{name}/"));
-                    } else if self.exts.iter().any(|x| name.ends_with(x.as_str())) {
-                        files.push(name);
-                    }
-                }
-                dirs.sort();
-                files.sort();
-                self.entries.extend(dirs);
-                self.entries.extend(files);
-            }
+        fn go(&mut self, dir: std::path::PathBuf) {
+            self.dir = dir;
+            self.entries = level_entries(&self.dir, &self.w.exts);
+        }
+        fn pick(&self, ctx: &egui::Context, c: LevelChoice) {
+            *self.out.lock().unwrap() = Some(c);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
     impl eframe::App for Picker {
         fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.heading("Pick a level");
-                ui.label(self.dir.display().to_string());
-                if ui.button("..").clicked() {
-                    if let Some(p) = self.dir.parent() {
-                        self.dir = p.to_path_buf();
-                        self.refresh();
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            egui::TopBottomPanel::top("server").show(ctx, |ui| {
+                ui.add_space(4.0);
+                match self.w.server.clone() {
+                    Some(s) => {
+                        ui.heading(s.line());
+                        if let Some(level) = &s.level {
+                            ui.horizontal_wrapped(|ui| {
+                                let open = ui.add_enabled(s.cached.is_some(), egui::Button::new(format!("Open {level} offline")));
+                                if open.clicked() {
+                                    if let Some(p) = s.cached.clone() {
+                                        self.pick(ctx, LevelChoice::Open(p));
+                                    }
+                                }
+                                ui.label(s.cache_line());
+                            });
+                        }
+                        ui.label("Opening a level here leaves the server and plays it offline.");
+                    }
+                    None => {
+                        ui.heading("Open a level (offline)");
                     }
                 }
-                for name in self.entries.clone() {
-                    if ui.button(&name).clicked() {
-                        let path = self.dir.join(name.trim_end_matches('/'));
-                        if path.is_dir() {
-                            self.dir = path;
-                            self.refresh();
-                        } else {
-                            *self.out.lock().unwrap() = Some(path);
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                ui.add_space(4.0);
+            });
+            egui::TopBottomPanel::bottom("buttons").show(ctx, |ui| {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Return to server list").clicked() {
+                        self.pick(ctx, LevelChoice::ServerList);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+                ui.add_space(4.0);
+            });
+            egui::CentralPanel::default().show(ctx, |ui| {
+                if !self.w.places.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, dir) in self.w.places.clone() {
+                            if ui.selectable_label(self.dir == dir, label).clicked() {
+                                self.go(dir);
+                            }
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("..").clicked() {
+                        if let Some(p) = self.dir.parent() {
+                            self.go(p.to_path_buf());
                         }
                     }
-                }
+                    ui.label(self.dir.display().to_string());
+                });
+                ui.separator();
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                    if self.entries.is_empty() {
+                        ui.label("No levels in this folder.");
+                    }
+                    for name in self.entries.clone() {
+                        if ui.button(&name).clicked() {
+                            let path = self.dir.join(name.trim_end_matches('/'));
+                            if path.is_dir() {
+                                self.go(path);
+                            } else {
+                                self.pick(ctx, LevelChoice::Open(path));
+                            }
+                        }
+                    }
+                });
             });
         }
     }
-    let mut picker = Picker {
-        dir: start.to_path_buf(),
-        entries: Vec::new(),
-        out: chosen2,
-        exts: exts.iter().map(|x| x.to_string()).collect(),
-    };
-    picker.refresh();
+    let chosen: Arc<Mutex<Option<LevelChoice>>> = Arc::default();
+    let mut picker = Picker { dir: w.start.clone(), w, entries: Vec::new(), out: chosen.clone() };
+    picker.go(picker.dir.clone());
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 480.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 520.0]),
         ..Default::default()
     };
-    let _ = eframe::run_native("Pick a level", options, Box::new(|_| Ok(Box::new(picker))));
+    let _ = eframe::run_native("Seihai: levels", options, Box::new(|_| Ok(Box::new(picker))));
     let picked = chosen.lock().unwrap().take();
     picked
 }
@@ -628,5 +758,42 @@ mod tests {
         let src = include_str!("gui.rs");
         let label = concat!("button(\"Connect to ", "listserver\")");
         assert_eq!(src.matches(label).count(), 1);
+    }
+
+    fn tmp(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("seihai-gui-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Folders first, then the levels this version opens, in any case.
+    #[test]
+    fn level_list_has_folders_then_levels() {
+        let d = tmp("entries");
+        std::fs::create_dir_all(d.join("bodies")).unwrap();
+        for f in ["zeta.nw", "Alpha.NW", "readme.txt", "old.graal", "mid.nw"] {
+            std::fs::write(d.join(f), b"x").unwrap();
+        }
+        let exts = vec![".nw".to_string()];
+        assert_eq!(level_entries(&d, &exts), ["bodies/", "Alpha.NW", "mid.nw", "zeta.nw"]);
+        assert!(level_entries(&d.join("missing"), &exts).is_empty());
+        let n = tmp("natural");
+        for f in ["level10.nw", "level2.nw", "level1.nw"] {
+            std::fs::write(n.join(f), b"x").unwrap();
+        }
+        assert_eq!(level_entries(&n, &exts), ["level1.nw", "level2.nw", "level10.nw"]);
+    }
+
+    #[test]
+    fn server_level_lines() {
+        let mut s = ServerLevel { server: "Classic".into(), level: Some("onlinestartlocal.nw".into()), cached: None };
+        assert_eq!(s.line(), "On Classic: onlinestartlocal.nw");
+        assert!(s.cache_line().contains("not in the download cache"));
+        s.cached = Some("/c/levels/onlinestartlocal.nw".into());
+        assert!(s.cache_line().starts_with("Saved copy: "));
+        s.level = None;
+        assert_eq!(s.line(), "On Classic: no level yet");
+        assert_eq!(s.cache_line(), "");
     }
 }
