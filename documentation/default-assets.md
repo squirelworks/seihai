@@ -16,7 +16,7 @@ Dated 2026-10-25. Base: `main` at `d5389c2`. Item 20 (wiring) is described under
 assets/default/
   pics1.png                  2048x512 tile sheet on the Graal tile layout, 8-bit palette PNG, opaque  24.1 KB
   tiledefs.txt               the 4096 tile types of the Graal layout, flat list     11.8 KB
-  state.png                  224x145 HUD sheet, 4-bit palette PNG (our own layout)  0.6 KB
+  state.png                  224x145 HUD sheet, 4-bit palette PNG (2.05 layout)     1.6 KB
   sprites.png                128x402, shadow, ripples, carried objects, break pieces  1.5 KB
   bodies/body.png            128x720 body sheet, 4-bit palette PNG                  1.5 KB
   heads/head0.png            32x560 head sheet, 4-bit palette PNG                   0.6 KB
@@ -81,7 +81,7 @@ To refresh the lists from an `arrays.dat`: `python3 tools/gen_default_assets.py 
 - **`sword1.png` 128x96**: four direction columns by three rows of 32x32 (held, mid-swing with an arc, thrust). `sword.gani` places these (symbolic sheet `SWORD`, sprite ids `300 + 4 * row + dir`).
 - **`shield1.png` 38x20**: four sprites at `x = 0, 6, 14, 30` of 6x18, 8x20, 16x20 and 8x20 (up, left, down, right). The core GANIs draw no shield (a player without one draws none); the sheet is there for the shield layer.
 - **`sprites.png` 128x402**: the shadow is 24x12 at `(0, 0)`; the two swim rings are 32x16 at `(0, 306)` and `(0, 322)`; the five carried objects (bush, pot-like block, two stones, a boulder) are 32x32 cut-outs with transparent corners at `(0, 338)`, `(32, 338)`, `(64, 338)`, `(96, 338)`, `(96, 370)`; the break pieces are leaf bits at `(44, 0)`/`(60, 0)`, rock chunks 16x16 at `(24, 82)` .. `(40, 98)`, pot chunks 16x14 at `(56, 82)` .. `(72, 96)`, and two 30x30 splash frames at `(24, 114)`/`(54, 114)`. All of it is drawn by `build_sprites` from polygons and ellipses; the rectangles are where `documentation/throwing.md`'s sprite table points. Everything else is transparent. The renderer skips only fully transparent pixels (`blit_sprite`), so the shadow is a checker-dithered ellipse rather than a soft alpha, and the rings carry an opaque water-coloured ellipse that hides the lower half of the head.
-- **`state.png` 224x145**: the HUD sheet is the one file whose real layout is not documented, and nothing in Seihai reads it yet (`--check-assets` only needs it to load). Ours holds a full, half and empty heart (16x16 at `x = 0, 16, 32`), a rupee, a bomb and an arrow (about 16x16 at `x = 50`, `66`, `82`) and ten 5x7 digits in 8x12 cells at `y = 16`. It is a placeholder with our own layout, not the real `state.png` layout; the 1.38+ layouts use 224x97, and a smaller sheet works for them too (the 145 row count is a superset).
+- **`state.png` 224x145**: our own art at the rectangles the 2.05 status routine reads (`hud.md`, `render/hud.rs`), so the built-in sheet fills the same HUD layout as a real client's. Big hearts 40x44, full at `(0, 0)` and half at `(40, 0)`; small hearts 31x33, full at `(80, 0)` and half at `(111, 0)` (a half heart is a whole heart with its right side empty; empty containers are not drawn, so there is no empty heart). The icon strip `(80, 33, 120, 16)` holds a rupee, a bomb and an arrow centred at strip x 6, 65 and 113, so each sits over its count (x 280, 338 and 386 on screen). The button the key names go on is 22x33 at `(202, 0)`; `(169, 15)` is left transparent so `three_buttons` does not take the sheet for 1.38 to 1.41 art. Ten digits in 14x16 cells at `y = 81` (the 5x7 glyphs doubled, with a one-pixel dark rim). The MP frame is 130x22 at `(0, 49)` with its fill row (100x10) at `y = 71`; the AP frame is at `(0, 97)` with its fill at `y = 119`. A frame has an emblem in its left 22 px and a dark well the fill covers from `+22, +6`. Before this the sheet was a 16 px placeholder in a layout of its own, which the HUD read with the 2.05 rectangles: cropped hearts and a stray digit row in the top right.
 
 Palettes: sword, shield, sprites and state are 4-bit palette PNGs with index 0 transparent (`tRNS`). The body is a 4-bit palette PNG in the 2.05 body layout, so it can be drawn in the player's colours (`appearance.md`): 0 outline, 1 belt, 2 transparent, 3 shoes, 4 sleeves, 5 skin, 6 coat, the rest after. The light tunic, dark skin and dark boot shades are folded into their parts; the head is also a 16-colour palette PNG (written 4-bit; the 8-bit form the 2.22 sheets use reads the same); `pics1.png` is an 8-bit palette PNG with no transparency. All are non-interlaced and read by `read_png_rgba` / `read_png_rgb`.
 
@@ -169,7 +169,6 @@ No file request is added for these (the first-step list is unchanged); a copy of
 
 ## Not settled
 
-- The real `state.png` layout; ours is a placeholder.
 - The swim head offset (14 px in code and here; 16 and 20 in the 2.22 animation).
 - Whether a 1.33 to 1.39 client reads ids on a 1856-wide sheet the same way.
 - The art is functional and small, not final: no hats, and one look per tile type outside the documented ids. Naming more ids (trees, houses, paths) needs a documented source for each; then the generator can draw them.

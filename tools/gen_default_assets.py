@@ -968,7 +968,8 @@ def draw_throw_art(d, p):
 
 
 # ---------------------------------------------------------------------------
-# HUD sheet (state.png, 224 x 145): our own layout, see documentation
+# HUD sheet (state.png, 224 x 145): our own art at the rectangles the 2.05
+# status routine reads (documentation/hud.md, render/hud.rs)
 # ---------------------------------------------------------------------------
 
 DIGITS = [
@@ -984,39 +985,141 @@ DIGITS = [
     "01110 10001 10001 01111 00001 00010 01100",
 ]
 
+# Sheet rectangles (x, y, w, h) the status routine reads; see hud.md.
+STATE_HEART_BIG = (0, 0, 40, 44)       # full; the half heart is the next 40
+STATE_HEART_SMALL = (80, 0, 31, 33)    # full; the half heart is the next 31
+STATE_ICONS = (80, 33, 120, 16)        # rupee, bomb, arrow, drawn at (274, 30)
+STATE_BUTTON = (202, 0, 22, 33)
+STATE_DIGIT_Y, STATE_DIGIT_W, STATE_DIGIT_H = 81, 14, 16
+STATE_MP = (0, 49, 130, 22, 71)        # frame, then the fill row's y
+STATE_AP = (0, 97, 130, 22, 119)
+STATE_FILL_H = 10
+
+
+def heart_mask(w, h):
+    """A heart filling a w x h box: two lobes and a point, as a set of
+    (x, y) pixels."""
+    m = Image.new("1", (w, h), 0)
+    md = ImageDraw.Draw(m)
+    r = w / 4.0
+    top = r * 1.05
+    for cx in (r, w - r):
+        md.ellipse([cx - r, top - r, cx + r - 1, top + r - 1], fill=1)
+    md.polygon([(0, top + r * 0.25), (w - 1, top + r * 0.25), ((w - 1) / 2.0, h - 1)], fill=1)
+    md.rectangle([int(r), int(top), int(w - r - 1), int(top + r)], fill=1)
+    return {(x, y) for y in range(h) for x in range(w) if m.getpixel((x, y))}
+
+
+def paint_shape(d, pix, ox, oy, fill, outline, rim=2, half_fill=None, w=0):
+    """Fill a pixel set with a `rim`-pixel outline. With `half_fill`, the
+    right half (x >= w / 2) is painted in that colour instead of `fill`."""
+    inner = set(pix)
+    for _ in range(rim):
+        inner = {(x, y) for (x, y) in inner
+                 if all((x + dx, y + dy) in inner for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))}
+    for (x, y) in pix:
+        if (x, y) not in inner:
+            c = outline
+        elif half_fill is not None and x >= w // 2:
+            c = half_fill
+        else:
+            c = fill
+        d.point([(ox + x, oy + y)], fill=c)
+    return inner
+
 
 def build_state():
     p = Pal(transparent=True)
-    for n, c in [("outline", (32, 28, 40)), ("red", (220, 40, 56)), ("red_lt", (255, 130, 140)),
-                 ("empty", (90, 40, 60)), ("green", (48, 190, 90)), ("white", (245, 245, 245)),
-                 ("grey", (110, 110, 120)), ("brown", (140, 90, 50)), ("gold", (244, 204, 64))]:
+    for n, c in [("outline", (32, 20, 36)), ("red", (214, 36, 60)), ("red_lt", (255, 150, 160)),
+                 ("empty", (84, 40, 64)), ("green", (40, 176, 96)), ("green_lt", (170, 240, 190)),
+                 ("white", (248, 248, 248)), ("grey", (96, 104, 128)), ("brown", (150, 96, 52)),
+                 ("gold", (246, 206, 70)), ("slate", (58, 74, 128)), ("slate_lt", (120, 146, 210)),
+                 ("dark", (20, 22, 34)), ("blue", (48, 112, 230)), ("blue_lt", (150, 200, 255))]:
         p.add(n, c)
     im = Image.new("P", (224, 145), 0)
     d = ImageDraw.Draw(im)
 
-    def heart(x, fill, half=False):
-        pts = [(x + 8, x * 0 + 14), (x + 1, 7), (x + 1, 3), (x + 3, 1), (x + 6, 1), (x + 8, 4), (x + 10, 1), (x + 13, 1), (x + 15, 3), (x + 15, 7)]
-        d.polygon(pts, fill=p["empty"] if half else p[fill], outline=p["outline"])
-        if half:
-            d.polygon([(x + 8, 14), (x + 1, 7), (x + 1, 3), (x + 3, 1), (x + 6, 1), (x + 8, 4)], fill=p["red"])
-            d.line([(x + 8, 4), (x + 8, 14)], fill=p["outline"])
-        elif fill == "red":
-            d.point([(x + 4, 3), (x + 3, 4)], fill=p["red_lt"])
+    # Hearts: full and half, big (40 x 44) and small (31 x 33). The half
+    # heart is a whole heart with its right side empty; empty containers
+    # are not drawn, so there is no empty heart.
+    for (x0, y0, w, h), rim in ((STATE_HEART_BIG, 3), (STATE_HEART_SMALL, 2)):
+        pix = heart_mask(w, h)
+        for k in range(2):
+            ox = x0 + k * w
+            inner = paint_shape(d, pix, ox, y0, p["red"], p["outline"], rim,
+                                half_fill=p["empty"] if k else None, w=w)
+            # a shine on the left lobe
+            sx, sy, sr = w // 4, h // 4, max(2, w // 10)
+            d.ellipse([ox + sx - sr, y0 + sy - sr, ox + sx, y0 + sy], fill=p["red_lt"])
+            if k:
+                d.line([(ox + w // 2 - 1, y0 + rim), (ox + w // 2 - 1, y0 + h - rim - 3)], fill=p["outline"])
+            # keep the shine inside the outline
+            for (x, y) in pix:
+                if (x, y) not in inner:
+                    d.point([(ox + x, y0 + y)], fill=p["outline"])
 
-    heart(0, "red")
-    heart(16, "red", half=True)
-    heart(32, "empty")
-    d.polygon([(56, 2), (62, 8), (56, 14), (50, 8)], fill=p["green"], outline=p["outline"])      # rupee
-    d.ellipse([68, 4, 78, 14], fill=p["grey"], outline=p["outline"])                              # bomb
-    d.line([(76, 4), (79, 1)], fill=p["gold"])
-    d.line([(84, 8), (95, 8)], fill=p["brown"])                                                   # arrow
-    d.polygon([(95, 5), (98, 8), (95, 11)], fill=p["grey"], outline=p["outline"])
-    d.line([(84, 8), (82, 5)], fill=p["white"])
+    # Icon strip: each icon centred over its count (rupees centred on
+    # x 280, bombs at 326..350, arrows at 374..398; the strip is drawn at
+    # x 274), so the centres are strip x 6, 65 and 113.
+    ix, iy, _, _ = STATE_ICONS
+    c = ix + 6                                                     # rupee
+    d.polygon([(c, iy + 1), (c + 5, iy + 5), (c + 5, iy + 10), (c, iy + 14), (c - 5, iy + 10), (c - 5, iy + 5)],
+              fill=p["green"], outline=p["outline"])
+    d.line([(c - 2, iy + 5), (c - 2, iy + 10)], fill=p["green_lt"])
+    d.point([(c, iy + 3)], fill=p["green_lt"])
+    c = ix + 65                                                    # bomb
+    d.ellipse([c - 6, iy + 3, c + 6, iy + 15], fill=p["grey"], outline=p["outline"])
+    d.point([(c - 3, iy + 6), (c - 2, iy + 6), (c - 3, iy + 7)], fill=p["white"])
+    d.line([(c + 3, iy + 4), (c + 5, iy + 1)], fill=p["brown"])
+    d.point([(c + 6, iy + 0), (c + 6, iy + 1)], fill=p["gold"])
+    c = ix + 113                                                   # arrow, pointing up
+    d.line([(c, iy + 4), (c, iy + 13)], fill=p["brown"], width=2)
+    d.polygon([(c, iy + 0), (c + 3, iy + 4), (c - 3, iy + 4)], fill=p["grey"], outline=p["outline"])
+    d.line([(c - 2, iy + 12), (c - 2, iy + 15)], fill=p["white"])
+    d.line([(c + 2, iy + 12), (c + 2, iy + 15)], fill=p["white"])
+
+    # The button the key names are printed on (22 x 33).
+    bx, by, bw, bh = STATE_BUTTON
+    d.rounded_rectangle([bx, by, bx + bw - 1, by + bh - 1], radius=5, fill=p["slate"], outline=p["outline"])
+    d.line([(bx + 2, by + 3), (bx + 2, by + bh - 5)], fill=p["slate_lt"])
+    d.line([(bx + 3, by + 2), (bx + bw - 5, by + 2)], fill=p["slate_lt"])
+
+    # Digits: 14 x 16 cells at y 81, a doubled 5x7 glyph (10 x 14) with a
+    # one-pixel dark rim, so it reads on grass; the routine steps 12 px.
     for i, rows in enumerate(DIGITS):
+        on = set()
         for ry, row in enumerate(rows.split()):
             for rx, ch in enumerate(row):
                 if ch == "1":
-                    d.point([(i * 8 + 1 + rx, 18 + ry)], fill=p["white"])
+                    on |= {(2 * rx + a, 2 * ry + b) for a in (0, 1) for b in (0, 1)}
+        ox, oy = i * STATE_DIGIT_W + 1, STATE_DIGIT_Y + 1
+        for (x, y) in on:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if (x + dx, y + dy) not in on:
+                        d.point([(ox + x + dx, oy + y + dy)], fill=p["outline"])
+        for (x, y) in on:
+            d.point([(ox + x, oy + y)], fill=p["white"])
+
+    # AP and MP bars: a 130 x 22 frame with an emblem in its left 22 px and
+    # a well whose inside (x 22..121, y 6..15) the fill covers; the fill row
+    # (100 x 10) sits under the frame and is drawn AP or MP pixels wide.
+    for (fx, fy, fw, fh, fill_y), col, col_lt in ((STATE_MP, "blue", "blue_lt"), (STATE_AP, "red", "red_lt")):
+        d.rounded_rectangle([fx, fy, fx + fw - 1, fy + fh - 1], radius=4, fill=p["slate"], outline=p["outline"])
+        d.line([(fx + 3, fy + 1), (fx + fw - 4, fy + 1)], fill=p["slate_lt"])
+        d.rectangle([fx + 21, fy + 5, fx + 122, fy + 16], fill=p["dark"], outline=p["outline"])
+        cx, cy = fx + 11, fy + 11                                  # emblem
+        if col == "red":                                           # AP: a star-like diamond
+            d.polygon([(cx, cy - 7), (cx + 3, cy - 2), (cx + 7, cy), (cx + 3, cy + 2), (cx, cy + 7),
+                       (cx - 3, cy + 2), (cx - 7, cy), (cx - 3, cy - 2)], fill=p["gold"], outline=p["outline"])
+        else:                                                      # MP: a drop
+            d.ellipse([cx - 5, cy - 2, cx + 5, cy + 7], fill=p[col], outline=p["outline"])
+            d.polygon([(cx, cy - 8), (cx + 4, cy), (cx - 4, cy)], fill=p[col])
+            d.line([(cx, cy - 8), (cx - 5, cy + 1)], fill=p["outline"])
+            d.line([(cx, cy - 8), (cx + 5, cy + 1)], fill=p["outline"])
+        d.rectangle([fx, fill_y, fx + 99, fill_y + STATE_FILL_H - 1], fill=p[col])
+        d.line([(fx, fill_y + 1), (fx + 99, fill_y + 1)], fill=p[col_lt])
+        d.line([(fx, fill_y + STATE_FILL_H - 1), (fx + 99, fill_y + STATE_FILL_H - 1)], fill=p["outline"])
     return im, p
 
 
