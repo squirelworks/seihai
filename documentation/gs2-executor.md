@@ -20,7 +20,8 @@ choice where the client is not followed.
   emits a function table with `public.` names. **[bin]**
 - Its VM is `FUN_003dc954`. Its switch has a case for every opcode the
   gs2-parser compiler emits except 11 (`OP_WAITFOR`). It also has cases for
-  45–47 and 66–67, which the compiler never emits (they are left for Stage D).
+  45–47 and 66–67, which the compiler never emits (still stubs, see
+  `gs2-commands.md`).
   3.153 also contains a GS2 compiler of its own: a flex scanner in
   `FUN_003f590c`. **[bin]**
 
@@ -87,8 +88,11 @@ handled before that search. **[bin]**
   function body). `Machine::call_event("onCreated", args)` calls a
   function the way `OP_CALL` would. Both return `Done`, `Sleep(t)` (go on
   with `resume`), `Stopped(reason)` or `NoSuchEvent`.
-- Every opcode in the table above is run. Anything else (arrays,
-  objects, `with`, shifts, `exp`, `log`, `in` ranges, `params`) is logged as "not run yet (Stage D)" and skipped.
+- Every opcode in the table above is run, and so are the Stage D groups
+  in `gs2-commands.md` (timers, strings, lists, the rest). The opcodes
+  still stubbed (real objects, `waitfor`, `link`, `params`) are listed
+  there under "Still stubs"; they are logged as "not run yet (Stage D)"
+  and skipped.
   A value the reader does not name is logged as an unknown opcode and
   skipped. Skipping can leave the stack uneven. The VM's own checks still
   stop the script if that happens.
@@ -109,12 +113,15 @@ handled before that search. **[bin]**
     `play`, …): `Effect::Command` with the evaluated arguments, as GS1
     sends them
 
-  Engine-side GS1 commands (arrays, timers, string lists) are not mapped,
-  because GS2 has its own forms of them (Stage D). `this.x` and `this.y`
+  Command names match in any case and with a `this.` or `thiso.` in
+  front. Engine-side GS1 commands (arrays, timers, string lists) are not
+  mapped, because GS2 has its own forms of them (Stage D). Every 3.153
+  built-in and how Seihai runs it is in `gs2-shared-commands.md`. `this.x` and `this.y`
   are `EffectHost` properties and a write gives `SetPos`.
 - Variables of `this` and `thiso` share one store. A dotted name under a
   variable (`this.a.b`) is kept as one name, `a.b`, under its root.
-  **[seihai]** Real objects are Stage D.
+  **[seihai]** Real objects are not run yet (`gs2-commands.md`, Still
+  stubs). `with` works on root objects (`gs2-commands.md`, The rest).
 
 ### Not taken from the client
 

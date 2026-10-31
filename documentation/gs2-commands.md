@@ -1,7 +1,9 @@
 # GS2-only commands (Stage D)
 
 Date: 2026-10-31. The GS2 commands the classic GS1 engine does not have,
-one group per PR: timers, strings, lists, then the rest. Each one is read
+one group per PR: timers, strings, lists, then the rest. Which of the
+client's built-in commands Seihai runs, and which are still stubs, is in
+`gs2-shared-commands.md`. Each one is read
 in GServer-v2 (the 2026-10-31 source tarball) and in the 3.153 client's
 command table, then run in `scripting/gs2/exec.rs` or listed here as not
 run.
@@ -197,13 +199,69 @@ which always splits on spaces and commas and does not trim.
   the loop variable and the list on the stack too, and so does Seihai;
   they go when the function returns. **[src]/[bin]**
 
-### Not run
-
-- `setarray(var, n)` (`OP_SETARRAY`): its helper (`0x3d6d7c`) was not
-  read. It is logged and skipped.
-- `a.indices(…)`, `a.link(…)`, `a.type()`: these are part of "the rest".
+`setarray`, `a.indices(v)` and `a.type()` are in "The rest" below.
 
 ### List tests
 
 `tests/fixtures/gs2/lists.gs2`, run by `tests/gs2_exec.rs`, and unit tests
 in `scripting/gs2/lists.rs` for `tokenize`, `positions` and `subarray`.
+
+## The rest
+
+The opcodes left after the lists, read in the 3.153 VM (`0x3dc954` and
+its helpers). **[bin]** S0 is the top of the stack and S1 the entry under
+it. Constants the decompile names but does not print are marked
+**[inf]**; the ones it prints (`OP_OBJ_TYPE`'s results) are **[bin]**.
+
+| Built-in | Opcode | 3.153 | Seihai |
+|---|---|---|---|
+| `exp(x)` | `OP_EXP` | `exp(S0)` | the same |
+| `log(…)` | `OP_LOG` | `log(S0) / log(S1)`: S1 is the base, `log10` when it is 10; a base of 0 or less gives 0 **[inf]** | the same |
+| `getangle(dx, dy)` | `OP_GETANGLE` | S1 `dx`, S0 `dy`: `atan(-dy / dx)`, plus π when `dx < 0`, plus 2π when still below 0 (`0x3dc038`); `dx == 0` gives one constant for `dy > 0` and another for the rest | 3π/2 and π/2 for those two **[inf]** |
+| `getdir(dx, dy)` | `OP_GETDIR` | the longer axis, ties to the vertical: four constants by sign | up 0, left 1, down 2, right 3 **[inf]** |
+| `vecx(d)`, `vecy(d)` | `OP_VECX`, `OP_VECY` | a four-row table for `d` 0..3, 0 for any other `d` | (0, -1), (-1, 0), (0, 1), (1, 0) **[inf]**: the table was not read |
+| `a << b`, `a >> b` | `OP_BW_LEFTSHIFT`, `…_RIGHTSHIFT` | 32-bit, both sides through the integer conversion, the count `& 63` | the same; a count of 32 or more gives 0 (or -1 for a negative `>>`), as PowerPC does |
+| `x in \|a, b\|` | `OP_IN_RANGE` | `[x, a, b]`; a list `x` is in when every element is; the bounds rule comes from the instruction's number field, modes 0..3 with small margins (`0x3d9d30`, `0x3d42dc`) | gs2-parser gives no number field (mode 0): `a <= x <= b`, no margin **[inf]** |
+| `a.type()` | `OP_OBJ_TYPE` | a list with elements 3; otherwise by the variable's kind: number 0, string 1, object 2; anything else -1 | the same; an empty list is -1, `this` or `player` is 2 **[inf]** |
+| `a.indices(v)` | `OP_OBJ_INDICES` | the list in S1, the value in S0: a new list of every index where the element equals `v` (numbers within a margin) (`0x3db4d4`) | the same, numbers exact |
+| `setarray(a, n)` | `OP_SETARRAY` | the list in S1, `n` in S0, nothing left: pads with 0 or cuts to `n`, kept to 0..10 000 (`0x3d6d7c`) | the same |
+| `with (obj) { … }` | `OP_WITH`, `OP_WITHEND` | a non-null object goes on the `with` stack and becomes `this` (unless it is of one class, not identified); a null object jumps past the block; `OP_WITHEND` pops it and puts `this` back | the same, below |
+
+`with` in Seihai: `this`, and names with no prefix, mean the `with` object
+inside the block. A name with no prefix that is not already a variable of
+the object or the level is made on the `with` object (outside `with` it
+goes to the global object, as before). **[seihai]** Seihai has no object
+references, so only a root object (`this`, `player`, `level`, …) can be a
+`with` object. Anything else, such as an object held in a variable, is
+logged and its block is skipped, as for a null object. **[seihai]**
+
+### Where gs2-parser and the 3.153 VM do not agree
+
+- `obj.indices(v)`: gs2-parser pushes `v`, then the list. The VM wants
+  the list under the value. Seihai follows the VM, so `indices` in a
+  script built by gs2-parser finds nothing. **[src]/[bin]**
+- `log(a, b)`: gs2-parser pushes `b` first, so the VM takes `b` as the
+  base and `log(2, 8)` is log base 8 of 2. Whether the original compiler
+  pushes them the other way was not checked. **[src]/[bin]**
+- `random(a, b)` and `min`/`max` are pushed the same reversed way, which
+  does not change their result.
+
+### Still stubs
+
+These opcodes are logged ("not run yet") and skipped:
+
+| Opcode | Why |
+|---|---|
+| `OP_WAITFOR` (11) | not in the 3.153 VM's switch; gs2-parser compiles `waitfor` to it |
+| `OP_INLINE_NEW` (40), `OP_NEW_OBJECT` (42), `OP_OBJ_FROM_STR` (43), `OP_MAKEVAR` (41) | they make or find real objects, and Seihai has no object references yet |
+| `OP_OBJ_LINK` (100) | its helper (`0x3f5848`) was not read |
+| `OP_OBJ_COMPARE` (104) | not in the 3.153 VM's switch; gs2-parser does not emit it |
+| 45–47, 66–67 | the VM has cases for them, but gs2-parser has no name for them and never emits them; they are logged as unknown opcodes |
+| `OP_PARAMS` (190) | pushes the function's `params` object, which needs object references; gs2-parser does not emit it |
+
+The commands that are still stubs are in `gs2-shared-commands.md`.
+
+### Rest tests
+
+`tests/fixtures/gs2/rest.gs2`, run by `tests/gs2_exec.rs`, and unit tests
+in `scripting/gs2/maths.rs` for `getangle`, `getdir` and the shifts.
