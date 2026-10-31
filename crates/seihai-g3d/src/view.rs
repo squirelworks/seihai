@@ -22,8 +22,6 @@ mod font;
 
 pub const WIDTH: usize = 640;
 pub const HEIGHT: usize = 480;
-/// Horizontal field of view (Seihai's choice).
-pub const FOV: f32 = 70.0;
 const SKY: u32 = 0x5a78b4;
 
 /// How long a chat line stays: 10 s at 50 ms ticks.
@@ -151,7 +149,7 @@ pub struct Scene<'a> {
 
 pub fn draw(f: &mut Frame, a: &mut Assets, s: Scene) {
     f.clear(SKY);
-    let cam = Camera::look_at(s.cam.pos, s.cam.target(s.me), FOV, f.w);
+    let cam = Camera::look_at(s.cam.pos, s.cam.target(s.me), s.cam.rig.fov, f.w);
     if let Some(level) = s.level {
         for m in &level.meshes {
             draw_mesh(f, &cam, m, &Placement::world(), &a.textures);

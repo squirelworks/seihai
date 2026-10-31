@@ -16,6 +16,7 @@
 //! one frame after the level is in (and after `--walk` steps forward and
 //! `--turn` steps right), writes it as a BMP and exits.
 
+use seihai_g3d::config::Config;
 use seihai_g3d::props::Player;
 use seihai_g3d::render::Frame;
 use seihai_g3d::session::{self, Event, Login, Session, TICK};
@@ -105,10 +106,18 @@ fn main() -> ExitCode {
     let password = a.password_env.as_deref().and_then(|v| std::env::var(v).ok()).unwrap_or_default();
     let account = a.account.clone().unwrap_or_else(|| "guest".into());
     let nick = a.nick.clone().unwrap_or_else(|| account.clone());
-    let me = Player { nick, ..Player::default() };
+    let mut me = Player { nick, ..Player::default() };
     let assets = a.assets.as_ref().map(PathBuf::from);
+    // The look and UDP options from the install's graal3dconfig.txt. Its
+    // server address is never used: the server is always --online.
+    // TODO(G3D-4): fixedport / fixedudpport (bind UDP to a set port).
+    let cfg = assets.as_ref().and_then(|d| std::fs::read_to_string(d.join("graal3dconfig.txt")).ok()).map(|t| Config::parse(&t));
+    if let Some(c) = &cfg {
+        c.apply_look(&mut me);
+    }
+    let no_udp = a.no_udp || cfg.as_ref().is_some_and(|c| c.no_udp);
     let dir = a.levels.clone().map(Into::into).unwrap_or_else(|| session::default_level_dir(assets.as_deref()));
-    let s = match Session::connect(&addr, &Login { account, password }, me, !a.no_udp, Some(dir.clone())) {
+    let s = match Session::connect(&addr, &Login { account, password }, me, !no_udp, Some(dir.clone())) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("seihai-g3d: {addr}: {e}");
