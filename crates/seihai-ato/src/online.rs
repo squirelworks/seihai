@@ -11,6 +11,10 @@
 //! and 3.04 does not) is kept by core's session state, read with
 //! `scripting::gs2::Script::parse` when the level is logged, and logged
 //! with its opcodes. It is not run.
+//!
+//! Under the level line come the fields the server sent with it (board,
+//! links, chests, signs, the player's props and each server NPC's props,
+//! [`crate::fields`]). Only builds with a Torque profile log them.
 
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
@@ -72,14 +76,14 @@ pub fn run(
                 let before = st.current_level_name();
                 // A new level ends the one owed: log it as it stood.
                 if owed && store.level_name().is_some_and(|n| before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))) {
-                    log_level(&store, &st, out, shown);
+                    log_level(version, &store, &st, out, shown);
                     owed = false;
                 }
                 owed |= store.update(&mut st, local);
             }
             Ok(Err(e)) => {
                 if owed {
-                    log_level(&store, &st, out, shown);
+                    log_level(version, &store, &st, out, shown);
                 }
                 let why = st.disconnect_message.take().unwrap_or_else(|| e.to_string());
                 let _ = writeln!(out, "connection closed: {why}");
@@ -87,7 +91,7 @@ pub fn run(
             }
             Err(RecvTimeoutError::Timeout) => {
                 if owed {
-                    log_level(&store, &st, out, shown);
+                    log_level(version, &store, &st, out, shown);
                     owed = false;
                     if first_level_only {
                         let _ = s.conn.shutdown();
@@ -100,9 +104,12 @@ pub fn run(
     }
 }
 
-fn log_level(store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
+fn log_level(version: ClientVersion, store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
     if let (Some(a), Some(level)) = (store.arrival(st), store.level.as_ref()) {
         let _ = writeln!(out, "{}", a.line());
+        for l in crate::fields::lines(version, level, &a.name, st) {
+            let _ = writeln!(out, "{l}");
+        }
         for l in a.script_lines() {
             let _ = writeln!(out, "{l}");
         }
