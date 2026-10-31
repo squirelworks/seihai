@@ -144,6 +144,55 @@ fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: 
 }
 
 /// Send the file requests the rules ask for.
+/// What the M map shows now: a `setmap` from a script, else the server's
+/// `PLO_BIGMAP` (2.1+), else the gmap the player is on when it names a
+/// picture, else the `--bigmap` file, else `bigmap.txt` and `map.png`.
+fn map_source(session: &OfflineSession, net: &SessionState, bigmap_file: Option<&std::path::Path>) -> seihai::mapscreen::MapSource {
+    use seihai::mapscreen::MapSource;
+    if let Some((image, txt, x, y)) = &session.script_map {
+        return MapSource::new(txt, image).with_off_map(*x, *y);
+    }
+    if let Some(spec) = &net.bigmap {
+        return MapSource::new(&spec.txt, &spec.png).with_off_map(spec.x, spec.y);
+    }
+    if let Some(img) = session.gmap.as_ref().and_then(|w| w.map.map_img.as_deref()) {
+        return MapSource::new(&session.gmap.as_ref().map(|w| w.name.clone()).unwrap_or_default(), img);
+    }
+    if let Some(name) = bigmap_file.and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()) {
+        return MapSource::new(&name, "map.png");
+    }
+    MapSource::default_map()
+}
+
+/// A grid for the map the client already holds: the gmap's, or the
+/// `--bigmap` file's.
+fn map_grid(session: &OfflineSession, want: &seihai::mapscreen::MapSource, bigmap_file: Option<&std::path::Path>) -> Option<seihai::gmap::Gmap> {
+    if let Some(w) = session.gmap.as_ref().filter(|w| w.name.eq_ignore_ascii_case(&want.txt)) {
+        return Some(w.map.clone());
+    }
+    let named = bigmap_file.and_then(|p| p.file_name()).is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(&want.txt));
+    if named {
+        return session.big_map.clone();
+    }
+    None
+}
+
+/// Ask the server once for each map file the client does not have.
+fn request_map_files(conn: Option<&mut Connection>, files: &mut FileSession, asked: &mut HashSet<String>, missing: &[String]) {
+    let Some(c) = conn else { return };
+    for name in missing {
+        if asked.insert(name.to_ascii_lowercase()) {
+            let msgs = files.need(name);
+            if !msgs.is_empty() {
+                eprintln!("requesting {name} (map)");
+                if let Err(e) = c.send_messages(&msgs) {
+                    eprintln!("file request send failed: {e}");
+                }
+            }
+        }
+    }
+}
+
 fn send_file_msgs(conn: Option<&mut Connection>, msgs: Vec<Vec<u8>>) {
     if msgs.is_empty() {
         return;
@@ -1631,6 +1680,10 @@ fn main() {
     let mut show_players = false;
     // The item list (Q): open or not, and the selected weapon.
     let mut item_list = seihai::inventory::ItemList::default();
+    // The M map: open or not, its scroll, and the files it shows.
+    let mut map_screen = seihai::mapscreen::MapScreen::default();
+    let mut map_files = seihai::mapscreen::MapFiles::default();
+    let mut map_asked: HashSet<String> = HashSet::new();
     let mut confirm_quit = false;
     // Set when the game ends to go back to the server list (S at the quit
     // prompt, or the F5 window's button).
@@ -2373,6 +2426,69 @@ fn main() {
             dirty = true;
         }
 
+        // The M map (2.05: action 7). M opens it centred on the player and
+        // closes it; the movement keys scroll it 8 pixels a press (with key
+        // repeat); Q swaps it for the item list and P closes it. While it is
+        // open the player does not walk, swing or act
+        // (`documentation/map-screen.md`).
+        let map_was_open = map_screen.open;
+        if !input.is_open() && !confirm_quit && !sign_was_open {
+            let view = (scene.width as i32, scene.height as i32);
+            if keymap.pressed(&window, Action::Map) {
+                if map_screen.open {
+                    map_screen.close();
+                    eprintln!("map closed");
+                } else {
+                    item_list.open = false;
+                    let want = map_source(&session, &net_state, bigmap_file.as_deref());
+                    let grid = map_grid(&session, &want, bigmap_file.as_deref());
+                    let missing = map_files.sync(&want, grid.as_ref(), &|n| files.store.read(n));
+                    request_map_files(conn.as_mut(), &mut files, &mut map_asked, &missing);
+                    let here = net_state.current_level_name().or_else(|| session.level_name());
+                    let me = here.as_deref().and_then(|l| map_files.spot(l, session.player_x, session.player_y));
+                    map_screen.open_at(me, map_files.size(), view);
+                    eprintln!(
+                        "map opened: {} / {} ({}x{}){}",
+                        want.txt,
+                        want.image,
+                        map_files.size().0,
+                        map_files.size().1,
+                        if me.is_some() { "" } else { ", the player's level is not on it" }
+                    );
+                }
+                dirty = true;
+            } else if map_screen.open {
+                let repeat = |a| keymap.keys(a).iter().any(|k| window.is_key_pressed(*k, minifb::KeyRepeat::Yes));
+                for (a, d) in [(Action::Up, (0, -1)), (Action::Left, (-1, 0)), (Action::Down, (0, 1)), (Action::Right, (1, 0))] {
+                    if repeat(a) {
+                        map_screen.scroll_by(d, map_files.size(), view);
+                        dirty = true;
+                    }
+                }
+                if keymap.pressed(&window, Action::ItemList) || keymap.pressed(&window, Action::Pause) {
+                    map_screen.close();
+                    eprintln!("map closed");
+                    dirty = true;
+                }
+            }
+        }
+        // The files of an open map: read when they arrive.
+        if map_screen.open && (map_files.grid.is_none() || map_files.picture.is_none()) {
+            if let Some(want) = map_files.source.clone() {
+                let had = map_files.size();
+                let grid = map_grid(&session, &want, bigmap_file.as_deref());
+                let missing = map_files.sync(&want, grid.as_ref(), &|n| files.store.read(n));
+                request_map_files(conn.as_mut(), &mut files, &mut map_asked, &missing);
+                if map_files.size() != had {
+                    let here = net_state.current_level_name().or_else(|| session.level_name());
+                    let me = here.as_deref().and_then(|l| map_files.spot(l, session.player_x, session.player_y));
+                    map_screen.open_at(me, map_files.size(), (scene.width as i32, scene.height as i32));
+                    dirty = true;
+                }
+            }
+        }
+        let map_busy = map_was_open || map_screen.open;
+
         // The item list (Q). While it is open the arrows move its
         // selection and the game keys close it; none of them reach the
         // player this frame, so the player does not walk, swing or interact.
@@ -2425,6 +2541,11 @@ fn main() {
                 }
             }
         }
+
+        // The chat bar still opens over the map (Tab is handled first in
+        // 2.05); every other game key below is held back while it is open.
+        let list_only_was_open = list_was_open;
+        let list_was_open = list_was_open || map_busy;
 
         // Health and death: the 50 ms death timer, the claim and the dead
         // bit on the wire, and the respawn on a movement or action key.
@@ -2835,7 +2956,7 @@ fn main() {
         {
             dirty = true;
         }
-        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.laying.is_none() && !sign_was_open && session.warp_pending.is_none() && session.script_freeze_ms == 0 && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !map_screen.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.laying.is_none() && !sign_was_open && session.warp_pending.is_none() && session.script_freeze_ms == 0 && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
@@ -3473,7 +3594,7 @@ fn main() {
             || window.is_key_pressed(minifb::Key::NumPadEnter, minifb::KeyRepeat::No);
         let talk = !confirm_quit
             && (window.is_key_pressed(minifb::Key::T, minifb::KeyRepeat::No) || keymap.pressed(&window, Action::SwitchToChat));
-        if !confirm_quit && !list_was_open && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
+        if !confirm_quit && !list_only_was_open && ui::chat_key_action(input.is_open(), enter, talk) != ui::ChatKeyAction::None {
             if !input.is_open() {
                 eprintln!("chat: line opened ({})", if enter { "Enter" } else { "T or switch-to-chat" });
                 input.open(ui::InputMode::Chat);
@@ -4000,6 +4121,31 @@ fn main() {
         }
         ft.mark("draw");
         let mut frame = scene.clone();
+        if map_screen.open {
+            let own_head = npc_images.get(session.looks.head_name()).map(|(w, px)| (*w, px.as_slice()));
+            let here = net_state.current_level_name().or_else(|| session.level_name());
+            let mut markers = Vec::new();
+            if let Some(at) = here.as_deref().and_then(|l| map_files.spot(l, session.player_x, session.player_y)) {
+                // Other players on our level (or our gmap's cells), then us
+                // on top with our name.
+                if let (Some(cell_px), Some(l)) = (map_files.cell_px(), here.as_deref()) {
+                    let own_cell = map_files.grid.as_ref().and_then(|g| g.cell_of(l));
+                    let gmap_cell = session.gmap.as_ref().map(|w| w.cell);
+                    for o in &net_state.others {
+                        let Some(base) = own_cell else { continue };
+                        let cell = match (o.cell, gmap_cell) {
+                            (Some(c), Some(mine)) => (base.0 + c.0 - mine.0, base.1 + c.1 - mine.1),
+                            _ => base,
+                        };
+                        let head = o.looks.head.as_deref().and_then(|n| npc_images.get(n)).map(|(w, px)| (*w, px.as_slice()));
+                        markers.push(seihai::mapscreen::Marker { at: seihai::mapscreen::spot_in_cell(cell_px, cell, o.x, o.y), head, name: None });
+                    }
+                }
+                markers.push(seihai::mapscreen::Marker { at, head: own_head, name: Some(me(&net_state, &account)) });
+            }
+            let others = conn.is_some().then_some(net_state.others.len());
+            seihai::mapscreen::draw(&mut frame, &map_screen, map_files.picture.as_ref(), &markers, others);
+        }
         if item_list.open {
             let entries = item_list_entries(&session, &net_state);
             let counts = seihai::inventory::Counts {

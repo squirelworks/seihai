@@ -13,7 +13,7 @@ Seihai uses them for every version:
 | `action` | A | read a sign, open a chest, lift, throw what is carried; with S held, pick an item to lay, then A alone lays it (`item-laying.md`) |
 | `attack` | S or Space | swing the sword; throw what is carried |
 | `item` | D | closes the item list (weapons are not fired yet) |
-| `map` | M | closes a sign (there is no map screen yet) |
+| `map` | M | opens or closes the map (`map-screen.md`); closes a sign |
 | `itemlist` | Q | opens or closes the item list |
 | `switchtochat` | Tab | opens the chat bar |
 | `pause` | P | pause or go on (`offline/pause.rs`): STATUS bit 0x01 goes out, other players see `(paused)` after the name, and a paused player cannot be hurt. A window without the focus is paused too. A sign turns its page with P instead |
