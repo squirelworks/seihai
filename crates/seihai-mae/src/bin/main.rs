@@ -1263,9 +1263,12 @@ fn main() {
         // draws the level, chests and image NPCs, but no player, no other
         // players and no HUD (see protocol::lobby).
         let others: &[seihai::protocol::OtherPlayer] = if characters { others } else { &[] };
+        // 5.31r4 and 6.03r7 draw no tiles in Login mode either, only the
+        // chests and image NPCs (`Lobby::login_tiles`).
+        let tiles = characters || version.profile().protocol.lobby.is_none_or(|l| l.login_tiles);
         let mut fb = match &tutorial_sheet {
-            Some((tw, th, t)) if session.tutorial_tables_active() => seihai::render::render_view(session, t, *tw, *th, view_w, view_h),
-            _ => seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h),
+            Some((tw, th, t)) if session.tutorial_tables_active() => seihai::render::render_view_tiles(session, t, *tw, *th, view_w, view_h, tiles),
+            _ => seihai::render::render_view_tiles(session, &sheet, sw, sh, view_w, view_h, tiles),
         };
         let (cam_x, cam_y) = seihai::render::camera_origin(session, view_w, view_h);
         // NPCs under and with the players now; `drawoverplayer` NPCs, the
