@@ -66,7 +66,45 @@ down probes at x 8.0 (no warp) and 10.5 (warp) require: a point cannot do both.
 
 Only builds with `levels.link_boxes` use the boxes: 2.22 and 2.31, plus the builds
 between and after them in the version chain, taken as the same (inferred). Earlier
-builds keep the foot-point rule; nobody measured them.
+builds use the 2.05 probe point below.
+
+## Builds without the boxes: the 2.05 probe point (2026-10-31)
+
+Earlier builds tested one point, the feet (`x + 2.0`, `y + 2.75`), in the link's
+tile. That point can never reach column 0: the edge wall stops the player at x
+-0.5, where the feet are in column 1. So a 2.00 player walked into the lab
+`new1.nw`'s west link (`LINK testworld.nw 0 28 1 6`) and stopped at the edge
+without warping, while 2.22 took it. Before #224 that showed only without
+tile types, where the player walked off the board until the feet reached
+column 0.
+
+The 2.05 client's link routine (derived) takes one probe point each tick: the
+player's position plus a per-facing offset from a table of four `(x, y)`
+doubles.
+
+| facing | probe |
+|---|---|
+| north | `x + 1.5`, `y + 1.0` |
+| west | `x + 0.5`, `y + 2.0` |
+| south | `x + 1.5`, `y + 3.0` |
+| east | `x + 2.5`, `y + 2.0` |
+
+For a link that is not a big-map edge link, the probe fires when it is in the
+link's rectangle, with the far edges included (`x <= probe x <= x + width`,
+the same for y). A probe within one tile of a level edge (x or y at most 1, or at
+least 63) counts only while the player faces out across that edge.
+
+The same 64 bytes of the table are in the Graal.exe of 9th and 15th Graal,
+1.1, 1.1.9, 1.3b, 1.21, 1.38, 1.39, 1.41.1, 2.00, 2.04, 2.05, 2.17, 2.22 and
+2.31. Only 2.05's link routine was read, so the table being the link probe
+in the other builds is inferred. 2.22 and 2.31 keep the measured boxes above.
+Each probe falls inside its 2.22 box, apart from the west probe's y, which
+sits on the box's top edge.
+
+`offline::LINK_PROBE` and `offline::probe_in_link`. The test
+`a_west_edge_link_fires_on_builds_without_link_boxes` walks west into that link:
+it fires for y 26 to 32, at x 0.5, and not at y 25.5 or 32.5. Real 2.00 was not
+run on it.
 
 ## Before and after (lab, real client against Seihai)
 
