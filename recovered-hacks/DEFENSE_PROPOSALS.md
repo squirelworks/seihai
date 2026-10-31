@@ -1,9 +1,9 @@
 # Defense proposals — recovered Graal hacks / trainers
 
-**Date:** 2026-10-31 (second pass; inventory + taxonomy backed)  
+**Date:** 2026-10-31 (third pass; inventory + taxonomy + Ghidra RE)  
 **Audience:** operators of Seihai-stack worlds (`seihai-gserver` / `seihai-gserver-v2`, `seihai-listserver`, staff RC/NC) and maintainers of `seihai-servertools`.  
-**Method:** static analysis only (Drive listing, archive inventory, readmes, PE/UPX/strings). No hacks executed; no exploit PoCs.  
-**Companions:** [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) (Groups 1–5) · [`defense-checklist.md`](defense-checklist.md) · [`INVENTORY.md`](INVENTORY.md) · [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md)
+**Method:** static analysis only (Drive listing, archive inventory, readmes, PE/UPX/strings, Ghidra headless). No hacks executed; no exploit PoCs.  
+**Companions:** [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) (Groups 1–5 + RE addendum) · [`defense-checklist.md`](defense-checklist.md) · [`INVENTORY.md`](INVENTORY.md) · [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md) · [`ghidra-analysis/`](ghidra-analysis/)
 
 **Intended long-term home:** mirror under `seihai-servertools/docs/security/` (local draft prepared; that repo returned 403 to this environment’s push token).
 
@@ -13,8 +13,9 @@
 |---|---|---|
 | Overall threat picture for Drive `Hacks/Trainers` | **High** | `INVENTORY.md` + `THREAT_TAXONOMY.md`: 18/20 archives, 24 unique PEs, readmes + VB6/AutoIt strings agree |
 | Taxonomy Groups 1–3, 5 | **High** | AFK bots, AutoIt macros, chat/appearance spam, capslock |
-| Group 4 (`Graal_Miner.zip`) | **Unknown payload** | Drive-blocked; treat hostile until RE |
-| Deep behaviour (Prayer `data.exe`, Digger corrupt UPX, GTS OpenProcess) | **Medium–Low** | Ghidra sibling queue |
+| Group 4 (`Graal_Miner.zip`) | **Unknown payload** | Drive-blocked; treat hostile until RE — **skipped this pass** |
+| Prayer / `data.exe` / GTS / AFK Bot (static RE) | **High** | `TRAINER_RE_NOTES.md` + `ghidra-analysis/*/SUMMARY.md` |
+| Digger (truncated UPX) | **Medium** | Hash + AutoIt v2.63 cues; imports/script not recoverable |
 | Version faker / CRC / packet logger (adjacent archives) | **Medium** | Not in this Hacks tree |
 | Classic login / RC / stealer ListServer | **High** | Seihai docs + `Graal_analysis` |
 | Network injectors / memory editors beyond these archives | **Unknown** | Not in Hacks listing |
@@ -23,7 +24,8 @@
 
 - Drive [Hacks](https://drive.google.com/drive/folders/1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK) → `Trainers/` (+ `AutoPrograms by RpgWarrior/`) — re-listed 2026-10-31
 - [`INVENTORY.md`](INVENTORY.md) / local static extracts (UPX AutoIt `SEND`/`keybd_event`; VB6 AFK/GTS/GraalLoad strings)
-- [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) Groups 1–5 + RE triage
+- [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) Groups 1–5 + RE addendum
+- [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md) — Ghidra/static IOC synthesis
 - Adjacent client archives: v4 packet-logger, v5 CRC / “Version 5.120 Faker Hack”
 - `seihai-servertools` go-public / `setup-core` checks; `AGENTS.md` stealer ListServer warning
 
@@ -45,12 +47,12 @@
 ### T1 — AFK / chat bots (Group 1; also GTS in Group 3, autoprogs idle in Group 2)
 
 **Evidence**  
-AFK Bot readme: three phrases every ~3s after focusing chat. Scroll Bot: growing/scrolling string. GTS: Word Scroller / letter-by-letter shouts (`MSVBVM60.DLL`). Autoprogs share UPX/AutoIt markers with Group 2.
+AFK Bot readme + RE strings: default phrases `I am AFK` / `I am using an AFK Bot`, UI `AFK Bot created by Zorg`, warning about illegality on playerworlds; ~3s timer after focusing chat. Scroll Bot: growing/scrolling string. GTS (see T3): Word Scroller / letter-by-letter shouts (`MSVBVM60.DLL`). Autoprogs share UPX/AutoIt markers with Group 2. **No Winsock** on AFK Bot static surface — client-side chat abuse only.
 
 **How it works (high level)**  
 External Windows programs inject keystrokes into the focused Graal chat field on a timer to farm online-time / stay “active”.
 
-**Detection** — fixed inter-arrival chat; phrase/scroll patterns; online-time with near-zero movement/combat.  
+**Detection** — fixed inter-arrival chat; phrase/scroll patterns (`I am AFK` cluster); online-time with near-zero movement/combat. Host: `AFK Bot.exe` + Zorg UI strings.  
 **Prevention** — messages/min caps; mute→kick; AFK rewards require movement/interaction, never chat alone; NPC scripts must not trust client timers.  
 **Response** — mute/warn/kick; snapshot chat timestamps; rebalance farmed NPC rewards.  
 **seihai-servertools** — policy docs here; optional offline periodic-chat log parsers later; enforcement in gserver.
@@ -58,20 +60,20 @@ External Windows programs inject keystrokes into the focused Graal chat field on
 ### T2 — Activity automation (Group 2; Group 4 Miner blocked)
 
 **Evidence**  
-Howtos: equip → stand on resource → start EXE → focus Graal. Unpacked PEs: AutoIt v2.64 (`SEND`, `keybd_event`). Digger CRC-truncated/truncated. Miner ×2 Drive-blocked (~39156 bytes) — assume Group 2 gameplay until RE; taxonomy keeps Group 4 host-risk open.
+Howtos: equip → stand on resource → start EXE → focus Graal. **RE (Prayer / `data.exe`):** twin AutoIt v2.64 UPX macros — APIs `keybd_event`, `mouse_event`, `SendMessageA`, `PostMessageA`, `FindWindowA`, `OpenProcess`, `VirtualAlloc`; **no** `WSAStartup` / WinINet / Winsock and **no** classic injection (`WriteProcessMemory` / `CreateRemoteThread`). Encrypted AutoIt overlays differ (~924 B vs ~180 B) — keep both packed + unpacked hashes. **Digger:** truncated zip PE (36111 / 41893 bytes); UPX overlay corrupt (`upx` refuses unpack); Ghidra import table empty; still classifiable as AutoIt v2.63 + UPX via strings + howto — hash `876723732378b36e…` usable, behaviour not recoverable until complete PE. Miner ×2 Drive-blocked (~39156 bytes) — **skipped**; taxonomy keeps Group 4 host-risk open.
 
-**Detection** — sustained interact/dig rates; low movement entropy at resource tiles; single-action-type sessions; shared IP timing fingerprints.  
+**Detection** — sustained interact/dig rates; low movement entropy at resource tiles; single-action-type sessions; shared IP timing fingerprints. Host: UPX + `Compiled AutoIt v2.6` + `>AUTOIT SCRIPT<` + `keybd_event` (no network imports).  
 **Prevention** — server-authoritative gather/prayer/dig/water cooldowns; yield caps per account/IP; soft anti-macro (facing/inventory/movement between gathers).  
 **Response** — soft yield nerf; hard kick/temp ban; wipe ill-gotten stacks if needed.  
 **seihai-servertools** — `lat-core/check.rs` lint for unbounded resource scripts; go-public warn on bot-farm lab leftovers.
 
-### T3 — Macro / appearance spam (Group 3: GraalLoad + `bomb.txt`)
+### T3 — Chat / appearance spam (Group 3: GTS + GraalLoad + `bomb.txt`)
 
 **Evidence**  
-`load<file.txt>`, `SendMessageA`. `bomb.txt`: setnick/setbody + countdown chat (not an explosive).
+**GTS RE:** VB6 DarkShadowz **Graal Text Sender v1.3.5**; late-bound `FindWindowA`/`Ex`, `OpenProcess`, `GetAsyncKeyState`, `SendMessageA`, module `SendKeys1`; timer UI (Word Scroller / shout / to-all); **no Winsock**. Host combo IOC: VB6 + those APIs + product/`darkzrealm.vze.com` strings. GraalLoad: `load<file.txt>`, `SendMessageA`. `bomb.txt`: setnick/setbody + countdown chat (not an explosive).
 
-**Detection** — sub-human nick/appearance/chat bursts; prop churn without movement.  
-**Prevention** — nick/appearance rate limits; T1 chat flood controls.  
+**Detection** — sub-human nick/appearance/chat bursts; prop churn without movement; GTS flood modes (scroller / to-all / shout). Host: window title `Graal Text Sender`.  
+**Prevention** — nick/appearance rate limits; T1 chat flood controls; rate-limit shout/to-all.  
 **Response** — mute; revert nick/appearance; escalate harassment.
 
 ### T4 — Version fakery + CRC patch (stack-adjacent)
@@ -152,16 +154,27 @@ Levels/NPCs that escalate rights when scripts are trusted. Filename ≠ proof.
 | New gserver registration | page listserver host |
 | Failed passwords from many IPs | lockout |
 
+## Key host / string IOCs (from RE)
+
+| Family | IOC cluster |
+|---|---|
+| Prayer / `data.exe` | UPX + AutoIt v2.64; `keybd_event` / `mouse_event` / `SendMessageA`; **no Winsock**; dual packed+unpacked SHA-256 in `TRAINER_RE_NOTES.md` |
+| Digger | Truncated UPX PE; AutoIt v2.63 splash fragment; hash only until complete sample |
+| GTS | VB6 + `FindWindow*` + `OpenProcess` + `SendMessageA` + `GetAsyncKeyState`; title `Graal Text Sender` |
+| AFK Bot | Strings `I am AFK` / `I am using an AFK Bot` / Zorg UI; VB6 + `Timer1` |
+
+Full tables: [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md). Per-binary: [`ghidra-analysis/*/SUMMARY.md`](ghidra-analysis/).
+
 ## Residual gaps (Ghidra / RE siblings)
 
 | Priority | Gap |
 |---|---|
-| P0 | Obtain `Graal_Miner.zip` (`acknowledgeAbuse` / mirror) + malware triage |
-| P1 | Prayer `data/data.exe` AutoIt script recovery |
-| P1 | Digger corrupt UPX — clean mirror or careful unpack |
-| P2 | GTS `OpenProcess` / `GetAsyncKeyState` — UI-only? |
+| P0 | Obtain `Graal_Miner.zip` (`acknowledgeAbuse` / mirror) + malware triage — **still skipped** |
+| P1 | Prayer / `data.exe` AutoIt **script body** recovery (overlays still encrypted) |
+| P1 | Digger truncated UPX — clean mirror or complete PE |
+| P2 | ~~GTS `OpenProcess` / `GetAsyncKeyState`~~ — **done:** SendMessage/hotkey automation, not proven inject |
 | P2 | autoprogs script recovery — macros only? |
 | P3 | Remaining RpgWarrior SEND loops; GraalLoad confirm |
 | Adjacent | Version-faker / packet-logger disassembly |
 
-Inventory + taxonomy Groups are enough to ship operator defenses **now**; deep RE refines signatures and Group 4 host-risk, not the patch order above.
+Inventory + taxonomy + RE notes are enough to ship operator defenses **now**; remaining RE refines AutoIt script plaintext and Group 4 host-risk, not the patch order above.
