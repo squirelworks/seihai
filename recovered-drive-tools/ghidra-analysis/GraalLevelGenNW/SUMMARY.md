@@ -1,35 +1,33 @@
 # Salvage analysis: GraalLevelGenNW
 
-- **Binary:** `/workspace/recovered-drive-tools/Developer Tools/LAT Tool - [Level Administration Team]/Level Generators/GraalOnline Level Generator - NW - [2001-10-08].rar.extracted/GraalLevelGenNW/GraalLevelGenNW.exe`
-- **Analyzed (UTC):** 20261031T211951Z
-- **Ghidra:** 12.2
-- **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing).
+- **Binary:** `Developer Tools/LAT Tool - [Level Administration Team]/Level Generators/GraalOnline Level Generator - NW - [2001-10-08].rar.extracted/GraalLevelGenNW/GraalLevelGenNW.exe`
+- **Analyzed (UTC):** 20261031T211951Z · Ghidra 12.2 · static only
+- **Format:** PE32 GUI (x86), Borland Delphi, ~422 KB
 
-## Identity
+## Purpose (plain behaviour)
 
-```
-# file
-/workspace/recovered-drive-tools/Developer Tools/LAT Tool - [Level Administration Team]/Level Generators/GraalOnline Level Generator - NW - [2001-10-08].rar.extracted/GraalLevelGenNW/GraalLevelGenNW.exe: PE32 executable (GUI) Intel 80386, for MS Windows, 8 sections
+Offline **New World level / world generator**. UI branded “Graal Level Generator”; magic/token `GLEVNW01` appears in the image. Operator loads a **map image**, then **Generate World** into a `levels\` tree. Companion assets include `levelgen.png` / `bigmap.txt`. NW time-related tokens (`nwyear`, `nwmonth`, `nwday`, `nwhour`, …) and level options such as `canwarp` show up in strings. Not a network service.
 
-# size
--rw-r--r-- 1 ubuntu ubuntu 422K Oct  8  2001 /workspace/recovered-drive-tools/Developer Tools/LAT Tool - [Level Administration Team]/Level Generators/GraalOnline Level Generator - NW - [2001-10-08].rar.extracted/GraalLevelGenNW/GraalLevelGenNW.exe
+Sibling LAT generators exist for classic Graal, terrain, and dungeon variants — same offline-content role.
 
-# sha256
-0b8471b65e3fd107eee61d2593edb6afb054c1f454131aa9ab842f4880b66802  /workspace/recovered-drive-tools/Developer Tools/LAT Tool - [Level Administration Team]/Level Generators/GraalOnline Level Generator - NW - [2001-10-08].rar.extracted/GraalLevelGenNW/GraalLevelGenNW.exe
-```
+## Recommended placement (`SALVAGE_PLACEMENT.md`)
 
-## Ghidra program
+| Placement | `lat-core` (content tooling) / `analysis-only` for the PE |
+| --- | --- |
+| Why | Offline world/level generation aids LAT workflows; promote behaviour into generators/docs, not binary reuse. |
+| Not | `setup-core` / `seihai-rc` |
+| Related | `GraalLevelGen.exe` (classic), TerrainGenerator, dungeongen, Graal Map Generator (2024 src) |
+| Licence | Legacy Delphi — clean-room notes only |
+
+## Ghidra stats (machine)
 
 | Field | Value |
 | --- | --- |
-| Format | Portable Executable (PE) |
-| Language | x86:LE:32:default |
-| Compiler | borlanddelphi |
-| Functions | 2038 (internal 1678) |
-| Imports | 375 |
-| Exports / entries | 3 |
-| Interesting strings | 118 |
-| Decompiled funcs | 20 |
+| Functions | ~2038 (internal ~1678) |
+| Imports | ~375 |
+| Interesting strings | ~118 |
+| Decompiled (local only) | 20 — **not committed** |
 
-## Notable symbols (names only)
+## Artifacts (local)
 
+`prelim/`, `functions.*`, `imports.txt`, `exports.txt`, `strings_interesting.txt`, `decompiled/`, `logs/`, `summary_stats.txt`

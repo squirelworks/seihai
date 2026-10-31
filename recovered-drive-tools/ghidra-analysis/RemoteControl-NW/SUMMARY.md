@@ -11,9 +11,10 @@
 
 Same family as classic `rc.rar` / Custom Agret RC:
 
-- Account/player edit units (`UEditAccountPlayer`, `UPlayerStats`).
+- Reads **`controlconfig.txt`**; account/player edit units (`UEditAccountPlayer`, `UPlayerStats`), DB accounts list with attribute search examples (`adminlevel`, `adminworlds`, `blocked`, …).
+- Staff actions: admin message / admin-to-all, edit account, update level, disconnect, ban players, attach “- away” when player list closed, HTML-in-PM toggles.
 - Winsock connect path; zlib deflate embedded.
-- Staff RC role: connect to gserver, manage players/accounts — comparative sample for NW protocol quirks vs v1 RC / RC3.
+- Comparative sample for NW protocol quirks vs v1 RC / GTK RC3.
 
 **Do not run** on public networks.
 
