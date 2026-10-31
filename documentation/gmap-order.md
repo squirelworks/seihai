@@ -111,4 +111,18 @@ differs from the server's copy. Two Mirae captures of the real 2.22 settle it:
   `created` sets their looks and message (63 and 71 bytes).
 
 #261 had turned the first round off for 2.22 from the first capture alone; that is reverted, and 2.22
-keeps the 2.05 rule like the other builds.
+keeps the 2.05 rule like the other builds. The test `npc_entry_222` feeds the server's two records from
+`lan-222g` and checks that Seihai sends the real client's two messages byte for byte, in the server's order
+(warp NPC, then clothes NPC).
+
+Still different:
+
+* **NPC order.** On the Linux lab's GServer-v2, Seihai 2.22 sent the same two messages with the clothes NPC
+  first: there it held `testworld.nw` locally, the file's NPCs took the server's ids, and the sync walks the
+  level's NPC list, which follows the file (clothes NPC first). The real client's order is the server's.
+  Not changed here: one capture, and it is not known whether the real client walks server order or
+  something else that happens to match it.
+* **`PLI_BADDYPROPS` (15).** In the same session the real client, as level leader, sent props for all six
+  baddies 176 ms after the level (prop 6 = 43 and prop 7 = 9, or prop 6 = 2 for the hare), then prop 6
+  alone 100 ms later (42, the hare 3). Seihai has no baddy objects yet, so it sends none. The bytes are in
+  the project file `lan-222g-testworld-npc-baddy.txt`; what props 6 and 7 mean is not decoded.
