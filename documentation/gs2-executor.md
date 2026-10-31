@@ -93,6 +93,9 @@ handled before that search. **[bin]**
   A value the reader does not name is logged as an unknown opcode and
   skipped. Skipping can leave the stack uneven. The VM's own checks still
   stop the script if that happens.
+- The timer commands (`settimer`, `timeout`, `scheduleevent`,
+  `cancelevents`) are the machine's own and run on `Machine::tick`; see
+  `gs2-commands.md`.
 - A call that is not to a script function goes to `Host::command`.
   `EffectHost` maps the commands GS1 already has to the GS1 engine's
   `Effect`s, the same values `scripting/engine` produces:
@@ -136,5 +139,5 @@ compiler:
   an `if`, `say2`, `setlevel2`, `unset`, and a `while (true)` that stops at
   the loop limit with the counter at exactly 10 000.
 - `control.gs2`: `for`, `continue`, `while`, `break` and `switch` reach
-  `case 1`. The skipped `in` and the unknown `setTimer` are logged.
+  `case 1`. The skipped `in` is logged; `setTimer` sets the timer.
 - A missing event is reported as `NoSuchEvent`.
