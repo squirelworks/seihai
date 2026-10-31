@@ -38,9 +38,10 @@ impl Line {
 }
 
 /// Which line a profile belongs to. The token says it: `GNW` for the 2D
-/// builds, `G3D` for the 3.x ones.
+/// builds, `G3D` for the 3.x ones. The 5.x and 6.x builds send `G3D` tokens
+/// too but play in `seihai-mae` (their profile has the Login lobby).
 fn line_for(p: &VersionProfile) -> Line {
-    if p.token.starts_with("G3D") {
+    if p.token.starts_with("G3D") && p.protocol.lobby.is_none() {
         Line::Ato
     } else {
         Line::Mae
@@ -150,6 +151,9 @@ mod tests {
     #[test]
     fn torque_builds_start_ato() {
         assert_eq!(pick(&args("--version 3.153")).0, Line::Ato);
+        // The 5.x and 6.x tokens start with G3D too, but they play on the flat path.
+        assert_eq!(pick(&args("--version 5.12")).0, Line::Mae);
+        assert_eq!(pick(&args("--version 6.03r7")).0, Line::Mae);
         assert_eq!(pick(&args("--version 3.04 --account a")).0, Line::Ato);
         // The last --version wins, as in seihai-mae.
         assert_eq!(pick(&args("--version 2.22 --version 3.153")).0, Line::Ato);

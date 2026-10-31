@@ -795,7 +795,14 @@ fn main() {
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
-            if addr.contains("14921") || addr.contains("14922") || addr.contains("14923") || addr.contains("listserver") {
+            // The 5.x/6.x builds have no listserver: they log in to the address
+            // as their Login server.
+            if version.profile().protocol.lobby.is_some() {
+                eprintln!("{}: logging in to {addr} as the Login server; nothing but the level is drawn until it sends a server warp (178)", version.label());
+                if !follow_serverwarp {
+                    eprintln!("server warps are off (--no-serverwarp or follow_serverwarp=0), so this build will stay in Login mode");
+                }
+            } else if addr.contains("14921") || addr.contains("14922") || addr.contains("14923") || addr.contains("listserver") {
                 match Connection::fetch_server_list(addr, version, &account, &password) {
                     Ok(reply) => {
                         if let Some(err) = &reply.error {
@@ -1137,8 +1144,13 @@ fn main() {
                 my_nick: Option<&str>,
                 npc_imgs: &HashMap<String, (u32, Vec<u8>)>,
                 item: Option<&str>,
-                own_failed: (bool, bool)|
+                own_failed: (bool, bool),
+                characters: bool|
      -> Framebuffer {
+        // A 5.x/6.x build in Login mode (the first server, before its warp)
+        // draws the level, chests and image NPCs, but no player, no other
+        // players and no HUD (see protocol::lobby).
+        let others: &[seihai::protocol::OtherPlayer] = if characters { others } else { &[] };
         let mut fb = seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h);
         let (cam_x, cam_y) = (
             ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
@@ -1254,6 +1266,7 @@ fn main() {
         let (dx, dy) = player_box_origin(session, view_w, view_h);
         let pose = session.current_pose();
         match (&body, &head) {
+            _ if !characters => {}
             (b, h) if pose.is_some() && (gif_art || (b.is_some() && h.is_some())) => {
                 // Our own head and body, the body in our colours; until
                 // they are here, the default pictures. A GIF build whose
@@ -1310,11 +1323,14 @@ fn main() {
         seihai::render::draw_npc_messages(&mut fb, session, &npc_art, chat_font.as_ref(), cam_x, cam_y);
         seihai::render::draw_baddy_verses(&mut fb, session, chat_font.as_ref(), cam_x, cam_y);
         ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
-        ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
-        if let Some(nick) = my_nick {
-            seihai::render::chattext::draw_nick_text(&mut fb, chat_font.as_ref(), nick, session.alignment, dx, dy);
+        if characters {
+            ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
+            if let Some(nick) = my_nick {
+                seihai::render::chattext::draw_nick_text(&mut fb, chat_font.as_ref(), nick, session.alignment, dx, dy);
+            }
         }
         match &state_sheet {
+            _ if !characters => {}
             Some(st) => seihai::render::hud::draw_hud(
                 &mut fb,
                 profile.ui.hud,
@@ -1374,11 +1390,15 @@ fn main() {
     // AP and a typed `showname` (2.05); other players' always shows.
     let mut my_name_timer = seihai::chatlists::BubbleTimer::start();
     let mut my_name_ap = session.alignment;
-    let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None, (false, false));
+    // 5.x/6.x: the server reached first is the Login lobby, named by the
+    // client; a server warp (178) names the next one (see protocol::lobby).
+    let mut lobby_server: Option<String> = profile.protocol.lobby.filter(|_| online.is_some()).map(|l| l.first_server.to_string());
+    let characters = |lobby_server: &Option<String>| !lobby_server.as_deref().is_some_and(seihai::protocol::lobby::is_login_mode);
+    let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None, (false, false), characters(&lobby_server));
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
 
-    let server_name = Settings::load().last_server_name;
+    let server_name = lobby_server.clone().or(Settings::load().last_server_name);
     let title = profile.window_title(server_name.as_deref().filter(|_| online.is_some()));
     let mut window = match minifb::Window::new(
         &title,
@@ -3117,6 +3137,12 @@ fn main() {
                         // The clients keep field 1 as the server's name (without
                         // the type prefix) and show it in the window title.
                         window.set_title(&profile.window_title(Some(&w.display_name())));
+                        // A lobby build leaves Login mode once the new name does not
+                        // start with "login".
+                        if lobby_server.is_some() {
+                            lobby_server = Some(w.display_name());
+                            dirty = true;
+                        }
                         for m in &sess.warnings {
                             eprintln!("{m}");
                         }
@@ -3619,7 +3645,7 @@ fn main() {
         if dirty {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
             let own_failed = (files.requests.has_failed(session.looks.body_name()), files.requests.has_failed(session.looks.head_name()));
-            scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image(), own_failed);
+            scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image(), own_failed, characters(&lobby_server));
             dirty = false;
         }
         ft.mark("draw");

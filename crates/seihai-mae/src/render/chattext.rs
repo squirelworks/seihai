@@ -71,7 +71,7 @@ fn candidates(face: ChatFace) -> &'static [(&'static str, bool)] {
         ("DejaVuSans.ttf", false),
     ];
     match face {
-        ChatFace::Dialog | ChatFace::Helvetica => ARIAL,
+        ChatFace::Dialog | ChatFace::Helvetica | ChatFace::Arial => ARIAL,
         ChatFace::TempusSans => TEMPUS,
     }
 }
