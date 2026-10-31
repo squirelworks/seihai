@@ -687,10 +687,10 @@ mod tests {
     /// unknown one opens "All versions".
     #[test]
     fn saved_minor_version_opens_all_versions() {
-        for l in ["1.39", "2.05", "2.22", "3.04", "5.00r7", "6.03r7"] {
+        for l in ["1.28 beta 2", "1.3 test", "1.31", "1.39", "2.05", "2.22", "3.04", "5.00r7", "6.03r7"] {
             assert!(!needs_all_versions(l), "{l}");
         }
-        for l in ["2.00", "2.1", "3.153", "5.24r4", "6.03r7 Linux", "no such build"] {
+        for l in ["1.21", "1.32", "2.00", "2.1", "3.153", "5.24r4", "6.03r7 Linux", "no such build"] {
             assert!(needs_all_versions(l), "{l}");
         }
         if let Some(b) = offline_builds::OFFLINE_BUILDS.first() {
