@@ -10,8 +10,17 @@
 //! - [`props`]: the player property table.
 //! - [`session`]: the TCP session and the peer-to-peer UDP socket.
 //! - [`xfile`]: the DirectX `.x` text meshes that levels and models use.
+//! - [`bmp`], [`render`], [`world`]: textures, the software renderer, and
+//!   walking, jumping and the follow camera.
+//! - [`model`]: the player model and its walk animation.
+//! - [`view`]: the scene: level, players and the chat log.
 
+pub mod bmp;
 pub mod codec;
+pub mod model;
 pub mod props;
+pub mod render;
 pub mod session;
+pub mod view;
+pub mod world;
 pub mod xfile;
