@@ -1360,6 +1360,8 @@ fn main() {
     let mut looks_sent: Option<seihai::looks::Looks> = None;
     let mut weapon_asked: HashSet<String> = HashSet::new();
     let mut weapon_recheck = true;
+    // A file arrived that may be an image of the item list's weapons.
+    let mut list_recheck = true;
     // Our own nickname shows for 60 frames after the start, a change of our
     // AP and a typed `showname` (2.05); other players' always shows.
     let mut my_name_timer = seihai::chatlists::BubbleTimer::start();
@@ -1613,6 +1615,7 @@ fn main() {
                         let got = files.process(&mut net_state);
                         send_file_msgs(conn.as_mut(), got.send);
                         weapon_recheck |= !got.written.is_empty();
+                        list_recheck |= !got.written.is_empty();
                         if !got.written.is_empty() {
                             look_not_received.clear();
                         }
@@ -2143,7 +2146,8 @@ fn main() {
                 use seihai::inventory::ListKey;
                 item_list.clamp(entries.len());
                 let (_, _, cw, _) = seihai::inventory::content_rect(scene.width as i32, scene.height as i32);
-                let cells = seihai::inventory::layout(&entries, cw);
+                let names = item_list_image_names(&entries, &weapon_bar, profile.files.image_ext);
+                let cells = seihai::inventory::layout(&entries, &item_list_images(&names, &npc_images), cw);
                 let before = item_list.selected;
                 for (a, lk) in [
                     (Action::Up, ListKey::Up),
@@ -3324,6 +3328,32 @@ fn main() {
                 }
             }
         }
+        // The open item list's images: each is asked for once and drawn
+        // when it is here (in the cache, the asset folders or the built-in
+        // set), as the selected weapon's is.
+        if item_list.open {
+            let entries = item_list_entries(&session, &net_state);
+            let recheck = std::mem::take(&mut list_recheck);
+            for name in item_list_image_names(&entries, &weapon_bar, profile.files.image_ext).into_iter().flatten() {
+                if npc_images.contains_key(&name) {
+                    continue;
+                }
+                if weapon_asked.insert(name.clone()) {
+                    let m = files.need(&name);
+                    if !m.is_empty() {
+                        eprintln!("requesting {name} (item list)");
+                    }
+                    send_file_msgs(conn.as_mut(), m);
+                }
+                if recheck {
+                    if let Some((w, _, px)) = files.store.read(&name).and_then(|d| read_png_rgba(&d).ok()) {
+                        npc_images.insert(name, (w, px));
+                    }
+                }
+            }
+        } else {
+            list_recheck = true;
+        }
         // A script changed our looks (`sethead`, `setcoatcolor` …): the
         // server and the other players see it from our props.
         // Only a real change is sent: a script that sets the same head every
@@ -3523,7 +3553,8 @@ fn main() {
                 shield: session.shield_power,
                 glove: session.glove_power,
             };
-            seihai::inventory::draw(&mut frame, &item_list, &entries, &counts);
+            let names = item_list_image_names(&entries, &weapon_bar, profile.files.image_ext);
+            seihai::inventory::draw(&mut frame, &item_list, &entries, &item_list_images(&names, &npc_images), &counts);
         }
         if show_players {
             ui::draw_player_list(&mut frame, &me(&net_state, &account), &net_state.others, &lists.buddy, &net_state.filter);
@@ -3679,6 +3710,28 @@ fn item_list_entries(session: &seihai::offline::OfflineSession, state: &SessionS
     let mut named: Vec<String> = seihai::inventory::chest_weapons(&session.flags);
     named.extend(state.weapons.iter().map(|w| w.name.clone()));
     seihai::inventory::entries(&state.default_weapons, &named)
+}
+
+/// The image of each item-list entry: the weapon bar's (the server's
+/// image, or the built-in weapon's), else the built-in image of a weapon
+/// got from a chest offline.
+fn item_list_image_names(entries: &[String], bar: &seihai::weaponbar::WeaponBar, image_ext: &str) -> Vec<Option<String>> {
+    entries
+        .iter()
+        .map(|n| match bar.entries.iter().find(|e| e.name.eq_ignore_ascii_case(n)) {
+            Some(e) => e.image.clone(),
+            None => seihai::inventory::default_weapon_image(n, image_ext),
+        })
+        .collect()
+}
+
+/// The loaded pictures for [`item_list_image_names`]; `None` for an entry
+/// with no image or one not here yet.
+fn item_list_images<'a>(names: &[Option<String>], images: &'a HashMap<String, (u32, Vec<u8>)>) -> Vec<Option<seihai::inventory::Image<'a>>> {
+    names
+        .iter()
+        .map(|n| n.as_ref().and_then(|n| images.get(n)).map(|(w, px)| seihai::inventory::Image { w: *w, px }))
+        .collect()
 }
 
 fn me(state: &SessionState, account: &str) -> String {
