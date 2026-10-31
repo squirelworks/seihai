@@ -1,260 +1,58 @@
-# Salvage analysis: gserver
+# Salvage analysis: gserver (Linux ELF from GServersource)
 
 - **Binary:** `/workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver`
-- **Analyzed (UTC):** 20261031T205250Z
+- **Analyzed (UTC):** prior headless · SUMMARY rewritten 20261031T211700Z — **prefer paired C++ source**
 - **Ghidra:** 12.2
 - **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing).
+
+## Purpose guess
+
+Classic **Graal game server** daemon (ELF32, dynamically linked, not stripped, ~Jun 2002). Same tree as Windows `gserver.exe` and full sources (`gserver.cpp`, `npcs.cpp`, `levels.cpp`, MySQL account helpers, password crypto). Headless RE confirms symbols already named in source (`startServer`, `parse`, `enterLevel`, `SendAccount`, RC player-prop paths, DB load/save).
+
+## Recommended placement (`SALVAGE_PLACEMENT.md`)
+
+| Placement | `analysis-only` |
+| --- | --- |
+| Why | Canonical legacy gserver; licence/GPL-adjacent. Seihai already has its own server — use only as protocol/behaviour reference. |
+| Not | `setup-core` / `lat-core` / `seihai` / `seihai-rc` (do not paste sources into MIT crates) |
+| Related | `gserver-win`, `gserver_pe_GServersource`, `gserver13`, Matriark 1.39 build |
+| Licence risk | High — source tree includes `passwords.h` / crypto; clean-room notes only |
 
 ## Identity
 
 ```
 # file
-/workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, for GNU/Linux 2.2.5, not stripped
+ELF 32-bit LSB executable, Intel 80386, dynamically linked, for GNU/Linux 2.2.5, not stripped
 
 # size
--rw-r--r-- 1 ubuntu ubuntu 1.3M Jun 13  2002 /workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver
+~1.3M
 
 # sha256
-56d9f0f8ba666c2e9ceb556932c01317374cf9d0e56c730b4d2643ce56947f9e  /workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver
+56d9f0f8ba666c2e9ceb556932c01317374cf9d0e56c730b4d2643ce56947f9e
 ```
 
 ## Ghidra program
 
 | Field | Value |
 | --- | --- |
-| Format | Executable and Linking Format (ELF) |
-| Language | x86:LE:32:default |
-| Compiler | gcc |
+| Format | ELF |
+| Language | x86:LE:32:default / gcc |
 | Functions | 628 (internal 419) |
 | Imports | 105 |
-| Exports / entries | 865 |
 | Interesting strings | 641 |
 | Decompiled funcs | 40 |
 
-## Notable symbols (names only)
+## Behaviour (source-led)
 
-Observed application/helper symbols (no addresses): `parse`, `SetProperties`, `SendAccount`, `parseChat`, `LoadNW`, `enterLevel`, `GetProperty`, `SaveDBAccount`, `LoadDBAccount`, `SetAccount`, `SetProfile`, `SetRCPlayerProps`, `main`, `startServer`, `VerifyGuildName`, `connecttodb`, `Connect`, `Bind`, `Accept`, `loginerror`, `encryptpassword`, `init`, `start`, `ApplyAccountChange`, `LoadWeapons`.
+From `gserver.h` / `gserver.cpp`: listens on a configured port (`startServer`), accepts players and Remote Control sessions, parses client package types (level warp, board modify, player/NPC props, bombs, horses, arrows, flags, chests, weapons, PMs, …). Account persistence via MySQL (`connecttodb`, `LoadDBAccount` / `SaveDBAccount`) and/or file-era helpers; password encryption helper present. RC-facing paths update player/account props and write RC log lines. Level/NPC/weapon loaders (`LoadNW`, `LoadWeapons`, `enterLevel`) drive world state.
 
-Full local function lists stay in untracked `functions.txt` / `functions.csv` under the analysis dir.
+**Do not deep-decompile further** while this source tree is available.
 
-## Imports
+## Prefer source trees
 
-```
-<EXTERNAL> :: _Unwind_Resume
-<EXTERNAL> :: __cxa_begin_catch
-<EXTERNAL> :: __cxa_call_unexpected
-<EXTERNAL> :: __cxa_end_catch
-<EXTERNAL> :: __cxa_finalize
-<EXTERNAL> :: __cxa_rethrow
-<EXTERNAL> :: __deregister_frame_info
-<EXTERNAL> :: __deregister_frame_info_bases
-<EXTERNAL> :: __errno_location
-<EXTERNAL> :: __gmon_start__
-<EXTERNAL> :: __gxx_personality_v0
-<EXTERNAL> :: __libc_start_main
-<EXTERNAL> :: __register_frame_info
-<EXTERNAL> :: __register_frame_info_bases
-<EXTERNAL> :: __strtod_internal
-<EXTERNAL> :: __strtol_internal
-<EXTERNAL> :: __xstat
-<EXTERNAL> :: accept
-<EXTERNAL> :: bind
-<EXTERNAL> :: close
-<EXTERNAL> :: compress
-<EXTERNAL> :: connect
-<EXTERNAL> :: crypt
-<EXTERNAL> :: ctime
-<EXTERNAL> :: exit
-<EXTERNAL> :: fclose
-<EXTERNAL> :: fcntl
-<EXTERNAL> :: fflush
-<EXTERNAL> :: fgets
-<EXTERNAL> :: fopen
-<EXTERNAL> :: fread
-<EXTERNAL> :: free
-<EXTERNAL> :: fseek
-<EXTERNAL> :: ftell
-<EXTERNAL> :: fwrite
-<EXTERNAL> :: getcwd
-<EXTERNAL> :: gethostbyname
-<EXTERNAL> :: gettimeofday
-<EXTERNAL> :: inet_addr
-<EXTERNAL> :: inet_ntoa
-<EXTERNAL> :: listen
-<EXTERNAL> :: localeconv
-<EXTERNAL> :: malloc
-<EXTERNAL> :: memchr
-<EXTERNAL> :: memcpy
-<EXTERNAL> :: memmove
-<EXTERNAL> :: memset
-<EXTERNAL> :: mysql_error
-<EXTERNAL> :: mysql_fetch_row
-<EXTERNAL> :: mysql_free_result
-<EXTERNAL> :: mysql_init
-<EXTERNAL> :: mysql_ping
-<EXTERNAL> :: mysql_query
-<EXTERNAL> :: mysql_real_connect
-<EXTERNAL> :: mysql_store_result
-<EXTERNAL> :: operator.delete
-<EXTERNAL> :: operator.delete[]
-<EXTERNAL> :: operator.new
-<EXTERNAL> :: operator.new[]
-<EXTERNAL> :: printf
-<EXTERNAL> :: pthread_mutex_lock
-<EXTERNAL> :: pthread_mutex_unlock
-<EXTERNAL> :: rand
-<EXTERNAL> :: realloc
-<EXTERNAL> :: recv
-<EXTERNAL> :: recvfrom
-<EXTERNAL> :: select
-<EXTERNAL> :: send
-<EXTERNAL> :: sendto
-<EXTERNAL> :: setsockopt
-<EXTERNAL> :: signal
-<EXTERNAL> :: socket
-<EXTERNAL> :: sprintf
-<EXTERNAL> :: strcat
-<EXTERNAL> :: strchr
-<EXTERNAL> :: strcmp
-<EXTERNAL> :: strcpy
-<EXTERNAL> :: strdup
-<EXTERNAL> :: strlen
-<EXTERNAL> :: strncmp
-```
-
-_… 25 more in `imports.txt`_
-
-## Exports / entry points
-
-```
-AddAccount [Function]
-AddAccount [function]
-AddAccountFromRC [Function]
-AddAccountFromRC [function]
-AddFileSeparators [Function]
-AddFileSeparators [function]
-AddLineEnds [Function]
-AddLineEnds [function]
-CfgRead [Function]
-CfgRead [function]
-CompressBuf [Function]
-CompressBuf [function]
-DecompressBuf [Function]
-DecompressBuf [function]
-DeleteAccount [Function]
-DeleteAccount [function]
-ExtractFilepath [Function]
-ExtractFilepath [function]
-FileExists [Function]
-FileExists [function]
-GetAccount [Function]
-GetAccount [function]
-GetAccountCount [Function]
-GetAccountCount [function]
-GetAccountsList [Function]
-GetAccountsList [function]
-GetAdminLevel [Function]
-GetAdminLevel [function]
-GetLevelFile [Function]
-GetLevelFile [function]
-GetProfile [Function]
-GetProfile [function]
-GetUTCFileModTime [Function]
-GetUTCFileModTime [function]
-GetWorlds [Function]
-GetWorlds [function]
-IsIPInList [Function]
-IsIPInList [function]
-JString::JString [Function]
-JString::JString [function]
-```
-
-## Interesting strings
-
-Useful for CLI flags, config paths, URLs, protocol tokens.
-
-```
-/lib/ld-linux.so.2
-mysql_error
-mysql_real_connect
-_ZNSt15basic_streambufIcSt11char_traitsIcEE9pbackfailEi
-_ZSt19__throw_ios_failurePKc
-_ZSt20__throw_length_errorPKc
-_ZNSt12__basic_fileIcE9pbackfailEi
-_ZNSt13basic_filebufIcSt11char_traitsIcEE9pbackfailEi
-printf
-connect
-socket
-bind
-listen
-sprintf
-fopen
-__libc_start_main
-Server started. Port: %d
-Response socket established at port 14899
-data/serverflags.txt
-data/maxplayers.txt
-Couldn't bind the response socket
-socket exception: cannot create socket
-Port address %d is currently used by another programm. Try later!
-logs/rclog.txt
-logs/errorlog.txt
-TServerFrame::CreatePlayer(): Checking ipbanned.txt...
-data/ipbanned.txt
-TServerFrame::CreatePlayer(): Client was IP Banned!
-TServerFrame::CreatePlayer(): GetFreePlayerID() returned %d!
-TServerFrame::CreatePlayer(): Sent(UNLIMITEDSIG) = %s
-There are too many players (28000) on this server.
-RC disconnected:
-levelnpcs/
-TServerPlayer::ClientRecieve(): buffer << sock->Read()
-TServerPlayer::ClientRecieve(): sock->error == %d
-Your Graal.exe has sent to much data (>=128k in the input buffer)
-Your Graal.exe has sent an empty data package.
-The socket to client
-The connection to client
-The connection to you was blocked for more than one minute (still
-Error while sending data to client
-TServerPlayer::parse(): Sending Account...
-level13.graal
-"From jail you can only send PMs to admins (RCs)."
-The server got uncertified data packages from your connection.
-disconnects
-The server administrator has disconnected you.
-Player
-The server got illegal data from your connection.
-loaded attributes of player
-from world
-loaded player attributes of account
-set attributes of player
-set player attributes of account
-set profile error:
-warped player
-' has added an npc in
-Adding npcs is not allowed in this level.
-Login error:
-The server got corrupt login data from your connection.
-```
-
-## Decompile note
-
-Decompiled C was produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour.
-
-## Rebuild / rehost checklist
-
-- [ ] Identify language/runtime from imports (libc, libstdc++, Go runtime, .NET, Python, JVM).
-- [ ] Extract CLI surface from `usage`/`help` strings and decompiled arg parsers.
-- [ ] Note config file paths and env vars from interesting strings.
-- [ ] Map network protocols (ports, URLs, RPC names) before rehosting.
-- [ ] Prefer reimplementation from observed behavior over blind binary reuse when licensing/safety unclear.
+- `_inbox/extracted/GServersource/` (and Developer Tools `GServer Source/GServersource.rar.extracted/`)
+- Older `gserver_source/` for `gserver13` / stats tools
 
 ## Artifacts
 
-- `prelim/` — file(1), strings, readelf/objdump/rizin/radare2 snapshots
-- `functions.txt`, `functions.csv`
-- `imports.txt`, `exports.txt`
-- `strings_interesting.txt`
-- `decompiled/`
-- `logs/` — analyzeHeadless + script logs
-- `summary_stats.txt` — machine-readable stats
-
+- Local Ghidra export retained for symbol cross-check; authoritative behaviour = source.
