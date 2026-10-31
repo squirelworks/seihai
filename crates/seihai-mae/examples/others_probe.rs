@@ -2,7 +2,7 @@
 //! player A moves to (33.5, 31) facing right, player B reports where it
 //! sees A, then A logs out and B reports what is left.
 //!
-//! Usage: cargo run -p seihai --example others_probe -- <account prefix> [host:port]
+//! Usage: cargo run -p seihai-mae --example others_probe -- <account prefix> [host:port]
 //!
 //! Each run logs in as `<prefix>a…` and `<prefix>b…`; the lab listserver
 //! accepts any account. The default address is the lab GServer.

@@ -214,7 +214,7 @@ To re-run the examples, write the synthetic session and point the tool at it:
 
 ```text
 SEIHAI_VIEWER_SAMPLE_OUT=/tmp/sample.pcap \
-  cargo test -p seihai --lib write_sample_pcap -- --ignored
+  cargo test -p seihai-core --lib write_sample_pcap -- --ignored
 seihai capture show /tmp/sample.pcap --layouts
 ```
 

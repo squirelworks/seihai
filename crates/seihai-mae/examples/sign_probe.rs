@@ -1,7 +1,7 @@
 //! Render a level's first sign as the client shows it: the view, the player
 //! below the sign, and the sign panel from `letters.png`, one PNG a page.
 //!
-//! Usage: cargo run -p seihai --example sign_probe -- <assets> <level.nw> <out_dir>
+//! Usage: cargo run -p seihai-mae --example sign_probe -- <assets> <level.nw> <out_dir>
 
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
 use seihai::offline::{OfflineSession, DIR_NORTH};

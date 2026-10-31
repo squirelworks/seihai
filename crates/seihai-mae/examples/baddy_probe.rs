@@ -1,6 +1,6 @@
 //! Run a level's baddies offline next to a standing player and write frames.
 //!
-//! Usage: cargo run -p seihai --example baddy_probe -- <assets> <level.nw> <out_dir> [px py] [ticks] [swing]
+//! Usage: cargo run -p seihai-mae --example baddy_probe -- <assets> <level.nw> <out_dir> [px py] [ticks] [swing]
 //!
 //! Every 10th player tick (500 ms) writes `baddies-NNN.png` and prints each
 //! baddy's mode, position and power, and the player's health.

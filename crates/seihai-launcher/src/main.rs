@@ -112,7 +112,10 @@ fn main() {
     cmd.args(&args);
     let err = run(cmd);
     eprintln!("seihai: cannot start {}: {err}", bin.display());
-    eprintln!("seihai: build it with `cargo build --release -p {}`", line.binary());
+    eprintln!(
+        "seihai: build {} with `cargo build --release` from the seihai folder; it builds seihai, seihai-mae and seihai-ato together",
+        line.binary()
+    );
     std::process::exit(1);
 }
 

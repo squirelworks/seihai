@@ -1,6 +1,6 @@
 //! Ask a lab listserver for its list the 2.05 way and print the reply.
 //!
-//! Usage: cargo run -p seihai --example list_probe -- <host:port> [--raw]
+//! Usage: cargo run -p seihai-mae --example list_probe -- <host:port> [--raw]
 //!
 //! Sends id 0 `newmain` in a zlib frame (2.05 needs no account for the
 //! list), reads the first frame and runs `parse_list_reply` on it.

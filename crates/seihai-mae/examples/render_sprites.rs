@@ -1,6 +1,6 @@
 //! Render the player, chests and HUD on a level to PNG files.
 //!
-//! Usage: cargo run -p seihai --example render_sprites -- <assets> <level.nw> <out_dir>
+//! Usage: cargo run -p seihai-mae --example render_sprites -- <assets> <level.nw> <out_dir>
 //!
 //! Writes `viewer-sprites.png` (standing, facing down) and one image
 //! per step north, east, south and west. Without body/head sheets the

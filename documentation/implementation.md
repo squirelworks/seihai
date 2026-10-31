@@ -36,7 +36,7 @@ No system SDL2. The `render` module provides:
 - NPC drawing heights: `drawunderplayer` and default NPCs before the players; `drawoverplayer`, `showimg` images and `drawaslight` after (`npc-draw-order.md`)
 - `seteffect`, `setcoloreffect`, `setzoomeffect`, `changeimgcolors` and `changeimgzoom` (`visual-effects.md`)
 - other players drawn through their GANI with their own sword, shield, head and body (`other-players-looks.md`)
-- windowed binary via `minifb` (`cargo run -p seihai`)
+- windowed binary via `minifb` (`cargo run -p seihai-mae`)
 - F5 opens a file picker for `.nw` / `.graal` / `.zelda`; online, F4 and F5 do nothing but print a chat line (F4: the real client's "You cannot open the editor in the online mode."; F5: "You are online and this feature is not available", inferred wording)
 - Play offline button in the GUI skips the connection
 

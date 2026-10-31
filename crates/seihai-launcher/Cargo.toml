@@ -1,10 +1,12 @@
 [package]
-name = "seihai-launcher"
+name = "seihai"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The `seihai` command. It reads the version-profile table and starts
+# The `seihai` command. The package is named `seihai` too, so
+# `cargo build --release -p seihai` names it; a plain
+# `cargo build --release` builds it together with both clients. It reads the version-profile table and starts
 # `seihai-mae` (1.x and 2.x builds) or `seihai-ato` (the Torque / 3.x
 # builds). It has no window, no renderer and no Torque code of its own, and
 # neither client depends on it.

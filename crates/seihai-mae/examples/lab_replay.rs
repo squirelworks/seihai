@@ -1,6 +1,6 @@
 //! Replay a cleaned lab frame export (JSONL) through Seihai's codecs.
 //!
-//! Usage: cargo run -p seihai --example lab_replay -- <frames.jsonl>...
+//! Usage: cargo run -p seihai-mae --example lab_replay -- <frames.jsonl>...
 //!
 //! Gen-3 C>S: every message must decode with `Gen3`, and the iterator
 //! after each frame must equal the next frame's `it_before`.

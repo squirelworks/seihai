@@ -1,7 +1,7 @@
 //! Log in and dump a cleaned SessionState, including disconnect text.
 //!
 //! Usage: SEIHAI_ACCOUNT=.. SEIHAI_PASSWORD=.. \
-//!     cargo run -p seihai --example session_probe -- <host:port> [seconds] [version]
+//!     cargo run -p seihai-mae --example session_probe -- <host:port> [seconds] [version]
 //!
 //! Version: 1.39, 2.05, 2.17, 2.22, 2.31 (default 2.05).
 

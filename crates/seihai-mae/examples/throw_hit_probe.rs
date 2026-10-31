@@ -5,7 +5,7 @@
 //! flight is judged against B with the 2.05 rules. Prints B's hearts before
 //! and after, and whether a claim would go out at one half heart.
 //!
-//! Usage: cargo run -p seihai --example throw_hit_probe -- <account prefix> [host:port]
+//! Usage: cargo run -p seihai-mae --example throw_hit_probe -- <account prefix> [host:port]
 //!
 //! The lab listserver accepts any account and password. The default address
 //! is the lab GServer.
