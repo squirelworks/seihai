@@ -101,9 +101,9 @@ Deduped high-value PE/ELF targets. Several already have `ghidra-analysis/<name>/
 
 Prior batch: `BytecodeViewer/`, `DClient_setup/`, `GCD/`, `GChar/`, `Graal_Auto_Key/`, `Graal_Digger/`, `ListServer/`, `TextConvert/`, `gserver-linux/`, `gserver-win/`, `gserver13/`, `gserver_pe_GServersource/`, `gserverstat/`, `gserverstat2/`, `serverlist3/`.
 
-Full-corpus follow-up: `RemoteControl3/`, `remotecontrol_custom/`, `RemoteControl-NW/`, `NPCControl/`, `TilesEditor/`, `Assimilator/`, `GraalLevelGenNW/`.
+Full-corpus follow-up: `RemoteControl3/`, `remotecontrol_custom/`, `RemoteControl-NW/`, `RemoteControl_classic/`, `NPCControl/`, `TilesEditor/`, `Assimilator/`, `PNGView/`, `scripteditor/`, `GraalLevelGenNW/`, `Matriark_gserver/`; scrubbed prose also for `ListServer/`, `TextConvert/`, gserver family, `serverlist3/`.
 
-Still thin: additional GServer MOD builds, older RC/NC revisions, more LAT converters.
+Still thin: additional GServer MOD/GUI builds, more LAT converters, GAT NW2PNG PE deep-dives.
 
 ## Corpus by category
 

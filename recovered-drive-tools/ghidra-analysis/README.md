@@ -13,20 +13,22 @@ Focus: plain behaviour, CLI, protocols, config paths. Do **not** paste decompile
 | `RemoteControl3/` | GTK `RemoteControl3.exe` | `seihai-rc` | Server list, NPC-server connect, player/NPC admin UI |
 | `remotecontrol_custom/` | Delphi Agret `remotecontrol.exe` | `seihai-rc` | Custom RC; registry `Software\Graal` |
 | `RemoteControl-NW/` | NW `RemoteControl-NW.exe` | `seihai-rc` | New World–era Delphi RC |
+| `RemoteControl_classic/` | `rc.rar` `RemoteControl.exe` | `seihai-rc` | Stock Delphi RC baseline |
 | `NPCControl/` | `NPCControl.exe` | `seihai-rc` | `controlconfig.txt`; NPC/weapon scripts |
 | `serverlist3/` | ELF `slist/serverlist3` | `analysis-only` | `clientsport` / `serversport` / `playerlimit` |
 | `ListServer/` | UPX-unpacked `ListServer.exe` | `analysis-only` | Win32 Delphi + WSOCK32; do not run |
 | `gserver-linux/` | `GServersource` ELF `gserver` | `analysis-only` | Prefer paired C++ source |
 | `gserver-win/` / `gserver_pe_GServersource/` | Win `gserver.exe` | `analysis-only` | Same era; watch password headers |
 | `gserver13/` | classic `gserver13` ELF | `analysis-only` | Classic Linux gserver |
+| `Matriark_gserver/` | Matriark 1.39 ELF `gserver` | `analysis-only` | Static-stripped community build |
 | `gserverstat/` / `gserverstat2/` | HTML stats emitters | `analysis-only` | Driven by `statmaker` |
 | `BytecodeViewer/` | GS2 `BytecodeViewer.exe` | `analysis-only` | Package has compiler source |
 | `TextConvert/` | `TextConvert.exe` | `analysis-only` | Graal→NW text helper |
 | `TilesEditor/` | Qt64 `TilesEditor.exe` | `seihai` (→ `lat-core` live) | Offline tile/NPC/chest editor |
 | `Assimilator/` | GAT `Assimilator.exe` | `seihai` / `analysis-only` | Batch Graal asset converter |
-| `PNGView/` | GAT `PNGView.exe` | `seihai` | Image viewer (when SUMMARY present) |
-| `scripteditor/` | NAT `scripteditor.exe` | `analysis-only` | Senolen GS1-era editor (when SUMMARY present) |
-| `GraalLevelGenNW/` | LAT NW level gen | `seihai` / `analysis-only` | Generator PE (when SUMMARY present) |
+| `PNGView/` | GAT `PNGView.exe` | `analysis-only` / `seihai` | Offline image viewer |
+| `scripteditor/` | NAT `scripteditor.exe` | `analysis-only` | Senolen GS1-era editor |
+| `GraalLevelGenNW/` | LAT NW level gen | `seihai` / `analysis-only` | Offline level generator |
 | `GCD/` / `GChar/` | character tools | `out-of-scope / seihai (client)` | Delphi character designers |
 | `Graal_Auto_Key/` / `Graal_Digger/` | trainers | `out-of-scope` | Overlap recovered-hacks |
 | `DClient_setup/` | salvaged `setup.exe` | `stay-staged` / client `out-of-scope` | Truncated Drive zip |

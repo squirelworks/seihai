@@ -28,4 +28,4 @@ Prefer GS2 compiler **source** under `GS2 Compiler.rar` for modern script toolin
 
 ## Notes
 
-Re-run Ghidra into this folder if deeper import graphs are needed; keep SUMMARY free of offsets/`FUN_*`.
+Re-run Ghidra into this folder if deeper import graphs are needed; keep SUMMARY free of offsets and anonymous decompiler names.
