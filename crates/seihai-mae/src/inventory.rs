@@ -129,16 +129,38 @@ pub fn nearest(cells: &[Cell], cur: usize, k: ListKey) -> Option<usize> {
     best.map(|(_, i)| i)
 }
 
+/// An entry's image: its width and its RGBA pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Image<'a> {
+    pub w: u32,
+    pub px: &'a [u8],
+}
+
+impl Image<'_> {
+    fn size(&self) -> (i32, i32) {
+        let w = self.w as i32;
+        (w, if w > 0 { (self.px.len() / 4 / self.w as usize) as i32 } else { 0 })
+    }
+}
+
+/// The size an entry's image takes in its cell: the image's own size, or
+/// the 32 x 32 placeholder when it has none (or it is not here yet).
+fn image_size(images: &[Option<Image>], i: usize) -> (i32, i32) {
+    images.get(i).copied().flatten().map_or((ICON, ICON), |im| im.size())
+}
+
 /// Pack the entries into cells inside a content area `width` pixels wide:
 /// each cell is as wide as the larger of its image and its label, plus
 /// padding, and as tall as both stacked, plus padding. Cells go left to
-/// right and wrap to a new row.
-pub fn layout(labels: &[String], width: i32) -> Vec<Cell> {
+/// right and wrap to a new row. `images` goes with `labels` by index; an
+/// entry with none takes the 32 x 32 placeholder's size.
+pub fn layout(labels: &[String], images: &[Option<Image>], width: i32) -> Vec<Cell> {
     let mut out = Vec::with_capacity(labels.len());
     let (mut x, mut y, mut row_h) = (0, 0, 0);
-    for l in labels {
-        let w = ICON.max(text_width(l)) + PAD * 2;
-        let h = ICON + CELL_H + PAD * 3;
+    for (i, l) in labels.iter().enumerate() {
+        let (iw, ih) = image_size(images, i);
+        let w = iw.max(text_width(l)) + PAD * 2;
+        let h = ih + CELL_H + PAD * 3;
         if x > 0 && x + w > width {
             x = 0;
             y += row_h;
@@ -164,6 +186,15 @@ pub fn default_weapon_name(id: u8) -> Option<&'static str> {
         23 => "joltbomb",
         _ => return None,
     })
+}
+
+/// The image of a built-in weapon by its item name (`bow` gives
+/// `wbowi1` plus the build's image extension).
+pub fn default_weapon_image(name: &str, image_ext: &str) -> Option<String> {
+    (0..=24u8)
+        .filter_map(crate::weaponbar::default_weapon)
+        .find(|d| d.name.eq_ignore_ascii_case(name))
+        .map(|d| format!("{}{image_ext}", d.image))
 }
 
 /// Built-in weapons the offline session got from chests (`item:bow` and
@@ -235,8 +266,9 @@ pub fn content_rect(fb_w: i32, fb_h: i32) -> (i32, i32, i32, i32) {
     (x + 32, y + 32, (w - 64).max(32), (h - 80).max(32))
 }
 
-/// Draw the open list.
-pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], counts: &Counts) {
+/// Draw the open list. `images` goes with `labels` by index; an entry with
+/// no image (or one not here yet) gets an outlined 32 x 32 placeholder.
+pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], images: &[Option<Image>], counts: &Counts) {
     let (fw, fh) = (fb.width as i32, fb.height as i32);
     let (wx, wy, ww, wh) = window_rect(fw, fh);
     fb.shade_rect(wx, wy, ww, wh, 60);
@@ -250,7 +282,7 @@ pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], counts: &C
         fb.draw_text(cx, cy, "No weapons", [0xA0, 0xA0, 0xA0]);
         return;
     }
-    let cells = layout(labels, cw);
+    let cells = layout(labels, images, cw);
     // Scroll so the selected cell is inside the content area.
     let sel = list.selected.and_then(|i| cells.get(i));
     let scroll = sel.map_or(0, |c| (c.bottom() - ch).max(0));
@@ -263,16 +295,23 @@ pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], counts: &C
         if selected {
             fb.fill_rect(x, y, c.w, c.h, [0xFF, 0xD4, 0x80]);
         }
-        // The image box (Seihai draws an outline where the weapon image goes).
-        let ix = x + (c.w - ICON) / 2;
+        // The image, centred with 5 px above it; the placeholder outline
+        // when there is none.
+        let (iw, ih) = image_size(images, i);
+        let ix = x + (c.w - iw) / 2;
         let iy = y + PAD;
-        let edge = if selected { [0x60, 0x40, 0x10] } else { [0x80, 0x80, 0x80] };
-        for (x, y, w, h) in [(ix, iy, ICON, 1), (ix, iy + ICON - 1, ICON, 1), (ix, iy, 1, ICON), (ix + ICON - 1, iy, 1, ICON)] {
-            fb.fill_rect(x, y, w, h, edge);
+        match images.get(i).copied().flatten() {
+            Some(im) => fb.blit_sprite(im.px, im.w, 4, 0, 0, iw, ih, ix, iy),
+            None => {
+                let edge = if selected { [0x60, 0x40, 0x10] } else { [0x80, 0x80, 0x80] };
+                for (x, y, w, h) in [(ix, iy, ICON, 1), (ix, iy + ICON - 1, ICON, 1), (ix, iy, 1, ICON), (ix + ICON - 1, iy, 1, ICON)] {
+                    fb.fill_rect(x, y, w, h, edge);
+                }
+            }
         }
         let tx = x + (c.w - text_width(l)) / 2;
         let colour = if selected { [0x20, 0x20, 0x20] } else { [0xFF, 0xFF, 0xFF] };
-        fb.draw_text(tx, iy + ICON + PAD, l, colour);
+        fb.draw_text(tx, iy + ih + PAD, l, colour);
     }
 }
 
@@ -326,12 +365,41 @@ mod tests {
     #[test]
     fn cells_wrap_inside_the_width() {
         let labels: Vec<String> = ["bow", "bomb", "fireball", "a"].iter().map(|s| s.to_string()).collect();
-        let cells = layout(&labels, 100);
+        let cells = layout(&labels, &[], 100);
         assert_eq!((cells[0].x, cells[0].y), (0, 0));
         assert_eq!(cells[1].x, cells[0].w);
         assert!(cells.iter().all(|c| c.x == 0 || c.right() <= 100));
         assert!(cells.iter().any(|c| c.y > 0), "a second row");
         assert!(cells.iter().all(|c| c.w >= ICON + 10 && c.h == ICON + CELL_H + 15));
+    }
+
+    #[test]
+    fn a_cell_takes_its_image_size_and_the_placeholder_without_one() {
+        let labels: Vec<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+        let px = vec![0u8; 48 * 20 * 4];
+        let cells = layout(&labels, &[Some(Image { w: 48, px: &px }), None], 1000);
+        assert_eq!((cells[0].w, cells[0].h), (48 + 10, 20 + CELL_H + 15));
+        assert_eq!((cells[1].w, cells[1].h), (ICON + 10, ICON + CELL_H + 15));
+    }
+
+    #[test]
+    fn the_image_is_drawn_in_its_cell() {
+        let mut fb = Framebuffer::new(640, 480);
+        let labels = vec!["bow".to_string()];
+        let px: Vec<u8> = [0x11, 0x22, 0x33, 0xFF].repeat(32 * 32);
+        draw(&mut fb, &ItemList { open: true, selected: None }, &labels, &[Some(Image { w: 32, px: &px })], &Counts::default());
+        let (cx, cy, _, _) = content_rect(640, 480);
+        let c = layout(&labels, &[Some(Image { w: 32, px: &px })], 1000)[0];
+        let (x, y) = (cx + (c.w - 32) / 2 + 16, cy + PAD + 16);
+        let i = (y as usize * 640 + x as usize) * 3;
+        assert_eq!(fb.pixels[i..i + 3], [0x11, 0x22, 0x33]);
+    }
+
+    #[test]
+    fn built_in_weapon_images_by_item_name() {
+        assert_eq!(default_weapon_image("bow", ".gif").as_deref(), Some("wbowi1.gif"));
+        assert_eq!(default_weapon_image("Bomb", ".png").as_deref(), Some("wbomb1.png"));
+        assert_eq!(default_weapon_image("Sword Spin", ".png"), None);
     }
 
     #[test]
@@ -361,8 +429,10 @@ mod tests {
         for (w, h) in [(640, 480), (160, 120), (32, 32)] {
             let mut fb = Framebuffer::new(w, h);
             let labels = entries(&[7, 8], &["Weapon".into()]);
-            draw(&mut fb, &ItemList { open: true, selected: Some(2) }, &labels, &Counts::default());
-            draw(&mut fb, &ItemList { open: true, selected: None }, &[], &Counts::default());
+            let px = vec![0xFFu8; 48 * 16 * 4];
+            let images = [Some(Image { w: 48, px: &px }), None];
+            draw(&mut fb, &ItemList { open: true, selected: Some(2) }, &labels, &images, &Counts::default());
+            draw(&mut fb, &ItemList { open: true, selected: None }, &[], &[], &Counts::default());
         }
     }
 }

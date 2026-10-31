@@ -54,8 +54,16 @@ hearts) are on the HUD, not in it.
   repeats are left out. Offline: built-in weapons the player got from
   chests.
 * Layout: the 2.05 window and content rectangles, and cells packed left to
-  right and wrapped with the 2.05 cell sizes. The weapon image is not drawn
-  yet; an outline marks where it goes.
+  right and wrapped with the 2.05 cell sizes.
+* Images: each cell draws its weapon's image, centred with 5 px above it,
+  and the cell takes the image's size. A built-in weapon uses its table
+  image (`wbowi1`, `wbomb1` and so on, with the build's extension, see
+  `weapon-images.md`), a server weapon the image from `PLO_NPCWEAPONADD`.
+  While the list is open each image not yet loaded is asked for once
+  through the file cache (the same request the D slot makes) and drawn
+  when it is in the cache, the asset folders or the built-in set; until
+  then, and for a weapon with no image, the cell shows the 32 x 32
+  placeholder outline. stderr: `requesting NAME (item list)`.
 * Seihai's own addition: a counts line (rupees, bombs, arrows, hearts,
   sword, shield, glove) at the top of the window. The real window does not
   have it.
@@ -73,7 +81,9 @@ weapon left out, the arrows select, A closes). Screens:
 
 ## Not done
 
-* Weapon images in the cells, folders, scroll arrows, mouse clicks.
+* Folders, scroll arrows, mouse clicks.
+* When the real client asks for the list's images (at login, on add, or
+  on opening) was not read; Seihai asks when the list is opened.
 * The built-in weapons (Bow, Bomb and the rest) have no script in Seihai
   yet, so D on them does nothing. In 2.00 and 2.05 each is a short GS1
   weapon script that fires only with ammo (`playerdarts>0`,
