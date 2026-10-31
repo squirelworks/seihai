@@ -131,11 +131,21 @@ pub struct AtoApp {
     start: StartWindow,
     game: Option<Game>,
     assets: Option<PathBuf>,
+    /// Log in on the first frame, without the start window.
+    skip_start: bool,
 }
 
 impl AtoApp {
     pub fn new(start: StartWindow, assets: Option<PathBuf>) -> AtoApp {
-        AtoApp { start, game: None, assets }
+        AtoApp { start, game: None, assets, skip_start: false }
+    }
+
+    /// As [`AtoApp::new`], but log in at once with the form as given when it
+    /// names a server and an account (`--online` and `--account`), as if
+    /// Start had been pressed. For lab runs that cannot press Start.
+    pub fn new_skipping_start(start: StartWindow, assets: Option<PathBuf>) -> AtoApp {
+        let skip_start = skips_start(&start);
+        AtoApp { start, game: None, assets, skip_start }
     }
 
     /// Start the network thread for `login` and switch to the game view.
@@ -168,6 +178,12 @@ impl AtoApp {
 
 impl eframe::App for AtoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if std::mem::take(&mut self.skip_start) && self.start.press_start() {
+            let login = self.start.started.lock().unwrap().take();
+            if let (Some(addr), Some(login)) = (self.start.online.clone(), login) {
+                self.begin(addr, login, ctx);
+            }
+        }
         match &mut self.game {
             Some(g) => g.show(ctx),
             None => {
@@ -182,14 +198,21 @@ impl eframe::App for AtoApp {
     }
 }
 
-/// Open the window and block until it is closed.
+/// True when the form names a server and an account, so the start window
+/// can be skipped.
+pub fn skips_start(start: &StartWindow) -> bool {
+    start.online.is_some() && !start.account.is_empty()
+}
+
+/// Open the window and block until it is closed. With a server and an
+/// account given, the start window is skipped (see [`skips_start`]).
 pub fn run(version: ClientVersion, start: StartWindow, assets: Option<PathBuf>) -> Result<(), String> {
     let title = format!("Graal {} (Seihai Ato)", version.label());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([CANVAS.0, CANVAS.1]).with_resizable(false),
         ..Default::default()
     };
-    let app = AtoApp::new(start, assets);
+    let app = AtoApp::new_skipping_start(start, assets);
     eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app)))).map_err(|e| e.to_string())
 }
 
@@ -240,6 +263,18 @@ mod tests {
         let (mut g, _tx) = game();
         g.walk(1, 0, Instant::now() + Duration::from_secs(1));
         assert_eq!(g.session.player_x, OfflineSession::default().player_x);
+    }
+
+    #[test]
+    fn the_start_window_is_skipped_only_with_a_server_and_an_account() {
+        let w = |online: Option<&str>, account: &str| {
+            let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), account.into(), "p".into());
+            w.online = online.map(String::from);
+            w
+        };
+        assert!(skips_start(&w(Some("127.0.0.1:14802"), "lab")));
+        assert!(!skips_start(&w(None, "lab")));
+        assert!(!skips_start(&w(Some("127.0.0.1:14802"), "")));
     }
 
     #[test]

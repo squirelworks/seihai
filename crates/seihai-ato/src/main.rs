@@ -7,7 +7,9 @@
 //!
 //! With `--online`, Start logs in at that game server, logs each level the
 //! server sends (its name, the start position and the NPC count) and draws
-//! it flat; the arrow keys walk it. `--no-window` only logs.
+//! it flat; the arrow keys walk it. With both `--online` and `--account`
+//! the start window is skipped and the login starts at once. `--no-window`
+//! only logs.
 //!
 //! `seihai-launcher` starts this binary for a 3.x `--version` and passes the
 //! user's arguments through; flags meant for `seihai-mae` are ignored.
