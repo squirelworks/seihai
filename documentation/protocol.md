@@ -28,6 +28,14 @@ This document describes the wire protocol used by Graal Reborn listservers and g
 
 **2.05 gen-3 insertion:** iterator seeded `0x04A80B38`, stepped `it = it * 0x08088405 + key`. Inserts `chr(((it>>16)&0x7F)+32)` at 1-based position `(it & 0xFFFF) mod len + 1` (len includes the trailing newline). Position can be 1 (junk byte before the id). Server→client is plain. Login frame is clean.
 
+**Gen-5 step count: keep Seihai's.** The iterator steps once for every 4-byte group the body has, a partial last group included (rounded up), at most 12 groups for an uncompressed (`0x02`) body and 4 for zlib (`0x04`) or bz2 (`0x06`). Every lab 2.22 frame chains with this count, client and server, and every real 2.22 zlib send (17 of them, none a multiple of 4 bytes) decodes with it. The one exception is 5.12, which on compressed bodies steps per whole group only (rounded down) and leaves a partial last group in the clear (`Gen5::round_down`, see `v5v6-profiles.md`).
+
+The third-party codecs agree with Seihai for 2.22 to 6.x but have no 5.12 case: pyReborn, reborn-protocol and pygserver always round up, as GServer-v2 does, so none of them stays in step with a real 5.12 (cross-check of 2026-11-01; nothing copied). Don't "fix" the step count toward any of them. Change it only if a new capture shows a frame that doesn't chain. These tests pin it in `protocol/gen5.rs`:
+
+- `lab_222_first_client_frame_is_rebuilt_byte_for_byte`: the 2.22 client's first frame, built from its two messages through `choose_comp`, `encode` and `write_frame` (the `net` send path), matches the capture byte for byte. It also shows that a whole-groups-only count leaves the frame's last byte unXORed.
+- `lab_222_short_server_frame_is_rebuilt_byte_for_byte`, `lab_222_server_chain`: a 7-byte uncompressed frame between zlib frames, chained by the exported iterator states.
+- `round_down_on_compressed_only`: 5.12's count, on compressed bodies only.
+
 ## Key Packet Categories
 
 ### Listserver ↔ Client
