@@ -1,0 +1,7 @@
+# name	entry	size	params	callers	callees	external	thunk	entry_point	signature
+FUN_004032e0	004032e0	905	1	0	14	false	false	false	undefined FUN_004032e0(uint param_1)
+FUN_00402d80	00402d80	725	1	0	10	false	false	false	undefined FUN_00402d80(uint param_1)
+FUN_004030b0	004030b0	517	1	0	3	false	false	false	undefined FUN_004030b0(uint param_1)
+FUN_00402d00	00402d00	114	1	0	0	false	false	false	undefined4 FUN_00402d00(uint param_1)
+entry	00401200	82	0	0	1	false	false	true	undefined entry(void)
+MSVBVM60.DLL::Ordinal_100	004011f8	6	0	1	0	false	true	false	undefined Ordinal_100()

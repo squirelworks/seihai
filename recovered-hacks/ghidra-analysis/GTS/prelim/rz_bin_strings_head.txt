@@ -1,0 +1,20 @@
+[Strings]
+     paddr      vaddr len size section type    string                                            
+―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[32m0x000090f6[0m [32m0x004090f6[0m [33m 15[0m [33m  32[0m [36m.rsrc   [0m[90mutf16le [0m[36mVS_VERSION_INFO[0m
+[32m0x00009152[0m [32m0x00409152[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mVarFileInfo[0m
+[32m0x00009172[0m [32m0x00409172[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mTranslation[0m
+[32m0x00009196[0m [32m0x00409196[0m [33m 14[0m [33m  30[0m [36m.rsrc   [0m[90mutf16le [0m[36mStringFileInfo[0m
+[32m0x000091ba[0m [32m0x004091ba[0m [33m  8[0m [33m  18[0m [36m.rsrc   [0m[90mutf16le [0m[36m040904B0[0m
+[32m0x000091d2[0m [32m0x004091d2[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mCompanyName[0m
+[32m0x000091ec[0m [32m0x004091ec[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mCrackHeadz® blocks=Basic Latin,Latin-1 Supplement[0m
+[32m0x0000920a[0m [32m0x0040920a[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mProductName[0m
+[32m0x00009224[0m [32m0x00409224[0m [33m 17[0m [33m  36[0m [36m.rsrc   [0m[90mutf16le [0m[36mGraal Text Sender[0m
+[32m0x0000924e[0m [32m0x0040924e[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mFileVersion[0m
+[32m0x00009268[0m [32m0x00409268[0m [33m  9[0m [33m  20[0m [36m.rsrc   [0m[90mutf16le [0m[36m1.03.0005[0m
+[32m0x00009282[0m [32m0x00409282[0m [33m 14[0m [33m  30[0m [36m.rsrc   [0m[90mutf16le [0m[36mProductVersion[0m
+[32m0x000092a0[0m [32m0x004092a0[0m [33m  9[0m [33m  20[0m [36m.rsrc   [0m[90mutf16le [0m[36m1.03.0005[0m
+[32m0x000092ba[0m [32m0x004092ba[0m [33m 12[0m [33m  26[0m [36m.rsrc   [0m[90mutf16le [0m[36mInternalName[0m
+[32m0x000092e2[0m [32m0x004092e2[0m [33m 16[0m [33m  34[0m [36m.rsrc   [0m[90mutf16le [0m[36mOriginalFilename[0m
+[32m0x00009304[0m [32m0x00409304[0m [33m  7[0m [33m  16[0m [36m.rsrc   [0m[90mutf16le [0m[36mGTS.exe[0m
+

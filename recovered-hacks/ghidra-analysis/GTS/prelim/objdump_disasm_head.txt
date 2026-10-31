@@ -1,0 +1,400 @@
+
+/workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe:     file format pei-i386
+
+
+Disassembly of section .text:
+
+00401000 <.text>:
+  401000:	b4 8d                	mov    $0x8d,%ah
+  401002:	0f 66 60 45          	pcmpgtd 0x45(%eax),%mm4
+  401006:	0f 66 9e f0 0f 66 15 	pcmpgtd 0x15660ff0(%esi),%mm3
+  40100d:	43                   	inc    %ebx
+  40100e:	02 66 54             	add    0x54(%esi),%ah
+  401011:	4d                   	dec    %ebp
+  401012:	02 66 73             	add    0x73(%esi),%ah
+  401015:	f0 0f 66 21          	lock pcmpgtd (%ecx),%mm4
+  401019:	3e 0f 66 9e 7b 0e 66 	pcmpgtd %ds:-0x2d99f185(%esi),%mm3
+  401020:	d2 
+  401021:	7b 0e                	jnp    0x401031
+  401023:	66 a8 44             	data16 test $0x44,%al
+  401026:	0f 66 6e 4d          	pcmpgtd 0x4d(%esi),%mm5
+  40102a:	02 66 ca             	add    -0x36(%esi),%ah
+  40102d:	96                   	xchg   %eax,%esi
+  40102e:	0e                   	push   %cs
+  40102f:	66 6f                	outsw  %ds:(%esi),(%dx)
+  401031:	4f                   	dec    %edi
+  401032:	0d 66 28 45 02       	or     $0x2452866,%eax
+  401037:	66 d5 3d             	data16 aad $0x3d
+  40103a:	0f 66 ee             	pcmpgtd %mm6,%mm5
+  40103d:	5f                   	pop    %edi
+  40103e:	02 66 37             	add    0x37(%esi),%ah
+  401041:	59                   	pop    %ecx
+  401042:	0f 66 4a 59          	pcmpgtd 0x59(%edx),%mm1
+  401046:	0f 66 23             	pcmpgtd (%ebx),%mm4
+  401049:	0b 0e                	or     (%esi),%ecx
+  40104b:	66 2a 3c 02          	data16 sub (%edx,%eax,1),%bh
+  40104f:	66 73 3e             	data16 jae 0x401090
+  401052:	02 66 f2             	add    -0xe(%esi),%ah
+  401055:	0c 0e                	or     $0xe,%al
+  401057:	66 6d                	insw   (%dx),%es:(%edi)
+  401059:	3e 0f 66 8d 59 0f 66 	pcmpgtd %ds:0x6d660f59(%ebp),%mm1
+  401060:	6d 
+  401061:	3f                   	aas
+  401062:	0f 66 22             	pcmpgtd (%edx),%mm4
+  401065:	78 02                	js     0x401069
+  401067:	66 70 5a             	data16 jo 0x4010c4
+  40106a:	0f 66 c9             	pcmpgtd %mm1,%mm1
+  40106d:	b4 0e                	mov    $0xe,%ah
+  40106f:	66 81 5a 0f 66 76    	sbbw   $0x7666,0xf(%edx)
+  401075:	5b                   	pop    %ebx
+  401076:	0f 66 1c 8f          	pcmpgtd (%edi,%ecx,4),%mm3
+  40107a:	0f 66 97 90 0e 66 f6 	pcmpgtd -0x999f170(%edi),%mm2
+  401081:	3d 02 66 1c 5d       	cmp    $0x5d1c6602,%eax
+  401086:	02 66 8b             	add    -0x75(%esi),%ah
+  401089:	d0 01                	rolb   $1,(%ecx)
+  40108b:	66 5a                	pop    %dx
+  40108d:	41                   	inc    %ecx
+  40108e:	02 66 25             	add    0x25(%esi),%ah
+  401091:	43                   	inc    %ebx
+  401092:	02 66 38             	add    0x38(%esi),%ah
+  401095:	b0 01                	mov    $0x1,%al
+  401097:	66 5d                	pop    %bp
+  401099:	45                   	inc    %ebp
+  40109a:	0f 66 83 e2 02 66 c1 	pcmpgtd -0x3e99fd1e(%ebx),%mm0
+  4010a1:	8f                   	(bad)
+  4010a2:	0f 66 d1             	pcmpgtd %mm1,%mm2
+  4010a5:	43                   	inc    %ebx
+  4010a6:	0d 66 a2 47 02       	or     $0x247a266,%eax
+  4010ab:	66 52                	push   %dx
+  4010ad:	4b                   	dec    %ebx
+  4010ae:	0d 66 f0 41 0f       	or     $0xf41f066,%eax
+  4010b3:	66 21 3f             	and    %di,(%edi)
+  4010b6:	0f 66 db             	pcmpgtd %mm3,%mm3
+  4010b9:	9e                   	sahf
+  4010ba:	0e                   	push   %cs
+  4010bb:	66 66 40             	data16 inc %ax
+  4010be:	0e                   	push   %cs
+  4010bf:	66 67 7d 10          	data16 addr16 jge 0x4010d3
+  4010c3:	66 59                	pop    %cx
+  4010c5:	8d 0e                	lea    (%esi),%ecx
+  4010c7:	66 a7                	cmpsw  %es:(%edi),%ds:(%esi)
+  4010c9:	78 0e                	js     0x4010d9
+  4010cb:	66 59                	pop    %cx
+  4010cd:	8e 0f                	mov    (%edi),%cs
+  4010cf:	66 c5 6d 0d          	lds    0xd(%ebp),%bp
+  4010d3:	66 c9                	leavew
+  4010d5:	51                   	push   %ecx
+  4010d6:	02 66 e0             	add    -0x20(%esi),%ah
+  4010d9:	50                   	push   %eax
+  4010da:	02 66 f4             	add    -0xc(%esi),%ah
+  4010dd:	79 0e                	jns    0x4010ed
+  4010df:	66 a1 3e 0f 66 a1    	mov    0xa1660f3e,%ax
+  4010e5:	3f                   	aas
+  4010e6:	0f 66 3d 3e 02 66 97 	pcmpgtd 0x9766023e,%mm7
+  4010ed:	40                   	inc    %eax
+  4010ee:	0e                   	push   %cs
+  4010ef:	66 f7 41 02 66 d5    	testw  $0xd566,0x2(%ecx)
+  4010f5:	3e 0f 66 10          	pcmpgtd %ds:(%eax),%mm2
+  4010f9:	39 0f                	cmp    %ecx,(%edi)
+  4010fb:	66 8b 4a 02          	mov    0x2(%edx),%cx
+  4010ff:	66 a2 dd 00 66 ca    	data16 mov %al,0xca6600dd
+  401105:	f6 0f 66             	testb  $0x66,(%edi)
+  401108:	f6 b0 01 66 38 43    	divb   0x43386601(%eax)
+  40110e:	02 66 ee             	add    -0x12(%esi),%ah
+  401111:	8c 0f                	mov    %cs,(%edi)
+  401113:	66 a5                	movsw  %ds:(%esi),%es:(%edi)
+  401115:	40                   	inc    %eax
+  401116:	02 66 b8             	add    -0x48(%esi),%ah
+  401119:	7b 0e                	jnp    0x401129
+  40111b:	66 c2 fc 0e          	retw   $0xefc
+  40111f:	66 72 90             	data16 jb 0x4010b2
+  401122:	0f 66 0d eb 0e 66 45 	pcmpgtd 0x45660eeb,%mm1
+  401129:	41                   	inc    %ecx
+  40112a:	02 66 1e             	add    0x1e(%esi),%ah
+  40112d:	4a                   	dec    %edx
+  40112e:	02 66 00             	add    0x0(%esi),%ah
+  401131:	00 00                	add    %al,(%eax)
+  401133:	00 00                	add    %al,(%eax)
+  401135:	00 00                	add    %al,(%eax)
+  401137:	00 05 00 08 00 be    	add    %al,0xbe000800
+  40113d:	52                   	push   %edx
+  40113e:	40                   	inc    %eax
+  40113f:	00 00                	add    %al,(%eax)
+  401141:	00 00                	add    %al,(%eax)
+  401143:	00 c5                	add    %al,%ch
+  401145:	52                   	push   %edx
+  401146:	40                   	inc    %eax
+  401147:	00 05 00 08 00 78    	add    %al,0x78000800
+  40114d:	54                   	push   %esp
+  40114e:	40                   	inc    %eax
+  40114f:	00 00                	add    %al,(%eax)
+  401151:	00 00                	add    %al,(%eax)
+  401153:	00 7f 54             	add    %bh,0x54(%edi)
+  401156:	40                   	inc    %eax
+  401157:	00 05 00 08 00 7e    	add    %al,0x7e000800
+  40115d:	55                   	push   %ebp
+  40115e:	40                   	inc    %eax
+  40115f:	00 00                	add    %al,(%eax)
+  401161:	00 00                	add    %al,(%eax)
+  401163:	00 85 55 40 00 25    	add    %al,0x25004055(%ebp)
+  401169:	00 14 00             	add    %dl,(%eax,%eax,1)
+  40116c:	bd 57 40 00 00       	mov    $0x4057,%ebp
+  401171:	00 00                	add    %al,(%eax)
+  401173:	00 c4                	add    %al,%ah
+  401175:	57                   	push   %edi
+  401176:	40                   	inc    %eax
+  401177:	00 00                	add    %al,(%eax)
+  401179:	00 00                	add    %al,(%eax)
+  40117b:	00 80 11 40 00 05    	add    %al,0x5004011(%eax)
+  401181:	00 00                	add    %al,(%eax)
+  401183:	00 05 56 40 00 0c    	add    %al,0xc004056
+  401189:	56                   	push   %esi
+  40118a:	40                   	inc    %eax
+  40118b:	00 1b                	add    %bl,(%ebx)
+  40118d:	56                   	push   %esi
+  40118e:	40                   	inc    %eax
+  40118f:	00 2e                	add    %ch,(%esi)
+  401191:	57                   	push   %edi
+  401192:	40                   	inc    %eax
+  401193:	00 b6 57 40 00 00    	add    %dh,0x4057(%esi)
+  401199:	00 00                	add    %al,(%eax)
+  40119b:	00 00                	add    %al,(%eax)
+  40119d:	00 00                	add    %al,(%eax)
+  40119f:	00 05 00 08 00 53    	add    %al,0x53000800
+  4011a5:	5a                   	pop    %edx
+  4011a6:	40                   	inc    %eax
+  4011a7:	00 00                	add    %al,(%eax)
+  4011a9:	00 00                	add    %al,(%eax)
+  4011ab:	00 5a 5a             	add    %bl,0x5a(%edx)
+  4011ae:	40                   	inc    %eax
+  4011af:	00 05 00 08 00 42    	add    %al,0x42000800
+  4011b5:	5b                   	pop    %ebx
+  4011b6:	40                   	inc    %eax
+  4011b7:	00 00                	add    %al,(%eax)
+  4011b9:	00 00                	add    %al,(%eax)
+  4011bb:	00 49 5b             	add    %cl,0x5b(%ecx)
+  4011be:	40                   	inc    %eax
+  4011bf:	00 05 00 08 00 5c    	add    %al,0x5c000800
+  4011c5:	5c                   	pop    %esp
+  4011c6:	40                   	inc    %eax
+  4011c7:	00 00                	add    %al,(%eax)
+  4011c9:	00 00                	add    %al,(%eax)
+  4011cb:	00 63 5c             	add    %ah,0x5c(%ebx)
+  4011ce:	40                   	inc    %eax
+  4011cf:	00 05 00 08 00 22    	add    %al,0x22000800
+  4011d5:	5d                   	pop    %ebp
+  4011d6:	40                   	inc    %eax
+  4011d7:	00 00                	add    %al,(%eax)
+  4011d9:	00 00                	add    %al,(%eax)
+  4011db:	00 29                	add    %ch,(%ecx)
+  4011dd:	5d                   	pop    %ebp
+  4011de:	40                   	inc    %eax
+  4011df:	00 05 00 08 00 ac    	add    %al,0xac000800
+  4011e5:	5e                   	pop    %esi
+  4011e6:	40                   	inc    %eax
+  4011e7:	00 00                	add    %al,(%eax)
+  4011e9:	00 00                	add    %al,(%eax)
+  4011eb:	00 b3 5e 40 00 05    	add    %dh,0x500405e(%ebx)
+  4011f1:	00 08                	add    %cl,(%eax)
+  4011f3:	00 b8 5f 40 00 00    	add    %bh,0x405f(%eax)
+  4011f9:	00 00                	add    %al,(%eax)
+  4011fb:	00 bf 5f 40 00 25    	add    %bh,0x2500405f(%edi)
+  401201:	00 14 00             	add    %dl,(%eax,%eax,1)
+  401204:	fd                   	std
+  401205:	61                   	popa
+  401206:	40                   	inc    %eax
+  401207:	00 00                	add    %al,(%eax)
+  401209:	00 00                	add    %al,(%eax)
+  40120b:	00 04 62             	add    %al,(%edx,%eiz,2)
+  40120e:	40                   	inc    %eax
+  40120f:	00 00                	add    %al,(%eax)
+  401211:	00 00                	add    %al,(%eax)
+  401213:	00 18                	add    %bl,(%eax)
+  401215:	12 40 00             	adc    0x0(%eax),%al
+  401218:	05 00 00 00 45       	add    $0x45000000,%eax
+  40121d:	60                   	pusha
+  40121e:	40                   	inc    %eax
+  40121f:	00 4c 60 40          	add    %cl,0x40(%eax,%eiz,2)
+  401223:	00 5b 60             	add    %bl,0x60(%ebx)
+  401226:	40                   	inc    %eax
+  401227:	00 6e 61             	add    %ch,0x61(%esi)
+  40122a:	40                   	inc    %eax
+  40122b:	00 f6                	add    %dh,%dh
+  40122d:	61                   	popa
+  40122e:	40                   	inc    %eax
+	...
+  401237:	00 05 00 08 00 d3    	add    %al,0xd3000800
+  40123d:	63 40 00             	arpl   %eax,0x0(%eax)
+  401240:	00 00                	add    %al,(%eax)
+  401242:	00 00                	add    %al,(%eax)
+  401244:	da 63 40             	fisubl 0x40(%ebx)
+  401247:	00 25 00 14 00 3d    	add    %ah,0x3d001400
+  40124d:	66 40                	inc    %ax
+  40124f:	00 00                	add    %al,(%eax)
+  401251:	00 00                	add    %al,(%eax)
+  401253:	00 44 66 40          	add    %al,0x40(%esi,%eiz,2)
+  401257:	00 00                	add    %al,(%eax)
+  401259:	00 00                	add    %al,(%eax)
+  40125b:	00 60 12             	add    %ah,0x12(%eax)
+  40125e:	40                   	inc    %eax
+  40125f:	00 05 00 00 00 85    	add    %al,0x85000000
+  401265:	64 40                	fs inc %eax
+  401267:	00 8c 64 40 00 9b 64 	add    %cl,0x649b0040(%esp,%eiz,2)
+  40126e:	40                   	inc    %eax
+  40126f:	00 ae 65 40 00 36    	add    %ch,0x36004065(%esi)
+  401275:	66 40                	inc    %ax
+	...
+  40127f:	00 05 00 08 00 42    	add    %al,0x42000800
+  401285:	67 40                	addr16 inc %eax
+  401287:	00 00                	add    %al,(%eax)
+  401289:	00 00                	add    %al,(%eax)
+  40128b:	00 49 67             	add    %cl,0x67(%ecx)
+  40128e:	40                   	inc    %eax
+  40128f:	00 05 00 08 00 21    	add    %al,0x21000800
+  401295:	68 40 00 00 00       	push   $0x40
+  40129a:	00 00                	add    %al,(%eax)
+  40129c:	28 68 40             	sub    %ch,0x40(%eax)
+  40129f:	00 25 00 14 00 6d    	add    %ah,0x6d001400
+  4012a5:	6a 40                	push   $0x40
+  4012a7:	00 00                	add    %al,(%eax)
+  4012a9:	00 00                	add    %al,(%eax)
+  4012ab:	00 74 6a 40          	add    %dh,0x40(%edx,%ebp,2)
+  4012af:	00 00                	add    %al,(%eax)
+  4012b1:	00 00                	add    %al,(%eax)
+  4012b3:	00 b8 12 40 00 05    	add    %bh,0x5004012(%eax)
+  4012b9:	00 00                	add    %al,(%eax)
+  4012bb:	00 b5 68 40 00 bc    	add    %dh,-0x43ffbf98(%ebp)
+  4012c1:	68 40 00 cb 68       	push   $0x68cb0040
+  4012c6:	40                   	inc    %eax
+  4012c7:	00 de                	add    %bl,%dh
+  4012c9:	69 40 00 66 6a 40 00 	imul   $0x406a66,0x0(%eax),%eax
+	...
+  4012d8:	25 00 14 00 a9       	and    $0xa9001400,%eax
+  4012dd:	6c                   	insb   (%dx),%es:(%edi)
+  4012de:	40                   	inc    %eax
+  4012df:	00 00                	add    %al,(%eax)
+  4012e1:	00 00                	add    %al,(%eax)
+  4012e3:	00 b0 6c 40 00 00    	add    %dh,0x406c(%eax)
+  4012e9:	00 00                	add    %al,(%eax)
+  4012eb:	00 f0                	add    %dh,%al
+  4012ed:	12 40 00             	adc    0x0(%eax),%al
+  4012f0:	05 00 00 00 35       	add    $0x35000000,%eax
+  4012f5:	6b 40 00 3c          	imul   $0x3c,0x0(%eax),%eax
+  4012f9:	6b 40 00 4b          	imul   $0x4b,0x0(%eax),%eax
+  4012fd:	6b 40 00 7f          	imul   $0x7f,0x0(%eax),%eax
+  401301:	6c                   	insb   (%dx),%es:(%edi)
+  401302:	40                   	inc    %eax
+  401303:	00 a2 6c 40 00 00    	add    %ah,0x406c(%edx)
+  401309:	00 00                	add    %al,(%eax)
+  40130b:	00 00                	add    %al,(%eax)
+  40130d:	00 00                	add    %al,(%eax)
+  40130f:	00 05 00 08 00 c1    	add    %al,0xc1000800
+  401315:	6d                   	insl   (%dx),%es:(%edi)
+  401316:	40                   	inc    %eax
+  401317:	00 00                	add    %al,(%eax)
+  401319:	00 00                	add    %al,(%eax)
+  40131b:	00 c8                	add    %cl,%al
+  40131d:	6d                   	insl   (%dx),%es:(%edi)
+  40131e:	40                   	inc    %eax
+  40131f:	00 05 00 08 00 92    	add    %al,0x92000800
+  401325:	6e                   	outsb  %ds:(%esi),(%dx)
+  401326:	40                   	inc    %eax
+  401327:	00 00                	add    %al,(%eax)
+  401329:	00 00                	add    %al,(%eax)
+  40132b:	00 99 6e 40 00 05    	add    %bl,0x500406e(%ecx)
+  401331:	00 08                	add    %cl,(%eax)
+  401333:	00 62 6f             	add    %ah,0x6f(%edx)
+  401336:	40                   	inc    %eax
+  401337:	00 00                	add    %al,(%eax)
+  401339:	00 00                	add    %al,(%eax)
+  40133b:	00 69 6f             	add    %ch,0x6f(%ecx)
+  40133e:	40                   	inc    %eax
+  40133f:	00 05 00 08 00 41    	add    %al,0x41000800
+  401345:	70 40                	jo     0x401387
+  401347:	00 00                	add    %al,(%eax)
+  401349:	00 00                	add    %al,(%eax)
+  40134b:	00 48 70             	add    %cl,0x70(%eax)
+  40134e:	40                   	inc    %eax
+  40134f:	00 25 00 14 00 8d    	add    %ah,0x8d001400
+  401355:	72 40                	jb     0x401397
+  401357:	00 00                	add    %al,(%eax)
+  401359:	00 00                	add    %al,(%eax)
+  40135b:	00 94 72 40 00 00 00 	add    %dl,0x40(%edx,%esi,2)
+  401362:	00 00                	add    %al,(%eax)
+  401364:	68 13 40 00 05       	push   $0x5004013
+  401369:	00 00                	add    %al,(%eax)
+  40136b:	00 d5                	add    %dl,%ch
+  40136d:	70 40                	jo     0x4013af
+  40136f:	00 dc                	add    %bl,%ah
+  401371:	70 40                	jo     0x4013b3
+  401373:	00 eb                	add    %ch,%bl
+  401375:	70 40                	jo     0x4013b7
+  401377:	00 fe                	add    %bh,%dh
+  401379:	71 40                	jno    0x4013bb
+  40137b:	00 86 72 40 00 00    	add    %al,0x4072(%esi)
+  401381:	00 00                	add    %al,(%eax)
+  401383:	00 00                	add    %al,(%eax)
+  401385:	00 00                	add    %al,(%eax)
+  401387:	00 05 00 08 00 68    	add    %al,0x68000800
+  40138d:	74 40                	je     0x4013cf
+  40138f:	00 00                	add    %al,(%eax)
+  401391:	00 00                	add    %al,(%eax)
+  401393:	00 6f 74             	add    %ch,0x74(%edi)
+  401396:	40                   	inc    %eax
+  401397:	00 05 00 08 00 62    	add    %al,0x62000800
+  40139d:	75 40                	jne    0x4013df
+  40139f:	00 00                	add    %al,(%eax)
+  4013a1:	00 00                	add    %al,(%eax)
+  4013a3:	00 69 75             	add    %ch,0x75(%ecx)
+  4013a6:	40                   	inc    %eax
+  4013a7:	00 05 00 08 00 58    	add    %al,0x58000800
+  4013ad:	79 40                	jns    0x4013ef
+  4013af:	00 00                	add    %al,(%eax)
+  4013b1:	00 00                	add    %al,(%eax)
+  4013b3:	00 5f 79             	add    %bl,0x79(%edi)
+  4013b6:	40                   	inc    %eax
+  4013b7:	00 04 00             	add    %al,(%eax,%eax,1)
+  4013ba:	04 00                	add    $0x0,%al
+	...
+  4013c4:	8a 7a 40             	mov    0x40(%edx),%bh
+	...
+  4013cf:	00 ff                	add    %bh,%bh
+  4013d1:	25 80 10 40 00       	and    $0x401080,%eax
+  4013d6:	ff 25 a8 10 40 00    	jmp    *0x4010a8
+  4013dc:	ff 25 c0 10 40 00    	jmp    *0x4010c0
+  4013e2:	ff 25 58 10 40 00    	jmp    *0x401058
+  4013e8:	ff 25 38 10 40 00    	jmp    *0x401038
+  4013ee:	ff 25 e0 10 40 00    	jmp    *0x4010e0
+  4013f4:	ff 25 18 10 40 00    	jmp    *0x401018
+  4013fa:	ff 25 f8 10 40 00    	jmp    *0x4010f8
+  401400:	ff 25 60 10 40 00    	jmp    *0x401060
+  401406:	ff 25 f4 10 40 00    	jmp    *0x4010f4
+  40140c:	ff 25 e4 10 40 00    	jmp    *0x4010e4
+  401412:	ff 25 b4 10 40 00    	jmp    *0x4010b4
+  401418:	ff 25 98 10 40 00    	jmp    *0x401098
+  40141e:	ff 25 b0 10 40 00    	jmp    *0x4010b0
+  401424:	ff 25 24 10 40 00    	jmp    *0x401024
+  40142a:	ff 25 04 10 40 00    	jmp    *0x401004
+  401430:	ff 25 10 11 40 00    	jmp    *0x401110
+  401436:	ff 25 00 10 40 00    	jmp    *0x401000
+  40143c:	ff 25 24 11 40 00    	jmp    *0x401124
+  401442:	ff 25 cc 10 40 00    	jmp    *0x4010cc
+  401448:	ff 25 78 10 40 00    	jmp    *0x401078
+  40144e:	ff 25 a0 10 40 00    	jmp    *0x4010a0
+  401454:	ff 25 20 11 40 00    	jmp    *0x401120
+  40145a:	ff 25 1c 11 40 00    	jmp    *0x40111c
+  401460:	ff 25 94 10 40 00    	jmp    *0x401094
+  401466:	ff 25 7c 10 40 00    	jmp    *0x40107c
+  40146c:	ff 25 c4 10 40 00    	jmp    *0x4010c4
+  401472:	ff 25 08 10 40 00    	jmp    *0x401008
+  401478:	ff 25 0c 11 40 00    	jmp    *0x40110c
+  40147e:	ff 25 10 10 40 00    	jmp    *0x401010
+  401484:	ff 25 8c 10 40 00    	jmp    *0x40108c
+  40148a:	ff 25 30 10 40 00    	jmp    *0x401030
+  401490:	ff 25 08 11 40 00    	jmp    *0x401108
+  401496:	ff 25 f0 10 40 00    	jmp    *0x4010f0
+  40149c:	ff 25 ec 10 40 00    	jmp    *0x4010ec
+  4014a2:	ff 25 bc 10 40 00    	jmp    *0x4010bc
+  4014a8:	ff 25 50 10 40 00    	jmp    *0x401050
+  4014ae:	ff 25 2c 11 40 00    	jmp    *0x40112c
+  4014b4:	ff 25 34 10 40 00    	jmp    *0x401034

@@ -1,0 +1,8 @@
+00401cd7	WARNING : AFK Bots are illegal on some playerworlds
+00401d2d	AFK = Away from Keyboard
+00401ee6	@*\AC:\Program Files\Microsoft Visual Studio\VB98\Source\AFK Bot\Project1.vbp
+00402214	C:\PROGRAM FILES\MICROSOFT VISUAL STUDIO\VB98\VB6.OLB
+00402408	__vbaErrorOverflow
+00403966	__vbaErrorOverflow
+0040522e	FileVersion
+0040525a	ProductVersion

@@ -1,0 +1,16 @@
+program=Graal Digger.exe
+executable_path=/workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe
+executable_format=Portable Executable (PE)
+language=x86:LE:32:default
+compiler=windows
+image_base=00400000
+function_count=1
+internal_function_count=1
+import_count=0
+export_count=2
+interesting_string_count=0
+decompiled_count=1
+key_function_count=1
+top_functions=entry@0044a6b0(sz=66)
+key_functions=entry@0044a6b0
+sample_strings=

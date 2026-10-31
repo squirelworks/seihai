@@ -17,7 +17,11 @@ __pycache__/
 /recovered-drive-tools/**
 !/recovered-drive-tools/**/
 !/recovered-drive-tools/**/*.md
-# Recovered hacks staging: commit analysis docs only; ignore binaries / archives
+# Recovered hacks staging: commit analysis docs + text RE exports; ignore binaries / archives
 /recovered-hacks/**
 !/recovered-hacks/**/
 !/recovered-hacks/**/*.md
+!/recovered-hacks/ghidra-analysis/**/*.txt
+!/recovered-hacks/ghidra-analysis/**/*.csv
+!/recovered-hacks/ghidra-analysis/**/*.c
+!/recovered-hacks/ghidra-analysis/**/*.log

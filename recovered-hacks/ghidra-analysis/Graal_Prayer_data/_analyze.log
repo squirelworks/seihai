@@ -1,0 +1,241 @@
+==> Salvage analysis
+    binary : /workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe
+    output : /workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data
+    ghidra : /workspace/tools/ghidra/current
+    java   : openjdk version "25.0.5" 2026-10-20 LTS
+==> Running analyzeHeadless (this can take a while)...
+openjdk version "25.0.5" 2026-10-20 LTS
+OpenJDK Runtime Environment Temurin-25.0.5+8 (build 25.0.5+8-LTS)
+OpenJDK 64-Bit Server VM Temurin-25.0.5+8 (build 25.0.5+8-LTS, mixed mode)
+INFO  Using log config file: jar:file:/workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data/logs/analyzeHeadless_20261031T205136Z.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (1418 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Loaded 120 trusted CA certificate(s) from /etc/ssl/certs/ca-certificates.crt (UnixSystemTrustKeyStoreUtil)  
+INFO  Loaded 120 trusted CA certificates from the OS trust store. (DefaultTrustManagerFactory)  
+INFO  Loaded 118 trusted CA certificates from the Java default trust store. (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (3688 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 60 extension points (19 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /workspace/tools/ghidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Swift/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating temporary project: /workspace/tools/ghidra/projects/salvage_Graal_Prayer_data_data_ (HeadlessAnalyzer)  
+INFO  Creating project: /workspace/tools/ghidra/projects/salvage_Graal_Prayer_data_data_ (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /workspace/tools/ghidra/projects/salvage_Graal_Prayer_data_data_ (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe (HeadlessAnalyzer)  
+INFO  Using Loader: Portable Executable (PE) (ProgramLoader)  
+INFO  Using Language/Compiler: x86:LE:32:default:windows (ProgramLoader)  
+INFO  Using Library Search Path: [., /bin, /lib, /lib64, /lib/x86_64-linux-gnu, /lib/aarch64-linux-gnu, /usr/bin, /usr/lib, /usr/X11R6/bin, /usr/X11R6/lib, /usr/java/packages/lib, /usr/lib64] (ProgramLoader)  
+INFO  Additional info:
+Loading file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe?MD5=491693cd3ec9309f0d7dbead73667c44...
+[Graal_Prayer_data_data.exe]: failed to create word at 00410b94: Conflicting data exists at address 00410b7a to 00410b94
+[Graal_Prayer_data_data.exe]: failed to create word at 00410ba6: Conflicting data exists at address 00410b96 to 00410ba6
+[Graal_Prayer_data_data.exe]: failed to create word at 00410bb4: Conflicting data exists at address 00410ba8 to 00410bb4
+[Graal_Prayer_data_data.exe]: failed to create word at 00410bda: Conflicting data exists at address 00410bca to 00410bda
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c08: Conflicting data exists at address 00410bf6 to 00410c08
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c1a: Conflicting data exists at address 00410c0a to 00410c1a
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c36: Conflicting data exists at address 00410c28 to 00410c36
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c66: Conflicting data exists at address 00410c56 to 00410c66
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c80: Conflicting data exists at address 00410c74 to 00410c80
+[Graal_Prayer_data_data.exe]: failed to create word at 00410c8c: Conflicting data exists at address 00410c82 to 00410c8c
+[Graal_Prayer_data_data.exe]: failed to create word at 00410cc4: Conflicting data exists at address 00410cb6 to 00410cc4
+[Graal_Prayer_data_data.exe]: failed to create word at 00410cde: Conflicting data exists at address 00410cd2 to 00410cde
+[Graal_Prayer_data_data.exe]: failed to create word at 00410cfe: Conflicting data exists at address 00410cf0 to 00410cfe
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d0e: Conflicting data exists at address 00410d00 to 00410d0e
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d1c: Conflicting data exists at address 00410d10 to 00410d1c
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d2a: Conflicting data exists at address 00410d1e to 00410d2a
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d38: Conflicting data exists at address 00410d2c to 00410d38
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d5c: Conflicting data exists at address 00410d50 to 00410d5c
+[Graal_Prayer_data_data.exe]: failed to create word at 00410d86: Conflicting data exists at address 00410d78 to 00410d86
+[Graal_Prayer_data_data.exe]: failed to create word at 00410da0: Conflicting data exists at address 00410d88 to 00410da0
+[Graal_Prayer_data_data.exe]: failed to create word at 00410db0: Conflicting data exists at address 00410da2 to 00410db0
+[Graal_Prayer_data_data.exe]: failed to create word at 00410dd0: Conflicting data exists at address 00410dc0 to 00410dd0
+[Graal_Prayer_data_data.exe]: failed to create word at 00410dde: Conflicting data exists at address 00410dd2 to 00410dde
+[Graal_Prayer_data_data.exe]: failed to create word at 00410df6: Conflicting data exists at address 00410de0 to 00410df6
+[Graal_Prayer_data_data.exe]: failed to create word at 00410e5c: Conflicting data exists at address 00410e44 to 00410e5c
+[Graal_Prayer_data_data.exe]: failed to create word at 00410e72: Conflicting data exists at address 00410e6a to 00410e72
+[Graal_Prayer_data_data.exe]: failed to create word at 00410e7a: Conflicting data exists at address 00410e74 to 00410e7a
+[Graal_Prayer_data_data.exe]: failed to create word at 00410e9a: Conflicting data exists at address 00410e92 to 00410e9a
+[Graal_Prayer_data_data.exe]: failed to create word at 00410eb6: Conflicting data exists at address 00410eaa to 00410eb6
+[Graal_Prayer_data_data.exe]: failed to create word at 00410ed0: Conflicting data exists at address 00410ec6 to 00410ed0
+[Graal_Prayer_data_data.exe]: failed to create word at 00410f06: Conflicting data exists at address 00410efa to 00410f06
+[Graal_Prayer_data_data.exe]: failed to create word at 00410f16: Conflicting data exists at address 00410f08 to 00410f16
+[Graal_Prayer_data_data.exe]: failed to create word at 00410f20: Conflicting data exists at address 00410f18 to 00410f20
+[Graal_Prayer_data_data.exe]: failed to create word at 00410f30: Conflicting data exists at address 00410f22 to 00410f30
+[Graal_Prayer_data_data.exe]: failed to create word at 00410f7a: Conflicting data exists at address 00410f64 to 00410f7a
+[Graal_Prayer_data_data.exe]: failed to create word at 00410faa: Conflicting data exists at address 00410fa2 to 00410faa
+[Graal_Prayer_data_data.exe]: failed to create word at 00410fb8: Conflicting data exists at address 00410fac to 00410fb8
+[Graal_Prayer_data_data.exe]: failed to create word at 00410fc8: Conflicting data exists at address 00410fba to 00410fc8
+[Graal_Prayer_data_data.exe]: failed to create word at 00410fd8: Conflicting data exists at address 00410fca to 00410fd8
+[Graal_Prayer_data_data.exe]: failed to create word at 00410ffa: Conflicting data exists at address 00410fe8 to 00410ffa
+[Graal_Prayer_data_data.exe]: failed to create word at 0041100a: Conflicting data exists at address 00410ffc to 0041100a
+[Graal_Prayer_data_data.exe]: failed to create word at 00411044: Conflicting data exists at address 00411032 to 00411044
+[Graal_Prayer_data_data.exe]: failed to create word at 00411056: Conflicting data exists at address 00411046 to 00411056
+[Graal_Prayer_data_data.exe]: failed to create word at 0041109c: Conflicting data exists at address 00411088 to 0041109c
+[Graal_Prayer_data_data.exe]: failed to create word at 004110ae: Conflicting data exists at address 0041109e to 004110ae
+[Graal_Prayer_data_data.exe]: failed to create word at 00411102: Conflicting data exists at address 004110f2 to 00411102
+[Graal_Prayer_data_data.exe]: failed to create word at 00411130: Conflicting data exists at address 00411122 to 00411130
+[Graal_Prayer_data_data.exe]: failed to create word at 00411154: Conflicting data exists at address 00411144 to 00411154
+[Graal_Prayer_data_data.exe]: failed to create word at 00411176: Conflicting data exists at address 00411168 to 00411176
+[Graal_Prayer_data_data.exe]: failed to create word at 004111ac: Conflicting data exists at address 0041119c to 004111ac
+[Graal_Prayer_data_data.exe]: failed to create word at 004111c8: Conflicting data exists at address 004111ae to 004111c8
+[Graal_Prayer_data_data.exe]: failed to create word at 004111d8: Conflicting data exists at address 004111ca to 004111d8
+[Graal_Prayer_data_data.exe]: failed to create word at 004111e2: Conflicting data exists at address 004111da to 004111e2
+[Graal_Prayer_data_data.exe]: failed to create word at 004111f4: Conflicting data exists at address 004111e4 to 004111f4
+[Graal_Prayer_data_data.exe]: failed to create word at 00411200: Conflicting data exists at address 004111f6 to 00411200
+[Graal_Prayer_data_data.exe]: failed to create word at 0041121e: Conflicting data exists at address 00411210 to 0041121e
+[Graal_Prayer_data_data.exe]: failed to create word at 00411242: Conflicting data exists at address 00411238 to 00411242
+[Graal_Prayer_data_data.exe]: failed to create word at 00411260: Conflicting data exists at address 00411252 to 00411260
+[Graal_Prayer_data_data.exe]: failed to create word at 0041127a: Conflicting data exists at address 00411270 to 0041127a
+[Graal_Prayer_data_data.exe]: failed to create word at 00411286: Conflicting data exists at address 0041127c to 00411286
+[Graal_Prayer_data_data.exe]: failed to create word at 004112d2: Conflicting data exists at address 004112c2 to 004112d2
+[Graal_Prayer_data_data.exe]: failed to create word at 004112ec: Conflicting data exists at address 004112d4 to 004112ec
+[Graal_Prayer_data_data.exe]: failed to create word at 0041130a: Conflicting data exists at address 00411300 to 0041130a
+[Graal_Prayer_data_data.exe]: failed to create word at 0041136e: Conflicting data exists at address 0041135e to 0041136e
+[Graal_Prayer_data_data.exe]: failed to create word at 004113b2: Conflicting data exists at address 004113a4 to 004113b2
+[Graal_Prayer_data_data.exe]: failed to create word at 004113fc: Conflicting data exists at address 004113ec to 004113fc
+[Graal_Prayer_data_data.exe]: failed to create word at 0041140e: Conflicting data exists at address 004113fe to 0041140e
+[Graal_Prayer_data_data.exe]: failed to create word at 0041142e: Conflicting data exists at address 0041141e to 0041142e
+[Graal_Prayer_data_data.exe]: failed to create word at 00411438: Conflicting data exists at address 00411430 to 00411438
+[Graal_Prayer_data_data.exe]: failed to create word at 00411444: Conflicting data exists at address 0041143a to 00411444
+[Graal_Prayer_data_data.exe]: failed to create word at 00411470: Conflicting data exists at address 00411464 to 00411470
+[Graal_Prayer_data_data.exe]: failed to create word at 00411480: Conflicting data exists at address 00411472 to 00411480
+[Graal_Prayer_data_data.exe]: failed to create word at 0041148a: Conflicting data exists at address 00411482 to 0041148a
+[Graal_Prayer_data_data.exe]: failed to create word at 004114a6: Conflicting data exists at address 00411498 to 004114a6
+[Graal_Prayer_data_data.exe]: failed to create word at 004114c2: Conflicting data exists at address 004114b8 to 004114c2
+[Graal_Prayer_data_data.exe]: failed to create word at 004114d0: Conflicting data exists at address 004114c4 to 004114d0
+[Graal_Prayer_data_data.exe]: failed to create word at 004114f8: Conflicting data exists at address 004114e8 to 004114f8
+[Graal_Prayer_data_data.exe]: failed to create word at 00411514: Conflicting data exists at address 00411508 to 00411514
+[Graal_Prayer_data_data.exe]: failed to create word at 00411530: Conflicting data exists at address 00411522 to 00411530
+[Graal_Prayer_data_data.exe]: failed to create word at 0041153c: Conflicting data exists at address 00411532 to 0041153c
+[Graal_Prayer_data_data.exe]: failed to create word at 00411562: Conflicting data exists at address 0041155a to 00411562
+------------------------------------------------
+
+Searching 8 paths for library ADVAPI32.DLL...
+Library not found.
+------------------------------------------------
+
+Searching 8 paths for library COMDLG32.DLL...
+Library not found.
+------------------------------------------------
+
+Searching 8 paths for library GDI32.DLL...
+Library not found.
+------------------------------------------------
+
+Searching 8 paths for library KERNEL32.DLL...
+Library not found.
+------------------------------------------------
+
+Searching 8 paths for library SHELL32.DLL...
+Library not found.
+------------------------------------------------
+
+Searching 8 paths for library USER32.DLL...
+Library not found.
+------------------------------------------------
+
+Linking the External Programs of 'Graal_Prayer_data_data.exe' to imported libraries...
+  [KERNEL32.DLL] -> not found in project
+  [ADVAPI32.DLL] -> not found in project
+  [COMDLG32.DLL] -> not found in project
+  [GDI32.DLL] -> not found in project
+  [SHELL32.DLL] -> not found in project
+  [USER32.DLL] -> not found in project
+------------------------------------------------
+
+ (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe (HeadlessAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+INFO  Unable to find DWARF information, skipping DWARF analysis (DWARFAnalyzer)  
+INFO  Skipping PDB processing: missing PDB information in program metadata (PdbUniversalAnalyzer)  
+INFO  Packed database cache: /var/tmp/ubuntu-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+WARN  Decompiling 0040529b, pcode error at 004052f5: Unable to resolve constructor at 004052f5 (DecompileCallback)  
+INFO  No functions detected that make variadic function calls with format strings containing format specifiers (FormatStringAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.377 secs
+    Apply Data Archives                        1.381 secs
+    Call Convention ID                         0.000 secs
+    Call-Fixup Installer                       0.056 secs
+    Create Address Tables                      0.182 secs
+    Create Address Tables - One Time           0.086 secs
+    Create Function                            0.197 secs
+    DWARF                                      0.007 secs
+    Data Reference                             0.114 secs
+    Decompiler Parameter ID                    2.070 secs
+    Decompiler Switch Analysis                 2.394 secs
+    Demangler Microsoft                        0.015 secs
+    Disassemble                                0.223 secs
+    Disassemble Entry Points                   0.938 secs
+    Embedded Media                             0.032 secs
+    External Entry References                  0.000 secs
+    Function ID                                0.775 secs
+    Function Start Pre Search                  0.023 secs
+    Function Start Search                      0.033 secs
+    Function Start Search After Code           0.004 secs
+    Function Start Search After Data           0.011 secs
+    Function Start Search delayed - One Time   0.001 secs
+    Non-Returning Functions - Discovered       0.134 secs
+    Non-Returning Functions - Known            0.009 secs
+    PDB Universal                              0.001 secs
+    Reference                                  0.190 secs
+    Scalar Operand References                  0.217 secs
+    Shared Return Calls                        0.094 secs
+    Source Language Support                    0.002 secs
+    Stack                                      1.013 secs
+    Subroutine References                      0.069 secs
+    Subroutine References - One Time           0.030 secs
+    Variadic Function Signature Override       0.070 secs
+    Windows x86 PE Exception Handling          0.004 secs
+    Windows x86 PE RTTI Analyzer               0.082 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.041 secs
+    WindowsResourceReference                   0.881 secs
+    X86 Function Callee Purge                  0.114 secs
+    x86 Constant Reference Analyzer            1.446 secs
+-----------------------------------------------------
+     Total Time   13 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: ExportSalvageArtifacts.java '/workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data' '30'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /workspace/tools/ghidra/ghidra_scripts/ExportSalvageArtifacts.java (HeadlessAnalyzer)  
+INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for Graal_Prayer_data_data.exe -> /workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data (GhidraScript)  
+INFO  ExportSalvageArtifacts.java> Export complete: 303 funcs, 158 imports, 13 exports, 34 interesting strings, 30 decompiled (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: file:///workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_data_data.exe (HeadlessAnalyzer)  
+INFO  /Graal_Prayer_data_data.exe: file created (ubuntu) (LocalFileSystem)  
+INFO  REPORT: Save succeeded for: /Graal_Prayer_data_data.exe (salvage_Graal_Prayer_data_data_:/Graal_Prayer_data_data.exe) (HeadlessAnalyzer)  
+INFO  REPORT: Import succeeded (HeadlessAnalyzer)  
+==> Wrote /workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data/SUMMARY.md
+==> Done (ghidra_rc=0)

@@ -1,0 +1,49 @@
+[Imports]
+nth      vaddr bind type lib          name                      
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[33m  1[0m [32m0x00401000[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaStrI2[0m
+[33m  2[0m [32m0x00401004[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIcos[0m
+[33m  3[0m [32m0x00401008[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fptan[0m
+[33m  4[0m [32m0x0040100c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaFreeVarList[0m
+[33m  5[0m [32m0x00401010[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdiv_m64[0m
+[33m  6[0m [32m0x00401014[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaStrErrVarCopy[0m
+[33m  7[0m [32m0x00401018[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fprem1[0m
+[33m  8[0m [32m0x0040101c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaStrCat[0m
+[33m  9[0m [32m0x00401020[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaHresultCheckObj[0m
+[33m 10[0m [32m0x00401024[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdiv_m32[0m
+[33m 11[0m [32m0x00401028[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaObjSet[0m
+[33m 12[0m [32m0x0040102c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdiv_m16i[0m
+[33m 13[0m [32m0x00401030[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdivr_m16i[0m
+[33m599[0m [32m0x00401034[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mrtcSendKeys[0m
+[33m600[0m [32m0x00401038[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIsin[0m
+[33m601[0m [32m0x0040103c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaChkstk[0m
+[33m602[0m [32m0x00401040[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mEVENT_SINK_AddRef[0m
+[33m603[0m [32m0x00401044[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fpatan[0m
+[33m604[0m [32m0x00401048[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mEVENT_SINK_Release[0m
+[33m605[0m [32m0x0040104c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIsqrt[0m
+[33m606[0m [32m0x00401050[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mEVENT_SINK_QueryInterface[0m
+[33m607[0m [32m0x00401054[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaExceptHandler[0m
+[33m608[0m [32m0x00401058[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fprem[0m
+[33m609[0m [32m0x0040105c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdivr_m64[0m
+[33m608[0m [32m0x00401060[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mrtcVarBstrFromAnsi[0m
+[33m609[0m [32m0x00401064[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaFPException[0m
+[33m610[0m [32m0x00401068[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaStrVarVal[0m
+[33m611[0m [32m0x0040106c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIlog[0m
+[33m612[0m [32m0x00401070[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaErrorOverflow[0m
+[33m613[0m [32m0x00401074[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdiv_m32i[0m
+[33m614[0m [32m0x00401078[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdivr_m32i[0m
+[33m615[0m [32m0x0040107c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaFreeStrList[0m
+[33m616[0m [32m0x00401080[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdivr_m32[0m
+[33m617[0m [32m0x00401084[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_adj_fdiv_r[0m
+[33m100[0m [32m0x00401088[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mThunRTMain[0m
+[33m610[0m [32m0x0040108c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mrtcGetDateVar[0m
+[33m611[0m [32m0x00401090[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaVarAdd[0m
+[33m612[0m [32m0x00401094[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31mrtcGetTimeVar[0m
+[33m613[0m [32m0x00401098[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIatan[0m
+[33m614[0m [32m0x0040109c[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaStrMove[0m
+[33m615[0m [32m0x004010a0[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_allmul[0m
+[33m616[0m [32m0x004010a4[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CItan[0m
+[33m617[0m [32m0x004010a8[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m_CIexp[0m
+[33m618[0m [32m0x004010ac[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaFreeObj[0m
+[33m619[0m [32m0x004010b0[0m [36mNONE [0m[90mFUNC [0m[36mMSVBVM60.DLL [0m[31m__vbaFreeStr[0m
+

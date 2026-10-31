@@ -1,0 +1,134 @@
+==> Salvage analysis
+    binary : /workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe
+    output : /workspace/recovered-hacks/ghidra-analysis/AFK_Bot
+    ghidra : /workspace/tools/ghidra/current
+    java   : openjdk version "25.0.5" 2026-10-20 LTS
+==> Running analyzeHeadless (this can take a while)...
+openjdk version "25.0.5" 2026-10-20 LTS
+OpenJDK Runtime Environment Temurin-25.0.5+8 (build 25.0.5+8-LTS)
+OpenJDK 64-Bit Server VM Temurin-25.0.5+8 (build 25.0.5+8-LTS, mixed mode)
+INFO  Using log config file: jar:file:/workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /workspace/recovered-hacks/ghidra-analysis/AFK_Bot/logs/analyzeHeadless_20261031T205201Z.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (827 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Loaded 120 trusted CA certificate(s) from /etc/ssl/certs/ca-certificates.crt (UnixSystemTrustKeyStoreUtil)  
+INFO  Loaded 120 trusted CA certificates from the OS trust store. (DefaultTrustManagerFactory)  
+INFO  Loaded 118 trusted CA certificates from the Java default trust store. (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (2400 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 60 extension points (19 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /workspace/tools/ghidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Swift/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating temporary project: /workspace/tools/ghidra/projects/salvage_AFK_Bot_ (HeadlessAnalyzer)  
+INFO  Creating project: /workspace/tools/ghidra/projects/salvage_AFK_Bot_ (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /workspace/tools/ghidra/projects/salvage_AFK_Bot_ (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe (HeadlessAnalyzer)  
+INFO  Using Loader: Portable Executable (PE) (ProgramLoader)  
+INFO  Using Language/Compiler: x86:LE:32:default:windows (ProgramLoader)  
+INFO  Using Library Search Path: [., /bin, /lib, /lib64, /lib/x86_64-linux-gnu, /lib/aarch64-linux-gnu, /usr/bin, /usr/lib, /usr/X11R6/bin, /usr/X11R6/lib, /usr/java/packages/lib, /usr/lib64] (ProgramLoader)  
+INFO  Additional info:
+Loading file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe?MD5=def8375f17384465385ac443dae25557...
+------------------------------------------------
+
+Searching 8 paths for library MSVBVM60.DLL...
+Library not found.
+------------------------------------------------
+
+Linking the External Programs of 'AFK Bot.exe' to imported libraries...
+  [MSVBVM60.DLL] -> not found in project
+------------------------------------------------
+
+ (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe (HeadlessAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+WARN  Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn (NoReturnFunctionAnalyzer)  
+INFO  Unable to find DWARF information, skipping DWARF analysis (DWARFAnalyzer)  
+INFO  Skipping PDB processing: missing PDB information in program metadata (PdbUniversalAnalyzer)  
+INFO  Packed database cache: /var/tmp/ubuntu-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: windows_vs12_32 (ApplyDataArchiveAnalyzer)  
+WARN  Decompiling 004032e0, pcode error at 004036c8: Unable to resolve constructor at 004036c8 (DecompileCallback)  
+INFO  No functions detected that make variadic function calls with format strings containing format specifiers (FormatStringAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.176 secs
+    Apply Data Archives                        0.657 secs
+    Call Convention ID                         0.001 secs
+    Call-Fixup Installer                       0.000 secs
+    Create Address Tables                      0.009 secs
+    Create Address Tables - One Time           0.084 secs
+    Create Function                            0.025 secs
+    DWARF                                      0.003 secs
+    Data Reference                             0.071 secs
+    Decompiler Parameter ID                    0.734 secs
+    Decompiler Switch Analysis                 1.018 secs
+    Demangler Microsoft                        0.008 secs
+    Disassemble                                0.098 secs
+    Disassemble Entry Points                   0.041 secs
+    Embedded Media                             0.006 secs
+    External Entry References                  0.001 secs
+    Function ID                                0.096 secs
+    Function Start Pre Search                  0.003 secs
+    Function Start Search                      0.026 secs
+    Function Start Search After Code           0.007 secs
+    Function Start Search After Data           0.005 secs
+    Non-Returning Functions - Discovered       0.023 secs
+    Non-Returning Functions - Known            0.001 secs
+    PDB Universal                              0.002 secs
+    Reference                                  0.106 secs
+    Scalar Operand References                  0.012 secs
+    Shared Return Calls                        0.009 secs
+    Source Language Support                    0.002 secs
+    Stack                                      0.031 secs
+    Subroutine References                      0.013 secs
+    Subroutine References - One Time           0.012 secs
+    Variadic Function Signature Override       0.007 secs
+    Windows x86 PE Exception Handling          0.008 secs
+    Windows x86 PE RTTI Analyzer               0.018 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.045 secs
+    WindowsResourceReference                   0.316 secs
+    X86 Function Callee Purge                  0.001 secs
+    x86 Constant Reference Analyzer            0.174 secs
+-----------------------------------------------------
+     Total Time   3 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: ExportSalvageArtifacts.java '/workspace/recovered-hacks/ghidra-analysis/AFK_Bot' '25'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /workspace/tools/ghidra/ghidra_scripts/ExportSalvageArtifacts.java (HeadlessAnalyzer)  
+INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for AFK Bot.exe -> /workspace/recovered-hacks/ghidra-analysis/AFK_Bot (GhidraScript)  
+WARN  Decompiling 004032e0, pcode error at 004036c8: Unable to resolve constructor at 004036c8 (DecompileCallback)  
+INFO  ExportSalvageArtifacts.java> Export complete: 6 funcs, 45 imports, 2 exports, 8 interesting strings, 5 decompiled (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: file:///workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe (HeadlessAnalyzer)  
+INFO  /AFK Bot.exe: file created (ubuntu) (LocalFileSystem)  
+INFO  REPORT: Save succeeded for: /AFK Bot.exe (salvage_AFK_Bot_:/AFK Bot.exe) (HeadlessAnalyzer)  
+INFO  REPORT: Import succeeded (HeadlessAnalyzer)  
+==> Wrote /workspace/recovered-hacks/ghidra-analysis/AFK_Bot/SUMMARY.md
+==> Done (ghidra_rc=0)

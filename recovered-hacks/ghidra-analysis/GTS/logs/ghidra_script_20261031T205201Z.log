@@ -1,0 +1,2 @@
+2026-10-31 20:52:13 INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for GTS.exe -> /workspace/recovered-hacks/ghidra-analysis/GTS  
+2026-10-31 20:52:13 INFO  ExportSalvageArtifacts.java> Export complete: 34 funcs, 76 imports, 2 exports, 22 interesting strings, 30 decompiled  

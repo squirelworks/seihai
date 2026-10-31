@@ -1,0 +1,2 @@
+2026-10-31 20:52:19 INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for Graal Digger.exe -> /workspace/recovered-hacks/ghidra-analysis/Graal_Digger  
+2026-10-31 20:52:20 INFO  ExportSalvageArtifacts.java> Export complete: 1 funcs, 0 imports, 2 exports, 0 interesting strings, 1 decompiled  

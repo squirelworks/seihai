@@ -1,0 +1,124 @@
+2026-10-31 20:52:03 INFO  (LoggingInitialization) Using log config file: jar:file:/workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml  
+2026-10-31 20:52:03 INFO  (LoggingInitialization) Using log file: /workspace/recovered-hacks/ghidra-analysis/GTS/logs/analyzeHeadless_20261031T205201Z.log  
+2026-10-31 20:52:03 DEBUG (GhidraObjectInputFilter) Including serial input filter: FileSystem/data/client.rmi.serial.filter  
+2026-10-31 20:52:03 INFO  (Preferences) Loading user preferences: /home/ubuntu/.config/ghidra/ghidra_12.2_PUBLIC/preferences  
+2026-10-31 20:52:03 INFO  (ClassSearcher) Searching for classes...  
+2026-10-31 20:52:04 INFO  (ClassSearcher) Class search complete (866 ms)  
+2026-10-31 20:52:04 INFO  (DefaultSSLContextInitializer) Initializing SSL Context  
+2026-10-31 20:52:04 INFO  (SecureRandomFactory) Initializing Random Number Generator...  
+2026-10-31 20:52:04 INFO  (SecureRandomFactory) Random Number Generator initialization complete: NativePRNGNonBlocking  
+2026-10-31 20:52:04 INFO  (UnixSystemTrustKeyStoreUtil) Loaded 120 trusted CA certificate(s) from /etc/ssl/certs/ca-certificates.crt  
+2026-10-31 20:52:04 INFO  (DefaultTrustManagerFactory) Loaded 120 trusted CA certificates from the OS trust store.  
+2026-10-31 20:52:04 INFO  (DefaultTrustManagerFactory) Loaded 118 trusted CA certificates from the Java default trust store.  
+2026-10-31 20:52:04 INFO  (AnalyzeHeadless) Headless startup complete (2423 ms)  
+2026-10-31 20:52:04 INFO  (ClassSearcher) Class searcher loaded 60 extension points (19 false positives)  
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer) HEADLESS Script Paths:
+    /workspace/tools/ghidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Swift/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts  
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer) HEADLESS: execution starts  
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer) Creating temporary project: /workspace/tools/ghidra/projects/salvage_GTS_  
+2026-10-31 20:52:05 INFO  (DefaultProject) Creating project: /workspace/tools/ghidra/projects/salvage_GTS_  
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer) REPORT: Processing input files:   
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer)      project: /workspace/tools/ghidra/projects/salvage_GTS_  
+2026-10-31 20:52:05 INFO  (HeadlessAnalyzer) IMPORTING: file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe  
+2026-10-31 20:52:06 DEBUG (SleighLanguage) Took 282ms (129ms inside lock) to initialize language /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/x86/data/languages/x86.slaspec -> /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Processors/x86/data/languages/x86.sla  
+2026-10-31 20:52:06 INFO  (ProgramLoader) Using Loader: Portable Executable (PE)  
+2026-10-31 20:52:06 INFO  (ProgramLoader) Using Language/Compiler: x86:LE:32:default:windows  
+2026-10-31 20:52:06 INFO  (ProgramLoader) Using Library Search Path: [., /bin, /lib, /lib64, /lib/x86_64-linux-gnu, /lib/aarch64-linux-gnu, /usr/bin, /usr/lib, /usr/X11R6/bin, /usr/X11R6/lib, /usr/java/packages/lib, /usr/lib64]  
+2026-10-31 20:52:07 INFO  (ProgramLoader) Additional info:
+Loading file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe?MD5=98b5be2b0de015e829b8ef104d5954b5...
+------------------------------------------------
+
+Searching 8 paths for library MSVBVM60.DLL...
+Library not found.
+------------------------------------------------
+
+Linking the External Programs of 'GTS.exe' to imported libraries...
+  [MSVBVM60.DLL] -> not found in project
+------------------------------------------------
+
+  
+2026-10-31 20:52:07 INFO  (HeadlessAnalyzer) IMPORTING: Loaded 0 additional files  
+2026-10-31 20:52:07 INFO  (HeadlessAnalyzer) ANALYZING all memory and code: file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe  
+2026-10-31 20:52:07 WARN  (NoReturnFunctionAnalyzer) Ignoring leading '_' chars on no-return name '___raise_securityfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn  
+2026-10-31 20:52:07 WARN  (NoReturnFunctionAnalyzer) Ignoring leading '_' chars on no-return name '___report_rangecheckfailure' specified in file: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/PEFunctionsThatDoNotReturn  
+2026-10-31 20:52:07 INFO  (DWARFAnalyzer) Unable to find DWARF information, skipping DWARF analysis  
+2026-10-31 20:52:07 INFO  (PdbUniversalAnalyzer) Skipping PDB processing: missing PDB information in program metadata  
+2026-10-31 20:52:09 INFO  (PackedDatabaseCache) Packed database cache: /var/tmp/ubuntu-ghidra/packed-db-cache  
+2026-10-31 20:52:09 DEBUG (PackedDatabaseCache) Using cached packed database: /workspace/tools/ghidra/ghidra_12.2_PUBLIC/Ghidra/Features/Base/data/typeinfo/win32/windows_vs12_32.gdt  
+2026-10-31 20:52:09 INFO  (ApplyDataArchiveAnalyzer) Applied data type archive: windows_vs12_32  
+2026-10-31 20:52:13 INFO  (FormatStringAnalyzer) No functions detected that make variadic function calls with format strings containing format specifiers  
+2026-10-31 20:52:13 INFO  (AutoAnalysisManager) -----------------------------------------------------
+    ASCII Strings                              0.176 secs
+    Apply Data Archives                        0.597 secs
+    Call Convention ID                         0.001 secs
+    Call-Fixup Installer                       0.003 secs
+    Create Address Tables                      0.025 secs
+    Create Address Tables - One Time           0.098 secs
+    Create Function                            0.044 secs
+    DWARF                                      0.002 secs
+    Data Reference                             0.110 secs
+    Decompiler Parameter ID                    0.805 secs
+    Decompiler Switch Analysis                 2.673 secs
+    Demangler Microsoft                        0.010 secs
+    Disassemble                                0.263 secs
+    Disassemble Entry Points                   0.041 secs
+    Embedded Media                             0.008 secs
+    External Entry References                  0.000 secs
+    Function ID                                0.057 secs
+    Function Start Pre Search                  0.004 secs
+    Function Start Search                      0.043 secs
+    Function Start Search After Code           0.005 secs
+    Function Start Search After Data           0.013 secs
+    Non-Returning Functions - Discovered       0.016 secs
+    Non-Returning Functions - Known            0.001 secs
+    PDB Universal                              0.002 secs
+    Reference                                  0.144 secs
+    Scalar Operand References                  0.027 secs
+    Shared Return Calls                        0.023 secs
+    Source Language Support                    0.001 secs
+    Stack                                      0.088 secs
+    Subroutine References                      0.025 secs
+    Subroutine References - One Time           0.009 secs
+    Variadic Function Signature Override       0.013 secs
+    Windows x86 PE Exception Handling          0.008 secs
+    Windows x86 PE RTTI Analyzer               0.003 secs
+    Windows x86 Thread Environment Block (TEB) Analyzer     0.039 secs
+    WindowsResourceReference                   0.271 secs
+    X86 Function Callee Purge                  0.008 secs
+    x86 Constant Reference Analyzer            0.235 secs
+-----------------------------------------------------
+     Total Time   5 secs
+-----------------------------------------------------
+  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) REPORT: Analysis succeeded for file: file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) REPORT: Execute script: ExportSalvageArtifacts.java '/workspace/recovered-hacks/ghidra-analysis/GTS' '30'   
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) SCRIPT: /workspace/tools/ghidra/ghidra_scripts/ExportSalvageArtifacts.java  
+2026-10-31 20:52:13 INFO  (GhidraScript) ExportSalvageArtifacts.java> Exporting salvage artifacts for GTS.exe -> /workspace/recovered-hacks/ghidra-analysis/GTS  
+2026-10-31 20:52:13 INFO  (GhidraScript) ExportSalvageArtifacts.java> Export complete: 34 funcs, 76 imports, 2 exports, 22 interesting strings, 30 decompiled  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) ANALYZING changes made by post scripts: file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) REPORT: Post-analysis succeeded for file: file:///workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe  
+2026-10-31 20:52:13 INFO  (LocalFileSystem) /GTS.exe: file created (ubuntu)  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) REPORT: Save succeeded for: /GTS.exe (salvage_GTS_:/GTS.exe)  
+2026-10-31 20:52:13 INFO  (HeadlessAnalyzer) REPORT: Import succeeded  

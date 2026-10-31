@@ -1,0 +1,138 @@
+/* FUN_00407300 @ 00407300 size=381 */
+
+void __cdecl FUN_00407300(uint param_1)
+
+{
+  undefined2 uVar1;
+  int iVar2;
+  undefined4 uVar3;
+  int *piVar4;
+  int *piVar5;
+  int *piStack_16c;
+  undefined4 uStack_168;
+  int *piStack_164;
+  undefined4 uStack_154;
+  undefined4 uStack_150;
+  undefined4 *puStack_14c;
+  undefined4 *puStack_148;
+  undefined4 *puStack_144;
+  undefined4 *puStack_140;
+  undefined4 *puStack_13c;
+  undefined4 *puStack_138;
+  undefined4 *puStack_134;
+  int *piStack_130;
+  undefined4 *puStack_12c;
+  undefined4 *puStack_128;
+  undefined4 *puStack_124;
+  undefined4 *puStack_120;
+  undefined4 *puStack_11c;
+  undefined4 *puStack_118;
+  undefined4 uStack_114;
+  undefined4 local_8c [2];
+  undefined4 local_84;
+  undefined4 local_7c [2];
+  undefined4 local_74;
+  undefined4 local_6c [2];
+  undefined4 local_64;
+  undefined4 local_5c [2];
+  undefined4 local_54;
+  undefined4 local_4c [2];
+  undefined4 local_44;
+  undefined4 local_3c [4];
+  undefined4 local_2c [4];
+  undefined4 local_1c;
+  void *pvStack_18;
+  undefined1 *puStack_14;
+  undefined1 *local_10;
+  undefined *local_c;
+  uint local_8;
+  
+  puStack_14 = &LAB_004013d6;
+  pvStack_18 = ExceptionList;
+  local_10 = (undefined1 *)((int)register0x00000010 + -0x110);
+  local_c = &DAT_00401388;
+  local_8 = param_1 & 1;
+  piVar5 = (int *)(param_1 & 0xfffffffe);
+  puStack_118 = (undefined4 *)0x407343;
+  ExceptionList = &pvStack_18;
+  uStack_114 = piVar5;
+  (**(code **)(*piVar5 + 4))();
+  local_84 = 0x80020004;
+  local_74 = 0x80020004;
+  local_64 = 0x80020004;
+  local_54 = 0x80020004;
+  local_44 = 0x80020004;
+  local_1c = 0;
+  local_2c[0] = 0;
+  local_3c[0] = 0;
+  local_8c[0] = 10;
+  local_7c[0] = 10;
+  local_6c[0] = 10;
+  local_5c[0] = 10;
+  local_4c[0] = 10;
+  puStack_118 = (undefined4 *)0x4073bc;
+  __vbaVarDup();
+  puStack_118 = (undefined4 *)0x4073db;
+  __vbaVarDup();
+  puStack_118 = local_8c;
+  puStack_11c = local_7c;
+  puStack_120 = local_6c;
+  puStack_124 = local_5c;
+  puStack_128 = local_4c;
+  puStack_12c = local_3c;
+  piStack_130 = local_2c;
+  puStack_134 = (undefined4 *)0x407403;
+  Ordinal_596();
+  puStack_134 = (undefined4 *)0x40740e;
+  __vbaStrMove();
+  puStack_134 = (undefined4 *)0x407418;
+  __vbaStrCopy();
+  puStack_134 = (undefined4 *)0x407421;
+  __vbaFreeStr();
+  puStack_134 = local_8c;
+  puStack_138 = local_7c;
+  puStack_13c = local_6c;
+  puStack_140 = local_5c;
+  puStack_144 = local_4c;
+  puStack_148 = local_3c;
+  puStack_14c = local_2c;
+  uStack_150 = 7;
+  uStack_154 = 0x407448;
+  __vbaFreeVarList();
+  puStack_134 = (undefined4 *)piVar5[0x10];
+  puStack_138 = (undefined4 *)0x407454;
+  iVar2 = __vbaLenBstr();
+  if (!SCARRY4(iVar2,1)) {
+    puStack_138 = (undefined4 *)0x407461;
+    uVar1 = __vbaI2I4();
+    *(undefined2 *)(piVar5 + 0x12) = uVar1;
+    return;
+  }
+  puStack_138 = (undefined4 *)0x4074c9;
+  __vbaErrorOverflow();
+  puStack_148 = (undefined4 *)&LAB_004013d6;
+  puStack_14c = ExceptionList;
+  uStack_168 = 0;
+  puStack_144 = &piStack_16c;
+  puStack_140 = (undefined4 *)&DAT_00401398;
+  puStack_13c = (undefined4 *)((uint)piStack_130 & 1);
+  piVar4 = (int *)((uint)piStack_130 & 0xfffffffe);
+  ExceptionList = &puStack_14c;
+  piStack_16c = piVar5;
+  piStack_164 = piVar5 + 0x10;
+  puStack_138 = local_2c + 10;
+  piStack_130 = piVar4;
+  (**(code **)(*piVar4 + 4))(piVar4);
+  uStack_150 = 0;
+  uVar1 = __vbaI2Str(&DAT_00403328);
+  *(undefined2 *)((int)piVar4 + 0x4a) = uVar1;
+  uVar3 = (**(code **)(*piVar4 + 0x370))(piVar4);
+  piVar5 = (int *)__vbaObjSet(&uStack_150,uVar3);
+  iVar2 = (**(code **)(*piVar5 + 0x5c))(piVar5,0);
+  if (iVar2 < 0) {
+    __vbaHresultCheckObj(iVar2,piVar5,&DAT_004031e8,0x5c);
+  }
+  __vbaFreeObj();
+  return;
+}
+

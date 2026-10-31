@@ -1,0 +1,39 @@
+[Info]
+[36march     [0m[90mx86[0m
+[36mcpu      [0m[1;91mN/A[0m
+[36mfeatures [0m[1;91mN/A[0m
+[36mbaddr    [0m[32m0x00400000[0m
+[36mbinsz    [0m[32m0x00008d0f[0m
+[36mbintype  [0m[90mpe[0m
+[36mbits     [0m[33m32[0m
+[36mclass    [0m[90mPE32[0m
+[36mcmp.csum [0m[32m0x0000a3cb[0m
+[36mcompiled [0m[90mTue Feb  5 20:01:04 2002 UTC[0m
+[36mcompiler [0m[90mLinker 06.00[0m
+[36mdbg_file [0m[1;91mN/A[0m
+[36mendian   [0m[34mLE[0m
+[36mhdr.csum [0m[32m0x00000000[0m
+[36mguid     [0m[1;91mN/A[0m
+[36mintrp    [0m[1;91mN/A[0m
+[36mladdr    [0m[32m0x00000000[0m
+[36mlang     [0m[90mc[0m
+[36mmachine  [0m[90mi386[0m
+[36mmaxopsz  [0m[33m16[0m
+[36mminopsz  [0m[33m1[0m
+[36mos       [0m[90mwindows[0m
+[36moverlay  [0m[31mfalse[0m
+[36mcc       [0m[90mcdecl[0m
+[36mpcalign  [0m[33m1[0m
+[36mrpath    [0m[1;91mN/A[0m
+[36msubsys   [0m[90mWindows GUI[0m
+[36mstripped [0m[31mfalse[0m
+[36mhavecode [0m[32mtrue[0m
+[36mva       [0m[32mtrue[0m
+[36mstatic   [0m[32mtrue[0m
+[36mlinenum  [0m[32mtrue[0m
+[36mlsyms    [0m[32mtrue[0m
+[36mcanary   [0m[32mtrue[0m
+[36mpie      [0m[31mfalse[0m
+[36mrelrocs  [0m[32mtrue[0m
+[36mnx       [0m[31mfalse[0m
+

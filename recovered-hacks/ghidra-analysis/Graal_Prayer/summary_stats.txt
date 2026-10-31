@@ -1,0 +1,16 @@
+program=Graal_Prayer_Graal_Prayer.exe
+executable_path=/workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe
+executable_format=Portable Executable (PE)
+language=x86:LE:32:default
+compiler=windows
+image_base=00400000
+function_count=303
+internal_function_count=301
+import_count=158
+export_count=13
+interesting_string_count=34
+decompiled_count=30
+key_function_count=30
+top_functions=FUN_004023b7@004023b7(sz=2144) | FUN_0040a35d@0040a35d(sz=1909) | ___crtLCMapStringA@0040d0de(sz=886) | FUN_0040de05@0040de05(sz=854) | ___sbh_free_block@0040966a(sz=792) | ___sbh_alloc_block@00409e1e(sz=764) | ___sbh_resize_block@00409b3f(sz=735) | FUN_0040c4a2@0040c4a2(sz=720) | FUN_004061cb@004061cb(sz=695) | _memcpy@00408c00(sz=672) | _memmove@0040c840(sz=672) | __tzset@0040acf8(sz=595) | FUN_00406d2e@00406d2e(sz=517) | FUN_00401c17@00401c17(sz=493) | FUN_0040b54f@0040b54f(sz=492)
+key_functions=entry@00408359 | FUN_004023b7@004023b7 | FUN_0040a35d@0040a35d | FUN_0040de05@0040de05 | FUN_0040c4a2@0040c4a2 | FUN_004061cb@004061cb | _memcpy@00408c00 | _memmove@0040c840 | FUN_00406d2e@00406d2e | FUN_00401c17@00401c17 | FUN_0040b54f@0040b54f | FUN_00408a1f@00408a1f | FUN_00402d9b@00402d9b | cvtdate@0040af4b | FUN_0040d939@0040d939 | FUN_0040e23d@0040e23d | FUN_004093d8@004093d8 | FUN_00404a21@00404a21 | FUN_00406b21@00406b21 | _strlen@00407630 | FUN_00406f33@00406f33 | FUN_00406fae@00406fae | _malloc@004078a9 | _free@004077ff | FUN_0040721b@0040721b | FUN_0040561d@0040561d | FUN_0040b8cf@0040b8cf | FUN_004022b4@004022b4 | _realloc@0040a135 | FUN_00406636@00406636
+sample_strings=A_OSVERSION | HideAutoItDebug | AutoIt Error | Line %d: %s  Error: %s | ERROR | Select File | HKEY_CURRENT_CONFIG | Powered by AutoIt - http://www.hiddensoft.com/AutoIt/ | ERRORLEVEL | runtime error | TLOSS error | SING error | DOMAIN error | R6024  - not enough space for _onexit/atexit table | R6018  - unexpected heap error | R6017  - unexpected multithread lock error | This application has requested the Runtime to terminate it in an unusual way.... | Runtime Error!  Program: | A security error of unknown cause has been detected which has corrupted the p... | Unknown security failure detected! | GetLastError | GetEnvironmentVariableA | GetEnvironmentStringsW | GetEnvironmentStrings | GetCPInfo

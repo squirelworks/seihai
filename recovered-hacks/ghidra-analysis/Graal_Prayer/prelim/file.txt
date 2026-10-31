@@ -1,0 +1,8 @@
+# file
+/workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe: PE32 executable (GUI) Intel 80386, for MS Windows, 4 sections
+
+# size
+-rw-r--r-- 1 ubuntu ubuntu 85K Oct 31 20:46 /workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe
+
+# sha256
+a348ecafc3fdf3069dcaf9dd6d776c3f83c6f6d4f547ccf09d94f3694d952074  /workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe

@@ -1,0 +1,8 @@
+
+/workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe:     file format pei-i386
+
+objdump: /workspace/recovered-hacks/_static_extract/upx_unpacked/Graal_Prayer_Graal_Prayer.exe: not a dynamic object
+DYNAMIC SYMBOL TABLE:
+no symbols
+
+

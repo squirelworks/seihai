@@ -1,0 +1,2 @@
+2026-10-31 20:52:11 INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for AFK Bot.exe -> /workspace/recovered-hacks/ghidra-analysis/AFK_Bot  
+2026-10-31 20:52:11 INFO  ExportSalvageArtifacts.java> Export complete: 6 funcs, 45 imports, 2 exports, 8 interesting strings, 5 decompiled  

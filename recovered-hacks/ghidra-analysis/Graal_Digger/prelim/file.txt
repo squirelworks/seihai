@@ -1,0 +1,8 @@
+# file
+/workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe: PE32 executable (GUI) Intel 80386, for MS Windows, UPX compressed, 3 sections
+
+# size
+-rw-r--r-- 1 ubuntu ubuntu 36K Oct 31 20:46 /workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe
+
+# sha256
+876723732378b36e8fd31d09120ec5a1b584cf46fb672ab9d5cf7a0a4f8b56d4  /workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe

@@ -1,0 +1,8 @@
+# file
+/workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe: PE32 executable (GUI) Intel 80386, for MS Windows, 3 sections
+
+# size
+-rw-r--r-- 1 ubuntu ubuntu 24K Apr 23  2014 /workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe
+
+# sha256
+35dbd87ca7560712aae0e1bb3c4b4861e5233eac32299170af25eaa71c13ff35  /workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe

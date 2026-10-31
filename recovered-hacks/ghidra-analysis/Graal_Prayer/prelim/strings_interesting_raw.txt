@@ -1,0 +1,5 @@
+/t(;
+A_OSVERSION
+HKEY_CURRENT_CONFIG
+Powered by AutoIt - http://www.hiddensoft.com/AutoIt/
+GetVersionExA

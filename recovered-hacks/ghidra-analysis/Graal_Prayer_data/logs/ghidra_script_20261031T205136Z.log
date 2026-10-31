@@ -1,0 +1,2 @@
+2026-10-31 20:51:59 INFO  ExportSalvageArtifacts.java> Exporting salvage artifacts for Graal_Prayer_data_data.exe -> /workspace/recovered-hacks/ghidra-analysis/Graal_Prayer_data  
+2026-10-31 20:52:00 INFO  ExportSalvageArtifacts.java> Export complete: 303 funcs, 158 imports, 13 exports, 34 interesting strings, 30 decompiled  

@@ -1,0 +1,125 @@
+!This program cannot be run in DOS mode.
+Rich
+.text
+`.data
+.rsrc
+MSVBVM60.DLL
+:U*@
+Project1
+4T5l
+Form1
+AFK Bot
+Form1
+Frame1
+AFK Bot
+Command2
+Stop
+Command1
+Start
+Text3
+AFK Bot created by Zorg
+Text2
+I am using an AFK Bot
+Text1
+I am AFK
+Label4
+WARNING : AFK Bots are illegal on some playerworlds
+Label3
+AFK = Away from Keyboard
+Label2
+Not currently AFK
+Label1
+Sent 0 AFK Messages
+Timer1
+VB5!
+AFK Bot
+Project1
+Project1
+Project1
+Form1
+4T5l
+Label1
+C:\PROGRAM FILES\MICROSOFT VISUAL STUDIO\VB98\VB6.OLB
+Form
+Label4
+Label3
+Frame1
+Label2
+Text1
+Text2
+Text3
+Command2
+Command1
+Timer1
+VBA6.DLL
+__vbaErrorOverflow
+__vbaStrI2
+__vbaFreeStr
+__vbaVarAdd
+__vbaStrVarVal
+__vbaFreeVarList
+__vbaFreeObj
+__vbaFreeStrList
+__vbaHresultCheckObj
+__vbaStrErrVarCopy
+__vbaStrCat
+__vbaStrMove
+__vbaObjSet
+HSVW
+h8#@
+PhX#@
+jThd#@
+ht#@
+ht#@
+ht#@
+ht#@
+ht#@
+ht#@
+jThd#@
+|SVW
+F6f=
+ht#@
+ht#@
+ht#@
+jThd#@
+MSVBVM60.DLL
+__vbaStrI2
+_CIcos
+_adj_fptan
+__vbaFreeVarList
+_adj_fdiv_m64
+__vbaStrErrVarCopy
+_adj_fprem1
+__vbaStrCat
+__vbaHresultCheckObj
+_adj_fdiv_m32
+__vbaObjSet
+_adj_fdiv_m16i
+_adj_fdivr_m16i
+_CIsin
+__vbaChkstk
+EVENT_SINK_AddRef
+_adj_fpatan
+EVENT_SINK_Release
+_CIsqrt
+EVENT_SINK_QueryInterface
+__vbaExceptHandler
+_adj_fprem
+_adj_fdivr_m64
+__vbaFPException
+__vbaStrVarVal
+_CIlog
+__vbaErrorOverflow
+_adj_fdiv_m32i
+_adj_fdivr_m32i
+__vbaFreeStrList
+_adj_fdivr_m32
+_adj_fdiv_r
+__vbaVarAdd
+_CIatan
+__vbaStrMove
+_allmul
+_CItan
+_CIexp
+__vbaFreeObj
+__vbaFreeStr

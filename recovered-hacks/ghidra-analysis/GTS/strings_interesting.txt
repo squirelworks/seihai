@@ -1,0 +1,22 @@
+00401666	Graal Text Sender by DarkShadowz v1.3.5
+00402472	Middle In-Out Letters
+004026eb	Letter by Letter To-Alls
+00402a84	Graal Text Sender
+00402abe	@*\AC:\Program Files\Microsoft Visual Studio\VB98\Graal\Project1.vbp
+00402e7c	C:\Program Files\Microsoft Visual Studio\VB98\VB6.OLB
+004030bc	This lil Graal Proggy was made by DarkShadowz
+00403128	http://www.darkzrealm.vze.com
+00403928	(To-All Messages Sent)
+004039b0	__vbaSetSystemError
+00403a04	__vbaOnError
+00403a40	An error has occured
+00403a78	__vbaErrorOverflow
+00403b1c	Error:
+0040512c	Graal Text Sender
+0040517c	Graal
+00407ce0	__vbaSetSystemError
+00407d3c	__vbaOnError
+00407eca	__vbaErrorOverflow
+00409224	Graal Text Sender
+0040924e	FileVersion
+00409282	ProductVersion

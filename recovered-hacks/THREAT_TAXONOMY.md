@@ -281,3 +281,14 @@ Both: **403 `cannotDownloadAbusiveFile`** — *“identified as malware or spam�
 - Analysis: `file`, `sha256sum`, PE header parse, `strings`, `upx -d` on **copies**, archive listing (`unzip -l` / `7z l`), readme/howto text.
 - **No execution** of recovered PE/AutoIt/VB binaries.
 - Re-run this taxonomy if the Hacks Drive root gains folders beyond `Trainers/`.
+
+---
+
+## RE addendum (2026-10-31)
+
+Headless Ghidra + static PE work on P1/P2 trainers is filed under:
+
+- **Synthesis (IOCs / behavioral tells):** [`TRAINER_RE_NOTES.md`](./TRAINER_RE_NOTES.md)
+- **Per-binary defense summaries:** [`ghidra-analysis/`](./ghidra-analysis/) — `Graal_Prayer/`, `Graal_Prayer_data/`, `Graal_Digger/`, `GTS/`, `AFK_Bot/`
+
+**Confirmed statically:** Prayer/`data.exe` are twin AutoIt v2.64 UPX macros (no network / no classic injection imports; encrypted script overlays differ). GTS is VB6 chat spam with string-visible `OpenProcess` + `GetAsyncKeyState` + `FindWindow*`. AFK Bot is string-rich VB6 presence spam. **Digger remains blocked** by truncated zip/UPX (hash still usable; imports not recoverable). Miner still skipped.

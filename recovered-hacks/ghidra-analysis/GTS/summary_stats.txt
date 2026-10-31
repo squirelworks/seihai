@@ -1,0 +1,16 @@
+program=GTS.exe
+executable_path=/workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe
+executable_format=Portable Executable (PE)
+language=x86:LE:32:default
+compiler=windows
+image_base=00400000
+function_count=34
+internal_function_count=30
+import_count=76
+export_count=2
+interesting_string_count=22
+decompiled_count=30
+key_function_count=30
+top_functions=FUN_004075a0@004075a0(sz=971) | FUN_00405830@00405830(sz=555) | FUN_004055b0@004055b0(sz=533) | FUN_00405ff0@00405ff0(sz=533) | FUN_00406430@00406430(sz=533) | FUN_00406860@00406860(sz=533) | FUN_00407080@00407080(sz=533) | FUN_00406ae0@00406ae0(sz=465) | FUN_00405310@00405310(sz=381) | FUN_00407300@00407300(sz=381) | FUN_00406270@00406270(sz=363) | FUN_00405d60@00405d60(sz=340) | FUN_004051d0@004051d0(sz=246) | FUN_00405b80@00405b80(sz=228) | FUN_004079b0@004079b0(sz=219)
+key_functions=entry@00401598 | FUN_004075a0@004075a0 | FUN_00405830@00405830 | FUN_004055b0@004055b0 | FUN_00405ff0@00405ff0 | FUN_00406430@00406430 | FUN_00406860@00406860 | FUN_00407080@00407080 | FUN_00406ae0@00406ae0 | FUN_00405310@00405310 | FUN_00407300@00407300 | FUN_00406270@00406270 | FUN_00405d60@00405d60 | FUN_004051d0@004051d0 | FUN_00405b80@00405b80 | FUN_004079b0@004079b0 | FUN_00405f10@00405f10 | FUN_00406780@00406780 | FUN_00406d20@00406d20 | FUN_00406fa0@00406fa0 | FUN_004054e0@004054e0 | FUN_00405ab0@00405ab0 | FUN_00405c90@00405c90 | FUN_004066b0@004066b0 | FUN_00406e00@00406e00 | FUN_00406ed0@00406ed0 | FUN_004074d0@004074d0 | FUN_004034d8@004034d8 | FUN_0040351c@0040351c | FUN_00403564@00403564
+sample_strings=Graal Text Sender by DarkShadowz v1.3.5 | Middle In-Out Letters | Letter by Letter To-Alls | Graal Text Sender | @*\AC:\Program Files\Microsoft Visual Studio\VB98\Graal\Project1.vbp | C:\Program Files\Microsoft Visual Studio\VB98\VB6.OLB | This lil Graal Proggy was made by DarkShadowz | http://www.darkzrealm.vze.com | (To-All Messages Sent) | __vbaSetSystemError | __vbaOnError | An error has occured | __vbaErrorOverflow | Error: | Graal Text Sender | Graal | __vbaSetSystemError | __vbaOnError | __vbaErrorOverflow | Graal Text Sender | FileVersion | ProductVersion

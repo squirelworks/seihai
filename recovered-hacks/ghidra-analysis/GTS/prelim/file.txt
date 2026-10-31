@@ -1,0 +1,8 @@
+# file
+/workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe: PE32 executable (GUI) Intel 80386, for MS Windows, 3 sections
+
+# size
+-rw-r--r-- 1 ubuntu ubuntu 40K Feb 14  2003 /workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe
+
+# sha256
+36e264ff1b9bd441b278ec4afc265c7991dc2f9ae065f721d178f59c74d2d0ab  /workspace/recovered-hacks/Trainers/extracted/GTS/GTS.exe

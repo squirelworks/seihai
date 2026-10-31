@@ -1,0 +1,34 @@
+0040f2e8	A_OSVERSION
+0040f40c	HideAutoItDebug
+0040f890	AutoIt Error
+0040f8a0	Line %d: %s  Error: %s
+0040f918	ERROR
+0040f928	Select File
+0040f9b0	HKEY_CURRENT_CONFIG
+0040fc1c	Powered by AutoIt - http://www.hiddensoft.com/AutoIt/
+0040fcf8	ERRORLEVEL
+0040fdf4	runtime error
+0040fe04	TLOSS error
+0040fe14	SING error
+0040fe24	DOMAIN error
+0040fef4	R6024  - not enough space for _onexit/atexit table
+0040ff58	R6018  - unexpected heap error
+0040ff7c	R6017  - unexpected multithread lock error
+0040ffd8	This application has requested the Runtime to terminate it in an unusual way. Please contact the application's support team for more information.
+0041011c	Runtime Error!  Program:
+00410660	A security error of unknown cause has been detected which has corrupted the program's internal state.  The program cannot safely continue execution and must now be terminated.
+00410714	Unknown security failure detected!
+00410ba8	GetLastError
+00410c9c	GetEnvironmentVariableA
+00410de0	GetEnvironmentStringsW
+00410e12	GetEnvironmentStrings
+00410e5e	GetCPInfo
+00411022	GetVersionExA
+004110c2	AdjustTokenPrivileges
+004110f2	OpenProcessToken
+00445a70	Third-party compiled AutoIt script.  For details visit http://www.hiddensoft.com/AutoIt/
+00445b82	FileVersion
+00445c0a	ProductVersion
+00445f30	Stack underflow error (Return with no matching Gosub, or, EndRepeat with no matching Repeat).
+00445fec	Unable to process shutdown (access rights error).
+00446050	AutoIt Error

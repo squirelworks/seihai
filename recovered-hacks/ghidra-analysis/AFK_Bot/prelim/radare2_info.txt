@@ -1,0 +1,84 @@
+arch     x86
+baddr    0x400000
+binsz    24576
+bintype  pe
+bits     32
+canary   false
+retguard false
+class    PE32
+cmp.csum 0x0000f848
+compiled Sat Sep 21 17:23:38 2002
+crypto   false
+endian   little
+havecode true
+hdr.csum 0x0000f848
+laddr    0x0
+lang     vb
+linenum  true
+lsyms    true
+machine  i386
+nx       false
+os       windows
+overlay  false
+cc       cdecl
+pic      false
+relocs   true
+signed   false
+sanitize false
+static   false
+stripped false
+subsys   Windows GUI
+va       true
+[Imports]
+nth vaddr      bind type lib          name
+――――――――――――――――――――――――――――――――――――――――――
+1   0x00401000 NONE FUNC MSVBVM60.DLL __vbaStrI2
+2   0x00401004 NONE FUNC MSVBVM60.DLL _CIcos
+3   0x00401008 NONE FUNC MSVBVM60.DLL _adj_fptan
+4   0x0040100c NONE FUNC MSVBVM60.DLL __vbaFreeVarList
+5   0x00401010 NONE FUNC MSVBVM60.DLL _adj_fdiv_m64
+6   0x00401014 NONE FUNC MSVBVM60.DLL __vbaStrErrVarCopy
+7   0x00401018 NONE FUNC MSVBVM60.DLL _adj_fprem1
+8   0x0040101c NONE FUNC MSVBVM60.DLL __vbaStrCat
+9   0x00401020 NONE FUNC MSVBVM60.DLL __vbaHresultCheckObj
+10  0x00401024 NONE FUNC MSVBVM60.DLL _adj_fdiv_m32
+11  0x00401028 NONE FUNC MSVBVM60.DLL __vbaObjSet
+12  0x0040102c NONE FUNC MSVBVM60.DLL _adj_fdiv_m16i
+13  0x00401030 NONE FUNC MSVBVM60.DLL _adj_fdivr_m16i
+599 0x00401034 NONE FUNC msvbvm60     Ordinal_599
+600 0x00401038 NONE FUNC MSVBVM60.DLL _CIsin
+601 0x0040103c NONE FUNC MSVBVM60.DLL __vbaChkstk
+602 0x00401040 NONE FUNC MSVBVM60.DLL EVENT_SINK_AddRef
+603 0x00401044 NONE FUNC MSVBVM60.DLL _adj_fpatan
+604 0x00401048 NONE FUNC MSVBVM60.DLL EVENT_SINK_Release
+605 0x0040104c NONE FUNC MSVBVM60.DLL _CIsqrt
+606 0x00401050 NONE FUNC MSVBVM60.DLL EVENT_SINK_QueryInterface
+607 0x00401054 NONE FUNC MSVBVM60.DLL __vbaExceptHandler
+608 0x00401058 NONE FUNC MSVBVM60.DLL _adj_fprem
+609 0x0040105c NONE FUNC MSVBVM60.DLL _adj_fdivr_m64
+608 0x00401060 NONE FUNC msvbvm60     Ordinal_608
+609 0x00401064 NONE FUNC MSVBVM60.DLL __vbaFPException
+610 0x00401068 NONE FUNC MSVBVM60.DLL __vbaStrVarVal
+611 0x0040106c NONE FUNC MSVBVM60.DLL _CIlog
+612 0x00401070 NONE FUNC MSVBVM60.DLL __vbaErrorOverflow
+613 0x00401074 NONE FUNC MSVBVM60.DLL _adj_fdiv_m32i
+614 0x00401078 NONE FUNC MSVBVM60.DLL _adj_fdivr_m32i
+615 0x0040107c NONE FUNC MSVBVM60.DLL __vbaFreeStrList
+616 0x00401080 NONE FUNC MSVBVM60.DLL _adj_fdivr_m32
+617 0x00401084 NONE FUNC MSVBVM60.DLL _adj_fdiv_r
+100 0x00401088 NONE FUNC msvbvm60     Ordinal_100
+610 0x0040108c NONE FUNC msvbvm60     Ordinal_610
+611 0x00401090 NONE FUNC MSVBVM60.DLL __vbaVarAdd
+612 0x00401094 NONE FUNC msvbvm60     Ordinal_612
+613 0x00401098 NONE FUNC MSVBVM60.DLL _CIatan
+614 0x0040109c NONE FUNC MSVBVM60.DLL __vbaStrMove
+615 0x004010a0 NONE FUNC MSVBVM60.DLL _allmul
+616 0x004010a4 NONE FUNC MSVBVM60.DLL _CItan
+617 0x004010a8 NONE FUNC MSVBVM60.DLL _CIexp
+618 0x004010ac NONE FUNC MSVBVM60.DLL __vbaFreeObj
+619 0x004010b0 NONE FUNC MSVBVM60.DLL __vbaFreeStr
+
+[Exports]
+
+nth paddr vaddr bind type size lib name
+―――――――――――――――――――――――――――――――――――――――

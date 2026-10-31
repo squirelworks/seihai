@@ -1,0 +1,30 @@
+[Strings]
+     paddr      vaddr len size section type    string                                      
+―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[32m0x000050f6[0m [32m0x004050f6[0m [33m 15[0m [33m  32[0m [36m.rsrc   [0m[90mutf16le [0m[36mVS_VERSION_INFO[0m
+[32m0x00005152[0m [32m0x00405152[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mVarFileInfo[0m
+[32m0x00005172[0m [32m0x00405172[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mTranslation[0m
+[32m0x00005196[0m [32m0x00405196[0m [33m 14[0m [33m  30[0m [36m.rsrc   [0m[90mutf16le [0m[36mStringFileInfo[0m
+[32m0x000051ba[0m [32m0x004051ba[0m [33m  8[0m [33m  18[0m [36m.rsrc   [0m[90mutf16le [0m[36m040904B0[0m
+[32m0x000051d2[0m [32m0x004051d2[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mCompanyName[0m
+[32m0x000051fa[0m [32m0x004051fa[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mProductName[0m
+[32m0x00005214[0m [32m0x00405214[0m [33m  8[0m [33m  18[0m [36m.rsrc   [0m[90mutf16le [0m[36mProject1[0m
+[32m0x0000522e[0m [32m0x0040522e[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mFileVersion[0m
+[32m0x00005248[0m [32m0x00405248[0m [33m  4[0m [33m  10[0m [36m.rsrc   [0m[90mutf16le [0m[36m1.00[0m
+[32m0x0000525a[0m [32m0x0040525a[0m [33m 14[0m [33m  30[0m [36m.rsrc   [0m[90mutf16le [0m[36mProductVersion[0m
+[32m0x00005278[0m [32m0x00405278[0m [33m  4[0m [33m  10[0m [36m.rsrc   [0m[90mutf16le [0m[36m1.00[0m
+[32m0x0000528a[0m [32m0x0040528a[0m [33m 12[0m [33m  26[0m [36m.rsrc   [0m[90mutf16le [0m[36mInternalName[0m
+[32m0x000052a4[0m [32m0x004052a4[0m [33m  7[0m [33m  16[0m [36m.rsrc   [0m[90mutf16le [0m[36mAFK Bot[0m
+[32m0x000052ba[0m [32m0x004052ba[0m [33m 16[0m [33m  34[0m [36m.rsrc   [0m[90mutf16le [0m[36mOriginalFilename[0m
+[32m0x000052dc[0m [32m0x004052dc[0m [33m 11[0m [33m  24[0m [36m.rsrc   [0m[90mutf16le [0m[36mAFK Bot.exe[0m
+[32m0x000053cd[0m [32m0x004053cd[0m [33m  9[0m [33m  18[0m [36m.rsrc   [0m[90mutf16be [0m[36mÿfÿ3ÿÿￌÌￌ[0m
+[32m0x00005453[0m [32m0x00405453[0m [33m  4[0m [33m   8[0m [36m.rsrc   [0m[90mutf16be [0m[36mÿÌÌÌ[0m
+[32m0x0000545d[0m [32m0x0040545d[0m [33m  5[0m [33m  12[0m [36m.rsrc   [0m[90mutf16be [0m[36mÌfÌ3Ì[0m
+[32m0x00005572[0m [32m0x00405572[0m [33m  5[0m [33m  10[0m [36m.rsrc   [0m[90mutf16le [0m[36mfÿfÌf blocks=Basic Latin,Latin-1 Supplement[0m
+[32m0x0000557e[0m [32m0x0040557e[0m [33m  5[0m [33m  12[0m [36m.rsrc   [0m[90mutf16le [0m[36mfff3f[0m
+[32m0x00005602[0m [32m0x00405602[0m [33m  5[0m [33m  10[0m [36m.rsrc   [0m[90mutf16le [0m[36m3ÿ3Ì3 blocks=Basic Latin,Latin-1 Supplement[0m
+[32m0x0000560e[0m [32m0x0040560e[0m [33m  5[0m [33m  12[0m [36m.rsrc   [0m[90mutf16le [0m[36m3f333[0m
+[32m0x000056ab[0m [32m0x004056ab[0m [33m  4[0m [33m  16[0m [36m.rsrc   [0m[90mutf32be [0m[36mwUD"[0m
+[32m0x000056ca[0m [32m0x004056ca[0m [33m  4[0m [33m  16[0m [36m.rsrc   [0m[90mutf32be [0m[36mwUD"[0m
+[32m0x000056f8[0m [32m0x004056f8[0m [33m  4[0m [33m  16[0m [36m.rsrc   [0m[90mutf32le [0m[36mwUD"[0m
+

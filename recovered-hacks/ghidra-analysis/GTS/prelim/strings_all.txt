@@ -1,0 +1,266 @@
+!This program cannot be run in DOS mode.
+Rich
+.text
+`.data
+.rsrc
+MSVBVM60.DLL
+Graal Text Sender
+f&`A
+Form1
+Graal Text Sender by DarkShadowz v1.3.5
+Form1
+Frame6
+Word Scroller
+Command20
+Command21
+Command22
+Set Timer
+Command23
+Set Message
+Frame5
+Middle In-Out Letters
+Command15
+Command17
+Command18
+Set Timer
+Command19
+Set Message
+Frame4
+Word Stay
+Command13
+Command14
+Command16
+Set Message
+Frame3
+Two Words Repeat
+Command9
+Command10
+Command11
+Set Timer
+Command12
+Set Message
+Frame2
+Letter by Letter To-Alls
+Command5
+Command6
+Command7
+Set Timer
+Command8
+Set Message
+Frame1
+Letter by Letter Shout Outs
+Command4
+Command3
+Command2
+Set Timer
+Command1
+Set Message
+Timer1
+About
+&About
+f&`A
+VB5!
+Graal Text Sender
+Form1
+Module1
+SendKeys1
+PcD A
+f&`A
+kk:O
+Form
+C:\Program Files\Microsoft Visual Studio\VB98\VB6.OLB
+Command20
+Command23
+Command21
+Command22
+About
+Command10
+Command11
+Command14
+Command15
+Command12
+Command13
+Command18
+Command19
+Command16
+Command17
+Command1
+Command2
+Command3
+Command4
+Command5
+Command6
+Command7
+Command8
+Command9
+Frame4
+Frame3
+Frame6
+Frame5
+Frame2
+Frame1
+Timer1
+shell32
+Shell_NotifyIconA
+hl4@
+user32
+FindWindowExA
+FindWindowA
+SendMessageA
+hL5@
+GetWindowThreadProcessId
+kernel32
+OpenProcess
+GetAsyncKeyState
+CloseHandle
+hP6@
+shell32.dll
+ShellExecuteA
+gdi32
+BitBlt
+msimg32.dll
+TransparentBlt
+hL7@
+GetTickCount
+VBA6.DLL
+__vbaVarCat
+__vbaFreeVar
+__vbaStrVarMove
+__vbaStrCmp
+__vbaSetSystemError
+__vbaStrToAnsi
+__vbaFreeStrList
+__vbaI4Str
+__vbaI2Str
+__vbaOnError
+__vbaFreeObj
+__vbaHresultCheckObj
+__vbaObjSet
+__vbaErrorOverflow
+__vbaLenBstr
+__vbaI2I4
+__vbaStrCopy
+__vbaFreeVarList
+__vbaFreeStr
+__vbaStrMove
+__vbaStrCat
+__vbaVarDup
+__vbaExitProc
+__vbaGetFxStr3
+__vbaStrFixstr
+__vbaGetFxStr4
+__vbaLsetFixstr
+__vbaFileClose
+__vbaPutFxStr3
+__vbaFileSeek
+__vbaFileOpen
+__vbaStrToUnicode
+Graal Text Sender
+Graal
+Dist
+Send
+Msg2
+MsgLen
+Lent
+Sent
+Word
+|SVW
+Ph(1@
+}#jdh
+h(3@
+hT[@
+h@3@
+hn\@
+h(3@
+h4]@
+}#jdh
+hEb@
+}#jdh
+h(3@
+hTg@
+h(3@
+h3h@
+}#jdh
+h(3@
+h(3@
+h(3@
+hto@
+h(3@
+hSp@
+}#jdh
+h(3@
+htu@
+\SVW
+Wh 4@
+V4PWR
+NLQh
+f;FHf
+FLPh
+f;FHf
+VLRh
+^PPh
+FLPh03@
+VLRh
+f;VHu
+h(3@
+MSVBVM60.DLL
+_CIcos
+_adj_fptan
+__vbaFreeVar
+__vbaLenBstr
+__vbaStrVarMove
+__vbaFreeVarList
+_adj_fdiv_m64
+__vbaGetFxStr3
+__vbaGetFxStr4
+_adj_fprem1
+__vbaStrCat
+__vbaLsetFixstr
+__vbaSetSystemError
+__vbaHresultCheckObj
+_adj_fdiv_m32
+__vbaExitProc
+__vbaObjSet
+__vbaOnError
+_adj_fdiv_m16i
+_adj_fdivr_m16i
+__vbaStrFixstr
+_CIsin
+__vbaChkstk
+__vbaFileClose
+EVENT_SINK_AddRef
+__vbaStrCmp
+__vbaI2I4
+DllFunctionCall
+_adj_fpatan
+EVENT_SINK_Release
+_CIsqrt
+EVENT_SINK_QueryInterface
+__vbaExceptHandler
+__vbaStrToUnicode
+_adj_fprem
+_adj_fdivr_m64
+__vbaI2Str
+__vbaFPException
+__vbaVarCat
+__vbaFileSeek
+_CIlog
+__vbaErrorOverflow
+__vbaFileOpen
+_adj_fdiv_m32i
+_adj_fdivr_m32i
+__vbaStrCopy
+__vbaI4Str
+__vbaFreeStrList
+_adj_fdivr_m32
+_adj_fdiv_r
+__vbaVarDup
+__vbaStrToAnsi
+_CIatan
+__vbaStrMove
+__vbaPutFxStr3
+_allmul
+_CItan
+_CIexp
+__vbaFreeStr
+__vbaFreeObj

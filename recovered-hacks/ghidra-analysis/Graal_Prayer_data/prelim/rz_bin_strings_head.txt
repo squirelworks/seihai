@@ -1,0 +1,300 @@
+[Strings]
+     paddr      vaddr len size section type    string                                                                                                                                                                                        
+―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[32m0x0000f290[0m [32m0x0040f290[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mFILE[0m
+[32m0x0000f2a0[0m [32m0x0040f2a0[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mJB01[0m
+[32m0x0000f2a8[0m [32m0x0040f2a8[0m [33m 22[0m [33m  23[0m [36m.rdata  [0m[90mascii   [0m[36mPause Script Execution[0m
+[32m0x0000f2c0[0m [32m0x0040f2c0[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mAutoIt[0m
+[32m0x0000f2c8[0m [32m0x0040f2c8[0m [33m 29[0m [33m  30[0m [36m.rdata  [0m[90mascii   [0m[36mCompiled AutoIt v2.64 Script.[0m
+[32m0x0000f2e8[0m [32m0x0040f2e8[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mA_OSVERSION[0m
+[32m0x0000f2f4[0m [32m0x0040f2f4[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_ME[0m
+[32m0x0000f2fc[0m [32m0x0040f2fc[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_98[0m
+[32m0x0000f304[0m [32m0x0040f304[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_95[0m
+[32m0x0000f30c[0m [32m0x0040f30c[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mWIN32_WINDOWS[0m
+[32m0x0000f31c[0m [32m0x0040f31c[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_NT4[0m
+[32m0x0000f324[0m [32m0x0040f324[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_2000[0m
+[32m0x0000f330[0m [32m0x0040f330[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mWIN_XP[0m
+[32m0x0000f338[0m [32m0x0040f338[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mA_OSTYPE[0m
+[32m0x0000f344[0m [32m0x0040f344[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mWIN32_NT[0m
+[32m0x0000f350[0m [32m0x0040f350[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mA_WORKINGDIR[0m
+[32m0x0000f360[0m [32m0x0040f360[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mA_SCRIPTDIR[0m
+[32m0x0000f36c[0m [32m0x0040f36c[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mA_SCRIPTNAME[0m
+[32m0x0000f37c[0m [32m0x0040f37c[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mA_SCRIPTFULLPATH[0m
+[32m0x0000f390[0m [32m0x0040f390[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mResume Script Execution[0m
+[32m0x0000f3ac[0m [32m0x0040f3ac[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mAutoIt - Splash[0m
+[32m0x0000f3c0[0m [32m0x0040f3c0[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36medit[0m
+[32m0x0000f3c8[0m [32m0x0040f3c8[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mFileCopy[0m
+[32m0x0000f3d4[0m [32m0x0040f3d4[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mFileRemoveDir[0m
+[32m0x0000f3e4[0m [32m0x0040f3e4[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mFileCreateDir[0m
+[32m0x0000f3f4[0m [32m0x0040f3f4[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mFileDelete[0m
+[32m0x0000f400[0m [32m0x0040f400[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mFileInstall[0m
+[32m0x0000f40c[0m [32m0x0040f40c[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mHideAutoItDebug[0m
+[32m0x0000f41c[0m [32m0x0040f41c[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mSetCapslockState[0m
+[32m0x0000f430[0m [32m0x0040f430[0m [33m 20[0m [33m  21[0m [36m.rdata  [0m[90mascii   [0m[36mSetStoreCapslockMode[0m
+[32m0x0000f448[0m [32m0x0040f448[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mFileSelectFile[0m
+[32m0x0000f458[0m [32m0x0040f458[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mStringGetPos[0m
+[32m0x0000f468[0m [32m0x0040f468[0m [33m 18[0m [33m  19[0m [36m.rdata  [0m[90mascii   [0m[36mWinMinimizeAllUndo[0m
+[32m0x0000f47c[0m [32m0x0040f47c[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mEnvDiv[0m
+[32m0x0000f484[0m [32m0x0040f484[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mEnvMult[0m
+[32m0x0000f48c[0m [32m0x0040f48c[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mWinGetActiveStats[0m
+[32m0x0000f4a0[0m [32m0x0040f4a0[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mSetBatchLines[0m
+[32m0x0000f4b0[0m [32m0x0040f4b0[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGREPLACE[0m
+[32m0x0000f4c0[0m [32m0x0040f4c0[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mIFNOTINSTRING[0m
+[32m0x0000f4d0[0m [32m0x0040f4d0[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mIFINSTRING[0m
+[32m0x0000f4dc[0m [32m0x0040f4dc[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mRANDOM[0m
+[32m0x0000f4e4[0m [32m0x0040f4e4[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGCASESENSE[0m
+[32m0x0000f4f4[0m [32m0x0040f4f4[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGTRIMLEFT[0m
+[32m0x0000f504[0m [32m0x0040f504[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGTRIMRIGHT[0m
+[32m0x0000f514[0m [32m0x0040f514[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGMID[0m
+[32m0x0000f520[0m [32m0x0040f520[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGLEN[0m
+[32m0x0000f52c[0m [32m0x0040f52c[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGLEFT[0m
+[32m0x0000f538[0m [32m0x0040f538[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mSTRINGRIGHT[0m
+[32m0x0000f544[0m [32m0x0040f544[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mIFLESSOREQUAL[0m
+[32m0x0000f554[0m [32m0x0040f554[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mIFGREATEROREQUAL[0m
+[32m0x0000f568[0m [32m0x0040f568[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mIFLESS[0m
+[32m0x0000f570[0m [32m0x0040f570[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mIFGREATER[0m
+[32m0x0000f57c[0m [32m0x0040f57c[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mFILEAPPEND[0m
+[32m0x0000f588[0m [32m0x0040f588[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mFILEREADLINE[0m
+[32m0x0000f598[0m [32m0x0040f598[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mBLOCKINPUT[0m
+[32m0x0000f5a4[0m [32m0x0040f5a4[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mREGDELETE[0m
+[32m0x0000f5b0[0m [32m0x0040f5b0[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mINIDELETE[0m
+[32m0x0000f5bc[0m [32m0x0040f5bc[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mREGWRITE[0m
+[32m0x0000f5c8[0m [32m0x0040f5c8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mREGREAD[0m
+[32m0x0000f5d0[0m [32m0x0040f5d0[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mMOUSEMOVE[0m
+[32m0x0000f5dc[0m [32m0x0040f5dc[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mMOUSEGETPOS[0m
+[32m0x0000f5e8[0m [32m0x0040f5e8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWINKILL[0m
+[32m0x0000f5f0[0m [32m0x0040f5f0[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mSHUTDOWN[0m
+[32m0x0000f5fc[0m [32m0x0040f5fc[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mINIWRITE[0m
+[32m0x0000f608[0m [32m0x0040f608[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mINIREAD[0m
+[32m0x0000f610[0m [32m0x0040f610[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWINSHOW[0m
+[32m0x0000f618[0m [32m0x0040f618[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mRIGHTCLICKDRAG[0m
+[32m0x0000f628[0m [32m0x0040f628[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mLEFTCLICKDRAG[0m
+[32m0x0000f638[0m [32m0x0040f638[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mENVSUB[0m
+[32m0x0000f640[0m [32m0x0040f640[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mENVADD[0m
+[32m0x0000f648[0m [32m0x0040f648[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mADLIBOFF[0m
+[32m0x0000f654[0m [32m0x0040f654[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mADLIBON[0m
+[32m0x0000f65c[0m [32m0x0040f65c[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mENDREPEAT[0m
+[32m0x0000f668[0m [32m0x0040f668[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mREPEAT[0m
+[32m0x0000f670[0m [32m0x0040f670[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mSPLASHTEXTOFF[0m
+[32m0x0000f680[0m [32m0x0040f680[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mSPLASHTEXTON[0m
+[32m0x0000f690[0m [32m0x0040f690[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mWINWAITNOTACTIVE[0m
+[32m0x0000f6a4[0m [32m0x0040f6a4[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mSETWINDELAY[0m
+[32m0x0000f6b0[0m [32m0x0040f6b0[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mBREAK[0m
+[32m0x0000f6b8[0m [32m0x0040f6b8[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mWINMINIMIZEALL[0m
+[32m0x0000f6c8[0m [32m0x0040f6c8[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mRETURN[0m
+[32m0x0000f6d0[0m [32m0x0040f6d0[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mEXIT[0m
+[32m0x0000f6d8[0m [32m0x0040f6d8[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mWINGETACTIVETITLE[0m
+[32m0x0000f6ec[0m [32m0x0040f6ec[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mDETECTHIDDENTEXT[0m
+[32m0x0000f700[0m [32m0x0040f700[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mWINSETTITLE[0m
+[32m0x0000f70c[0m [32m0x0040f70c[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWINMOVE[0m
+[32m0x0000f714[0m [32m0x0040f714[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mHIDEAUTOITWIN[0m
+[32m0x0000f724[0m [32m0x0040f724[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mIFMSGBOX[0m
+[32m0x0000f730[0m [32m0x0040f730[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mIFNOTEQUAL[0m
+[32m0x0000f73c[0m [32m0x0040f73c[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mIFEQUAL[0m
+[32m0x0000f744[0m [32m0x0040f744[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mINPUTBOX[0m
+[32m0x0000f750[0m [32m0x0040f750[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mMSGBOX[0m
+[32m0x0000f758[0m [32m0x0040f758[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mIFNOTEXIST[0m
+[32m0x0000f764[0m [32m0x0040f764[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mIFEXIST[0m
+[32m0x0000f76c[0m [32m0x0040f76c[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mSETENV[0m
+[32m0x0000f774[0m [32m0x0040f774[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mSETTITLEMATCHMODE[0m
+[32m0x0000f788[0m [32m0x0040f788[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mGOSUB[0m
+[32m0x0000f790[0m [32m0x0040f790[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mGOTO[0m
+[32m0x0000f798[0m [32m0x0040f798[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mIFWINNOTACTIVE[0m
+[32m0x0000f7a8[0m [32m0x0040f7a8[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mIFWINACTIVE[0m
+[32m0x0000f7b4[0m [32m0x0040f7b4[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mIFWINNOTEXIST[0m
+[32m0x0000f7c4[0m [32m0x0040f7c4[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mIFWINEXIST[0m
+[32m0x0000f7d0[0m [32m0x0040f7d0[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mSEND[0m
+[32m0x0000f7d8[0m [32m0x0040f7d8[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mRIGHTCLICK[0m
+[32m0x0000f7e4[0m [32m0x0040f7e4[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mLEFTCLICK[0m
+[32m0x0000f7f0[0m [32m0x0040f7f0[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mSLEEP[0m
+[32m0x0000f7f8[0m [32m0x0040f7f8[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mSETKEYDELAY[0m
+[32m0x0000f808[0m [32m0x0040f808[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mWINCLOSE[0m
+[32m0x0000f814[0m [32m0x0040f814[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mWinMaximize[0m
+[32m0x0000f820[0m [32m0x0040f820[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWinHide[0m
+[32m0x0000f828[0m [32m0x0040f828[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mWinRestore[0m
+[32m0x0000f834[0m [32m0x0040f834[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mWinMinimize[0m
+[32m0x0000f840[0m [32m0x0040f840[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mRUNWAIT[0m
+[32m0x0000f848[0m [32m0x0040f848[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mWinActivate[0m
+[32m0x0000f854[0m [32m0x0040f854[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mQUIT[0m
+[32m0x0000f85c[0m [32m0x0040f85c[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mWinWaitClose[0m
+[32m0x0000f86c[0m [32m0x0040f86c[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mWinWaitActive[0m
+[32m0x0000f87c[0m [32m0x0040f87c[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mWinWait[0m
+[32m0x0000f884[0m [32m0x0040f884[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mEXESCRIPT[0m
+[32m0x0000f890[0m [32m0x0040f890[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mAutoIt Error[0m
+[32m0x0000f8a0[0m [32m0x0040f8a0[0m [33m 22[0m [33m  23[0m [36m.rdata  [0m[90mascii   [0m[36mLine %d:\n%s\n\nError: %s[0m
+[32m0x0000f8b8[0m [32m0x0040f8b8[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mShell_TrayWnd[0m
+[32m0x0000f8cc[0m [32m0x0040f8cc[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36m\r\n\r\n[0m
+[32m0x0000f8d4[0m [32m0x0040f8d4[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mLine: [0m
+[32m0x0000f8dc[0m [32m0x0040f8dc[0m [33m 19[0m [33m  20[0m [36m.rdata  [0m[90mascii   [0m[36mExecuting script...[0m
+[32m0x0000f8f8[0m [32m0x0040f8f8[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mhide[0m
+[32m0x0000f900[0m [32m0x0040f900[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mBlockInput[0m
+[32m0x0000f90c[0m [32m0x0040f90c[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36muser32.dll[0m
+[32m0x0000f918[0m [32m0x0040f918[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mERROR[0m
+[32m0x0000f928[0m [32m0x0040f928[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mSelect File[0m
+[32m0x0000f938[0m [32m0x0040f938[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mAll files (*.*)[0m
+[32m0x0000f950[0m [32m0x0040f950[0m [33m 19[0m [33m  20[0m [36m.rdata  [0m[90mascii   [0m[36mSeShutdownPrivilege[0m
+[32m0x0000f968[0m [32m0x0040f968[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mCANCEL[0m
+[32m0x0000f970[0m [32m0x0040f970[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mABORT[0m
+[32m0x0000f978[0m [32m0x0040f978[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mRETRY[0m
+[32m0x0000f980[0m [32m0x0040f980[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mIGNORE[0m
+[32m0x0000f990[0m [32m0x0040f990[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mHKEY_USERS[0m
+[32m0x0000f99c[0m [32m0x0040f99c[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mHKEY_CURRENT_USER[0m
+[32m0x0000f9b0[0m [32m0x0040f9b0[0m [33m 19[0m [33m  20[0m [36m.rdata  [0m[90mascii   [0m[36mHKEY_CURRENT_CONFIG[0m
+[32m0x0000f9c4[0m [32m0x0040f9c4[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mHKEY_CLASSES_ROOT[0m
+[32m0x0000f9d8[0m [32m0x0040f9d8[0m [33m 18[0m [33m  19[0m [36m.rdata  [0m[90mascii   [0m[36mHKEY_LOCAL_MACHINE[0m
+[32m0x0000f9f0[0m [32m0x0040f9f0[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mREG_DWORD[0m
+[32m0x0000f9fc[0m [32m0x0040f9fc[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mdefault[0m
+[32m0x0000fa08[0m [32m0x0040fa08[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36m[ADLIB][0m
+[32m0x0000fa10[0m [32m0x0040fa10[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36m>AUTOIT SCRIPT<[0m
+[32m0x0000fa24[0m [32m0x0040fa24[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mRWINUP[0m
+[32m0x0000fa2c[0m [32m0x0040fa2c[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mRWINDOWN[0m
+[32m0x0000fa38[0m [32m0x0040fa38[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mLWINUP[0m
+[32m0x0000fa40[0m [32m0x0040fa40[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mLWINDOWN[0m
+[32m0x0000fa4c[0m [32m0x0040fa4c[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mSHIFTUP[0m
+[32m0x0000fa54[0m [32m0x0040fa54[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mSHIFTDOWN[0m
+[32m0x0000fa60[0m [32m0x0040fa60[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mALTUP[0m
+[32m0x0000fa68[0m [32m0x0040fa68[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mALTDOWN[0m
+[32m0x0000fa70[0m [32m0x0040fa70[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mCTRLUP[0m
+[32m0x0000fa78[0m [32m0x0040fa78[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mCTRLDOWN[0m
+[32m0x0000fa84[0m [32m0x0040fa84[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mAPPSKEY[0m
+[32m0x0000fa8c[0m [32m0x0040fa8c[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPADDIV[0m
+[32m0x0000fa98[0m [32m0x0040fa98[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPADDOT[0m
+[32m0x0000faa4[0m [32m0x0040faa4[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPADSUB[0m
+[32m0x0000fab0[0m [32m0x0040fab0[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPADADD[0m
+[32m0x0000fabc[0m [32m0x0040fabc[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPADMULT[0m
+[32m0x0000fac8[0m [32m0x0040fac8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD9[0m
+[32m0x0000fad0[0m [32m0x0040fad0[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD8[0m
+[32m0x0000fad8[0m [32m0x0040fad8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD7[0m
+[32m0x0000fae0[0m [32m0x0040fae0[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD6[0m
+[32m0x0000fae8[0m [32m0x0040fae8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD5[0m
+[32m0x0000faf0[0m [32m0x0040faf0[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD4[0m
+[32m0x0000faf8[0m [32m0x0040faf8[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD3[0m
+[32m0x0000fb00[0m [32m0x0040fb00[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD2[0m
+[32m0x0000fb08[0m [32m0x0040fb08[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD1[0m
+[32m0x0000fb10[0m [32m0x0040fb10[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMPAD0[0m
+[32m0x0000fb18[0m [32m0x0040fb18[0m [33m  8[0m [33m   9[0m [36m.rdata  [0m[90mascii   [0m[36mCAPSLOCK[0m
+[32m0x0000fb24[0m [32m0x0040fb24[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mPAUSE[0m
+[32m0x0000fb2c[0m [32m0x0040fb2c[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mCTRLBREAK[0m
+[32m0x0000fb38[0m [32m0x0040fb38[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36mNUMLOCK[0m
+[32m0x0000fb40[0m [32m0x0040fb40[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mSCROLLLOCK[0m
+[32m0x0000fb4c[0m [32m0x0040fb4c[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mRWIN[0m
+[32m0x0000fb54[0m [32m0x0040fb54[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mLWIN[0m
+[32m0x0000fb5c[0m [32m0x0040fb5c[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mPRINTSCREEN[0m
+[32m0x0000fb70[0m [32m0x0040fb70[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mSPACE[0m
+[32m0x0000fb78[0m [32m0x0040fb78[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mRIGHT[0m
+[32m0x0000fb80[0m [32m0x0040fb80[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mPGUP[0m
+[32m0x0000fb88[0m [32m0x0040fb88[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mPGDN[0m
+[32m0x0000fb90[0m [32m0x0040fb90[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mLEFT[0m
+[32m0x0000fb98[0m [32m0x0040fb98[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mINSERT[0m
+[32m0x0000fba4[0m [32m0x0040fba4[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mHOME[0m
+[32m0x0000fbdc[0m [32m0x0040fbdc[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mESCAPE[0m
+[32m0x0000fbe8[0m [32m0x0040fbe8[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mENTER[0m
+[32m0x0000fbf4[0m [32m0x0040fbf4[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36mDOWN[0m
+[32m0x0000fbfc[0m [32m0x0040fbfc[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mDELETE[0m
+[32m0x0000fc0c[0m [32m0x0040fc0c[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mBACKSPACE[0m
+[32m0x0000fc1c[0m [32m0x0040fc1c[0m [33m 57[0m [33m  58[0m [36m.rdata  [0m[90mascii   [0m[36m\n\nPowered by AutoIt - http://www.hiddensoft.com/AutoIt/\n\n[0m
+[32m0x0000fc68[0m [32m0x0040fc68[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mA_NUMBATCHLINES[0m
+[32m0x0000fc78[0m [32m0x0040fc78[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mA_YDAY[0m
+[32m0x0000fc80[0m [32m0x0040fc80[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mA_WDAY[0m
+[32m0x0000fc88[0m [32m0x0040fc88[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mA_YEAR[0m
+[32m0x0000fc90[0m [32m0x0040fc90[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mA_MON[0m
+[32m0x0000fc98[0m [32m0x0040fc98[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mA_MDAY[0m
+[32m0x0000fca0[0m [32m0x0040fca0[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36mA_HOUR[0m
+[32m0x0000fca8[0m [32m0x0040fca8[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mA_MIN[0m
+[32m0x0000fcb0[0m [32m0x0040fcb0[0m [33m  5[0m [33m   6[0m [36m.rdata  [0m[90mascii   [0m[36mA_SEC[0m
+[32m0x0000fcb8[0m [32m0x0040fcb8[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mCLIPBOARD[0m
+[32m0x0000fcc4[0m [32m0x0040fcc4[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mclipboard[0m
+[32m0x0000fcd4[0m [32m0x0040fcd4[0m [33m  4[0m [33m   5[0m [36m.rdata  [0m[90mascii   [0m[36m%.2d[0m
+[32m0x0000fcdc[0m [32m0x0040fcdc[0m [33m 25[0m [33m  26[0m [36m.rdata  [0m[90mascii   [0m[36mAutoIt Clipboard overflow[0m
+[32m0x0000fcf8[0m [32m0x0040fcf8[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mERRORLEVEL[0m
+[32m0x0000fd14[0m [32m0x0040fd14[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mCorExitProcess[0m
+[32m0x0000fd24[0m [32m0x0040fd24[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mmscoree.dll[0m
+[32m0x0000fd51[0m [32m0x0040fd51[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36m (8PX\a\b[0m
+[32m0x0000fd59[0m [32m0x0040fd59[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36m700WP\a[0m
+[32m0x0000fd68[0m [32m0x0040fd68[0m [33m  7[0m [33m   8[0m [36m.rdata  [0m[90mascii   [0m[36m\b`h````[0m
+[32m0x0000fd71[0m [32m0x0040fd71[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mppxxxx\b\a\b[0m
+[32m0x0000fd8c[0m [32m0x0040fd8c[0m [33m  6[0m [33m  14[0m [36m.rdata  [0m[90mutf16le [0m[36m(null)[0m
+[32m0x0000fd9c[0m [32m0x0040fd9c[0m [33m  6[0m [33m   7[0m [36m.rdata  [0m[90mascii   [0m[36m(null)[0m
+[32m0x0000fda4[0m [32m0x0040fda4[0m [33m 21[0m [33m  22[0m [36m.rdata  [0m[90mascii   [0m[36mSunMonTueWedThuFriSat[0m
+[32m0x0000fdbc[0m [32m0x0040fdbc[0m [33m 36[0m [33m  37[0m [36m.rdata  [0m[90mascii   [0m[36mJanFebMarAprMayJunJulAugSepOctNovDec[0m
+[32m0x0000fdf4[0m [32m0x0040fdf4[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mruntime error [0m
+[32m0x0000fe04[0m [32m0x0040fe04[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mTLOSS error\r\n[0m
+[32m0x0000fe14[0m [32m0x0040fe14[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mSING error\r\n[0m
+[32m0x0000fe24[0m [32m0x0040fe24[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mDOMAIN error\r\n[0m
+[32m0x0000fe34[0m [32m0x0040fe34[0m [33m 36[0m [33m  37[0m [36m.rdata  [0m[90mascii   [0m[36mR6028\r\n- unable to initialize heap\r\n[0m
+[32m0x0000fe5c[0m [32m0x0040fe5c[0m [33m 52[0m [33m  53[0m [36m.rdata  [0m[90mascii   [0m[36mR6027\r\n- not enough space for lowio initialization\r\n[0m
+[32m0x0000fe94[0m [32m0x0040fe94[0m [33m 52[0m [33m  53[0m [36m.rdata  [0m[90mascii   [0m[36mR6026\r\n- not enough space for stdio initialization\r\n[0m
+[32m0x0000fecc[0m [32m0x0040fecc[0m [33m 37[0m [33m  38[0m [36m.rdata  [0m[90mascii   [0m[36mR6025\r\n- pure virtual function call\r\n[0m
+[32m0x0000fef4[0m [32m0x0040fef4[0m [33m 52[0m [33m  53[0m [36m.rdata  [0m[90mascii   [0m[36mR6024\r\n- not enough space for _onexit/atexit table\r\n[0m
+[32m0x0000ff2c[0m [32m0x0040ff2c[0m [33m 40[0m [33m  41[0m [36m.rdata  [0m[90mascii   [0m[36mR6019\r\n- unable to open console device\r\n[0m
+[32m0x0000ff58[0m [32m0x0040ff58[0m [33m 32[0m [33m  33[0m [36m.rdata  [0m[90mascii   [0m[36mR6018\r\n- unexpected heap error\r\n[0m
+[32m0x0000ff7c[0m [32m0x0040ff7c[0m [33m 44[0m [33m  45[0m [36m.rdata  [0m[90mascii   [0m[36mR6017\r\n- unexpected multithread lock error\r\n[0m
+[32m0x0000ffac[0m [32m0x0040ffac[0m [33m 43[0m [33m  44[0m [36m.rdata  [0m[90mascii   [0m[36mR6016\r\n- not enough space for thread data\r\n[0m
+[32m0x0000ffd8[0m [32m0x0040ffd8[0m [33m149[0m [33m 150[0m [36m.rdata  [0m[90mascii   [0m[36m\r\nThis application has requested the Runtime to terminate it in an unusual way.\nPlease contact the application's support team for more information.\r\n[0m
+[32m0x00010070[0m [32m0x00410070[0m [33m 43[0m [33m  44[0m [36m.rdata  [0m[90mascii   [0m[36mR6009\r\n- not enough space for environment\r\n[0m
+[32m0x0001009c[0m [32m0x0041009c[0m [33m 41[0m [33m  42[0m [36m.rdata  [0m[90mascii   [0m[36mR6008\r\n- not enough space for arguments\r\n[0m
+[32m0x000100c8[0m [32m0x004100c8[0m [33m 36[0m [33m  37[0m [36m.rdata  [0m[90mascii   [0m[36mR6002\r\n- floating point not loaded\r\n[0m
+[32m0x000100f0[0m [32m0x004100f0[0m [33m 36[0m [33m  37[0m [36m.rdata  [0m[90mascii   [0m[36mMicrosoft Visual C++ Runtime Library[0m
+[32m0x0001011c[0m [32m0x0041011c[0m [33m 25[0m [33m  26[0m [36m.rdata  [0m[90mascii   [0m[36mRuntime Error!\n\nProgram: [0m
+[32m0x0001013c[0m [32m0x0041013c[0m [33m 22[0m [33m  23[0m [36m.rdata  [0m[90mascii   [0m[36m<program name unknown>[0m
+[32m0x0001017a[0m [32m0x0041017a[0m [33m 33[0m [33m  66[0m [36m.rdata  [0m[90mutf16le [0m[36m         (((((                  H[0m
+[32m0x00010382[0m [32m0x00410382[0m [33m 33[0m [33m  66[0m [36m.rdata  [0m[90mutf16le [0m[36m         h((((                  H[0m
+[32m0x00010480[0m [32m0x00410480[0m [33m 34[0m [33m  68[0m [36m.rdata  [0m[90mutf16le [0m[36m                                 H[0m
+[32m0x00010594[0m [32m0x00410594[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mProgram: [0m
+[32m0x000105a0[0m [32m0x004105a0[0m [33m159[0m [33m 160[0m [36m.rdata  [0m[90mascii   [0m[36mA buffer overrun has been detected which has corrupted the program's\ninternal state.  The program cannot safely continue execution and must\nnow be terminated.\n[0m
+[32m0x00010640[0m [32m0x00410640[0m [33m 24[0m [33m  25[0m [36m.rdata  [0m[90mascii   [0m[36mBuffer overrun detected![0m
+[32m0x00010660[0m [32m0x00410660[0m [33m176[0m [33m 177[0m [36m.rdata  [0m[90mascii   [0m[36mA security error of unknown cause has been detected which has\ncorrupted the program's internal state.  The program cannot safely\ncontinue execution and must now be terminated.\n[0m
+[32m0x00010714[0m [32m0x00410714[0m [33m 34[0m [33m  35[0m [36m.rdata  [0m[90mascii   [0m[36mUnknown security failure detected![0m
+[32m0x0001076c[0m [32m0x0041076c[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mGetProcessWindowStation[0m
+[32m0x00010784[0m [32m0x00410784[0m [33m 25[0m [33m  26[0m [36m.rdata  [0m[90mascii   [0m[36mGetUserObjectInformationA[0m
+[32m0x000107a0[0m [32m0x004107a0[0m [33m 18[0m [33m  19[0m [36m.rdata  [0m[90mascii   [0m[36mGetLastActivePopup[0m
+[32m0x000107b4[0m [32m0x004107b4[0m [33m 15[0m [33m  16[0m [36m.rdata  [0m[90mascii   [0m[36mGetActiveWindow[0m
+[32m0x000107c4[0m [32m0x004107c4[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mMessageBoxA[0m
+[32m0x00010b30[0m [32m0x00410b30[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mKERNEL32.DLL[0m
+[32m0x00010b3d[0m [32m0x00410b3d[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mADVAPI32.dll[0m
+[32m0x00010b4a[0m [32m0x00410b4a[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mcomdlg32.dll[0m
+[32m0x00010b57[0m [32m0x00410b57[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mGDI32.dll[0m
+[32m0x00010b61[0m [32m0x00410b61[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mSHELL32.dll[0m
+[32m0x00010b6d[0m [32m0x00410b6d[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mUSER32.dll[0m
+[32m0x00010b7a[0m [32m0x00410b7a[0m [33m 26[0m [33m  27[0m [36m.rdata  [0m[90mascii   [0m[36mWritePrivateProfileStringA[0m
+[32m0x00010b96[0m [32m0x00410b96[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mRemoveDirectoryA[0m
+[32m0x00010ba8[0m [32m0x00410ba8[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mGetLastError[0m
+[32m0x00010bb6[0m [32m0x00410bb6[0m [33m 17[0m [33m  18[0m [36m.rdata  [0m[90mascii   [0m[36mGetCurrentProcess[0m
+[32m0x00010bca[0m [32m0x00410bca[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mTerminateProcess[0m
+[32m0x00010bdc[0m [32m0x00410bdc[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mOpenProcess[0m
+[32m0x00010bea[0m [32m0x00410bea[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mlstrcmpiA[0m
+[32m0x00010bf6[0m [32m0x00410bf6[0m [33m 18[0m [33m  19[0m [36m.rdata  [0m[90mascii   [0m[36mGetCurrentThreadId[0m
+[32m0x00010c0a[0m [32m0x00410c0a[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mGetModuleHandleA[0m
+[32m0x00010c1c[0m [32m0x00410c1c[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mFindClose[0m
+[32m0x00010c28[0m [32m0x00410c28[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mFindFirstFileA[0m
+[32m0x00010c38[0m [32m0x00410c38[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mFindNextFileA[0m
+[32m0x00010c48[0m [32m0x00410c48[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mDeleteFileA[0m
+[32m0x00010c56[0m [32m0x00410c56[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mCreateDirectoryA[0m
+[32m0x00010c68[0m [32m0x00410c68[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mCopyFileA[0m
+[32m0x00010c74[0m [32m0x00410c74[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mGlobalUnlock[0m
+[32m0x00010c82[0m [32m0x00410c82[0m [33m 10[0m [33m  11[0m [36m.rdata  [0m[90mascii   [0m[36mGlobalLock[0m
+[32m0x00010c8e[0m [32m0x00410c8e[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mGlobalAlloc[0m
+[32m0x00010c9c[0m [32m0x00410c9c[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mGetEnvironmentVariableA[0m
+[32m0x00010cb6[0m [32m0x00410cb6[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mCompareStringA[0m
+[32m0x00010cc6[0m [32m0x00410cc6[0m [33m  9[0m [33m  10[0m [36m.rdata  [0m[90mascii   [0m[36mRtlUnwind[0m
+[32m0x00010cd2[0m [32m0x00410cd2[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mVirtualQuery[0m
+[32m0x00010ce0[0m [32m0x00410ce0[0m [33m 13[0m [33m  14[0m [36m.rdata  [0m[90mascii   [0m[36mGetSystemInfo[0m
+[32m0x00010cf0[0m [32m0x00410cf0[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mVirtualProtect[0m
+[32m0x00010d00[0m [32m0x00410d00[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mGetLocaleInfoA[0m
+[32m0x00010d10[0m [32m0x00410d10[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mSetEndOfFile[0m
+[32m0x00010d1e[0m [32m0x00410d1e[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mLCMapStringW[0m
+[32m0x00010d2c[0m [32m0x00410d2c[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mLCMapStringA[0m
+[32m0x00010d3a[0m [32m0x00410d3a[0m [33m 19[0m [33m  20[0m [36m.rdata  [0m[90mascii   [0m[36mGetCurrentProcessId[0m
+[32m0x00010d50[0m [32m0x00410d50[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mGetTickCount[0m
+[32m0x00010d5e[0m [32m0x00410d5e[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mQueryPerformanceCounter[0m
+[32m0x00010d78[0m [32m0x00410d78[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mGetStringTypeW[0m
+[32m0x00010d88[0m [32m0x00410d88[0m [33m 24[0m [33m  25[0m [36m.rdata  [0m[90mascii   [0m[36mGetPrivateProfileStringA[0m
+[32m0x00010da2[0m [32m0x00410da2[0m [33m 14[0m [33m  15[0m [36m.rdata  [0m[90mascii   [0m[36mGetStringTypeA[0m
+[32m0x00010db2[0m [32m0x00410db2[0m [33m 11[0m [33m  12[0m [36m.rdata  [0m[90mascii   [0m[36mCreateFileA[0m
+[32m0x00010dc0[0m [32m0x00410dc0[0m [33m 16[0m [33m  17[0m [36m.rdata  [0m[90mascii   [0m[36mFlushFileBuffers[0m
+[32m0x00010dd2[0m [32m0x00410dd2[0m [33m 12[0m [33m  13[0m [36m.rdata  [0m[90mascii   [0m[36mSetStdHandle[0m
+[32m0x00010de0[0m [32m0x00410de0[0m [33m 22[0m [33m  23[0m [36m.rdata  [0m[90mascii   [0m[36mGetEnvironmentStringsW[0m
+[32m0x00010df8[0m [32m0x00410df8[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mFreeEnvironmentStringsW[0m
+[32m0x00010e12[0m [32m0x00410e12[0m [33m 21[0m [33m  22[0m [36m.rdata  [0m[90mascii   [0m[36mGetEnvironmentStrings[0m
+[32m0x00010e2a[0m [32m0x00410e2a[0m [33m 23[0m [33m  24[0m [36m.rdata  [0m[90mascii   [0m[36mFreeEnvironmentStringsA[0m
+[32m0x00010e44[0m [32m0x00410e44[0m [33m 24[0m [33m  25[0m [36m.rdata  [0m[90mascii   [0m[36mUnhandledExceptionFilter[0m

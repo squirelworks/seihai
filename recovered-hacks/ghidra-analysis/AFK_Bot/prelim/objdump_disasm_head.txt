@@ -1,0 +1,400 @@
+
+/workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe:     file format pei-i386
+
+
+Disassembly of section .text:
+
+00401000 <.text>:
+  401000:	9e                   	sahf
+  401001:	4a                   	dec    %edx
+  401002:	0e                   	push   %cs
+  401003:	66 6c                	data16 insb (%dx),%es:(%edi)
+  401005:	a3 0f 66 00 5b       	mov    %eax,0x5b00660f
+  40100a:	0f 66 73 00          	pcmpgtd 0x0(%ebx),%mm6
+  40100e:	10 66 c1             	adc    %ah,-0x3f(%esi)
+  401011:	53                   	push   %ebx
+  401012:	0f 66 e8             	pcmpgtd %mm0,%mm5
+  401015:	5b                   	pop    %ebx
+  401016:	0e                   	push   %cs
+  401017:	66 48                	dec    %ax
+  401019:	5a                   	pop    %edx
+  40101a:	0f 66 24 53          	pcmpgtd (%ebx,%edx,2),%mm4
+  40101e:	02 66 de             	add    -0x22(%esi),%ah
+  401021:	4a                   	dec    %edx
+  401022:	02 66 75             	add    0x75(%esi),%ah
+  401025:	53                   	push   %ebx
+  401026:	0f 66 e0             	pcmpgtd %mm0,%mm4
+  401029:	41                   	inc    %ecx
+  40102a:	02 66 0d             	add    0xd(%esi),%ah
+  40102d:	54                   	push   %esp
+  40102e:	0f 66 0d 55 0f 66 34 	pcmpgtd 0x34660f55,%mm1
+  401035:	6e                   	outsb  %ds:(%esi),(%dx)
+  401036:	0d 66 d4 a4 0f       	or     $0xfa4d466,%eax
+  40103b:	66 ac                	data16 lods %ds:(%esi),%al
+  40103d:	43                   	inc    %ebx
+  40103e:	02 66 57             	add    0x57(%esi),%ah
+  401041:	d3 01                	roll   %cl,(%ecx)
+  401043:	66 fd                	data16 std
+  401045:	5a                   	pop    %edx
+  401046:	0f 66 77 e2          	pcmpgtd -0x1e(%edi),%mm6
+  40104a:	02 66 79             	add    0x79(%esi),%ah
+  40104d:	a5                   	movsl  %ds:(%esi),%es:(%edi)
+  40104e:	0f 66 0d 58 0d 66 58 	pcmpgtd 0x58660d58,%mm1
+  401055:	4d                   	dec    %ebp
+  401056:	02 66 90             	add    -0x70(%esi),%ah
+  401059:	57                   	push   %edi
+  40105a:	0f 66 c1             	pcmpgtd %mm1,%mm0
+  40105d:	54                   	push   %esp
+  40105e:	0f 66 4f 54          	pcmpgtd 0x54(%edi),%mm1
+  401062:	0e                   	push   %cs
+  401063:	66 67 8d 10          	lea    (%bx,%si),%dx
+  401067:	66 ca 5a 0e          	lretw  $0xe5a
+  40106b:	66 11 a4 0f 66 16 82 	adc    %sp,0xd821666(%edi,%ecx,1)
+  401072:	0d 
+  401073:	66 41                	inc    %cx
+  401075:	54                   	push   %esp
+  401076:	0f 66 41 55          	pcmpgtd 0x55(%ecx),%mm0
+  40107a:	0f 66 ad 47 02 66 75 	pcmpgtd 0x75660247(%ebp),%mm5
+  401081:	54                   	push   %esp
+  401082:	0f 66 b0 4e 0f 66 22 	pcmpgtd 0x22660f4e(%eax),%mm6
+  401089:	de 00                	fiadds (%eax)
+  40108b:	66 03 b9 0d 66 15 90 	add    -0x6fea99f3(%ecx),%di
+  401092:	10 66 45             	adc    %ah,0x45(%esi)
+  401095:	b9 0d 66 a6 a2       	mov    $0xa2a6660d,%ecx
+  40109a:	0f 66 5b 46          	pcmpgtd 0x46(%ebx),%mm3
+  40109e:	02 66 62             	add    0x62(%esi),%ah
+  4010a1:	12 0f                	adc    (%edi),%cl
+  4010a3:	66 2a a6 0f 66 ad 00 	data16 sub 0xad660f(%esi),%ah
+  4010aa:	0f 66 d4             	pcmpgtd %mm4,%mm2
+  4010ad:	4f                   	dec    %edi
+  4010ae:	02 66 fb             	add    -0x5(%esi),%ah
+  4010b1:	46                   	inc    %esi
+  4010b2:	02 66 00             	add    0x0(%esi),%ah
+  4010b5:	00 00                	add    %al,(%eax)
+  4010b7:	00 01                	add    %al,(%ecx)
+  4010b9:	00 08                	add    %cl,(%eax)
+  4010bb:	00 53 2d             	add    %dl,0x2d(%ebx)
+  4010be:	40                   	inc    %eax
+  4010bf:	00 05 00 08 00 4d    	add    %al,0x4d000800
+  4010c5:	30 40 00             	xor    %al,0x0(%eax)
+  4010c8:	00 00                	add    %al,(%eax)
+  4010ca:	00 00                	add    %al,(%eax)
+  4010cc:	54                   	push   %esp
+  4010cd:	30 40 00             	xor    %al,0x0(%eax)
+  4010d0:	05 00 08 00 ad       	add    $0xad000800,%eax
+  4010d5:	32 40 00             	xor    0x0(%eax),%al
+  4010d8:	00 00                	add    %al,(%eax)
+  4010da:	00 00                	add    %al,(%eax)
+  4010dc:	b4 32                	mov    $0x32,%ah
+  4010de:	40                   	inc    %eax
+  4010df:	00 05 00 08 00 57    	add    %al,0x57000800
+  4010e5:	36 40                	ss inc %eax
+  4010e7:	00 00                	add    %al,(%eax)
+  4010e9:	00 00                	add    %al,(%eax)
+  4010eb:	00 5e 36             	add    %bl,0x36(%esi)
+  4010ee:	40                   	inc    %eax
+  4010ef:	00 ff                	add    %bh,%bh
+  4010f1:	25 3c 10 40 00       	and    $0x40103c,%eax
+  4010f6:	ff 25 54 10 40 00    	jmp    *0x401054
+  4010fc:	ff 25 64 10 40 00    	jmp    *0x401064
+  401102:	ff 25 2c 10 40 00    	jmp    *0x40102c
+  401108:	ff 25 24 10 40 00    	jmp    *0x401024
+  40110e:	ff 25 74 10 40 00    	jmp    *0x401074
+  401114:	ff 25 10 10 40 00    	jmp    *0x401010
+  40111a:	ff 25 84 10 40 00    	jmp    *0x401084
+  401120:	ff 25 30 10 40 00    	jmp    *0x401030
+  401126:	ff 25 80 10 40 00    	jmp    *0x401080
+  40112c:	ff 25 78 10 40 00    	jmp    *0x401078
+  401132:	ff 25 5c 10 40 00    	jmp    *0x40105c
+  401138:	ff 25 44 10 40 00    	jmp    *0x401044
+  40113e:	ff 25 58 10 40 00    	jmp    *0x401058
+  401144:	ff 25 18 10 40 00    	jmp    *0x401018
+  40114a:	ff 25 08 10 40 00    	jmp    *0x401008
+  401150:	ff 25 98 10 40 00    	jmp    *0x401098
+  401156:	ff 25 04 10 40 00    	jmp    *0x401004
+  40115c:	ff 25 a8 10 40 00    	jmp    *0x4010a8
+  401162:	ff 25 6c 10 40 00    	jmp    *0x40106c
+  401168:	ff 25 38 10 40 00    	jmp    *0x401038
+  40116e:	ff 25 4c 10 40 00    	jmp    *0x40104c
+  401174:	ff 25 a4 10 40 00    	jmp    *0x4010a4
+  40117a:	ff 25 a0 10 40 00    	jmp    *0x4010a0
+  401180:	ff 25 70 10 40 00    	jmp    *0x401070
+  401186:	ff 25 00 10 40 00    	jmp    *0x401000
+  40118c:	ff 25 b0 10 40 00    	jmp    *0x4010b0
+  401192:	ff 25 90 10 40 00    	jmp    *0x401090
+  401198:	ff 25 68 10 40 00    	jmp    *0x401068
+  40119e:	ff 25 34 10 40 00    	jmp    *0x401034
+  4011a4:	ff 25 60 10 40 00    	jmp    *0x401060
+  4011aa:	ff 25 0c 10 40 00    	jmp    *0x40100c
+  4011b0:	ff 25 ac 10 40 00    	jmp    *0x4010ac
+  4011b6:	ff 25 7c 10 40 00    	jmp    *0x40107c
+  4011bc:	ff 25 20 10 40 00    	jmp    *0x401020
+  4011c2:	ff 25 8c 10 40 00    	jmp    *0x40108c
+  4011c8:	ff 25 94 10 40 00    	jmp    *0x401094
+  4011ce:	ff 25 14 10 40 00    	jmp    *0x401014
+  4011d4:	ff 25 1c 10 40 00    	jmp    *0x40101c
+  4011da:	ff 25 9c 10 40 00    	jmp    *0x40109c
+  4011e0:	ff 25 28 10 40 00    	jmp    *0x401028
+  4011e6:	ff 25 50 10 40 00    	jmp    *0x401050
+  4011ec:	ff 25 40 10 40 00    	jmp    *0x401040
+  4011f2:	ff 25 48 10 40 00    	jmp    *0x401048
+  4011f8:	ff 25 88 10 40 00    	jmp    *0x401088
+  4011fe:	00 00                	add    %al,(%eax)
+  401200:	68 30 1e 40 00       	push   $0x401e30
+  401205:	e8 ee ff ff ff       	call   0x4011f8
+  40120a:	00 00                	add    %al,(%eax)
+  40120c:	00 00                	add    %al,(%eax)
+  40120e:	00 00                	add    %al,(%eax)
+  401210:	30 00                	xor    %al,(%eax)
+  401212:	00 00                	add    %al,(%eax)
+  401214:	40                   	inc    %eax
+  401215:	00 00                	add    %al,(%eax)
+  401217:	00 00                	add    %al,(%eax)
+  401219:	00 00                	add    %al,(%eax)
+  40121b:	00 bd f1 39 0f 3a    	add    %bh,0x3a0f39f1(%ebp)
+  401221:	55                   	push   %ebp
+  401222:	2a 40 a3             	sub    -0x5d(%eax),%al
+  401225:	b9 2b 58 21 97       	mov    $0x9721582b,%ecx
+  40122a:	d9 78 00             	fnstcw 0x0(%eax)
+  40122d:	00 00                	add    %al,(%eax)
+  40122f:	00 00                	add    %al,(%eax)
+  401231:	00 01                	add    %al,(%ecx)
+	...
+  40123b:	00 50 72             	add    %dl,0x72(%eax)
+  40123e:	6f                   	outsl  %ds:(%esi),(%dx)
+  40123f:	6a 65                	push   $0x65
+  401241:	63 74 31 00          	arpl   %esi,0x0(%ecx,%esi,1)
+	...
+  40124d:	00 00                	add    %al,(%eax)
+  40124f:	00 ff                	add    %bh,%bh
+  401251:	cc                   	int3
+  401252:	31 00                	xor    %eax,(%eax)
+  401254:	0b 57 dd             	or     -0x23(%edi),%edx
+  401257:	3a 61 d1             	cmp    -0x2f(%ecx),%ah
+  40125a:	2e 06                	cs push %es
+  40125c:	46                   	inc    %esi
+  40125d:	b1 82                	mov    $0x82,%cl
+  40125f:	fc                   	cld
+  401260:	48                   	dec    %eax
+  401261:	6d                   	insl   (%dx),%es:(%edi)
+  401262:	fe                   	(bad)
+  401263:	bf c1 93 0d 52       	mov    $0x520d93c1,%edi
+  401268:	7b c2                	jnp    0x40122c
+  40126a:	0d 04 4d 91 34       	or     $0x34914d04,%eax
+  40126f:	54                   	push   %esp
+  401270:	35 6c 14 12 ef       	xor    $0xef12146c,%eax
+  401275:	3a 4f ad             	cmp    -0x53(%edi),%cl
+  401278:	33 99 66 cf 11 b7    	xor    -0x48ee309a(%ecx),%ebx
+  40127e:	0c 00                	or     $0x0,%al
+  401280:	aa                   	stos   %al,%es:(%edi)
+  401281:	00 60 d3             	add    %ah,-0x2d(%eax)
+  401284:	93                   	xchg   %eax,%ebx
+	...
+  4012a9:	37                   	aaa
+  4012aa:	0b 00                	or     (%eax),%eax
+  4012ac:	00 0a                	add    %cl,(%edx)
+  4012ae:	09 00                	or     %eax,(%eax)
+  4012b0:	00 00                	add    %al,(%eax)
+  4012b2:	05 00 46 6f 72       	add    $0x726f4600,%eax
+  4012b7:	6d                   	insl   (%dx),%es:(%edi)
+  4012b8:	31 00                	xor    %eax,(%eax)
+  4012ba:	0d 01 07 00 41       	or     $0x41000701,%eax
+  4012bf:	46                   	inc    %esi
+  4012c0:	4b                   	dec    %ebx
+  4012c1:	20 42 6f             	and    %al,0x6f(%edx)
+  4012c4:	74 00                	je     0x4012c6
+  4012c6:	19 01                	sbb    %eax,(%ecx)
+  4012c8:	00 42 00             	add    %al,0x0(%edx)
+  4012cb:	22 01                	and    (%ecx),%al
+  4012cd:	23 c6                	and    %esi,%eax
+  4012cf:	08 00                	or     %al,(%eax)
+  4012d1:	00 6c 74 00          	add    %ch,0x0(%esp,%esi,2)
+  4012d5:	00 be 08 00 00 00    	add    %bh,0x8(%esi)
+  4012db:	00 01                	add    %al,(%ecx)
+  4012dd:	00 01                	add    %al,(%ecx)
+  4012df:	00 20                	add    %ah,(%eax)
+  4012e1:	20 00                	and    %al,(%eax)
+  4012e3:	00 00                	add    %al,(%eax)
+  4012e5:	00 00                	add    %al,(%eax)
+  4012e7:	00 a8 08 00 00 16    	add    %ch,0x16000008(%eax)
+  4012ed:	00 00                	add    %al,(%eax)
+  4012ef:	00 28                	add    %ch,(%eax)
+  4012f1:	00 00                	add    %al,(%eax)
+  4012f3:	00 20                	add    %ah,(%eax)
+  4012f5:	00 00                	add    %al,(%eax)
+  4012f7:	00 40 00             	add    %al,0x0(%eax)
+  4012fa:	00 00                	add    %al,(%eax)
+  4012fc:	01 00                	add    %eax,(%eax)
+  4012fe:	08 00                	or     %al,(%eax)
+  401300:	00 00                	add    %al,(%eax)
+  401302:	00 00                	add    %al,(%eax)
+  401304:	80 04 00 00          	addb   $0x0,(%eax,%eax,1)
+	...
+  401310:	00 01                	add    %al,(%ecx)
+	...
+  40131e:	80 00 00             	addb   $0x0,(%eax)
+  401321:	80 00 00             	addb   $0x0,(%eax)
+  401324:	00 80 80 00 80 00    	add    %al,0x800080(%eax)
+  40132a:	00 00                	add    %al,(%eax)
+  40132c:	80 00 80             	addb   $0x80,(%eax)
+  40132f:	00 80 80 00 00 c0    	add    %al,-0x3fffff80(%eax)
+  401335:	c0 c0 00             	rol    $0x0,%al
+  401338:	c0 dc c0             	rcr    $0xc0,%ah
+  40133b:	00 f0                	add    %dh,%al
+  40133d:	ca a6 00             	lret   $0xa6
+  401340:	cc                   	int3
+  401341:	ff                   	(bad)
+  401342:	ff 00                	incl   (%eax)
+  401344:	99                   	cltd
+  401345:	ff                   	(bad)
+  401346:	ff 00                	incl   (%eax)
+  401348:	66 ff                	data16 (bad)
+  40134a:	ff 00                	incl   (%eax)
+  40134c:	33 ff                	xor    %edi,%edi
+  40134e:	ff 00                	incl   (%eax)
+  401350:	ff cc                	dec    %esp
+  401352:	ff 00                	incl   (%eax)
+  401354:	cc                   	int3
+  401355:	cc                   	int3
+  401356:	ff 00                	incl   (%eax)
+  401358:	99                   	cltd
+  401359:	cc                   	int3
+  40135a:	ff 00                	incl   (%eax)
+  40135c:	66 cc                	data16 int3
+  40135e:	ff 00                	incl   (%eax)
+  401360:	33 cc                	xor    %esp,%ecx
+  401362:	ff 00                	incl   (%eax)
+  401364:	00 cc                	add    %cl,%ah
+  401366:	ff 00                	incl   (%eax)
+  401368:	ff 99 ff 00 cc 99    	lcall  *-0x6633ff01(%ecx)
+  40136e:	ff 00                	incl   (%eax)
+  401370:	99                   	cltd
+  401371:	99                   	cltd
+  401372:	ff 00                	incl   (%eax)
+  401374:	66 99                	cwtd
+  401376:	ff 00                	incl   (%eax)
+  401378:	33 99 ff 00 00 99    	xor    -0x66ffff01(%ecx),%ebx
+  40137e:	ff 00                	incl   (%eax)
+  401380:	ff 66 ff             	jmp    *-0x1(%esi)
+  401383:	00 cc                	add    %cl,%ah
+  401385:	66 ff 00             	incw   (%eax)
+  401388:	99                   	cltd
+  401389:	66 ff 00             	incw   (%eax)
+  40138c:	66 66 ff 00          	data16 incw (%eax)
+  401390:	33 66 ff             	xor    -0x1(%esi),%esp
+  401393:	00 00                	add    %al,(%eax)
+  401395:	66 ff 00             	incw   (%eax)
+  401398:	ff 33                	push   (%ebx)
+  40139a:	ff 00                	incl   (%eax)
+  40139c:	cc                   	int3
+  40139d:	33 ff                	xor    %edi,%edi
+  40139f:	00 99 33 ff 00 66    	add    %bl,0x6600ff33(%ecx)
+  4013a5:	33 ff                	xor    %edi,%edi
+  4013a7:	00 33                	add    %dh,(%ebx)
+  4013a9:	33 ff                	xor    %edi,%edi
+  4013ab:	00 00                	add    %al,(%eax)
+  4013ad:	33 ff                	xor    %edi,%edi
+  4013af:	00 cc                	add    %cl,%ah
+  4013b1:	00 ff                	add    %bh,%bh
+  4013b3:	00 99 00 ff 00 66    	add    %bl,0x6600ff00(%ecx)
+  4013b9:	00 ff                	add    %bh,%bh
+  4013bb:	00 33                	add    %dh,(%ebx)
+  4013bd:	00 ff                	add    %bh,%bh
+  4013bf:	00 ff                	add    %bh,%bh
+  4013c1:	ff cc                	dec    %esp
+  4013c3:	00 cc                	add    %cl,%ah
+  4013c5:	ff cc                	dec    %esp
+  4013c7:	00 99 ff cc 00 66    	add    %bl,0x6600ccff(%ecx)
+  4013cd:	ff cc                	dec    %esp
+  4013cf:	00 66 ff             	add    %ah,-0x1(%esi)
+  4013d2:	cc                   	int3
+  4013d3:	00 33                	add    %dh,(%ebx)
+  4013d5:	ff cc                	dec    %esp
+  4013d7:	00 00                	add    %al,(%eax)
+  4013d9:	ff cc                	dec    %esp
+  4013db:	00 ff                	add    %bh,%bh
+  4013dd:	cc                   	int3
+  4013de:	cc                   	int3
+  4013df:	00 cc                	add    %cl,%ah
+  4013e1:	cc                   	int3
+  4013e2:	cc                   	int3
+  4013e3:	00 99 cc cc 00 66    	add    %bl,0x6600cccc(%ecx)
+  4013e9:	cc                   	int3
+  4013ea:	cc                   	int3
+  4013eb:	00 33                	add    %dh,(%ebx)
+  4013ed:	cc                   	int3
+  4013ee:	cc                   	int3
+  4013ef:	00 00                	add    %al,(%eax)
+  4013f1:	cc                   	int3
+  4013f2:	cc                   	int3
+  4013f3:	00 ff                	add    %bh,%bh
+  4013f5:	99                   	cltd
+  4013f6:	cc                   	int3
+  4013f7:	00 cc                	add    %cl,%ah
+  4013f9:	99                   	cltd
+  4013fa:	cc                   	int3
+  4013fb:	00 99 99 cc 00 66    	add    %bl,0x6600cc99(%ecx)
+  401401:	99                   	cltd
+  401402:	cc                   	int3
+  401403:	00 33                	add    %dh,(%ebx)
+  401405:	99                   	cltd
+  401406:	cc                   	int3
+  401407:	00 00                	add    %al,(%eax)
+  401409:	99                   	cltd
+  40140a:	cc                   	int3
+  40140b:	00 ff                	add    %bh,%bh
+  40140d:	66 cc                	data16 int3
+  40140f:	00 cc                	add    %cl,%ah
+  401411:	66 cc                	data16 int3
+  401413:	00 99 66 cc 00 66    	add    %bl,0x6600cc66(%ecx)
+  401419:	66 cc                	data16 int3
+  40141b:	00 33                	add    %dh,(%ebx)
+  40141d:	66 cc                	data16 int3
+  40141f:	00 00                	add    %al,(%eax)
+  401421:	66 cc                	data16 int3
+  401423:	00 ff                	add    %bh,%bh
+  401425:	33 cc                	xor    %esp,%ecx
+  401427:	00 cc                	add    %cl,%ah
+  401429:	33 cc                	xor    %esp,%ecx
+  40142b:	00 99 33 cc 00 66    	add    %bl,0x6600cc33(%ecx)
+  401431:	33 cc                	xor    %esp,%ecx
+  401433:	00 33                	add    %dh,(%ebx)
+  401435:	33 cc                	xor    %esp,%ecx
+  401437:	00 00                	add    %al,(%eax)
+  401439:	33 cc                	xor    %esp,%ecx
+  40143b:	00 ff                	add    %bh,%bh
+  40143d:	00 cc                	add    %cl,%ah
+  40143f:	00 cc                	add    %cl,%ah
+  401441:	00 cc                	add    %cl,%ah
+  401443:	00 99 00 cc 00 66    	add    %bl,0x6600cc00(%ecx)
+  401449:	00 cc                	add    %cl,%ah
+  40144b:	00 33                	add    %dh,(%ebx)
+  40144d:	00 cc                	add    %cl,%ah
+  40144f:	00 00                	add    %al,(%eax)
+  401451:	00 cc                	add    %cl,%ah
+  401453:	00 ff                	add    %bh,%bh
+  401455:	ff 99 00 cc ff 99    	lcall  *-0x66003400(%ecx)
+  40145b:	00 99 ff 99 00 66    	add    %bl,0x660099ff(%ecx)
+  401461:	ff 99 00 33 ff 99    	lcall  *-0x6600cd00(%ecx)
+  401467:	00 00                	add    %al,(%eax)
+  401469:	ff 99 00 ff cc 99    	lcall  *-0x66330100(%ecx)
+  40146f:	00 cc                	add    %cl,%ah
+  401471:	cc                   	int3
+  401472:	99                   	cltd
+  401473:	00 99 cc 99 00 66    	add    %bl,0x660099cc(%ecx)
+  401479:	cc                   	int3
+  40147a:	99                   	cltd
+  40147b:	00 33                	add    %dh,(%ebx)
+  40147d:	cc                   	int3
+  40147e:	99                   	cltd
+  40147f:	00 00                	add    %al,(%eax)
+  401481:	cc                   	int3
+  401482:	99                   	cltd
+  401483:	00 ff                	add    %bh,%bh
+  401485:	99                   	cltd
+  401486:	99                   	cltd
+  401487:	00 cc                	add    %cl,%ah
+  401489:	99                   	cltd
+  40148a:	99                   	cltd
+  40148b:	00 99 99 99 00 66    	add    %bl,0x66009999(%ecx)
+  401491:	99                   	cltd

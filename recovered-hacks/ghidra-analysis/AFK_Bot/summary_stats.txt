@@ -1,0 +1,16 @@
+program=AFK Bot.exe
+executable_path=/workspace/recovered-hacks/Trainers/extracted/AFKBOT/AFKBOT/AFK Bot.exe
+executable_format=Portable Executable (PE)
+language=x86:LE:32:default
+compiler=windows
+image_base=00400000
+function_count=6
+internal_function_count=5
+import_count=45
+export_count=2
+interesting_string_count=8
+decompiled_count=5
+key_function_count=5
+top_functions=FUN_004032e0@004032e0(sz=905) | FUN_00402d80@00402d80(sz=725) | FUN_004030b0@004030b0(sz=517) | FUN_00402d00@00402d00(sz=114) | entry@00401200(sz=82)
+key_functions=entry@00401200 | FUN_004032e0@004032e0 | FUN_00402d80@00402d80 | FUN_004030b0@004030b0 | FUN_00402d00@00402d00
+sample_strings=WARNING : AFK Bots are illegal on some playerworlds | AFK = Away from Keyboard | @*\AC:\Program Files\Microsoft Visual Studio\VB98\Source\AFK Bot\Project1.vbp | C:\PROGRAM FILES\MICROSOFT VISUAL STUDIO\VB98\VB6.OLB | __vbaErrorOverflow | __vbaErrorOverflow | FileVersion | ProductVersion

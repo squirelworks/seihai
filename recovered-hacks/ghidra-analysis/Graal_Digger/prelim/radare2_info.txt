@@ -1,0 +1,40 @@
+Error parsing resource directory
+arch     x86
+baddr    0x400000
+binsz    36111
+bintype  pe
+bits     32
+canary   false
+retguard false
+class    PE32
+cmp.csum 0x0000a3cb
+compiled Tue Feb  5 20:01:04 2002
+crypto   false
+endian   little
+havecode true
+hdr.csum 0x00000000
+laddr    0x0
+lang     c
+linenum  true
+lsyms    true
+machine  i386
+nx       false
+os       windows
+overlay  true
+cc       cdecl
+pic      false
+relocs   true
+signed   false
+sanitize false
+static   true
+stripped false
+subsys   Windows GUI
+va       true
+[Imports]
+nth vaddr bind type lib name
+――――――――――――――――――――――――――――
+
+[Exports]
+
+nth paddr vaddr bind type size lib name
+―――――――――――――――――――――――――――――――――――――――

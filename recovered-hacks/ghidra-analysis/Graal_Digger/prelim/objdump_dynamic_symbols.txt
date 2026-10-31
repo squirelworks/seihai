@@ -1,0 +1,8 @@
+
+/workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe:     file format pei-i386
+
+objdump: /workspace/recovered-hacks/Trainers/extracted/Graal_Digger/Graal Digger.exe: not a dynamic object
+DYNAMIC SYMBOL TABLE:
+no symbols
+
+
