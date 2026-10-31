@@ -99,15 +99,16 @@ the new level, and its scripts were parked and resumed under the wrong name. On 
 session's cell level (`OfflineSession::level_name`). No unit test covers the loop order; the lab rerun is
 the check.
 
-## No NPC props on first entry for 2.22 (2026-10-31)
+## NPC props on entry for 2.22 (2026-10-31)
 
-On the **first** entry of a level the 2.22 build sent `VISFLAGS` for each NPC and the props its `created`
-sets (`BODY`, `GANI`), the 2.05 rule (`documentation/ledges-push-pull.md`). The real 2.22 login capture
-(`lan-222r`, about 23 s) has no C>S `PLI_NPCPROPS` (id 3) at all, after login or later. Its whole C>S
-inventory was LOGIN 1, LANGUAGE 1, TAMPERCHECK 1, UPDATEFILE 4, ADJACENTLEVEL 3, FLAGSET 28,
-PLAYERPROPS 18, SHOWIMGPLAYER 7.
+2.22 sends NPC props under the 2.05 rule (`documentation/ledges-push-pull.md`): a prop goes out when it
+differs from the server's copy. Two Mirae captures of the real 2.22 settle it:
 
-So on 2.22 `ServerNpcSync::settle_first` is on: the first send round after an NPC is linked sends
-nothing, and what its script set by then counts as what the server has. Later changes (a push, `setimg`)
-still go out under the 2.05 rule. That part is not captured: the session touched no NPC. Other builds
-keep the 2.05 rule. Test: `on_2_22_the_first_round_after_linking_sends_nothing`.
+* `lan-222r`, a direct login into `minipw.gmap` (about 23 s): no C>S `PLI_NPCPROPS` at all. Earlier
+  sessions had already given the server the values the NPCs' scripts set, so nothing differed.
+* `lan-222g`, a link (`LEVELWARPMOD`) into `testworld`: the first C>S frame, 115 ms after the warp, holds
+  `FLAGSET gr.x`, the `PLAYERPROPS` position, then one `PLI_NPCPROPS` for each of the two NPCs whose
+  `created` sets their looks and message (63 and 71 bytes).
+
+#261 had turned the first round off for 2.22 from the first capture alone; that is reverted, and 2.22
+keeps the 2.05 rule like the other builds.
