@@ -60,6 +60,11 @@ PLO_BADDYPROPS / PLI_BADDYPROPS (15): `id`, then `prop, value` pairs.
   * After those comes counter 1, then mode 5 with counter 14, counting down to 0.
   * The leader sends nothing after that. The server sends mode 9 about 1.2 s later.
 * The leader stores each baddy's props on its first think and sends only the changed props after that.
+* **Send rate.** The leader sends one PLI_BADDYPROPS per baddy per think, with only the changed props, and all of one think's messages go in one frame.
+  * The real 2.22 (`lan-222d`) and 2.00 (`lan-200west`) leaders do this for as long as they stay in the level: 48 to 60 messages a second for 6 baddies, about 45 bytes a second.
+  * The walk and look counters change every think, so a moving baddy is in nearly every think. A baddy with no change is left out.
+  * So 12 baddies make about 120 messages a second, under 1 KB/s. Seihai matches it (test `a_leader_sends_one_message_per_baddy_per_think_like_2_22`: 579 in 10 s for the 6 `lan-222d` baddies).
+  * There are no leader captures from 1.41 or 5.x.
 * For a custom image the leader sends the type's default image name. GServer notes "client resets the custom image when the baddy is hurt".
 
 PLI_ARROWADD (9): the leader sends each baddy shot as `x * 2`, `y * 2`, `dir`, `sprite`, `kind + 1`. The real 2.22 sends `87 79 20 8b 21` for an arrow facing north (sprite 107 + dir).

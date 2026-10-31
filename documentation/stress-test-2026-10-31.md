@@ -180,9 +180,12 @@ may be caches filling; I did not trace it further.
    "many clients" numbers are CPU-bound.
 9. **The 1.41r1, 2.22 and 5.31r4 leaders send `BADDYPROPS` for every baddy
    every think, even when unchanged.** At 12 baddies that is 120 msgs/s
-   from one client. This matches the documented 100 ms think, but the 2.22
-   capture in `baddies.md` shows only the first steps. Whether the real
-   client skips unchanged baddies is not known.
+   from one client. **Checked since: this is what the real clients do.**
+   The real 2.22 (`lan-222d`, 5 minutes) and 2.00 (`lan-200west`) leaders
+   send one message per baddy per think for as long as they stay in the
+   level, 48 to 60 a second for 6 baddies, and leave out only a baddy with
+   no change, as Seihai does. Each think's messages go in one frame in both.
+   Seihai's rate is kept as it is and pinned by a test (see `baddies.md`).
 10. **The fault proxy found no panic in 84 sessions.** Those sessions had
     1350 hostile, oversized, mutated, flooded and broken-framing faults,
     including lying raw-data lengths, 60 KB board lines, warps to 255,255,
@@ -193,8 +196,8 @@ may be caches filling; I did not trace it further.
 
 ## Not covered
 
-- Real client binaries were not run, so items 7 and 9 need a check with a
-  real client.
+- Real client binaries were not run, so item 7 needs a check with a real
+  client. Item 9 was checked against the 2.00 and 2.22 captures.
 - Only GServer-v2 was tested, not GServer-RS. GS1 NPC scripts do not run on
   5.x/6.x (they need GS2), so the script-driven warps and item churn only
   reached the 1.x and 2.x builds. The 5.x/6.x clients got the chat warps,
