@@ -225,7 +225,7 @@ fn message_width(npc: &Npc, art: &NpcArt) -> i32 {
 /// or the sheets it needs are not loaded (the image is drawn then).
 fn draw_animation(fb: &mut Framebuffer, session: &OfflineSession, npc: &Npc, art: &NpcArt, dx: i32, dy: i32) -> bool {
     let Some(name) = &npc.ani else { return false };
-    let Some(gani) = session.npc_ganis.get(name) else { return false };
+    let Some(gani) = session.npc_gani(name) else { return false };
     let sheets = npc_sheets(npc, gani, art);
     if gani.frame_count() == 0 || sheets.body.is_none() || sheets.head.is_none() {
         return false;
