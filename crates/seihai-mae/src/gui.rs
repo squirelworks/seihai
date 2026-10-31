@@ -4,6 +4,7 @@ use crate::net::Connection;
 use crate::protocol::{ClientVersion, ServerList};
 use crate::settings::Settings;
 use eframe::egui;
+use std::sync::{Arc, Mutex};
 
 /// The launcher's listserver boxes: a host and a port that follows the
 /// selected version's default until the user types a port.
@@ -91,6 +92,8 @@ pub struct Launcher {
     direct: String,
     /// Asset folder for the selected version only.
     version_assets: String,
+    /// Set when a 3.x build was picked: the window closes and Ato starts.
+    ato: Arc<Mutex<Option<crate::ato::Handoff>>>,
 }
 
 impl Launcher {
@@ -123,6 +126,7 @@ impl Launcher {
                 .clone()
                 .unwrap_or_else(|| "localhost:14900".into()),
             version_assets: String::new(),
+            ato: Arc::default(),
         }
         .with_version_assets()
     }
@@ -149,6 +153,27 @@ impl Launcher {
         s.last_server_name = Some(name.to_string());
         s.offline = None;
         s.save();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    /// A 3.x build was picked: save the form and close, so Ato starts with
+    /// it. The saved version stays the last classic one, so the next
+    /// settings window does not open on a build it cannot run.
+    fn hand_to_ato(&self, ctx: &egui::Context, version: ClientVersion) {
+        let mut s = Settings::load();
+        s.account = Some(self.account.clone());
+        s.password = Some(self.password.clone());
+        s.assets = Some(self.assets.clone().into());
+        s.set_assets_for(version.label(), &self.version_assets);
+        s.last_server = None;
+        s.offline = None;
+        s.save();
+        *self.ato.lock().unwrap() = Some(crate::ato::Handoff {
+            version,
+            account: self.account.clone(),
+            password: self.password.clone(),
+            assets: Some(self.version_assets.clone()),
+        });
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
@@ -272,6 +297,9 @@ impl eframe::App for Launcher {
                     .assets_for(label)
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
+                if crate::ato::runs_in_ato(v) {
+                    self.hand_to_ato(ctx, v);
+                }
             }
             let profile = self.version_enum().profile();
             ui.small(profile.summary());
@@ -349,21 +377,34 @@ pub fn run_with_error(error: String) -> Option<String> {
     run_inner(Some(error))
 }
 
-fn run_inner(error: Option<String>) -> Option<String> {
-    // Clear any previous choice so closing the window does not reconnect.
-    let mut s = Settings::load();
-    s.last_server = None;
-    s.save();
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([720.0, 520.0]),
-        ..Default::default()
-    };
-    let _ = eframe::run_native(
-        "Seihai",
-        options,
-        Box::new(move |_cc| Ok(Box::new(Launcher::with_error(error)))),
-    );
-    Settings::load().last_server
+fn run_inner(mut error: Option<String>) -> Option<String> {
+    loop {
+        // Clear any previous choice so closing the window does not reconnect.
+        let mut s = Settings::load();
+        s.last_server = None;
+        s.save();
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default().with_inner_size([720.0, 520.0]),
+            ..Default::default()
+        };
+        let ato: Arc<Mutex<Option<crate::ato::Handoff>>> = Arc::default();
+        let ato2 = ato.clone();
+        let _ = eframe::run_native(
+            "Seihai",
+            options,
+            Box::new(move |_cc| {
+                let mut l = Launcher::with_error(error);
+                l.ato = ato2;
+                Ok(Box::new(l))
+            }),
+        );
+        // A 3.x build was picked: Ato takes over. If it cannot start, the
+        // window comes back with the reason.
+        let Some(handoff) = ato.lock().unwrap().take() else { return Settings::load().last_server };
+        let why = handoff.start();
+        eprintln!("seihai-mae: {why}");
+        error = Some(why);
+    }
 }
 
 /// Pick a level file with one of `exts` (e.g. `.nw`). Returns the chosen

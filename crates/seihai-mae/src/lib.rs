@@ -8,6 +8,7 @@ pub use seihai_core::{
     protocol, scripting, servercache, throwing, viewer,
 };
 
+pub mod ato;
 pub mod gui;
 pub mod keys;
 pub mod help;
