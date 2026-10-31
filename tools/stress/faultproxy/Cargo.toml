@@ -1,0 +1,17 @@
+[package]
+name = "faultproxy"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Not a workspace member: a lab tool, built on its own
+# (`cargo build --release --manifest-path tools/stress/faultproxy/Cargo.toml`).
+[workspace]
+
+[dependencies]
+seihai-core = { path = "../../../crates/seihai-core", default-features = false }
+flate2 = "1"
+bzip2 = "0.5"
+
+[profile.release]
+debug = 1
