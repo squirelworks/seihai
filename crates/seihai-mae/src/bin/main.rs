@@ -2366,6 +2366,7 @@ fn main() {
                         // The pick is the weapon D fires and the HUD draws.
                         if weapon_bar.select_name(n) {
                             scripts.world.core.player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
+                            scripts.world.core.player.selected_weapon = weapon_bar.selected;
                             weapon_recheck = true;
                         }
                     }
@@ -3612,9 +3613,19 @@ fn main() {
                 net_state.weapons.iter().map(|w| (w.name.as_str(), w.image.as_deref())),
                 profile.files.image_ext,
             );
+            // A script set `selectedweapon` (the script already applied the
+            // client's skip-hidden rule).
+            if let Some(i) = session.weapon_select.take().filter(|&i| i < weapon_bar.entries.len()) {
+                weapon_bar.selected = Some(i);
+            }
             let now = weapon_bar.current_image().map(str::to_string);
-            // `#w` in scripts: the selected weapon's name.
-            scripts.world.core.player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
+            // `#w` in scripts: the selected weapon's name; `selectedweapon`,
+            // `#w(i)`, `#W(i)`, `weaponscount` and `callweapon i` index the
+            // whole list, hidden weapons included.
+            let player = &mut scripts.world.core.player;
+            player.weapon = weapon_bar.current().map(|e| e.name.clone()).unwrap_or_default();
+            player.weapons = weapon_bar.entries.iter().map(|e| (e.name.clone(), e.image.clone().unwrap_or_default())).collect();
+            player.selected_weapon = weapon_bar.selected;
             if now != before {
                 dirty = true;
                 weapon_recheck = true;
