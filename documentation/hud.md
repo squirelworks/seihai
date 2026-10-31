@@ -60,8 +60,10 @@ names a base point `B = (15, 15)`.
   * Bits 0x100 and 0x200 belong to the player icons and to the weapon
     image list.
   * Seihai does not draw those parts in the status display.
-  * `showstats` and `disablestats` scripts do not reach the HUD yet, so
-    Seihai always draws every bit.
+  * A script's `showstats bits` sets the bits the HUD draws (2026-10-31;
+    2gta's `splashscreen.nw` sends `showstats 0` to clear the screen for
+    its title). Until a script sets them, every bit is drawn.
+    `disablestats` does not reach the HUD yet.
 
 ## Older builds (inferred)
 

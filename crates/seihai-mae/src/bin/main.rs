@@ -155,6 +155,7 @@ fn npc_image_pass(
     conn: Option<&mut Connection>,
     npc_images: &mut HashMap<String, (u32, Vec<u8>)>,
     not_received: &mut HashSet<String>,
+    font: Option<&seihai::render::chattext::ChatFont>,
 ) {
     let mut msgs = Vec::new();
     // Each NPC's image, the images its script put up with showimg, and the
@@ -162,6 +163,12 @@ fn npc_image_pass(
     let weapons = player_images.iter().map(|i| i.file.as_str()).filter(|n| !n.is_empty());
     for name in level.npcs.iter().flat_map(|n| n.image_names()).chain(weapons) {
         if npc_images.contains_key(name) || not_received.contains(name) {
+            continue;
+        }
+        // A text image (`@font@style@text`) is drawn here, not asked for:
+        // 2gta's title screen asked the server for "@b@Start" as a file.
+        if let Some(img) = seihai::render::chattext::text_image(font, name) {
+            npc_images.insert(name.to_string(), img);
             continue;
         }
         let m = files.need(name);
@@ -179,6 +186,18 @@ fn npc_image_pass(
         }
     }
     send_file_msgs(conn, msgs);
+}
+
+/// Debug: write the NPC scripts of `level` to `levels/<label>.txt` in the
+/// debug folder, so a script error in the script log can be read against
+/// its source. Written again when the level gains an NPC.
+fn dump_level_scripts(debug_dir: Option<&PathBuf>, label: &str, level: &seihai::assets::Level) {
+    let Some(dir) = debug_dir else { return };
+    let dir = dir.join("levels");
+    let safe: String = label.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).collect();
+    if std::fs::create_dir_all(&dir).is_ok() {
+        let _ = std::fs::write(dir.join(format!("{safe}.txt")), level.npc_scripts_dump());
+    }
 }
 
 /// The default picture of a shield power (`shield1.png`), or an empty
@@ -1305,7 +1324,8 @@ fn main() {
         let (dx, dy) = player_box_origin(session, view_w, view_h);
         let pose = session.current_pose();
         match (&body, &head) {
-            _ if !characters => {}
+            // `hideplayer`: the player is not drawn while its time runs.
+            _ if !characters || session.script_hide_ms > 0 => {}
             (b, h) if pose.is_some() && (gif_art || (b.is_some() && h.is_some())) => {
                 // Our own head and body, the body in our colours; until
                 // they are here, the default pictures. A GIF build whose
@@ -1391,7 +1411,7 @@ fn main() {
                     glove_power: i32::from(session.glove_power),
                     sword_power: i32::from(session.sword_power),
                     weapons: true,
-                    stats: seihai::render::hud::stats::ALL,
+                    stats: session.stats.unwrap_or(seihai::render::hud::stats::ALL),
                     keys: button_keys,
                 },
             ),
@@ -1716,7 +1736,7 @@ fn main() {
                                     level_from_board = false;
                                     // Scan for missing NPC images after the file arrives.
                                     if let Some(level) = session.current_level.clone() {
-                                        npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                                        npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                                     }
                                 }
                                 eprintln!("loaded {name}");
@@ -1753,7 +1773,7 @@ fn main() {
                                 // ignores case).
                                 if let Some(level) = session.current_level.clone() {
                                     npc_images.retain(|k, _| k == name || !k.eq_ignore_ascii_case(name));
-                                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                                 }
                             }
                         }
@@ -1930,7 +1950,7 @@ fn main() {
                         loaded_level = Some(name.clone());
                         // Request missing NPC images.
                         if let Some(level) = session.current_level.clone() {
-                            npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                            npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                         }
                     }
                 }
@@ -2734,7 +2754,7 @@ fn main() {
         {
             dirty = true;
         }
-        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.laying.is_none() && !sign_was_open && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.laying.is_none() && !sign_was_open && session.warp_pending.is_none() && session.script_freeze_ms == 0 && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if keymap.down(&window, Action::Left) {
                 dx -= 0.5;
@@ -2881,7 +2901,10 @@ fn main() {
                             if !no_scripts && scripts_serial == session.level_serial {
                                 scripts.add_npc(&mut session, i);
                             }
-                            npc_image_pass(&session.current_level.clone().unwrap(), &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                            if let (Some(level), Some(name)) = (session.current_level.as_ref(), debug_level.as_deref()) {
+                                dump_level_scripts(debug_dir.as_ref(), name, level);
+                            }
+                            npc_image_pass(&session.current_level.clone().unwrap(), &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                             i
                         }
                         seihai::offline::Linked::None => continue,
@@ -2903,11 +2926,14 @@ fn main() {
                 scripts_serial = session.level_serial;
                 // On a gmap the cell's level (see the NPC link above).
                 let label = session.gmap.as_ref().and(session.level_name()).or_else(|| loaded_level.clone()).or_else(|| offline_level.clone()).unwrap_or_default();
+                if let Some(level) = session.current_level.as_ref() {
+                    dump_level_scripts(debug_dir.as_ref(), debug_level.as_deref().unwrap_or(&label), level);
+                }
                 scripts.load_level(&mut session, &label);
                 // Pictures of this level's NPCs (online they were asked for when the
                 // level arrived; a second pass asks for nothing twice).
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                    npc_image_pass(&level, &[], &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                 }
                 dirty = true;
             }
@@ -2992,7 +3018,7 @@ fn main() {
             // A script changed an NPC picture (setimg, showimg): load it.
             if std::mem::take(&mut scripts.images_changed) {
                 if let Some(level) = session.current_level.clone() {
-                    npc_image_pass(&level, &session.player_images, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received);
+                    npc_image_pass(&level, &session.player_images, &mut files, conn.as_mut(), &mut npc_images, &mut look_not_received, chat_font.as_ref());
                 }
                 dirty = true;
             }

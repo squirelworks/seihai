@@ -222,6 +222,49 @@ impl ChatFont {
     }
 }
 
+/// The text of a text image name, `@font@style@text` (`showimg
+/// i,@Arial@b@Start,x,y`): what follows the last `@`. `None` for a name
+/// that is not a text image (it does not start with `@`). Such a name is
+/// drawn, never downloaded.
+pub fn text_image_text(name: &str) -> Option<&str> {
+    let rest = name.strip_prefix('@')?;
+    Some(rest.rsplit('@').next().unwrap_or(rest))
+}
+
+/// A text image as an RGBA picture (width, pixels): the text in white on a
+/// clear background, in `font` if there is one, else in the built-in
+/// letters. `None` when `name` is not a text image. Font, style and the
+/// real client's text size are not followed yet: the chat font is used.
+pub fn text_image(font: Option<&ChatFont>, name: &str) -> Option<(u32, Vec<u8>)> {
+    let text = text_image_text(name)?;
+    let (w, h, cov) = match font {
+        Some(f) => {
+            let line = f.render(text);
+            (line.w, f.line_height(), line.cov)
+        }
+        None => {
+            let w = font::text_width(text).max(1);
+            let h = 7;
+            let mut cov = vec![0u8; (w * h) as usize];
+            for (i, c) in text.chars().enumerate() {
+                for (row, bits) in font::glyph(c).iter().enumerate() {
+                    for col in 0..5 {
+                        if bits >> (4 - col) & 1 != 0 {
+                            cov[row * w as usize + i * font::CELL_W as usize + col] = 255;
+                        }
+                    }
+                }
+            }
+            (w, h, cov)
+        }
+    };
+    let mut px = Vec::with_capacity((w * h * 4) as usize);
+    for a in cov {
+        px.extend_from_slice(&[0xff, 0xff, 0xff, a]);
+    }
+    Some((w as u32, px))
+}
+
 /// Split `text` into lines no wider than `max_w` the way the client does:
 /// words are added while the line fits; a word that does not fit starts the
 /// next line, and a word that does not fit on a line of its own is a line.
@@ -363,6 +406,24 @@ pub fn draw_nick_text(fb: &mut Framebuffer, font: Option<&ChatFont>, nick: &str,
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_image_names_give_their_text() {
+        assert_eq!(super::text_image_text("@b@Start"), Some("Start"));
+        assert_eq!(super::text_image_text("@Arial@b@Start game"), Some("Start game"));
+        assert_eq!(super::text_image_text("@@@"), Some(""));
+        assert_eq!(super::text_image_text("graalsplash1.png"), None);
+    }
+
+    #[test]
+    fn a_text_image_is_white_text_on_clear() {
+        let (w, px) = super::text_image(None, "@b@Hi").unwrap();
+        assert_eq!(w as i32, super::font::text_width("Hi"));
+        assert_eq!(px.len(), (w * 7 * 4) as usize);
+        assert!(px.chunks(4).any(|p| p == [0xff, 0xff, 0xff, 0xff]));
+        assert!(px.chunks(4).any(|p| p[3] == 0));
+        assert!(super::text_image(None, "start.png").is_none());
+    }
+
     use super::*;
 
     fn w(s: &str) -> i32 {
