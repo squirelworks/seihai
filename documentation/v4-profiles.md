@@ -14,7 +14,7 @@ Sources, all in Graal_analysis: `protocol/v4x-clients.md` (static reads of all t
 
 Every row is client type 5, gen 5, no tamper check, no showimg timer, the Login lobby, the built-in `loginserver.graalonline.com:14900`, and 3.153's prop sets.
 
-- **Server ids.** 4.04r2 is 3.153's set plus the update packages (105, 106), ghost mode (170), the window list (182, 183), `onServerListerConnect` (190), `SHOOT2` (191), the cache check (193), the script-list clear (194) and server ganis (195). 4.20r8 adds the layered board change (107), 108 and 196. The Mac 4.20r6 has 4.20r8's set without 41 and 196. The note counts that set as 97, but the set it describes has 99 ids; the binary was not re-read, so the row keeps the listed set and says so in its `unknown`.
+- **Server ids.** 4.04r2 is 3.153's set plus the update packages (105, 106), ghost mode (170), the window list (182, 183), `onServerListerConnect` (190), `SHOOT2` (191), the cache check (193), the script-list clear (194) and server ganis (195). 4.20r8 adds the layered board change (107), 108 and 196. The Mac 4.20r6 has 4.20r8's set without 41 and 196: 99 ids. Its packet switch (re-read 2026-10-31) has 97 cases, 0 to 195 without 41, and like 4.20r8 it takes 100 and 108 before the switch; the earlier note's count of 97 was the switch alone. Its 108 handler answers subtype 0 with 162.
 - **Client ids.** Only 4.20r8's send code was read, and some sends pass the id in a register, so that list is a floor. The rows take it, plus the ids both 3.153 and 5.00r7 send (as the 5.00r7 row did with its neighbours); 40 and 43 are sent by neither 4.x nor 5.00r7 and are left out. 4.04r2 has no 108 handler, so it does not get 162 (the answer to 108). 11, 23, 34, 37, 38, 44 and 157 were seen from the real 4.04r2.
 - **5.00r7 re-checked.** It now follows 4.20r8: server ids 140 and 197 in, 100, 108 and 196 out; client ids 47 and 159 in, 162 out. Its lobby, list address and chat face come from the 4.x rows. The resolved 5.00r7 row is unchanged.
 - **Chat.** The real 4.04r2 draws white bold sans with a blue shadow. The rows use `ChatFace::Arial` at 24, as 5.00r7 does.
@@ -48,7 +48,8 @@ Not covered: the real 4.x clients were not run against Seihai's rows here (the 4
 
 ## Not done
 
-- The Mac 4.20r6 id count (97 in the note, 99 in the set it lists) and its send ids.
+- The Mac 4.20r6 send ids beyond 162. A scan of `li r4, id` before a virtual call at the send slot finds 0, 3, 20, 25, 27, 38, 40, 43, 45, 46, 93, 98, 155, 156 and 159 as well, and not 14, 15, 22-24, 26, 37, 44, 79, 80 or 92, but that slot is not proven to be the send call on every object, so the row is unchanged.
+- Running the real 4.20r6: it is a PowerPC Mach-O on Carbon, OpenGL and AGL, so it needs Mac OS X 10.3 or 10.4 for PowerPC, for example under `qemu-system-ppc -M mac99`. No OS image is in the project yet.
 - The 4.04r2 send ids (taken from 4.20r8).
 - The base-file requests after the language (`basepackage.gupd`, `bigmap.txt`) are not sent, as for 5.x.
 - The stock 4.20r8 engine is in a password-protected archive; only the packet-logger copy was read.
