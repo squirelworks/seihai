@@ -45,6 +45,15 @@ impl Framebuffer {
         dx: i32,
         dy: i32,
     ) {
+        self.blit_tile_keyed(sheet, sheet_w, sheet_h, tile, dx, dy, None);
+    }
+
+    /// [`Self::blit_tile`], leaving the pixels of colour `key` out. Chests
+    /// are drawn this way with [`CHEST_KEY`], so a sheet can give its chest
+    /// art no ground of its own (the tutorial sheet does; Graal sheets have
+    /// no such colour, so they draw as before).
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_tile_keyed(&mut self, sheet: &[u8], sheet_w: u32, sheet_h: u32, tile: u16, dx: i32, dy: i32, key: Option<[u8; 3]>) {
         let t = tile as u32;
         let col = t % 16 + (t / 512) * 16;
         let row = (t / 16) % SHEET_ROWS;
@@ -65,6 +74,9 @@ impl Framebuffer {
                     * 3;
                 let didx = (py as usize * self.width as usize + px as usize) * 3;
                 if sidx + 2 < sheet.len() && didx + 2 < self.pixels.len() {
+                    if key.is_some_and(|k| sheet[sidx..sidx + 3] == k) {
+                        continue;
+                    }
                     self.pixels[didx..didx + 3].copy_from_slice(&sheet[sidx..sidx + 3]);
                 }
             }
@@ -263,6 +275,10 @@ impl Framebuffer {
 pub const CHEST_CLOSED_TILES: [u16; 4] = [1784, 1785, 1800, 1801];
 pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
 
+/// The colour left out when a chest is drawn (magenta, #FF00FF): the ground
+/// under the chest shows through it.
+pub const CHEST_KEY: [u8; 3] = [255, 0, 255];
+
 /// The four tiles to draw for a chest record. The built-in sheet has its
 /// chest art at the same ids as the real sheets.
 pub fn chest_art(opened: bool) -> [u16; 4] {
@@ -341,7 +357,7 @@ fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::as
         let opened = c.opened || session.opened_chests.contains(&(c.x, c.y));
         for (i, id) in chest_art(opened).into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
-            fb.blit_tile(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
+            fb.blit_tile_keyed(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y, Some(CHEST_KEY));
         }
     }
 }

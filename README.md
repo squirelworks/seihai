@@ -71,7 +71,7 @@ cargo run --release -p seihai-mae
 
 ## Assets
 
-Seihai ships a small set of its own default art, sounds and two starter levels (`assets/default/`, compiled into the program), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline". To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
+Seihai ships a small set of its own default art, sounds, two starter levels and a short tutorial (`assets/default/`, compiled into the program), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline", and you start in the tutorial. "Play the tutorial" in the start window opens it with any Assets folder; the tutorial always uses its own art. See `documentation/tutorial-levels.md`. To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
 
 - `levels/` — `.nw`, `.graal`, or `.zelda` levels
 - `bodies/body.png` and `heads/head0.png` — player sprites

@@ -371,6 +371,21 @@ impl eframe::App for Launcher {
                 s.save();
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            if ui
+                .button("Play the tutorial")
+                .on_hover_text("Seihai's own short tutorial levels, offline. They use their own art, whatever assets are set.")
+                .clicked()
+            {
+                let mut s = Settings::load();
+                s.last_server = None;
+                s.offline = Some(true);
+                s.version = Some(self.version.clone());
+                s.assets = Some(self.assets.clone().into());
+                s.set_assets_for(self.assets_label(), &self.version_assets);
+                s.save();
+                TUTORIAL_PICKED.store(true, std::sync::atomic::Ordering::Relaxed);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
             if offline_build.is_none() && ui.button("Connect to listserver").clicked() {
                 self.connect_list();
             }
@@ -404,6 +419,14 @@ impl eframe::App for Launcher {
                 }
             });
     }
+}
+
+/// Set when "Play the tutorial" closed the start window.
+static TUTORIAL_PICKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the start window was closed with "Play the tutorial" (and clear it).
+pub fn take_tutorial_pick() -> bool {
+    TUTORIAL_PICKED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn run() -> Option<String> {
