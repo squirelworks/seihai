@@ -1998,6 +1998,12 @@ fn main() {
                 // owned by the sender while it is in the player list.
                 session.present_players = net_state.others.iter().map(|o| o.id).collect();
                 let own_cell = net_state.gmap.as_ref().map(|g| g.cell);
+                // 2.22 and 2.31 walk into other players as into a wall.
+                session.solid_players = if matches!(version, ClientVersion::V222 | ClientVersion::V231) {
+                    net_state.others.iter().map(|o| o.position_from(own_cell)).collect()
+                } else {
+                    Vec::new()
+                };
                 let shift = |id: u16| {
                     net_state.others.iter().find(|o| o.id == id).map_or((0.0, 0.0), |o| {
                         let (x, y) = o.position_from(own_cell);
