@@ -136,3 +136,74 @@ The padding byte for `s` is a one-byte string constant in the client
 `tests/fixtures/gs2/strings.gs2`, run by `tests/gs2_exec.rs`, and unit
 tests in `scripting/gs2/strings.rs` for `format`, `substring`, `trim` and
 the integer conversion.
+
+## Lists
+
+Opcodes again, so the source is the 3.153 VM. **[bin]** The client keeps
+a list as a variable object (`TGraalVar` in the class names) with a kind:
+numbers, a string, or objects. Its methods (size, element at, insert at,
+set at, delete at) are reached through a method table whose entries are
+not in the decompile. So the VM shows which values each opcode takes off
+the stack, in which order, and what it does with them; what happens past
+the end of a list, inside those methods, was not read. **[bin]/[inf]**
+
+Seihai keeps a list as a value of the variable (`lists::Value`) and
+copies it on assignment. Whether the client copies or shares a list on
+`b = a` was not read. **[seihai]** A list read as a plain value, or handed
+to a host command, is its elements joined with commas, the form of a GS1
+string list. **[seihai]**
+
+| Built-in | Opcode | 3.153 | Seihai |
+|---|---|---|---|
+| `{a, b, …}` | `OP_ARRAY_END` | takes everything down to the marker, the first element nearest the top (`0x3d69c4`) | the same |
+| `new[n]` | `OP_ARRAY_NEW` | `n` zeros, `n` kept to 0..10 000 (`0x3d6b08`) | the same |
+| `new[n][m]` | `OP_ARRAY_NEW_MULTIDIM` | each element becomes `m` zeros, recursively (`0x3d6bcc`) | the same |
+| `a.size()` | `OP_OBJ_SIZE` | the list's size; 0 for no object | 0 for anything that is not a list |
+| `a[i]` | `OP_ARRAY` | by kind: the number at `i`, the variable's string (no index), or the object at `i`; 0 for no object (`0x3da5d4`) | the element at `i`; a string or number variable gives itself; past the end is 0 **[inf]** |
+| `a[i] = v` | `OP_ARRAY_ASSIGN` | sets the element at `i` by the value's kind and leaves nothing on the stack (`0x3da744`) | past the end, nothing happens **[inf]** |
+| `a[i, j]`, `a[i, j] = v` | `OP_ARRAY_MULTIDIM`, `…_ASSIGN` | needs a two-dimensional variable (`0x3da904`, `0x3daaf8`) | element `j` of element `i` **[inf]** |
+| `a.add(v)` | `OP_OBJ_ADDSTRING` | inserts at -1, the end (`0x3dae0c`) | the same |
+| `a.insert(i, v)` | `OP_OBJ_INSERTSTRING` | the index is on top, the value under it; inserts at `i` (`0x3db220`) | `i` kept to 0..size **[inf]** |
+| `a.replace(i, v)` | `OP_OBJ_REPLACESTRING` | the index on top; sets at `i`, or adds at the end when `i` is below 0 or past the end (`0x3db064`) | the same |
+| `a.delete(i)` | `OP_OBJ_DELETESTRING` | deletes at `i` | out of range, nothing **[inf]** |
+| `a.remove(v)` | `OP_OBJ_REMOVESTRING` | finds `v` and deletes the first match (`0x3daf74`) | the same |
+| `a.clear()` | `OP_OBJ_CLEAR` | clears the list | the same |
+| `a.index(v)` | `OP_OBJ_INDEX` | the first index of `v`, or -1; -1 for an empty list (`0x3db388`) | the same |
+| `v in a` | `OP_IN_OBJ` | 1 if `v` is in `a`; a list `v` is in when each of its elements is (`0x3d9f14`) | the same |
+| `s.tokenize(seps)` | `OP_OBJ_TOKENIZE` | splits on the bytes in `seps` (`" ,"` when none is given); `"…"` is one token with `""` for `"`; tokens trimmed, empty unquoted ones dropped; no tokens gives no object (`0x3db984`, `0x3c1884`) | the same |
+| `s.positions(t)` | `OP_OBJ_POSITIONS` | every index where `t` starts, overlapping ones too; an empty list when there is none (`0x3db7a8`) | the same |
+| `a.subarray(start, n)` | `OP_OBJ_SUBARRAY` | takes the list, the start and the count, the count on top; `start` kept to the list, `n` below 0 runs to the end (`0x3da47c`) | the same |
+| `for (v : a)` | `OP_FOREACH` | with the loop variable, the list and the index on the stack: sets the variable to element `index`, or jumps out past the end | the same |
+
+Searches (`index`, `remove`, `in`) compare numbers with numbers and
+strings with strings (`0x3ef660`, `0x3ef704`). Seihai uses the executor's
+comparison (`gs2-executor.md`), and lists compare element by element.
+**[inf]**
+
+`tokenize` here is the GS2 one. It is not the GS1 engine's `tokenize`,
+which always splits on spaces and commas and does not trim.
+
+### Where gs2-parser and the 3.153 VM do not agree
+
+- `a.subarray(start, n)`: gs2-parser pushes `n`, then `start`, then the
+  list, and does not convert it to an object. The VM wants the list
+  first and the count on top. Seihai follows the VM, so a script built by
+  gs2-parser gets a wrong result from `subarray`. **[src]/[bin]**
+- `arraylen(a)` and `sarraylen(a)`: gs2-parser converts `a` to a number
+  (`OP_CONV_TO_FLOAT`) before `OP_OBJ_SIZE`. In Seihai that makes it 0.
+  Whether the client's conversion keeps the list was not read. Use
+  `a.size()`. **[src]/[inf]**
+- After a `for`-each loop, gs2-parser pops only the index. The VM leaves
+  the loop variable and the list on the stack too, and so does Seihai;
+  they go when the function returns. **[src]/[bin]**
+
+### Not run
+
+- `setarray(var, n)` (`OP_SETARRAY`): its helper (`0x3d6d7c`) was not
+  read. It is logged and skipped.
+- `a.indices(…)`, `a.link(…)`, `a.type()`: these are part of "the rest".
+
+### List tests
+
+`tests/fixtures/gs2/lists.gs2`, run by `tests/gs2_exec.rs`, and unit tests
+in `scripting/gs2/lists.rs` for `tokenize`, `positions` and `subarray`.

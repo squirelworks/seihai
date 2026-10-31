@@ -88,13 +88,13 @@ handled before that search. **[bin]**
   function the way `OP_CALL` would. Both return `Done`, `Sleep(t)` (go on
   with `resume`), `Stopped(reason)` or `NoSuchEvent`.
 - Every opcode in the table above is run. Anything else (arrays,
-  objects, `with`, `for`-each, the list methods, shifts, `exp`,
-  `log`, `in`, `params`) is logged as "not run yet (Stage D)" and skipped.
+  objects, `with`, shifts, `exp`, `log`, `in` ranges, `params`) is logged as "not run yet (Stage D)" and skipped.
   A value the reader does not name is logged as an unknown opcode and
   skipped. Skipping can leave the stack uneven. The VM's own checks still
   stop the script if that happens.
-- The string built-ins (`format`, `char` and the string methods) run as
-  in `gs2-commands.md`.
+- The string built-ins (`format`, `char` and the string methods) and the
+  lists (literals, `new[n]`, `a[i]`, the list methods, `in`, `for`-each)
+  run as in `gs2-commands.md`.
 - The timer commands (`settimer`, `timeout`, `scheduleevent`,
   `cancelevents`) are the machine's own and run on `Machine::tick`; see
   `gs2-commands.md`.
