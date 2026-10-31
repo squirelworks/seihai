@@ -48,6 +48,9 @@ PLO_BADDYPROPS / PLI_BADDYPROPS (15): `id`, then `prop, value` pairs.
   * it then hunts with counter 16, counting down to 5 without moving;
   * then the counter goes to 0, and the baddy moves half a tile a think while the counter cycles 3, 2, 1, 0.
 * The same capture shows the touch damage: 1 half heart, and 2 from the gold soldier (baddy 6, type 7).
+* In 2.00 the touches come 2 s apart (the player's 40-tick hurt time), as in Seihai.
+* The player's knockback from a touch is 1.0 tile a tick for 5 ticks, away from the baddy. The real 2.22 shows this in the lab's position log (`lab-baddies.md`), and it is the same knockback Seihai already uses for sword hits.
+* The 2.22 position log shows knockbacks about 0.6 to 1 s apart, which is shorter than 2 s. That has not been checked against the wire.
 * That capture has no baddy getting hurt, so it says nothing about the knockback.
 * The leader stores each baddy's props on its first think and sends only the changed props after that.
 * For a custom image the leader sends the type's default image name. GServer notes "client resets the custom image when the baddy is hurt".
