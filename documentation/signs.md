@@ -33,6 +33,7 @@ The pixels at (252..255, 223) are colours, not art. The client fills the inside 
 - On a 640-wide view it sits at y 256, or at y 128 when the player is more than 14 tiles down the view. At 800: 18 tiles, y 320 or 160. At 1024: 22 tiles, y 448 or 192. Which two values the client compares is inferred from the code's shape (the player's row against the view's top); the thresholds and positions are as read.
 - The frame: the top and bottom edges every 16 pixels, the sides every 32 pixels, the corners over them, then the two fills from (x + 16, y + 24) to the right and bottom pieces.
 - Text: three lines a page, from (x + 16, y + 16), 32 pixels apart. The sign's text is split at newlines.
+- No wrapping: a line longer than the panel runs past its right edge and is cut only by the window, in real 2.00 too (Mirae capture `lan-200sign2`, 2026-10-31). Seihai draws it the same way.
 - In a line, `#` and a letter draws button pictures: `#A`, `#B`, `#X`, `#Y`, `#u`, `#d`, `#l`, `#r`, `#h`, `#x`, `#y`, `#z`, `#4`, `#.`. `#` and any other letter draws glyph 86 and moves 16 pixels. `#i` and a character puts up an image from the level's list (not done in Seihai).
 - A character outside the glyph order is drawn by the client in its system font, in the colour at (253, 223). Seihai leaves it out.
 
@@ -60,6 +61,7 @@ While a sign is open the game keys work the sign and nothing else: the player do
 - Seihai reads "pressed" and "was down last frame" from the same source (`SignKeys`, down or pressed this frame). minifb reports a key down one frame before it reports it pressed, and taking one from each made every press look held: A, S and D did nothing while a sign was open (fixed 2026-10-31, tests in `render/signs.rs`).
 - After reading ends, the game keys stay off the player until all are let go, so the S that closes a sign does not swing a frame later.
 - The lock is in the session too, not only in the key loop: while `reading` is set, `try_move` takes no step and no turn, `start_swing` refuses, `interact` does nothing (no lift, throw, grab or chest), and `toggle_hide` does nothing. A while hidden does not bring the player out either. Tests: `an_open_sign_takes_the_walk_the_a_key_and_hiding`, `no_swing_while_a_sign_is_open`.
+- While the panel is open the client's STATUS has bit 0x01: real 2.00 sent `PLAYERPROPS` with Y, SPRITE 0 and STATUS 21 when the panel opened and STATUS 20 when A closed it (Mirae capture `lan-200sign2`, 2026-10-31). Seihai sends the same bit while `reading` is set. A pressed again after closing lifts the sign (BOARDMODIFY, GANI lift, CARRYSPRITE 7), as in Seihai.
 - The client plays a sound when the page turns and runs `playerendsreading` when reading ends. Neither is done in Seihai yet.
 
 ## Confirmed, inferred, not tested

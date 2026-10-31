@@ -44,29 +44,54 @@ One 2.31 probe differs: up at x 10.5, y 40 warped after y 33, one step earlier
 than at x 8.5 and 9.5 (the 2.22 client did not). Seihai does not copy it; the
 cause is not known (a missed tick in that run is possible).
 
-## The model
+## The model: one probe point per facing (2026-10-31)
 
-The real client behaves as if each walking direction tests a small box against
-the link rectangle (boxes that only touch a link edge do not fire). Offsets are from the
-player's position, in tiles:
+Every build tests one probe point against each link: the player's position
+plus an offset that depends on the facing. The point comes from a table of
+four `(x, y)` doubles in the 2.05 client's link routine (derived):
 
-| direction | x range | y range | what the captures fix |
-|---|---|---|---|
-| north | 1.0 to 2.0 | 0.75 to 1.25 | the top edge is above `y + 0.5` and at or below `y + 1.0` |
-| west | 0.25 to 0.75 | 2.0 to 3.0 | the left edge is right of `x + 0.0` and at or left of `x + 0.5`; the box reaches `y + 2` (warp at y 26) and not `y + 1` (no warp at y 32) |
-| south | 1.0 to 2.0 | 2.75 to 3.25 | the bottom edge is below `y + 3.0` and at or above `y + 3.5` |
-| east | 2.25 to 2.75 | 2.0 to 3.0 | the right edge is at least `x + 2.5` and below `x + 3.0` |
+| facing | probe |
+|---|---|
+| north | `x + 1.5`, `y + 1.0` |
+| west | `x + 0.5`, `y + 2.0` |
+| south | `x + 1.5`, `y + 3.0` |
+| east | `x + 2.5`, `y + 2.0` |
 
-The numbers inside those ranges are chosen, not measured: only where the half-tile
-step first overlaps is known. The one tile wide north and south box is what the
-down probes at x 8.0 (no warp) and 10.5 (warp) require: a point cannot do both.
-`offline::LINK_BOX` holds the table and `offline` has tests with every probe above.
+For a link that is not a big-map edge link, the probe fires when it is in the
+link's rectangle, with the far edges included (`x <= probe x <= x + width`,
+the same for y). A probe within one tile of a level edge (x or y at most 1, or at
+least 63) counts only while the player faces out across that edge.
 
-## Scope
+The same 64 bytes of the table are in the Graal.exe of 9th and 15th Graal,
+1.1, 1.1.9, 1.3b, 1.21, 1.38, 1.39, 1.41.1, 2.00, 2.04, 2.05, 2.17, 2.22 and
+2.31. Only 2.05's link routine was read. The other builds are backed by
+captures, not by reading their routines:
 
-Only builds with `levels.link_boxes` use the boxes: 2.22 and 2.31, plus the builds
-between and after them in the version chain, taken as the same (inferred). Earlier
-builds keep the foot-point rule; nobody measured them.
+* Every 2.22 and 2.31 probe in the tables above, with the far edge included.
+  That covers the down probes at x 8.0 (probe x 9.5, no warp) and 10.5
+  (probe x 12, on the link's far edge, warp). The one exception is the
+  2.31 run listed above.
+* The lab `new1.nw` west link (`LINK testworld.nw 0 28 1 6`), walked west
+  from x 6 or 8 (lab, 2026-10-31):
+
+  | client | y 25.5 | y 26 to 32 | y 32.5 | y 33 |
+  |---|---|---|---|---|
+  | real 2.00 | stops at x -0.5 | warps after x 1 | stops | |
+  | real 2.22 | | warps (31.5, 32) after x 1, at 0.5 | stops | stops |
+  | Seihai 2.00 (#273) | stops | warps at x 0.5 | stops | |
+
+  Until 2026-10-31, Seihai gave 2.22 and 2.31 boxes fitted to the 2026-10-25
+  captures (`LINK_BOX`). The west box's top edge was at `y + 2`, so at y 32
+  it only touched the link's bottom edge (34) and missed the warp that real
+  2.22 takes there. The probe point fits every capture, so the boxes are gone.
+
+Builds before that used one point, the feet (`x + 2.0`, `y + 2.75`), in the
+link's tile. That point can never reach column 0: the edge wall stops the
+player at x -0.5, where the feet are in column 1. So a 2.00 player walked into
+the west link above and stopped (#273).
+
+`offline::LINK_PROBE` and `offline::probe_in_link` implement this, and the
+tests in `offline` cover every probe above.
 
 ## Before and after (lab, real client against Seihai)
 
@@ -116,7 +141,7 @@ Seihai (`offline::edge_link_arrival`, `OfflineSession::big_map`,
   `--bigmap FILE` gives it. Without one, nothing changes.
 * The real client fires a neighbour edge link once the player has crossed
   the edge (when the neighbour level is loaded); Seihai still fires it on
-  the direction boxes above, a little earlier, so the arrival is held to
+  the probe point above, a little earlier, so the arrival is held to
   where the real crossing would land: at least -0.5 going east, at most
   61.5 going west, at most 61 going north, at least -1 going south (a
   Seihai choice).
@@ -155,6 +180,6 @@ has no tile types; on a gmap a loaded neighbour is still open ground.
 
 The edge links were not at fault. The lab level has one link, on the west
 edge; a test with that link as the server sends it (`PLO_LEVELLINK`), no tile
-types and the 2.22 link boxes shows it fires and arrives at the link's own x.
+types and the link probe shows it fires and arrives at the link's own x.
 The other edges have no links, so walking off them should not warp. Whether
 the run itself crossed the west edge is not in its log.
