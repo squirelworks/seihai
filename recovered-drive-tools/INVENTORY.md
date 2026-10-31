@@ -114,7 +114,7 @@ No `setup-core` / `lat-core` clean-room targets in this snapshot.
   - `_inbox/extracted/gserver_source/gserver13` (890.2 KB (890171)) — ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, for GNU/Linux 2.0.0, not stripped; sha256=`be1c397d2c21049c7848a7c922455861ee0a4b413967c867c2e7efa90a7c9997`
   - `_inbox/extracted/gserver_source/gserverstat` (525.2 KB (525199)) — ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, for GNU/Linux 2.0.0, not stripped; sha256=`b8ae1a13147567d6544fb30ab383359e6c1c19849deb9d87d219f7cf90af867d`
   - `_inbox/extracted/gserver_source/gserverstat2` (525.2 KB (525162)) — ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.2, for GNU/Linux 2.0.0, not stripped; sha256=`966feaab46fea8b93e8b6c8a23cc333b9161f8f08f246b376cf4bfdb375fedbd`
-- **Ghidra:** ghidra-analysis/gserver13/ (SUMMARY.md written)
+- **Ghidra:** ghidra-analysis/gserver13/ (SUMMARY.md written); also `gserverstat/` + `gserverstat2/` (**done**)
 
 ### `Developer Tools/# Graal Client Tools And Sources/GServer/GServer Source/GServersource.rar` — complete
 
@@ -142,13 +142,13 @@ Sibling index: [`ghidra-analysis/README.md`](./ghidra-analysis/README.md) (done 
 | high | `_extracted/.../GServersource/gserver` (ELF) | `ghidra-analysis/gserver-linux/` | analysis-only |
 | medium-high | `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` | `ghidra-analysis/BytecodeViewer/` | analysis-only |
 | medium | `_extracted/graal-to-nw/TextConvert.exe` | `ghidra-analysis/TextConvert/` | analysis-only / client converter |
+| medium | `_inbox/extracted/gserver_source/gserverstat` | `ghidra-analysis/gserverstat/` | analysis-only |
+| medium | `_inbox/extracted/gserver_source/gserverstat2` | `ghidra-analysis/gserverstat2/` | analysis-only |
 
 ### Queued
 
 | Priority | Binary | Output dir | Placement |
 |---|---|---|---|
-| medium | `_inbox/extracted/gserver_source/gserverstat` | `ghidra-analysis/gserverstat/` | analysis-only |
-| medium | `_inbox/extracted/gserver_source/gserverstat2` | `ghidra-analysis/gserverstat2/` | analysis-only |
 | low | `_extracted/dclient-setup/setup.exe` | `ghidra-analysis/DClient_setup/` | stay-staged / out-of-scope (client installer fragment) |
 | low | `_inbox/extracted/Graal_Character_Designer_1.2.7/GCD.exe` | `ghidra-analysis/GCD/` | out-of-scope / seihai (client) |
 | low | `_inbox/extracted/charactergenerator/charactergenerator/GChar.exe` | `ghidra-analysis/GChar/` | out-of-scope / seihai (client) |
