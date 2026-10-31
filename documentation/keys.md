@@ -10,7 +10,7 @@ Seihai uses them for every version:
 | action (`graalconfig.txt` name) | keys | in Seihai |
 |---|---|---|
 | `up`, `left`, `down`, `right` | arrows, or I, J, K, L | walk; turn sign pages back with Up |
-| `action` | A | read a sign, open a chest, lift, throw what is carried |
+| `action` | A | read a sign, open a chest, lift, throw what is carried; with S held, pick an item to lay, then A alone lays it (`item-laying.md`) |
 | `attack` | S or Space | swing the sword; throw what is carried |
 | `item` | D | closes the item list (weapons are not fired yet) |
 | `map` | M | closes a sign (there is no map screen yet) |

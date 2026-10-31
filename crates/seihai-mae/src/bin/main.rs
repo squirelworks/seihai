@@ -2278,6 +2278,8 @@ fn main() {
                 }
             }
         }
+        // A key the lay mode took this pass (see below).
+        let mut lay_keys = false;
         // Combat: S swings the sword (others judge the hit from the sprite
         // we send), and the swing and hurt mode run on the 50 ms clock.
         {
@@ -2399,7 +2401,28 @@ fn main() {
                 sprite_changed = true;
                 dirty = true;
             }
-            if !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
+            // The lay mode (S held and A, see `offline/laying.rs`): A with S
+            // held picks the next item, A alone lays it, and an arrow, D or
+            // S leaves it. Those presses do nothing else.
+            if session.laying.is_some() && session.life.is_dead() {
+                session.stop_laying();
+                dirty = true;
+            }
+            if session.laying.is_some() && !input.is_open() && !list_was_open && !sign_was_open {
+                if keymap.pressed(&window, Action::Act) {
+                    if keymap.down(&window, Action::Attack) {
+                        session.next_lay_item();
+                    } else if let Some(item) = session.lay_item() {
+                        eprintln!("laid item {item} ({})", seihai::offline::ITEM_NAMES.get(usize::from(item)).copied().unwrap_or("?"));
+                    }
+                    lay_keys = true;
+                } else if [Action::Up, Action::Left, Action::Down, Action::Right, Action::Item, Action::Attack].into_iter().any(|a| keymap.pressed(&window, a)) {
+                    session.stop_laying();
+                    lay_keys = true;
+                }
+                dirty |= lay_keys;
+            }
+            if !lay_keys && !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Attack) && session.start_swing() {
                 sprite_changed = true;
             }
             // A thrown object's hit, or the end of hurt mode (GANI `idle`).
@@ -2438,6 +2461,8 @@ fn main() {
         // player faces. Attack (S, Space) while carrying throws (its swing
         // was refused above).
         let interact = !input.is_open()
+            && !lay_keys
+            && session.laying.is_none()
             && !list_was_open
             && !sign_was_open
             && !session.life.is_dead()
@@ -2449,7 +2474,7 @@ fn main() {
             );
         // D while carrying hides under the object (or comes out); A comes out
         // too. Others see STATUS bit 0x02 and the hidden sprites.
-        let hide_key = !input.is_open() && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
+        let hide_key = !input.is_open() && !lay_keys && !list_was_open && !sign_was_open && keymap.pressed(&window, Action::Item);
         let unhide_key = !sign_was_open && session.hidden && keymap.pressed(&window, Action::Act) && !keymap.pressed(&window, Action::Attack);
         let interact = interact && !unhide_key;
         // D with nothing carried fires the selected weapon: its script
@@ -2556,7 +2581,12 @@ fn main() {
                         }
                     }
                 }
-                seihai::offline::Interaction::Nothing => {}
+                // A did nothing else, with S held: pick an item to lay.
+                seihai::offline::Interaction::Nothing => {
+                    if keymap.down(&window, Action::Attack) && session.start_laying() {
+                        eprintln!("lay mode: {:?}", session.laying);
+                    }
+                }
             }
             dirty = true;
         }
@@ -2573,7 +2603,7 @@ fn main() {
         {
             dirty = true;
         }
-        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && !sign_was_open && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
+        if !input.is_open() && !item_list.open && !list_was_open && !session.life.is_dead() && session.reading.is_none() && session.laying.is_none() && !sign_was_open && session.warp_pending.is_none() && last_step.elapsed() >= session.step_interval() {
             let (mut dx, mut dy) = (0.0, 0.0);
             if keymap.down(&window, Action::Left) {
                 dx -= 0.5;

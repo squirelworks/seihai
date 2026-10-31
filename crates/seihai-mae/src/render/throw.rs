@@ -88,6 +88,13 @@ pub fn draw_throw_layer(fb: &mut Framebuffer, session: &OfflineSession, sprites:
             }
         }
     }
+    // The item picked in the lay mode, centred above the head.
+    if let Some(id) = session.laying.and_then(|i| crate::items::ITEM_SPRITES.get(usize::from(i)).copied()) {
+        if let Some((_, _, w, h)) = t::sprite_rect(tables, id) {
+            let (x, y) = crate::offline::lay_held_centre(session.player_x, session.player_y);
+            draw_sprite(fb, sprites, tables, id, px(x) - w / 2 - cam_x, px(y) - h / 2 - cam_y);
+        }
+    }
     for o in &session.thrown {
         if let Some(sheet) = o.sprite.and_then(|id| bombs.for_sprite(sprites, id)) {
             draw_sprite(fb, sheet, tables, o.sprite.unwrap_or_default(), px(o.x) - cam_x, px(o.y) - cam_y);
