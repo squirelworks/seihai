@@ -201,3 +201,22 @@ vector set (fixed X25519 and Ed25519 keys) is a TODO for the fork's tests.
   gserver check accounts itself.
 - RC logins (`seihai-rc`) through the same handshake.
 - The GUI login screen: a "secure login" tick box and the fingerprint prompt.
+
+## Lab run, 2026-10-31
+
+Loopback in a cloud container: seihai-mae built from this branch,
+seihai-gserver and seihai-listserver from their `secure-login-sei00001`
+branches, one argon2 account `test1`, fresh settings folder.
+
+| Run | Result |
+|---|---|
+| `--list-only --version 2.31 --secure-login` on 14922, first visit | List and status; key trusted and written to `known_servers.txt` |
+| Same with `--version 2.22`, second visit | List; pin matched, no prompt |
+| Same without `--secure-login` | Classic list login, unchanged |
+| Game login `--version 2.31 --secure-login` on 14802 | `logged in`; server log `version SEI00001 (inner GNW28015)`; the stage-1 message comes back in 2.31's gen-5 coding |
+| Game login `--version 2.05 --secure-login` | Same, gen 3 |
+| Wrong password, secure | `disconnected: Your password is incorrect.` |
+| `--server-key` with a different key | `login failed: server key SHA256:… is not the given key …; not sending the password`; the server saw no C2 |
+| Through a byte-logging relay, secure vs classic 2.31 | Classic: `%VGNW28015%test1%labpw` in the first frame. Secure: C1, S1 and C2 as base64 only; `labpw` and `test1` appear nowhere on the wire |
+
+No real Graal client was involved: they never send this token.
