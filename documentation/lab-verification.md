@@ -66,7 +66,7 @@ This was checked with a live `session_probe` run against the lab GServer, using 
 - **Id numbering:** ids 21, 23 and 24 are hit, level name and entered level, not position, props and board. The constants are renamed to match. None of the three appears in the captures.
 
 ## 7. Sprites and HUD (d1c499c)
-This check uses the player sheets from the lab 2.05 client folder: `body.png`, `head0.png`, `sprites.png`, and `idle.gani` for the offsets. It is run with `cargo run -p seihai --example render_sprites -- <assets> onlinestartlocal.nw <out>`, from the start position 30, 30.5.
+This check uses the player sheets from the lab 2.05 client folder: `body.png`, `head0.png`, `sprites.png`, and `idle.gani` for the offsets. It is run with `cargo run -p seihai-mae --example render_sprites -- <assets> onlinestartlocal.nw <out>`, from the start position 30, 30.5.
 
 Problems found in d1c499c:
 - **PNG reading:** the sheets are 4-bit palette PNGs with `tRNS`. The reader only took 8-bit images and dropped alpha, so the sprites could not load. `read_png_rgba` now reads 1/2/4/8-bit palettes and applies `tRNS`, and the sprites blit as RGBA.

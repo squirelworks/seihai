@@ -5,7 +5,7 @@
 //! `PLO_HURTPLAYER` (40) is judged and the push is stepped on the 50 ms
 //! clock. Prints the payload B got, the judge's result, and where B ends up.
 //!
-//! Usage: cargo run -p seihai --example knock_probe -- <account prefix> [host:port]
+//! Usage: cargo run -p seihai-mae --example knock_probe -- <account prefix> [host:port]
 //!
 //! The lab listserver accepts any account and password. The default address
 //! is the lab GServer.

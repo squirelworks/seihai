@@ -1,6 +1,6 @@
 //! Decode a lab UDP pcap with Seihai's peer-channel codec.
 //!
-//! Usage: cargo run -p seihai --example udp_replay -- <file.pcap> <port=id>...
+//! Usage: cargo run -p seihai-mae --example udp_replay -- <file.pcap> <port=id>...
 //!        [--from <seconds> port=id...]
 //!
 //! Each `port=id` maps a destination port to the player id that owns

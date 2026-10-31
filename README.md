@@ -28,7 +28,7 @@ python3 -m zipfile -e seihai-main.zip ~/Seihai
 rm -rf seihai
 mv seihai-main seihai
 cd seihai
-cargo build --release -p seihai-launcher -p seihai-mae -p seihai-ato
+cargo build --release
 ./target/release/seihai
 ```
 
@@ -40,7 +40,7 @@ On Windows (PowerShell), for a fresh extract only:
 
 ```powershell
 cd seihai
-cargo build --release -p seihai-launcher -p seihai-mae -p seihai-ato
+cargo build --release
 .\target\release\seihai.exe
 ```
 
@@ -49,13 +49,15 @@ cargo build --release -p seihai-launcher -p seihai-mae -p seihai-ato
 ```bash
 cd seihai
 git pull origin main
-cargo build --release -p seihai-launcher -p seihai-mae -p seihai-ato
+cargo build --release
 ```
 
 This creates the binary at:
 
 - Linux / macOS: `target/release/seihai`
 - Windows: `target\release\seihai.exe`
+
+A plain `cargo build --release` builds every package: `seihai`, `seihai-mae`, `seihai-ato` and the level editor. `cargo build --release -p seihai` builds only the `seihai` launcher, which cannot play anything without `seihai-mae` beside it, so use the plain command.
 
 `seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client) or `seihai-ato` (the Torque / 3.x line, which does not draw yet and says so), passing every argument through. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. Picking 3.04 or 3.153 in `seihai-mae`'s start window (under "All versions") closes it and opens `seihai-ato`'s 3.x start window with the account and password filled in. Keep the three binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
 

@@ -3,7 +3,7 @@
 //! with the carry sprite), player B reports what it sees on A; then A throws
 //! (PLI_THROWCARRIED, CARRYSPRITE -1) and B reports again.
 //!
-//! Usage: cargo run -p seihai --example carry_probe -- <account prefix> [host:port] [hold seconds]
+//! Usage: cargo run -p seihai-mae --example carry_probe -- <account prefix> [host:port] [hold seconds]
 //!
 //! With a hold time, A keeps the object that long before throwing (to look
 //! at it from a GUI client on the same level).

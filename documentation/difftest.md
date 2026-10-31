@@ -218,5 +218,5 @@ target/release/difftest trace some.pcap --version 2.31 --out real.tsv
 target/release/difftest diff real.tsv seihai.tsv --out report
 ```
 
-`cargo test -p seihai --lib difftest` runs the unit tests for the pcap reader,
+`cargo test -p seihai-core --lib difftest` runs the unit tests for the pcap reader,
 the decoder, the trace format and the differ.
