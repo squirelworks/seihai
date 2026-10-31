@@ -152,6 +152,18 @@ not measurable in this lab without a Seihai asset folder that holds `gm2x2.gmap`
 `high` rows in the ranked report. With them on, the first id 24 now goes at the end of the post-login frame like
 the real 2.31 client's. Whether they should become defaults is not decided here.
 
+## Status, 2026-10-31 (laundry item 6)
+
+What each skipped gap still needs. None of them can be closed from the
+captures in this repository or in Graal_analysis without inventing bytes.
+
+| gap | state | needs |
+|---|---|---|
+| `walk.gani` and step sounds (7) | done (`FileSession::on_step`), lab-checked for 2.22 and 2.31 | nothing |
+| walk update, gr flags off the tick (8) | open | the real client's script-timer phase against its 50 ms send tick; one frame-level capture with `-gr_movement` |
+| walk update, turn and diagonal step (8) | open | a capture of a real 2.22 and 2.31 turn and diagonal walk (`gmap_cross` and `door_warp` walk straight only) |
+| gmap login bundling (10) | open | the message order of the real 2.22 and 2.31 post-login frame on a gmap login, with `UPDATEFILE gm2x2.gmap` and the three `ADJACENTLEVEL`s, decoded from the lab's `gmap_cross` frames; then a run with `gm2x2.gmap` in Seihai's folder |
+
 ## Maintainer answers (2026-10-25)
 
 - **Tamper check and id 24 as defaults:** undecided. Leave them opt-in (`--send-tampercheck`, `--send-showimg`) for now.
