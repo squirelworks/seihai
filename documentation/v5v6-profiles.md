@@ -14,6 +14,8 @@ Sources, all in Graal_analysis: `protocol/v5x-clients.md`, `protocol/v6x-clients
 | 5.30r3 | `G3D26090` | 95 | as 5.00r7 | runs only with the clock set back |
 | 5.31r4 | `G3D26090` | 95 | as 5.00r7 | draws no tiles before the warp (Seihai does) |
 | 6.00r2 | `G3D26090` | 93 | Linux 6.01r1's (inferred) | Tempus Sans ITC 24 |
+| 6.015 | `G3D3007A` | 91 (Linux 6.01r1's, inferred) | Linux 6.01r1's (inferred) | **no binary**: the token 6.00r7 and 6.01r5 send, from GServer-v2's `allowedversions.txt`; stock gs2lib knows it |
+| 6.034 | `G3D2505C` | 92 (Linux 6.03r7's, inferred) | Linux 6.03r7's (inferred) | **no binary**: the token 6.03r4 sends, from the same file; stock gs2lib knows it |
 | 6.03r7 | `G3D0311C` | 92 | Linux 6.03r7's (60) | Tempus Sans ITC 24 |
 | 6.036 | **missing** | – | – | no binary and no token: **no row**. It is only named by 5.00r7's updater packages (`Graal6.exe` 6.036, probably 6.03r6). |
 
