@@ -26,8 +26,9 @@ ACCOUNT="guest"
 PWFILE=""
 SEIHAI="./target/release/seihai"
 OUTROOT="_debug"
-# Listserver, gserver and serverwarp ports seen so far.
-PORTS="14921 14922 14923 14801 14802 14842 14900 14912 14913"
+# Listserver and gserver ports: the Graal range, plus the target's port
+# (a few servers, such as Jojo's on 30903, sit outside it).
+PORTRANGE="14800-14999"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,8 +46,7 @@ done
 
 HOST="${TARGET%%:*}"
 PORT="${TARGET##*:}"
-case " $PORTS " in *" $PORT "*) ;; *) PORTS="$PORTS $PORT" ;; esac
-FILTER="tcp and ($(echo "$PORTS" | sed 's/ / or /g; s/\([0-9][0-9]*\)/port \1/g'))"
+FILTER="tcp and (portrange $PORTRANGE or port $PORT)"
 
 [ -x "$SEIHAI" ] || { echo "Seihai not found at $SEIHAI (cargo build --release, or --seihai PATH)"; exit 1; }
 command -v tcpdump >/dev/null || { echo "tcpdump not found (sudo apt install tcpdump)"; exit 1; }
