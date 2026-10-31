@@ -21,7 +21,7 @@ Seihaiscript is the scripting engine for the seihai client and tools. It aims fo
 - Basic arrays / string lists
 
 ### 2.05 command set (cleaned)
-The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode = 600 + table index. The table contains **161** commands (opcodes 600..760). `show`/`hide` are 759/760. A small set of commands compile but have no executor case in 2.05 (`seturllevel`, `setfocus`, `resetfocus`, `setbacktile`, `setbacktile2`, `canwarp`, `canwarp2`, `drawovertrees`, `join`, `freezeplayer2`, `unfreezeplayer`, `setz`, `updateterrain`). Script-facing directions are 0 up / 1 left / 2 down / 3 right. Full cleaned list is in the Graal_analysis notes; Seihai should implement the subset needed for offline play first.
+The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode = 600 + table index. The table contains **161** commands (opcodes 600..760). `show`/`hide` are 759/760. A small set of commands compile but have no executor case in 2.05 (`seturllevel`, `setfocus`, `resetfocus`, `setbacktile`, `setbacktile2`, `canwarp`, `canwarp2`, `drawovertrees`, `join`, `freezeplayer2`, `unfreezeplayer`, `setz`, `updateterrain`). (For 2.1+ builds Seihai runs `setfocus` / `resetfocus` as a view move: 2gta's `splashscreen.nw`, written for those clients, holds its title on `setfocus 30,30` with the player at y 65. Inferred from that script, not read in a 2.1+ binary.) Script-facing directions are 0 up / 1 left / 2 down / 3 right. `keydown(i)`: 0..3 movement, 4..6 A/S/D, 7 map, 8 tab, 9 Q, 10 P (`newfeatures2001.txt` in 2.05 rev 2), always false while paused. Full cleaned list is in the Graal_analysis notes; Seihai should implement the subset needed for offline play first.
 
 ### Planned extensions (GS2-inspired)
 - Functions with parameters and return values
@@ -89,7 +89,7 @@ Corpus: 3,306 scripts (2,947 plus 359 records from the binary levels): 352 with 
 
 **Scheduler.** Ticks are 50 ms. Timeouts round up to a tick and fire in order of tick, then creation. The same script and the same seed produce the same run. Limits: 10,000 loop passes, 200,000 steps per run, call depth 64, expression depth 400, parser depth 200. `callnpc`, `callweapon`, `triggeraction` and `movementfinished` are queued and run after the caller finishes (at most 1,000 per drain).
 
-**Touch.** `playertouchsme` is edge-triggered against the NPC's rectangle (2 by 2 tiles by default; `setshape 1,w,h` is in pixels), tested with the player's foot point.
+**Touch.** `playertouchsme` is edge-triggered against the NPC's rectangle, tested with the player's foot point. The rectangle is `setshape 1,w,h` (pixels) if the script set one, else the NPC's picture (its image part, or the whole image once it is loaded), else 2 by 2 tiles. The picture size came in on 2026-10-31: 2gta's north exit on `onlinestartlocal.nw` is a wide image NPC at 29,0 that could not be touched as 2 by 2.
 
 **Host.** `scripting::engine::host::SessionScripts` wires an offline session to the engine. Scripts run by default; `--no-scripts` turns them off.
 
