@@ -1,0 +1,20 @@
+[package]
+name = "seihai-g3d"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Graal3D (February 2000): the standalone 3D client with its own server
+# (`GR3DV002`). Not the Torque 3D of the 3.x–5.x clients, which is
+# seihai-ato's. Stage 1: the wire (login, props, chat, level receive, the
+# peer-to-peer UDP) and the `.x` level reader, headless.
+[lib]
+name = "seihai_g3d"
+path = "src/lib.rs"
+
+[[bin]]
+name = "seihai-g3d"
+path = "src/main.rs"
+
+[dependencies]
+seihai-core = { path = "../seihai-core", default-features = false }

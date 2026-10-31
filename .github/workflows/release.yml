@@ -34,17 +34,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release -p seihai -p seihai-mae -p seihai-ato --target ${{ matrix.target }}
+        run: cargo build --release -p seihai -p seihai-mae -p seihai-ato -p seihai-g3d --target ${{ matrix.target }}
       - name: Package (unix)
         if: matrix.os != 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.name }}.tar.gz seihai seihai-mae seihai-ato
+          tar czf ../../../${{ matrix.name }}.tar.gz seihai seihai-mae seihai-ato seihai-g3d
       - name: Package (windows)
         if: matrix.os == 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
-          Compress-Archive -Path seihai.exe,seihai-mae.exe,seihai-ato.exe -DestinationPath ../../../${{ matrix.name }}.zip
+          Compress-Archive -Path seihai.exe,seihai-mae.exe,seihai-ato.exe,seihai-g3d.exe -DestinationPath ../../../${{ matrix.name }}.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
