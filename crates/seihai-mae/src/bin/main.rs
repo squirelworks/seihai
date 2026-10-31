@@ -95,9 +95,22 @@ fn sent_sprite(session: &OfflineSession, version: ClientVersion, ganis: bool) ->
     }
 }
 
+/// Read a player animation: a GANI file, or for a build without GANIs the
+/// stock file standing in for its built-in animation, fitted to that build
+/// (`AssetResolver::pose_gani`, `pose::fit_builtin_139`).
+fn read_pose_gani(resolver: &AssetResolver, name: &str) -> Option<Result<Gani, String>> {
+    let path = resolver.pose_gani(name)?;
+    Some(Gani::load(&path).map(|mut g| {
+        if !resolver.profile().ui.ganis {
+            seihai::pose::fit_builtin_139(name, &mut g);
+        }
+        g
+    }))
+}
+
 fn load_motion_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
-    if let Some(path) = resolver.gani(name) {
-        match Gani::load(&path) {
+    if let Some(loaded) = read_pose_gani(resolver, name) {
+        match loaded {
             Ok(g) if name.eq_ignore_ascii_case("swim.gani") => session.set_swim_gani(GaniPlayer::new(g)),
             Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
             Err(e) => eprintln!("sound: cannot read {name}: {e}"),
@@ -123,8 +136,8 @@ fn npc_ani_of(session: &OfflineSession, name: &str) -> Option<String> {
 }
 
 fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
-    let (Some(kind), Some(path)) = (seihai::pose::PoseKind::from_file(name), resolver.gani(name)) else { return };
-    match Gani::load(&path) {
+    let (Some(kind), Some(loaded)) = (seihai::pose::PoseKind::from_file(name), read_pose_gani(resolver, name)) else { return };
+    match loaded {
         Ok(g) => session.set_pose_gani(kind, g),
         Err(e) => eprintln!("cannot read {name}: {e}"),
     }
@@ -1008,6 +1021,7 @@ fn main() {
     // tick, with the tile changes of the tick (see `protocol::walkcadence`).
     let mut walk_cadence = conn.as_ref().and_then(|_| seihai::protocol::walkcadence::WalkCadence::for_version(version));
     let mut cadence_clock = Instant::now();
+    session.walk_sprite = !version.profile().ui.ganis;
     session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304) || seihai::protocol::lobby::LobbyBurst::for_version(version).is_some();
     let mut held_boards: Vec<Vec<u8>> = Vec::new();
     // A gmap crossing's 39 for the next tick frame (builds with a cadence).
@@ -1610,7 +1624,9 @@ fn main() {
             eprintln!("{line} (also in {})", path.display());
         })
     };
-    while window.is_open() {
+    // Set when the connection ends with an error: shown after the loop.
+    let mut exit_error: Option<String> = None;
+    'game: while window.is_open() {
         let mut ft = FrameTimes::start(&stall);
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open() {
@@ -1787,8 +1803,11 @@ fn main() {
                         };
                         eprintln!("{why}");
                         if !cli_mode {
-                            let _ = seihai::gui::run_with_error(why);
-                            return;
+                            // The error window opens once the game loop
+                            // has ended, so the stall watch does not count
+                            // the time it is open.
+                            exit_error = Some(why);
+                            break 'game;
                         }
                         conn = None;
                         break;
@@ -3002,7 +3021,9 @@ fn main() {
             // is asked for, and loaded over the empty one when it arrives.
             for name in session.wanted_npc_anis() {
                 let file = format!("{name}.gani");
-                let gani = resolver.gani(&file).and_then(|p| Gani::load(p).ok());
+                // A build without GANIs draws a character NPC with its own
+                // built-in animation when the name is one of them.
+                let gani = resolver.gani(&file).and_then(|p| Gani::load(p).ok()).or_else(|| read_pose_gani(&resolver, &file).and_then(Result::ok));
                 if gani.is_none() {
                     let msgs = if conn.is_some() { files.need_missing(&file) } else { Vec::new() };
                     if msgs.is_empty() {
@@ -3320,8 +3341,11 @@ fn main() {
                     Err(why) => {
                         eprintln!("{why}");
                         if !cli_mode {
-                            let _ = seihai::gui::run_with_error(why);
-                            return;
+                            // The error window opens once the game loop
+                            // has ended, so the stall watch does not count
+                            // the time it is open.
+                            exit_error = Some(why);
+                            break 'game;
                         }
                     }
                 }
@@ -3898,6 +3922,26 @@ fn main() {
             fps_since = Instant::now();
         }
     }
+    // The loop is over: nothing is left for the stall watch to time (its
+    // thread ends with the last handle), so an open error window is not
+    // reported as a stuck loop.
+    drop(stall);
+    close_window(window);
+    if let Some(why) = exit_error {
+        let _ = seihai::gui::run_with_error(why);
+    }
+}
+
+/// Close the game window at exit without dropping it. minifb 0.27's Wayland
+/// backend destroys its event queue before the surfaces, buffers and pools
+/// made on it (`DisplayInfo` drops the queue with them still attached and
+/// never destroys them), and libwayland then prints "queue ... destroyed
+/// while proxies still attached" with a line for each. The process is
+/// ending, or hands over to the error window, and the compositor frees
+/// all of them when the connection closes, so the window is forgotten
+/// instead.
+fn close_window(window: minifb::Window) {
+    std::mem::forget(window);
 }
 
 /// How long each part of one pass of the main loop took.

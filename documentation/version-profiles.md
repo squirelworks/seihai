@@ -103,8 +103,9 @@ Graal_analysis `version-profiles/matrix/` has the cross-era matrix (1998 to
 
 - HUD drawing: the row says which `state.png` layout a build ships, but the
   HUD is still Seihai's own bar until the sheet is drawn.
-- Key bindings, emoticons, ganis, log window and ghost mode are recorded but
-  not implemented.
+- Emoticons, log window and ghost mode are recorded but not implemented.
+  Builds without GANIs (1.33 to 1.39) draw their built-in player poses from
+  the stock GANI files of the asset folder (`builtin-animations-139.md`).
 - Client→server and server→client sets for 2.1–2.16 and 2.3 are inferred (no binary); 2.22 ids 36, 42 and 45 are unmatched in the binary, so 2.22 does not send 36 or 45.
 - 2.31 keeps PLI 44 in its send set (a real 2.31 client answered the server's process-list request with it); Seihai never sends it.
 - 2.3 (inferred) has no tamper-check constant, so `--send-tampercheck` sends nothing for it.

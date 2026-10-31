@@ -15,9 +15,7 @@ pub const OTHER_STEP_MS: u64 = 50;
 /// death timer reaches 28 ticks and sends no dead sprite.
 pub const STATUS_DEAD: u8 = 0x08;
 
-/// The walk step the 2.05 client sends for walk frames 0 to 7 as the sprite
-/// number S (1 to 5); its inverse picks the frame for an S.
-const WALK_S: [u8; 8] = [4, 5, 4, 3, 2, 1, 2, 3];
+use crate::pose::WALK_S;
 
 /// The GANI prop (10) of another player, lower case, without `.gani`.
 fn gani_name(o: &OtherPlayer) -> Option<String> {
