@@ -12,8 +12,11 @@ Focus: purpose, CLI, protocols, config paths for rebuild/rehost notes. Do **not*
 | --- | --- | --- | --- |
 | `RemoteControl3/` | `windows_rc3_beta` / v5 `RemoteControl3.exe` | `seihai-rc` | GTK Win32 RC; listserver + NPC-server connect; player/NPC/account/file UI. |
 | `remotecontrol_custom/` | Custom `remotecontrol.exe` (+ UPX `Agret_RC.exe`) | `seihai-rc` | Delphi Agret “Blue RC”; `controlconfig.txt` / `Software\Graal`. |
+| `RemoteControl_classic/` | `rc.rar` `RemoteControl.exe` | `seihai-rc` | Stock Delphi RC baseline vs Agret/NW. |
 | `RemoteControl-NW/` | NW2 / NC-pack `RemoteControl-NW.exe` | `seihai-rc` | NW-era Delphi RC; admin/account/ban/update-level. |
 | `NPCControl/` | `nc7132001` `NPCControl.exe` | `seihai-rc` | NC client; `controlconfig.txt`; NPC/weapon/class scripts. |
+| `scripteditor/` | Senolen `scripteditor.exe` 2.53 | `analysis-only` | NAT GS1 script editor UX; prefer GS2 sources for modern notes. |
+| `PNGView/` | GAT `PNGView.exe` | `analysis-only` | Offline PNG viewer beside Assimilator. |
 | `serverlist3/` | `slist/serverlist3` | `analysis-only` | ELF32 classic listserver; `clientsport`/`serversport`/`playerlimit`. Prefer C# rewrite tree. |
 | `ListServer/` | UPX-unpacked `ListServer.exe` | `analysis-only` | Win32 Delphi + WSOCK32; `servers.ini`. Do not run. |
 | `gserver-linux/` | `GServersource/gserver` | `analysis-only` | ELF32 — prefer paired C++ source. |
