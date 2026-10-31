@@ -23,6 +23,20 @@ Hard rules: do **not** commit raw binaries into `seihai-servertools`; do **not**
 | `Developer Tools/# Graal Client Tools And Sources/GServer/GServer Source/gserver source.rar` | **complete** | 505.4 KB (505386) | `e226d3bde4edbe80e3f601eaedc682db659a3cd96ed72e52170097f0554ab946` | RAR archive data, v4, os: Win32, flags: Solid | yes → `_inbox/extracted/gserver_source` | analysis-only |
 | `Developer Tools/# Graal Client Tools And Sources/GServer/GServer Source/GServersource.rar` | **complete** | 1.41 MB (1408823) | `68a99f3da1adf8232e0e008afc57412af14faf49d5fa8a53e3b7a264ca62cc19` | RAR archive data, v4, os: Win32, flags: Solid | yes → `_inbox/extracted/GServersource` | analysis-only |
 
+
+## Placement summary
+
+Roll-up of the Archives **Recommended placement** column (`SALVAGE_PLACEMENT.md` decision tree).
+
+| Placement | Meaning | Archives in this snapshot |
+|---|---|---|
+| **analysis-only** | Study / Graal_analysis / sibling runtimes only — never paste into MIT `seihai-servertools` | `Server Lister.rar`, `GS2 Compiler.rar`, `gserver source.rar`, `GServersource.rar` |
+| **out-of-scope** | Client trainers / bots — not servertools | `Graal_Auto_Key.zip`, `Graal_Digger.zip` |
+| **out-of-scope / seihai (client)** | Offline client tooling if anything | `Graal Character Designer 1.2.7.zip`, `charactergenerator.7z` |
+| **stay-staged (bad archive)** | Incomplete / corrupt — do not open a rewrite PR | `DClientSetup1198.zip` |
+
+No `setup-core` / `lat-core` clean-room targets in this snapshot.
+
 ## Per-archive notes
 
 ### `Tools/DClientSetup1198.zip` — incomplete
@@ -88,7 +102,7 @@ Hard rules: do **not** commit raw binaries into `seihai-servertools`; do **not**
 - **Members (summary):** `BytecodeCompiler sources`, `BytecodeViewer.exe`, `BytecodeDump scripts`, `Documentation`
 - **Binaries:**
   - `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` (90.1 KB (90112)) — PE32 executable (console) Intel 80386, for MS Windows, 5 sections; sha256=`8e6b1f22947a6df814fc2f4be8169998e1f2bd1effc2becf51029eff3107f6a9`
-- **Ghidra:** ghidra-analysis/BytecodeViewer/ (queued in batch)
+- **Ghidra:** ghidra-analysis/BytecodeViewer/ (SUMMARY.md written)
 
 ### `Developer Tools/# Graal Client Tools And Sources/GServer/GServer Source/gserver source.rar` — complete
 
@@ -110,35 +124,46 @@ Hard rules: do **not** commit raw binaries into `seihai-servertools`; do **not**
 - **Members (summary):** `gserver.exe`, `gserver.cpp/h`, `mysql/`, `passwords.h`, `levels.h`, `npcs.h`
 - **Binaries:**
   - `_inbox/extracted/GServersource/gserver.exe` (2.85 MB (2850871)) — PE32 executable (console) Intel 80386, for MS Windows, 6 sections; sha256=`ad146b971eb1af76471d439f3f48b843e44c03b9b85f0ec9995877d6ba91bc01`
-- **Ghidra:** ghidra-analysis/gserver_pe_GServersource/ (in progress)
+- **Ghidra:** ghidra-analysis/gserver_pe_GServersource/ (SUMMARY.md written; sibling also `gserver-win/`)
 
 ## Ghidra queue
 
 Helper: `/workspace/tools/ghidra/analyze_tool.sh` (ready). Batch log: `ghidra-analysis/_batch.log`.
+Sibling index: [`ghidra-analysis/README.md`](./ghidra-analysis/README.md) (done / skipped).
 
-| Priority | Binary | Output dir | Status | Placement |
-|---|---|---|---|---|
-| high | `_inbox/extracted/Server Lister/ListServer.exe` | `ghidra-analysis/ListServer/` | **done** | analysis-only |
-| high | `_inbox/extracted/gserver_source/gserver13` | `ghidra-analysis/gserver13/` | **done** | analysis-only |
-| high | `_inbox/extracted/GServersource/gserver.exe` | `ghidra-analysis/gserver_pe_GServersource/` | **done** | analysis-only |
-| medium-high | `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` | `ghidra-analysis/BytecodeViewer/` | **done** | analysis-only |
-| high | `_extracted/unpacked/ListServer.unpacked.exe` | `ghidra-analysis/ListServer/` | **done (sibling)** | analysis-only |
-| medium | `_extracted/server-lister/Server Lister/slist/serverlist3` | `ghidra-analysis/serverlist3/` | **done (sibling)** | analysis-only |
-| medium | `_inbox/extracted/gserver_source/gserverstat` | `ghidra-analysis/gserverstat/` | **queued** | analysis-only |
-| medium | `_inbox/extracted/gserver_source/gserverstat2` | `ghidra-analysis/gserverstat2/` | **queued** | analysis-only |
-| low | `_extracted/dclient-setup/setup.exe` | `ghidra-analysis/DClient_setup/` | **queued** | out-of-scope (client installer fragment) |
-| low | `_inbox/extracted/Graal_Character_Designer_1.2.7/GCD.exe` | `ghidra-analysis/GCD/` | **queued** | out-of-scope / seihai (client) |
-| low | `_inbox/extracted/charactergenerator/charactergenerator/GChar.exe` | `ghidra-analysis/GChar/` | **queued** | out-of-scope / seihai (client) |
-| low | `_inbox/extracted/Graal_Auto_Key/Graal Auto Key.exe` | `ghidra-analysis/Graal_Auto_Key/` | **queued** | out-of-scope |
-| low | `_inbox/extracted/Graal_Digger/Graal Digger.exe` | `ghidra-analysis/Graal_Digger/` | **queued** | out-of-scope |
-### Analyses completed this pass
+### Done (SUMMARY.md present)
 
-- `ListServer.exe` → `ghidra-analysis/ListServer/` (**done**; UPX-packed limited; sibling unpacked re-run also done)
-- `gserver13` → `ghidra-analysis/gserver13/` (**done**)
-- `gserver.exe` → `ghidra-analysis/gserver_pe_GServersource/` (**done**; sibling also `gserver-win/`)
-- `BytecodeViewer.exe` → `ghidra-analysis/BytecodeViewer/` (**done**)
-- `serverlist3` → `ghidra-analysis/serverlist3/` (**done**, sibling)
-- sibling also wrote `ghidra-analysis/gserver-linux/`
+| Priority | Binary | Output dir | Placement |
+|---|---|---|---|
+| high | `_inbox/extracted/Server Lister/ListServer.exe` (+ unpacked sibling) | `ghidra-analysis/ListServer/` | analysis-only |
+| high | `_extracted/server-lister/Server Lister/slist/serverlist3` | `ghidra-analysis/serverlist3/` | analysis-only |
+| high | `_inbox/extracted/gserver_source/gserver13` | `ghidra-analysis/gserver13/` | analysis-only |
+| high | `_inbox/extracted/GServersource/gserver.exe` | `ghidra-analysis/gserver_pe_GServersource/` (+ sibling `gserver-win/`) | analysis-only |
+| high | `_extracted/.../GServersource/gserver` (ELF) | `ghidra-analysis/gserver-linux/` | analysis-only |
+| medium-high | `_inbox/extracted/GS2 Compiler/BytecodeViewer/ViewerApp/BytecodeViewer.exe` | `ghidra-analysis/BytecodeViewer/` | analysis-only |
+| medium | `_extracted/graal-to-nw/TextConvert.exe` | `ghidra-analysis/TextConvert/` | analysis-only / client converter |
+
+### Queued
+
+| Priority | Binary | Output dir | Placement |
+|---|---|---|---|
+| medium | `_inbox/extracted/gserver_source/gserverstat` | `ghidra-analysis/gserverstat/` | analysis-only |
+| medium | `_inbox/extracted/gserver_source/gserverstat2` | `ghidra-analysis/gserverstat2/` | analysis-only |
+| low | `_extracted/dclient-setup/setup.exe` | `ghidra-analysis/DClient_setup/` | stay-staged / out-of-scope (client installer fragment) |
+| low | `_inbox/extracted/Graal_Character_Designer_1.2.7/GCD.exe` | `ghidra-analysis/GCD/` | out-of-scope / seihai (client) |
+| low | `_inbox/extracted/charactergenerator/charactergenerator/GChar.exe` | `ghidra-analysis/GChar/` | out-of-scope / seihai (client) |
+| low | `_inbox/extracted/Graal_Auto_Key/Graal Auto Key.exe` | `ghidra-analysis/Graal_Auto_Key/` | out-of-scope |
+| low | `_inbox/extracted/Graal_Digger/Graal Digger.exe` | `ghidra-analysis/Graal_Digger/` | out-of-scope |
+
+### Skipped / blockers (from sibling README)
+
+| Item | Reason |
+|---|---|
+| `DClientSetup1198.zip` | Truncated download — **stay-staged** |
+| `Graal_Auto_Key`, `Graal_Digger` | Client trainers — **out-of-scope** |
+| `charactergenerator` / `GCD.exe` | Client character tools — low priority |
+| `scripteditor.exe` | VB5/OCX-heavy — defer unless GS2 tooling needs it |
+
 
 ## Extraction map
 
@@ -162,5 +187,5 @@ Also: Drive sibling parallel tree under `_extracted/` (server-lister, gs2-compil
 - No `setup-core` / `lat-core` rewrite candidates yet — all server-side material is `analysis-only`.
 - Client trainers / character tools present → `out-of-scope`.
 - Drive sibling has more queued downloads (`_next_batch.json`, `_queue.json`, `_oversized.json`); refresh inventory when new complete archives land.
-- ListServer Ghidra on packed binary yielded 0 internal funcs; prefer unpacked analysis when sibling finishes.
+- ListServer packed PE had 0 internal funcs; unpacked sibling SUMMARY is present under `ghidra-analysis/ListServer/`.
 
