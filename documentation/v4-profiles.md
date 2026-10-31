@@ -44,7 +44,29 @@ Run on 2026-10-31 in the cloud container, all on loopback, Seihai `seihai-mae` r
 
 Server ids seen on 4.04r2 and 4.20r8: 0, 4, 6, 9, 10, 14, 25, 30, 33, 34, 39, 41, 42, 43, 47, 82, 100, 101, 156, 168, 174, 179, 180, 182, 190, 194. All are in both sets (100 is the raw-data prefix, read by the frame layer). On 4.20r6 GServer-v2 sent 7 and left out 0, 156, 174, 179 and 180: stock gs2lib has no entry for `G3D27076`, so it treats the build as an older client. 41 also came on 4.20r6, which has no case for it, so Seihai drops it as the row says.
 
-Not covered: the real 4.x clients were not run against Seihai's rows here (the 4.04r2 live run is the client against GServer-v2, not Seihai). The server sent none of 105 to 108, 170, 191, 193, 195 or 196, so those handlers are covered by unit tests only. Seihai sends 46 after each login because the rows take it from 3.153 and 5.00r7; the real 4.04r2 was not seen sending it.
+Not covered in this first check: the real 4.x clients side by side with Seihai. That is the next section. The server sent none of 105 to 108, 170, 191, 193, 195 or 196, so those handlers are covered by unit tests only. Seihai sends 46 after each login because the rows take it from 3.153 and 5.00r7; the live run below saw the real 4.04r2 and 4.20r8 send it too.
+
+## Live run: the real 4.04r2 and 4.20r8 next to Seihai
+
+Run on 2026-10-31 in the cloud container. Wine 9 (32-bit prefix), Xvfb, and a net and mount namespace with only loopback up and a private hosts file that points `loginserver.graalonline.com` (and `loginserver2`, `loginserver3`) at 127.0.0.1. The same server pack, stock gs2lib, `G3D17026` and `G3D20126` in `allowedversions.txt`, the lab listserver moved to 14899 so that `warpproxy.py` can listen on 14900 (the license port) and inject `0,Lab Server,127.0.0.1,14900`. Clients: the stock 4.04r2 from the Thinstall installer, and the 4.20r8 packet-logger copy with the 8 original bytes put back at its only hook (`GraalEngine.dll` file offset 0x1a3ae3: `e9 f3 cc 08 00 90 90 90` back to `5f 5e 5d b8 01 00 00 00`, the end of zlib's inflate). Logs and screenshots: project folder `v4/lab-4x-live-2026-10-31/`.
+
+| | real 4.04r2 | real 4.20r8 | Seihai 4.04r2 / 4.20r8 |
+|---|---|---|---|
+| Login, warp, level | yes, GServer-v2 logs `G3D17026 (4.042)` | yes, `G3D20126` | yes |
+| Login tail | `win,<md5>,<md5>,<md5>` | same | `win,"","",""` (accepted) |
+| After the login | 37, 23 `basepackage.gupd` (twice), 23 `bigmap.txt` (first session only), 157 `idle`, 152 `GraalEngine,pmguilds` and `pmservers`, 154 lister options and `verifybuddies`, **46**, 44 (window titles), then 2 (own props) | same | 37, 46 |
+| Walk | 2 with GANI `walk` and SPRITE on the first step, then **X2 (78) alone every 50 ms**, 8 px a tick; `idle` at the stop. Never X/Y (15/16) | same | was X, Y, SPRITE (15, 16, 17); **now SPRITE, X2, Y2** every 50 ms |
+| Chat | Tab opens the dark red bar, Enter sends 2 prop 12; the bar stays open; Tab again closes it and sends an empty prop 12 | same | prop 12 (Tab, T or Enter opens) |
+| Script flags | `-gr_movement`'s `setstring gr.x/gr.y` every 50 ms: **nothing sent** | (same weapon, nothing sent) | was 18 `gr.x=..`/`gr.y=..`; **now nothing** |
+| Other | S: 23 `sword.gani`, 157 `sword`, prop 10. D with the bow: 157 `shoot`, prop 10 `shoot,wbow1.png`, 9 (arrow). Click: 38 `leftmouse` | D with bombs: 4 (bomb) | not compared |
+
+C>S ids seen from the real clients: 2, 4, 9, 23, 24, 34, 37, 38, 44, 46, 152, 154, 157. All are in both rows. S>C ids are the same 26 as in the first check, plus 45. All are in both rows. So the id sets need no change.
+
+**Flags.** A probe weapon on the 4.04r2 account ran `setplayerprop #c`, `setstring gr.probe,1`, `setstring client.probe,2` and `set probeflag` on `playerenters`. The real client sent only 18 `client.probe=2`. So the 4.x client runs GS1 weapon scripts but sends only `client.` string flags to the server. Seihai's lobby builds (4.x to 6.x) now do the same (`Connection::queue_flag`). Whether 5.x and 6.x send `client.` flags only was not run; they follow 4.20r8 in the chain.
+
+**Walk.** Seihai's lobby builds now send `SPRITE, X2, Y2` in each walk update (`net::position_message_precise`), checked on the lab: GServer-v2 relays them to the real 4.04r2 as S>C 8 with X/Y and X2/Y2, and the real client got Seihai's chat. The real client sends only the props that changed and adds GANI `walk`/`idle`; Seihai sends all three each step and no GANI (as for the builds without a walk cadence). The 2.31 and 3.153 rows also have X2/Y2 (`precise_pos`) but keep the classic walk until a lab run checks them.
+
+Still open: the base-file requests (23 `basepackage.gupd`, `bigmap.txt`), 152 and 154 after the login, the nickname and the rest of the own props in the login burst, and GANI in walk updates are not sent by Seihai. The real client keeps the chat bar open after Enter.
 
 ## Not done
 
