@@ -9,6 +9,7 @@
 
 use crate::assets::{tile_id, Gani, Level};
 use crate::offline::OfflineSession;
+use std::collections::HashSet;
 
 /// Width of a tile in pixels.
 pub const TILE_PX: u32 = 16;
@@ -338,12 +339,15 @@ pub fn render_view_tiles(
         for tx in 0..=view_tiles_w as i32 {
             let lx = ox + tx;
             let ly = oy + ty;
-            // The current level, or on a gmap the neighbour the tile is in.
+            // The current level, or on a gmap or a big map the neighbour
+            // the tile is in.
             let (kx, ky) = (lx.div_euclid(64), ly.div_euclid(64));
             let at = if (kx, ky) == (0, 0) {
                 Some(level)
+            } else if let Some(w) = &session.gmap {
+                w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky))
             } else {
-                session.gmap.as_ref().and_then(|w| w.levels.get(&(w.cell.0 + kx, w.cell.1 + ky)))
+                session.big_map_neighbour(kx, ky)
             };
             let Some(at) = at else { continue };
             if let Some(id) = tile_at(at, lx.rem_euclid(64), ly.rem_euclid(64)) {
@@ -356,6 +360,16 @@ pub fn render_view_tiles(
     // art of their own on the board. An NPC whose image is not there yet
     // draws nothing, as in the 2.05 client (see npc-images.md).
     draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y);
+    // A big map's neighbours show their chests too (closed or open as their
+    // records say), so nothing appears on them at the crossing.
+    if board && session.gmap.is_none() {
+        for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+            if let Some(n) = session.big_map_neighbour(dx, dy) {
+                let off = 64 * t;
+                draw_level_chests(&mut fb, n, &HashSet::new(), sheet, sheet_w, sheet_h, cam_x - dx * off, cam_y - dy * off);
+            }
+        }
+    }
 
     fb
 }
@@ -365,12 +379,19 @@ pub fn render_view_tiles(
 /// is outside 0 to 62.
 #[allow(clippy::too_many_arguments)]
 fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::assets::Level, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32) {
+    draw_level_chests(fb, level, &session.opened_chests, sheet, sw, sh, cam_x, cam_y);
+}
+
+/// [`draw_chests`] for any level: `opened_now` holds the chests opened
+/// since it was entered.
+#[allow(clippy::too_many_arguments)]
+fn draw_level_chests(fb: &mut Framebuffer, level: &crate::assets::Level, opened_now: &HashSet<(i32, i32)>, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32) {
     let t = TILE_PX as i32;
     for c in &level.chests {
         if !(0..=62).contains(&c.x) || !(0..=62).contains(&c.y) {
             continue;
         }
-        let opened = c.opened || session.opened_chests.contains(&(c.x, c.y));
+        let opened = c.opened || opened_now.contains(&(c.x, c.y));
         for (i, id) in chest_art(opened).into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
             fb.blit_tile_keyed(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y, Some(CHEST_KEY));
@@ -384,8 +405,9 @@ fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::as
 pub fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
     let t = TILE_PX as f32;
     // The view's centre: a script's `setfocus` point, else the middle of
-    // the player's 48-pixel box.
-    let (cx, cy) = session.view_focus.unwrap_or((session.player_x + 1.5, session.player_y + 1.5));
+    // the player's 48-pixel box, where it is drawn (see `view_glide`).
+    let (gx, gy) = session.view_glide();
+    let (cx, cy) = session.view_focus.unwrap_or((session.player_x + gx + 1.5, session.player_y + gy + 1.5));
     (
         (cx * t - (view_tiles_w as f32 * t) / 2.0) as i32,
         (cy * t - (view_tiles_h as f32 * t) / 2.0) as i32,
@@ -396,12 +418,14 @@ pub fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: 
 /// by [`render_view`] with the same size.
 pub fn player_box_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
     let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
+    // Over a big-map edge link the player is drawn gliding from the old place.
+    let (gx, gy) = session.view_glide();
     // The box starts at the player's tile position, the same as for other
     // players. The 2.05 client draws it there too (checked against a
     // screenshot at onlinestartlocal.nw 30, 30.5).
     (
-        (session.player_x * TILE_PX as f32) as i32 - cam_x,
-        (session.player_y * TILE_PX as f32) as i32 - cam_y,
+        ((session.player_x + gx) * TILE_PX as f32) as i32 - cam_x,
+        ((session.player_y + gy) * TILE_PX as f32) as i32 - cam_y,
     )
 }
 
@@ -755,5 +779,89 @@ mod tests {
         assert_eq!(red_at(&fb, ex, ey), 21, "the east level's tile (0, 30)");
         let (ix, iy) = px(63, 30);
         assert_eq!(red_at(&fb, ix, iy), 1, "this level's own tile");
+    }
+
+    /// A `.nw` text of a big-map level at grid column `col`: each tile's id
+    /// names its place in the world (world column mod 128, row mod 32), so
+    /// a frame shows where in the world it looks. Edge links both ways.
+    fn world_level_text(col: i32) -> String {
+        const B64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut t = String::from("GLEVNW01\n");
+        for y in 0..64 {
+            let row: String = (0..64)
+                .flat_map(|x| {
+                    let id = ((col * 64 + x) % 128 + 128 * (y % 32)) as usize;
+                    [B64[id / 64] as char, B64[id % 64] as char]
+                })
+                .collect();
+            t.push_str(&format!("BOARD 0 {y} 64 0 {row}\n"));
+        }
+        let names = ["w.nw", "mid.nw", "e.nw"];
+        if col > 0 {
+            t.push_str(&format!("LINK {} 0 0 1 64 61 playery\n", names[col as usize - 1]));
+        }
+        if col < 2 {
+            t.push_str(&format!("LINK {} 63 0 1 64 0 playery\n", names[col as usize + 1]));
+        }
+        t
+    }
+
+    /// A big map's edge link changes nothing on screen: the frame drawn the
+    /// moment the link fires and the one after the next level is in are the
+    /// same pixels (the neighbour drawn past the edge, the level left drawn
+    /// behind, the jump the link makes hidden by the glide). The glide then
+    /// runs out and the view is where the player really is.
+    #[test]
+    fn a_big_map_edge_link_shows_no_seam() {
+        let dir = std::env::temp_dir().join(format!("seihai-bigmap-seam-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (col, name) in ["w.nw", "mid.nw", "e.nw"].iter().enumerate() {
+            std::fs::write(dir.join(name), world_level_text(col as i32)).unwrap();
+        }
+        let mut load = |n: &str| crate::assets::Level::load(dir.join(n)).ok();
+        let mut s = OfflineSession::new();
+        s.big_map = crate::gmap::Gmap::parse_grid("\"w.nw\",\"mid.nw\",\"e.nw\"\n");
+        s.load_level(dir.join("mid.nw")).unwrap();
+        s.sync_big_map(Some("mid.nw"), &mut load);
+        let sheet = id_sheet();
+        let (vw, vh) = (40, 30);
+        // Walking east: the east level is already drawn past the edge.
+        s.player_dir = crate::offline::DIR_EAST;
+        s.player_y = 20.0;
+        s.player_x = 50.0;
+        let fb = render_view(&s, &sheet, 2048, 512, vw, vh);
+        let (cx, cy) = camera_origin(&s, vw, vh);
+        let east_tile = id_at(&fb, (64 * 16 - cx + 8) as u32, (20 * 16 - cy + 8) as u32);
+        assert_eq!(east_tile, (128 % 128 + 128 * 20) as u16, "world column 128 (e.nw column 0) past the edge");
+        // Step to the link.
+        let mut fired = false;
+        for _ in 0..40 {
+            s.player_x += 0.5;
+            if s.check_links() {
+                fired = true;
+                break;
+            }
+        }
+        assert!(fired, "the east link fired");
+        let before = render_view(&s, &sheet, 2048, 512, vw, vh);
+        let player_before = player_box_origin(&s, vw, vh);
+        let (dest, nx, ny) = s.pending_link.take().unwrap();
+        assert_eq!(dest, "e.nw");
+        s.load_level(dir.join(&dest)).unwrap();
+        s.arrive(nx, ny);
+        assert!(s.sync_big_map(Some("e.nw"), &mut load), "the view moved on");
+        assert!(s.view_glide().0 < 0.0, "the link jumps ahead, the glide starts behind");
+        let after = render_view(&s, &sheet, 2048, 512, vw, vh);
+        assert_eq!(player_box_origin(&s, vw, vh), player_before, "the player is drawn where it was");
+        assert!(before.pixels == after.pixels, "the same frame across the edge link");
+        // The level left is drawn west of the new one.
+        assert!(s.big_map_neighbour(-1, 0).is_some());
+        // The glide runs out over SEAM_GLIDE_MS.
+        assert!(s.tick_seam_glide(100));
+        assert!(s.view_glide().0 < 0.0);
+        s.tick_seam_glide(u64::from(crate::offline::SEAM_GLIDE_MS));
+        assert_eq!(s.view_glide(), (0.0, 0.0));
+        assert!(!s.tick_seam_glide(16));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
