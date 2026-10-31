@@ -47,6 +47,7 @@ Single code path. Versions are profile rows, not branches.
 - Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist, the first CLI slice (open, list, paint, save) and a window (palette, layers 0 and 1, stamps, object markers, gmap grid, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
 - Public-server checks: list checks done from the user's machine (2026-10-25); game-server checks still to do. Results and checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
+- Graal3D (2000): `seihai-g3d` plays it (login, props, UDP, levels, renderer, model animation, walking, camera, chat log; #331, #332). Open tasks G3D-1 to G3D-9 (faithful collision, camera numbers, options windows, admin session, start window, two-real-client lab) are in `crates/seihai-g3d/ARCHITECTURE.md`.
 - Walking collision: the real six-probe body-box routine is documented in `documentation/walking-collision-note.md` (cross-link). The earlier SDL single-point test is superseded.
 
 ## Completed (prior phases)
