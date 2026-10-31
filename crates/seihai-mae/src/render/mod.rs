@@ -5,6 +5,7 @@
 //! watched. `tiles` composites a 16×16 tile view into an RGB buffer
 //! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
+mod baddies;
 pub mod font;
 mod npcs;
 mod others;
@@ -14,6 +15,7 @@ pub mod signs;
 pub mod chattext;
 mod tiles;
 
+pub use baddies::{draw_baddies, draw_baddy_verses, BaddyArt};
 pub use throw::{draw_floor_items, draw_sprite, draw_throw_layer, BombSheets};
 pub use npcs::{draw_npc_messages, draw_npcs, npc_sheets, NpcArt, NpcPass, NPC_DIR};
 pub use others::{look_images, other_blink_off, other_hidden, other_pose, OTHER_STEP_MS};
