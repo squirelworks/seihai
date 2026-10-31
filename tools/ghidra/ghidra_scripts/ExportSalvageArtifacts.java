@@ -425,10 +425,15 @@ public class ExportSalvageArtifacts extends GhidraScript {
 		lines.add("decompiled_count=" + decompiled);
 		lines.add("key_function_count=" + keyFuncs.size());
 
+		// Names only in stats that feed committed SUMMARY.md (no addresses / FUN_).
 		StringBuilder top = new StringBuilder();
 		int n = 0;
 		for (FuncRec f : functions) {
 			if (f.external || f.thunk) {
+				continue;
+			}
+			String sn = simpleName(f.name);
+			if (sn.startsWith("FUN_") || sn.startsWith("thunk_") || sn.equals("entry")) {
 				continue;
 			}
 			if (n++ >= 15) {
@@ -437,17 +442,20 @@ public class ExportSalvageArtifacts extends GhidraScript {
 			if (top.length() > 0) {
 				top.append(" | ");
 			}
-			top.append(simpleName(f.name)).append("@").append(f.entry).append("(sz=").append(f.size)
-				.append(")");
+			top.append(sn).append("(sz=").append(f.size).append(")");
 		}
 		lines.add("top_functions=" + top);
 
 		StringBuilder keys = new StringBuilder();
 		for (FuncRec f : keyFuncs) {
+			String sn = simpleName(f.name);
+			if (sn.startsWith("FUN_") || sn.startsWith("thunk_")) {
+				continue;
+			}
 			if (keys.length() > 0) {
 				keys.append(" | ");
 			}
-			keys.append(simpleName(f.name)).append("@").append(f.entry);
+			keys.append(sn);
 		}
 		lines.add("key_functions=" + keys);
 

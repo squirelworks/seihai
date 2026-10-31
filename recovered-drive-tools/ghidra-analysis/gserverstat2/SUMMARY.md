@@ -25,146 +25,143 @@
 | Format | Executable and Linking Format (ELF) |
 | Language | x86:LE:32:default |
 | Compiler | gcc |
-| Image base | 08048000 |
 | Functions | 899 (internal 744) |
 | Imports | 77 |
 | Exports / entries | 1296 |
 | Interesting strings | 223 |
 | Decompiled funcs | 50 |
 
-## Top / key functions
+## Notable symbols (names only)
 
-**Largest internal:** SetProperties__13TServerPlayerG7JString@0804bc18(sz=4347) | main@0804da2c(sz=4160) | ParseAccount__FG7JString@0805388c(sz=1910) | LoadAccounts__Fv@0805257c(sz=1232) | SaveAccount__FP12TTempAccountG7JString@08052c9c(sz=1186) | SaveAccounts__Fv@08053270(sz=1160) | __throw_type_match_rtti@0805d8b8(sz=1156) | LoadAccount__14TServerAccount@080513f0(sz=1023) | __13TServerPlayer@0804b4e0(sz=1014) | ReadNewAccounts__Fv@08054760(sz=993) | RemoveLineEnds__FG7JString@0804ac70(sz=959) | throw_helper@0805b214(sz=864) | ParseAccount2__FG7JString@0805425c(sz=737) | read_int__FR7istreamRUxRi@08056c14(sz=714) | write_int__FR7ostreamUxi@08057598(sz=674)
+Observed application/helper symbols (no addresses): `SetProperties`, `main`, `ParseAccount`, `LoadAccounts`, `SaveAccount`, `SaveAccounts`, `throw_type_match_rtti`, `LoadAccount`, `13TServerPlayer`, `ReadNewAccounts`, `RemoveLineEnds`, `ParseAccount2`, `read_int`, `write_int`, `init`, `do_osfx`, `AddTempAccount`, `LoadFromFile`, `GetClosed`, `SaveAccountNames`, `end_fde_sort`, `GetIDAsJString`, `getline`, `RemoveExtension`, `SetCommaText`.
 
-**Decompile targets:** main@0804da2c | init__3iosP9streambufP7ostream@0805a528 | do_osfx__7ostream@08058674 | entry@0804a6d0 | init__7filebuf@0805a610 | init_dummy@0804a788 | init_dummy@0805e4c8 | SetProperties__13TServerPlayerG7JString@0804bc18 | ParseAccount__FG7JString@0805388c | LoadAccounts__Fv@0805257c | SaveAccount__FP12TTempAccountG7JString@08052c9c | SaveAccounts__Fv@08053270 | LoadAccount__14TServerAccount@080513f0 | ReadNewAccounts__Fv@08054760 | RemoveLineEnds__FG7JString@0804ac70 | throw_helper@0805b214 | ParseAccount2__FG7JString@0805425c | read_int__FR7istreamRUxRi@08056c14 | write_int__FR7ostreamUxi@08057598 | AddTempAccount__FP12TTempAccount@08052208 | LoadFromFile__7TStreamRC7JString@08050934 | GetClosed__12TServerChest@0804d364 | SaveAccountNames__Fv@08054d40 | end_fde_sort@0805c258 | GetIDAsJString__14TServerAccount@08050f54 | getline__7istreamPcic@080590b0 | RemoveExtension__FG7JString@0804a970 | SetCommaText__12TJStringListG7JString@08050628 | extract_cie_info@0805c6c4 | dcast__C17__class_type_infoRC9type_infoiPvPC9type_infoT3@0805d514 | AddWeapon__FRC7JString@0805202c | GetOpened__12TServerChest@0804d728 | _._7JString@0805e4e0 | flush__7ostream@08058364 | length__C7JString@0804f1a8 | Length__FRC7JString@0804f9a4 | _skip_ws__7istream@08058488 | text__C7JString@0804f1d0 | SaveToFile__7TStreamRC7JString@08050c30 | _._9type_info@0805d334 | LowerCaseFilename__FG7JString@0804a7a0 | subJString__C7JStringii@0804f3bc | LowerCase__FRC7JString@0804fabc | Copy__FRC7JStringii@0804fa88 | Add__12TJStringListG7JString@080502f8 | FileExists__FRC7JString@08055134 | eh_context_initialize@0805ac44 | getGifNumber__FG7JStringRC7JString@0804b284 | GetWeaponName__FRC7JString@08051f00 | read__7istreamPci@0805681c
-
-See `functions.txt` / `functions.csv` for the full list.
+Full local function lists stay in untracked `functions.txt` / `functions.csv` under the analysis dir.
 
 ## Imports
 
 ```
-<EXTERNAL> :: _IO_adjust_column @ EXTERNAL:00000027
-<EXTERNAL> :: _IO_default_doallocate @ EXTERNAL:00000005
-<EXTERNAL> :: _IO_default_finish @ EXTERNAL:00000004
-<EXTERNAL> :: _IO_default_pbackfail @ EXTERNAL:00000049
-<EXTERNAL> :: _IO_default_uflow @ EXTERNAL:0000002f
-<EXTERNAL> :: _IO_default_xsgetn @ EXTERNAL:00000006
-<EXTERNAL> :: _IO_default_xsputn @ EXTERNAL:0000000e
-<EXTERNAL> :: _IO_do_write @ EXTERNAL:0000001f
-<EXTERNAL> :: _IO_doallocbuf @ EXTERNAL:0000003b
-<EXTERNAL> :: _IO_file_attach @ EXTERNAL:00000045
-<EXTERNAL> :: _IO_file_close @ EXTERNAL:00000012
-<EXTERNAL> :: _IO_file_close_it @ EXTERNAL:00000019
-<EXTERNAL> :: _IO_file_doallocate @ EXTERNAL:00000034
-<EXTERNAL> :: _IO_file_fopen @ EXTERNAL:00000046
-<EXTERNAL> :: _IO_file_init @ EXTERNAL:0000001c
-<EXTERNAL> :: _IO_file_open @ EXTERNAL:00000038
-<EXTERNAL> :: _IO_file_overflow @ EXTERNAL:0000001d
-<EXTERNAL> :: _IO_file_read @ EXTERNAL:00000035
-<EXTERNAL> :: _IO_file_seek @ EXTERNAL:00000009
-<EXTERNAL> :: _IO_file_seekoff @ EXTERNAL:00000016
-<EXTERNAL> :: _IO_file_setbuf @ EXTERNAL:0000002a
-<EXTERNAL> :: _IO_file_stat @ EXTERNAL:0000001e
-<EXTERNAL> :: _IO_file_sync @ EXTERNAL:00000018
-<EXTERNAL> :: _IO_file_underflow @ EXTERNAL:00000025
-<EXTERNAL> :: _IO_file_write @ EXTERNAL:00000048
-<EXTERNAL> :: _IO_file_xsputn @ EXTERNAL:00000041
-<EXTERNAL> :: _IO_flockfile @ EXTERNAL:00000010
-<EXTERNAL> :: _IO_flush_all @ EXTERNAL:00000026
-<EXTERNAL> :: _IO_flush_all_linebuffered @ EXTERNAL:0000000b
-<EXTERNAL> :: _IO_free_backup_area @ EXTERNAL:0000002d
-<EXTERNAL> :: _IO_funlockfile @ EXTERNAL:0000000c
-<EXTERNAL> :: _IO_getc @ EXTERNAL:0000002b
-<EXTERNAL> :: _IO_getline_info @ EXTERNAL:00000024
-<EXTERNAL> :: _IO_init @ EXTERNAL:00000044
-<EXTERNAL> :: _IO_init_marker @ EXTERNAL:0000000a
-<EXTERNAL> :: _IO_link_in @ EXTERNAL:00000002
-<EXTERNAL> :: _IO_marker_delta @ EXTERNAL:00000028
-<EXTERNAL> :: _IO_marker_difference @ EXTERNAL:0000002c
-<EXTERNAL> :: _IO_padn @ EXTERNAL:00000023
-<EXTERNAL> :: _IO_peekc_locked @ EXTERNAL:00000036
-<EXTERNAL> :: _IO_putc @ EXTERNAL:0000003f
-<EXTERNAL> :: _IO_remove_marker @ EXTERNAL:00000001
-<EXTERNAL> :: _IO_seekmark @ EXTERNAL:0000004b
-<EXTERNAL> :: _IO_seekoff @ EXTERNAL:0000003e
-<EXTERNAL> :: _IO_seekpos @ EXTERNAL:00000040
-<EXTERNAL> :: _IO_setb @ EXTERNAL:00000032
-<EXTERNAL> :: _IO_sgetn @ EXTERNAL:00000008
-<EXTERNAL> :: _IO_sputbackc @ EXTERNAL:00000003
-<EXTERNAL> :: _IO_sungetc @ EXTERNAL:0000000f
-<EXTERNAL> :: _IO_switch_to_get_mode @ EXTERNAL:00000039
-<EXTERNAL> :: _IO_un_link @ EXTERNAL:00000047
-<EXTERNAL> :: _IO_unsave_markers @ EXTERNAL:00000014
-<EXTERNAL> :: _IO_vfscanf @ EXTERNAL:0000003a
-<EXTERNAL> :: __errno_location @ EXTERNAL:0000003c
-<EXTERNAL> :: __finite @ EXTERNAL:00000022
-<EXTERNAL> :: __finitef @ EXTERNAL:00000015
-<EXTERNAL> :: __finitel @ EXTERNAL:0000004a
-<EXTERNAL> :: __gmon_start__ @ EXTERNAL:0000004d
-<EXTERNAL> :: __libc_start_main @ EXTERNAL:00000042
-<EXTERNAL> :: __printf_fp @ EXTERNAL:0000001b
-<EXTERNAL> :: __underflow @ EXTERNAL:0000002e
-<EXTERNAL> :: abort @ EXTERNAL:0000001a
-<EXTERNAL> :: atof @ EXTERNAL:00000020
-<EXTERNAL> :: atol @ EXTERNAL:00000007
-<EXTERNAL> :: exit @ EXTERNAL:0000003d
-<EXTERNAL> :: fflush @ EXTERNAL:00000017
-<EXTERNAL> :: fprintf @ EXTERNAL:00000021
-<EXTERNAL> :: free @ EXTERNAL:0000004c
-<EXTERNAL> :: getcwd @ EXTERNAL:00000031
-<EXTERNAL> :: localeconv @ EXTERNAL:00000037
-<EXTERNAL> :: malloc @ EXTERNAL:00000013
-<EXTERNAL> :: memcpy @ EXTERNAL:0000000d
-<EXTERNAL> :: sprintf @ EXTERNAL:00000033
-<EXTERNAL> :: strcmp @ EXTERNAL:00000030
-<EXTERNAL> :: strlen @ EXTERNAL:00000043
-<EXTERNAL> :: tolower @ EXTERNAL:00000011
-<EXTERNAL> :: unlink @ EXTERNAL:00000029
+<EXTERNAL> :: _IO_adjust_column
+<EXTERNAL> :: _IO_default_doallocate
+<EXTERNAL> :: _IO_default_finish
+<EXTERNAL> :: _IO_default_pbackfail
+<EXTERNAL> :: _IO_default_uflow
+<EXTERNAL> :: _IO_default_xsgetn
+<EXTERNAL> :: _IO_default_xsputn
+<EXTERNAL> :: _IO_do_write
+<EXTERNAL> :: _IO_doallocbuf
+<EXTERNAL> :: _IO_file_attach
+<EXTERNAL> :: _IO_file_close
+<EXTERNAL> :: _IO_file_close_it
+<EXTERNAL> :: _IO_file_doallocate
+<EXTERNAL> :: _IO_file_fopen
+<EXTERNAL> :: _IO_file_init
+<EXTERNAL> :: _IO_file_open
+<EXTERNAL> :: _IO_file_overflow
+<EXTERNAL> :: _IO_file_read
+<EXTERNAL> :: _IO_file_seek
+<EXTERNAL> :: _IO_file_seekoff
+<EXTERNAL> :: _IO_file_setbuf
+<EXTERNAL> :: _IO_file_stat
+<EXTERNAL> :: _IO_file_sync
+<EXTERNAL> :: _IO_file_underflow
+<EXTERNAL> :: _IO_file_write
+<EXTERNAL> :: _IO_file_xsputn
+<EXTERNAL> :: _IO_flockfile
+<EXTERNAL> :: _IO_flush_all
+<EXTERNAL> :: _IO_flush_all_linebuffered
+<EXTERNAL> :: _IO_free_backup_area
+<EXTERNAL> :: _IO_funlockfile
+<EXTERNAL> :: _IO_getc
+<EXTERNAL> :: _IO_getline_info
+<EXTERNAL> :: _IO_init
+<EXTERNAL> :: _IO_init_marker
+<EXTERNAL> :: _IO_link_in
+<EXTERNAL> :: _IO_marker_delta
+<EXTERNAL> :: _IO_marker_difference
+<EXTERNAL> :: _IO_padn
+<EXTERNAL> :: _IO_peekc_locked
+<EXTERNAL> :: _IO_putc
+<EXTERNAL> :: _IO_remove_marker
+<EXTERNAL> :: _IO_seekmark
+<EXTERNAL> :: _IO_seekoff
+<EXTERNAL> :: _IO_seekpos
+<EXTERNAL> :: _IO_setb
+<EXTERNAL> :: _IO_sgetn
+<EXTERNAL> :: _IO_sputbackc
+<EXTERNAL> :: _IO_sungetc
+<EXTERNAL> :: _IO_switch_to_get_mode
+<EXTERNAL> :: _IO_un_link
+<EXTERNAL> :: _IO_unsave_markers
+<EXTERNAL> :: _IO_vfscanf
+<EXTERNAL> :: __errno_location
+<EXTERNAL> :: __finite
+<EXTERNAL> :: __finitef
+<EXTERNAL> :: __finitel
+<EXTERNAL> :: __gmon_start__
+<EXTERNAL> :: __libc_start_main
+<EXTERNAL> :: __printf_fp
+<EXTERNAL> :: __underflow
+<EXTERNAL> :: abort
+<EXTERNAL> :: atof
+<EXTERNAL> :: atol
+<EXTERNAL> :: exit
+<EXTERNAL> :: fflush
+<EXTERNAL> :: fprintf
+<EXTERNAL> :: free
+<EXTERNAL> :: getcwd
+<EXTERNAL> :: localeconv
+<EXTERNAL> :: malloc
+<EXTERNAL> :: memcpy
+<EXTERNAL> :: sprintf
+<EXTERNAL> :: strcmp
+<EXTERNAL> :: strlen
+<EXTERNAL> :: tolower
+<EXTERNAL> :: unlink
 ```
 
 ## Exports / entry points
 
 ```
-.LFE141 @ 0805ef4c [function]
-.LFE20 @ 0805f16c [function]
-.LFE23 @ 0805eff8 [function]
-AccountExists__FRC7JString @ 0805464c [Function]
-AccountExists__FRC7JString @ 0805464c [function]
-AddTempAccount__FP12TTempAccount @ 08052208 [Function]
-AddTempAccount__FP12TTempAccount @ 08052208 [function]
-AddWeapon__FRC7JString @ 0805202c [Function]
-AddWeapon__FRC7JString @ 0805202c [function]
-Add__12TJStringListG7JString @ 080502f8 [Function]
-Add__12TJStringListG7JString @ 080502f8 [function]
-Add__5TListPv @ 0804fea0 [Function]
-Add__5TListPv @ 0804fea0 [function]
-Assign__12TJStringListP12TJStringList @ 0805027c [Function]
-Assign__12TJStringListP12TJStringList @ 0805027c [function]
-Assigned__FPCv @ 080553a4 [Function]
-Assigned__FPCv @ 080553a4 [function]
-Bbase__9streambuf @ 0805a1a8 [Function]
-Bbase__9streambuf @ 0805a1a8 [function]
-Bptr__9streambuf @ 0805a1c8 [Function]
-Bptr__9streambuf @ 0805a1c8 [function]
-Clear__12TJStringList @ 080505a4 [Function]
-Clear__12TJStringList @ 080505a4 [function]
-Clear__5TList @ 080501f0 [Function]
-Clear__5TList @ 080501f0 [function]
-CompressBuf__FPCvi @ 080550e4 [Function]
-CompressBuf__FPCvi @ 080550e4 [function]
-Copy__FRC7JStringii @ 0804fa88 [Function]
-Copy__FRC7JStringii @ 0804fa88 [function]
-DecompressBuf__FPCvi @ 0805510c [Function]
-DecompressBuf__FPCvi @ 0805510c [function]
-Delete__12TJStringListi @ 0805043c [Function]
-Delete__12TJStringListi @ 0805043c [function]
-Delete__5TListi @ 0805006c [Function]
-Delete__5TListi @ 0805006c [function]
-ExtractFilepath__FRC7JString @ 0805520c [Function]
-ExtractFilepath__FRC7JString @ 0805520c [function]
-FileExists__FRC7JString @ 08055134 [Function]
-FileExists__FRC7JString @ 08055134 [function]
-FormCreate__12TServerFrame @ 0804b414 [Function]
+.LFE141 [function]
+.LFE20 [function]
+.LFE23 [function]
+AccountExists__FRC7JString [Function]
+AccountExists__FRC7JString [function]
+AddTempAccount__FP12TTempAccount [Function]
+AddTempAccount__FP12TTempAccount [function]
+AddWeapon__FRC7JString [Function]
+AddWeapon__FRC7JString [function]
+Add__12TJStringListG7JString [Function]
+Add__12TJStringListG7JString [function]
+Add__5TListPv [Function]
+Add__5TListPv [function]
+Assign__12TJStringListP12TJStringList [Function]
+Assign__12TJStringListP12TJStringList [function]
+Assigned__FPCv [Function]
+Assigned__FPCv [function]
+Bbase__9streambuf [Function]
+Bbase__9streambuf [function]
+Bptr__9streambuf [Function]
+Bptr__9streambuf [function]
+Clear__12TJStringList [Function]
+Clear__12TJStringList [function]
+Clear__5TList [Function]
+Clear__5TList [function]
+CompressBuf__FPCvi [Function]
+CompressBuf__FPCvi [function]
+Copy__FRC7JStringii [Function]
+Copy__FRC7JStringii [function]
+DecompressBuf__FPCvi [Function]
+DecompressBuf__FPCvi [function]
+Delete__12TJStringListi [Function]
+Delete__12TJStringListi [function]
+Delete__5TListi [Function]
+Delete__5TListi [function]
+ExtractFilepath__FRC7JString [Function]
+ExtractFilepath__FRC7JString [function]
+FileExists__FRC7JString [Function]
+FileExists__FRC7JString [function]
+FormCreate__12TServerFrame [Function]
 ```
 
 ## Interesting strings
@@ -172,19 +169,19 @@ FormCreate__12TServerFrame @ 0804b414 [Function]
 Useful for CLI flags, config paths, URLs, protocol tokens.
 
 ```
-080480f4	/lib/ld-linux.so.2
-08049782	__printf_fp
-08049812	fprintf
-08049991	sprintf
-08049a83	__libc_start_main
-08049ac2	_IO_file_fopen
-08049b08	_IO_default_pbackfail
-0805f76c	onlinestartlocal.graal
-0805f900	<body bgcolor="#009933" background="image/fond2b.gif" text="#CCCC99" link="#0000CC" vlink="#0000CC">
-0805fab1	</table>
-0805fb57	accounts/acc
-0805fb98	cgi-bin/newaccounts.txt
-0805fbb4	cgi-bin/names.txt
+/lib/ld-linux.so.2
+__printf_fp
+fprintf
+sprintf
+__libc_start_main
+_IO_file_fopen
+_IO_default_pbackfail
+onlinestartlocal.graal
+<body bgcolor="#009933" background="image/fond2b.gif" text="#CCCC99" link="#0000CC" vlink="#0000CC">
+</table>
+accounts/acc
+cgi-bin/newaccounts.txt
+cgi-bin/names.txt
 .comment::00000001	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
 .comment::0000003e	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
 .comment::000004a3	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
@@ -234,62 +231,9 @@ Useful for CLI flags, config paths, URLs, protocol tokens.
 .stabstr::00002686	/usr/include/rpc/netdb.h
 ```
 
-## Decompiled C
+## Decompile note
 
-| File | Function | Address |
-| --- | --- | --- |
-| `main_0804da2c.c` | `main` | `0804da2c` |
-| `init__3iosP9streambufP7ostream_0805a528.c` | `init__3iosP9streambufP7ostream` | `0805a528` |
-| `do_osfx__7ostream_08058674.c` | `do_osfx__7ostream` | `08058674` |
-| `entry_0804a6d0.c` | `entry` | `0804a6d0` |
-| `init__7filebuf_0805a610.c` | `init__7filebuf` | `0805a610` |
-| `init_dummy_0804a788.c` | `init_dummy` | `0804a788` |
-| `init_dummy_0805e4c8.c` | `init_dummy` | `0805e4c8` |
-| `SetProperties__13TServerPlayerG7JString_0804bc18.c` | `SetProperties__13TServerPlayerG7JString` | `0804bc18` |
-| `ParseAccount__FG7JString_0805388c.c` | `ParseAccount__FG7JString` | `0805388c` |
-| `LoadAccounts__Fv_0805257c.c` | `LoadAccounts__Fv` | `0805257c` |
-| `SaveAccount__FP12TTempAccountG7JString_08052c9c.c` | `SaveAccount__FP12TTempAccountG7JString` | `08052c9c` |
-| `SaveAccounts__Fv_08053270.c` | `SaveAccounts__Fv` | `08053270` |
-| `LoadAccount__14TServerAccount_080513f0.c` | `LoadAccount__14TServerAccount` | `080513f0` |
-| `ReadNewAccounts__Fv_08054760.c` | `ReadNewAccounts__Fv` | `08054760` |
-| `RemoveLineEnds__FG7JString_0804ac70.c` | `RemoveLineEnds__FG7JString` | `0804ac70` |
-| `throw_helper_0805b214.c` | `throw_helper` | `0805b214` |
-| `ParseAccount2__FG7JString_0805425c.c` | `ParseAccount2__FG7JString` | `0805425c` |
-| `read_int__FR7istreamRUxRi_08056c14.c` | `read_int__FR7istreamRUxRi` | `08056c14` |
-| `write_int__FR7ostreamUxi_08057598.c` | `write_int__FR7ostreamUxi` | `08057598` |
-| `AddTempAccount__FP12TTempAccount_08052208.c` | `AddTempAccount__FP12TTempAccount` | `08052208` |
-| `LoadFromFile__7TStreamRC7JString_08050934.c` | `LoadFromFile__7TStreamRC7JString` | `08050934` |
-| `GetClosed__12TServerChest_0804d364.c` | `GetClosed__12TServerChest` | `0804d364` |
-| `SaveAccountNames__Fv_08054d40.c` | `SaveAccountNames__Fv` | `08054d40` |
-| `end_fde_sort_0805c258.c` | `end_fde_sort` | `0805c258` |
-| `GetIDAsJString__14TServerAccount_08050f54.c` | `GetIDAsJString__14TServerAccount` | `08050f54` |
-| `getline__7istreamPcic_080590b0.c` | `getline__7istreamPcic` | `080590b0` |
-| `RemoveExtension__FG7JString_0804a970.c` | `RemoveExtension__FG7JString` | `0804a970` |
-| `SetCommaText__12TJStringListG7JString_08050628.c` | `SetCommaText__12TJStringListG7JString` | `08050628` |
-| `extract_cie_info_0805c6c4.c` | `extract_cie_info` | `0805c6c4` |
-| `dcast__C17__class_type_infoRC9type_infoiPvPC9type_infoT3_0805d514.c` | `dcast__C17__class_type_infoRC9type_infoiPvPC9type_infoT3` | `0805d514` |
-| `AddWeapon__FRC7JString_0805202c.c` | `AddWeapon__FRC7JString` | `0805202c` |
-| `GetOpened__12TServerChest_0804d728.c` | `GetOpened__12TServerChest` | `0804d728` |
-| `_._7JString_0805e4e0.c` | `_._7JString` | `0805e4e0` |
-| `flush__7ostream_08058364.c` | `flush__7ostream` | `08058364` |
-| `length__C7JString_0804f1a8.c` | `length__C7JString` | `0804f1a8` |
-| `Length__FRC7JString_0804f9a4.c` | `Length__FRC7JString` | `0804f9a4` |
-| `_skip_ws__7istream_08058488.c` | `_skip_ws__7istream` | `08058488` |
-| `text__C7JString_0804f1d0.c` | `text__C7JString` | `0804f1d0` |
-| `SaveToFile__7TStreamRC7JString_08050c30.c` | `SaveToFile__7TStreamRC7JString` | `08050c30` |
-| `_._9type_info_0805d334.c` | `_._9type_info` | `0805d334` |
-| `LowerCaseFilename__FG7JString_0804a7a0.c` | `LowerCaseFilename__FG7JString` | `0804a7a0` |
-| `subJString__C7JStringii_0804f3bc.c` | `subJString__C7JStringii` | `0804f3bc` |
-| `LowerCase__FRC7JString_0804fabc.c` | `LowerCase__FRC7JString` | `0804fabc` |
-| `Copy__FRC7JStringii_0804fa88.c` | `Copy__FRC7JStringii` | `0804fa88` |
-| `Add__12TJStringListG7JString_080502f8.c` | `Add__12TJStringListG7JString` | `080502f8` |
-| `FileExists__FRC7JString_08055134.c` | `FileExists__FRC7JString` | `08055134` |
-| `eh_context_initialize_0805ac44.c` | `eh_context_initialize` | `0805ac44` |
-| `getGifNumber__FG7JStringRC7JString_0804b284.c` | `getGifNumber__FG7JStringRC7JString` | `0804b284` |
-| `GetWeaponName__FRC7JString_08051f00.c` | `GetWeaponName__FRC7JString` | `08051f00` |
-| `read__7istreamPci_0805681c.c` | `read__7istreamPci` | `0805681c` |
-
-Read these for CLI parsing, config paths, and protocol handlers when rebuilding/rehosting.
+Decompiled C was produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour.
 
 ## Rebuild / rehost checklist
 
