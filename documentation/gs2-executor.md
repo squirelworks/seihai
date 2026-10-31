@@ -56,7 +56,7 @@ The stack holds up to 256 entries. Each entry is a type tag (0 the
 | `OP_INC`, `OP_DEC` | change the variable on top, which stays there | bin |
 | arithmetic 60–65 | on the numbers in the two top entries. `x / 0` is 0 | bin |
 | `OP_NOT`, `OP_UNARYSUB`, `OP_ABS`, `OP_SIN`, `OP_COS`, `OP_ARCTAN` | on the top number | bin |
-| `OP_INT`, bitwise 76–79 | through a double-to-int conversion | bin |
+| `OP_INT`, bitwise 76–79 | through the client's double-to-int conversion (`0x3d3ab8`), which rounds down: `int(-1.5)` is -2 | bin |
 | `OP_RANDOM` | `S1 + r·(S0 − S1)`, `r` from the client's generator | bin |
 | `OP_MIN`, `OP_MAX` | the smaller or larger of the two by the comparison below | bin |
 | comparisons 70–75 | a three-way compare: two strings as text, two numbers as numbers within a small epsilon, a string against a number as the number it reads as | bin |
@@ -88,11 +88,13 @@ handled before that search. **[bin]**
   function the way `OP_CALL` would. Both return `Done`, `Sleep(t)` (go on
   with `resume`), `Stopped(reason)` or `NoSuchEvent`.
 - Every opcode in the table above is run. Anything else (arrays,
-  objects, `with`, `for`-each, the string methods, `format`, shifts, `exp`,
+  objects, `with`, `for`-each, the list methods, shifts, `exp`,
   `log`, `in`, `params`) is logged as "not run yet (Stage D)" and skipped.
   A value the reader does not name is logged as an unknown opcode and
   skipped. Skipping can leave the stack uneven. The VM's own checks still
   stop the script if that happens.
+- The string built-ins (`format`, `char` and the string methods) run as
+  in `gs2-commands.md`.
 - The timer commands (`settimer`, `timeout`, `scheduleevent`,
   `cancelevents`) are the machine's own and run on `Machine::tick`; see
   `gs2-commands.md`.
