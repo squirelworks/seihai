@@ -178,6 +178,21 @@ may be caches filling; I did not trace it further.
    a 4-core VM. Past that, frames go over 100 ms: 174 times in b1–b4, and
    2274 times (up to 601 ms) in the 28-client run. Nothing broke, but the
    "many clients" numbers are CPU-bound.
+   **Fixed later (`seihai::present`).** A profile of an idle 2.22 client
+   put 60 % of its CPU in minifb, which scales the whole frame to the
+   window and sends every pixel with `XPutImage` on each update, 15 % in
+   packing RGB into words, and 3 % in rebuilding the script `board[]`
+   with one run scan per tile. The loop now sends a frame only when it
+   differs from the last one sent (and at least every 250 ms), packs
+   pixels with `chunks_exact`, and builds the board in one pass. Offline
+   under Xvfb, an idle client went from 23 % to 4–5 % and a walking one
+   from 24 % to 10–13 %; Xvfb's own share fell from 10 % to 1–4 %. In the
+   lab (8 × 2.22, 120 s, `run.sh`) the mean went from 23 % to 16 %, with
+   no exits, stalls or log lines of note. The arena clients stay near
+   23 %: their NPCs change the picture about 16 times a second, close to
+   the 2.x 50 ms game frame, and each frame sent is still a full
+   `XPutImage` (44 % of that client's CPU). Going lower needs a window
+   backend that uses shared memory (MIT-SHM) instead of minifb's X11 path.
 9. **The 1.41r1, 2.22 and 5.31r4 leaders send `BADDYPROPS` for every baddy
    every think, even when unchanged.** At 12 baddies that is 120 msgs/s
    from one client. **Checked since: this is what the real clients do.**

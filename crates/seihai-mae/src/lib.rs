@@ -13,6 +13,7 @@ pub mod gui;
 pub mod keys;
 pub mod help;
 pub mod inventory;
+pub mod present;
 pub mod render;
 pub mod settings;
 pub mod sound;
