@@ -1457,6 +1457,11 @@ fn main() {
         }
     };
     window.limit_update_rate(Some(std::time::Duration::from_millis(16)));
+    // Declared after `window`, so it is dropped before the window it draws into.
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+    let mut shm = seihai::present::ShmWindow::new(&window);
+    #[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android")))))]
+    let mut shm: Option<NoShm> = None;
 
     // Typed characters arrive through minifb's input callback.
     let typed: Arc<Mutex<Vec<char>>> = Arc::default();
@@ -3861,9 +3866,25 @@ fn main() {
         // Only a changed frame goes to the window: sending one scales it
         // and copies every pixel to the X server (see `seihai::present`).
         // An unchanged pass still polls input and keeps the 16 ms pace.
-        if presenter.should_send(&frame.pixels, frame.width as usize, frame.height as usize, window.get_size(), Instant::now()) {
-            seihai::present::rgb_to_0rgb(&frame.pixels, &mut buffer);
-            let _ = window.update_with_buffer(&buffer, frame.width as usize, frame.height as usize);
+        let (fw, fh) = (frame.width as usize, frame.height as usize);
+        if presenter.should_send(&frame.pixels, fw, fh, window.get_size(), Instant::now()) {
+            // On X11 the frame goes through shared memory; if that fails
+            // once, minifb's own path takes over for good.
+            let shown = match shm.as_mut().map(|s| s.present(&frame.pixels, fw, fh, window.get_size())) {
+                Some(Ok(())) => true,
+                Some(Err(e)) => {
+                    eprintln!("shared-memory window: {e}; using minifb's from now on");
+                    shm = None;
+                    false
+                }
+                None => false,
+            };
+            if shown {
+                window.update();
+            } else {
+                seihai::present::rgb_to_0rgb(&frame.pixels, &mut buffer);
+                let _ = window.update_with_buffer(&buffer, fw, fh);
+            }
         } else {
             window.update();
         }
@@ -4072,5 +4093,16 @@ fn first_frame_check(assets: Option<&std::path::Path>, name: &str) -> Vec<u8> {
     match found.and_then(|p| seihai::filecache::mod_time_of(&p)) {
         Some(t) => seihai::net::updatefile_message(t, name),
         None => seihai::net::wantfile_message(name),
+    }
+}
+
+/// Where there is no shared-memory path, minifb draws every frame.
+#[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android")))))]
+struct NoShm;
+
+#[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android")))))]
+impl NoShm {
+    fn present(&mut self, _: &[u8], _: usize, _: usize, _: (usize, usize)) -> Result<(), String> {
+        Ok(())
     }
 }

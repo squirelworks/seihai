@@ -40,3 +40,10 @@ audio-rodio = ["dep:rodio"]
 
 [dev-dependencies]
 serde_json = "1"
+
+# Linux/BSD under X11: frames go to the window through MIT-SHM shared
+# memory instead of minifb's XPutImage over the socket (see
+# `seihai::present`). Wayland and the other systems keep minifb's path.
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+softbuffer = { version = "0.4", default-features = false, features = ["x11", "x11-dlopen"] }
+raw-window-handle = "0.6"
