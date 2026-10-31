@@ -177,6 +177,37 @@ changed key; back it up.
 - A server may require the secure login (refuse classic logins with a
   password) as a setting; off by default so real clients keep working.
 
+## Gserver to listserver link
+
+The link between a gserver and the listserver carries every player's
+account and password (`VERIACC2`, 17) whatever client the player uses, so
+it is encrypted for every client, real Graal clients included. Both ends
+are Seihai's own programs. (The GPL fork still speaks the plain link until
+it implements this section.)
+
+1. The gserver connects to the listserver's gserver port and sends, as its
+   first line and **instead of** `SVO_REGISTERV3`, an uncompressed C1 with
+   an empty prefix and suffix and the inner token `SVLINK01`:
+   `"SEI00001" "SVLINK01" b64(gserver_x25519_pub) \n`.
+2. The listserver answers with S1 as one uncompressed line, signed as for
+   a login (the signed C1 is the line without its `\n`).
+3. The gserver checks the signature and pins the listserver's key: the
+   setting `listserver_key`, or else trust on first use in the world's
+   `config/listserver.pin`. On a mismatch it does not send anything more.
+4. Both sides derive, besides the login key, two channel keys:
+   `HKDF-SHA256(salt = th, ikm = shared, info = "seihai-channel-v1/c2s key")`
+   and `... "seihai-channel-v1/s2c key"` (c2s = gserver to listserver).
+5. From then on every byte both ways goes in records:
+   `u16be length || ChaCha20-Poly1305(dir_key, nonce = 0x00000000 || u64be(record count), aad = empty, plaintext)`,
+   at most 16 KiB of plaintext per record, counted from 0 in each
+   direction. A record that does not open closes the link.
+6. Inside the records the link is the classic one, byte for byte: the
+   `SVO_REGISTERV3` line, then zlib frames of messages, and the replies.
+
+The listserver takes plain links too unless `require_secure_gserver_link`
+is on, so GServer-v2 and the fork can still register. `seihai_core`'s
+`seclogin::Channel` and `SecureStream` implement the records.
+
 ## Implementations
 
 | Where | What |
@@ -184,8 +215,8 @@ changed key; back it up.
 | `seihai` `crates/seihai-core/src/protocol/seclogin.rs` | Messages, crypto, pins, server key file: one definition for client and servers |
 | `seihai` `crates/seihai-core/src/net/mod.rs` | `login_gserver_secure`, `Connection::login_secure_with`, `fetch_server_list_secure` |
 | `seihai` `seihai-mae` | `--secure-login`, `--server-key KEY` |
-| `seihai-listserver` | Secure id 7 on every client port |
-| `seihai-gserver` | Login accept module (classic and secure); the rest of stage 1 to come |
+| `seihai-listserver` | Secure id 7 on every client port; the encrypted gserver link |
+| `seihai-gserver` | Secure login on the stage-1 login path; the encrypted listserver link (`listlink.rs`) |
 | `seihai-gserver-v2` (GPL fork) | Not yet. Write it from this document with libsodium or OpenSSL, not from the Rust code, so the licences stay apart |
 
 ## Test vectors
@@ -201,11 +232,6 @@ vector set (fixed X25519 and Ed25519 keys) is a TODO for the fork's tests.
 - `SEI00002`: keep the AEAD keys and encrypt the whole session (each frame
   sealed with a counter nonce) in place of gen-3/gen-5.
 - OPAQUE (RFC 9807) so the server never sees the password.
-- Optional, only if Squirrel asks: gserver to listserver account checks
-  (`VERIACC2`) carry the player's password in the clear on that
-  server-to-server link. Both ends are ours, so the same handshake could
-  cover it (the gserver pins the listserver's key), or the gserver can
-  check accounts itself.
 - RC logins (`seihai-rc`) through the same handshake.
 - The GUI login screen: a "secure login" tick box and the fingerprint prompt.
 
