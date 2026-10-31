@@ -7,7 +7,7 @@
 
 ## Purpose (plain behaviour)
 
-Classic **Graal NPC Control** staff client for talking to an NPC server / world control port.
+Classic **Graal NPC Control** staff client for talking to an NPC server / world control port (banner string **GServer2 NPC Control 2001/07/13** / **Graal NPC Control**).
 
 Observed behaviour:
 

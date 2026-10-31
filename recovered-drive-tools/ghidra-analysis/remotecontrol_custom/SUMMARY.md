@@ -6,7 +6,7 @@
 
 ## Purpose (plain behaviour)
 
-Community-modified **Graal Remote Control** (“Modified by Agret” version string). Classic Delphi VCL RC rather than the GTK RemoteControl3 line.
+Community-modified **Graal Remote Control** (“Modified by Agret” / “Agret's Blue RC” branding, `controlconfig.txt` with nickname/UI colour keys). Classic Delphi VCL RC rather than the GTK RemoteControl3 line. Companion **`Agret_RC.exe`** in the same folder is a **UPX-packed** PE; static `upx -d` yields a different hash from this `remotecontrol.exe` (variant build, not a byte-identical pack).
 
 Observed behaviour from strings/imports:
 
