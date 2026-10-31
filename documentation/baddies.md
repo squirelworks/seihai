@@ -43,6 +43,12 @@ PLO_BADDYPROPS / PLI_BADDYPROPS (15): `id`, then `prop, value` pairs.
 | 8, 9, 10 | verses: on sight, on hurt, on attack (text) |
 
 * The captures confirm this. The 2.22 server sends 6 baddies of 67 to 68 bytes. On level entry the leader (2.22 and 2.31) sends 6 messages of 5,5,5,5,3,5 bytes, then 6 of 3 bytes 100 ms later.
+* The real 2.00 as leader (`lan-200west.txt`) shows how a hunt goes, and Seihai matches it (test `the_hunt_matches_the_2_00_capture`):
+  * the baddy looks around with counter 44;
+  * it then hunts with counter 16, counting down to 5 without moving;
+  * then the counter goes to 0, and the baddy moves half a tile a think while the counter cycles 3, 2, 1, 0.
+* The same capture shows the touch damage: 1 half heart, and 2 from the gold soldier (baddy 6, type 7).
+* That capture has no baddy getting hurt, so it says nothing about the knockback.
 * The leader stores each baddy's props on its first think and sends only the changed props after that.
 * For a custom image the leader sends the type's default image name. GServer notes "client resets the custom image when the baddy is hurt".
 
