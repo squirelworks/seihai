@@ -1,0 +1,5 @@
+BLOCKED: Google Drive refused download.
+Drive file id: 1t4vGUTKEgSp7P5l-dK6SHTLQNEBZwKXt
+Error: 403 cannotDownloadAbusiveFile — "This file has been identified as malware or spam and cannot be downloaded."
+Reported size in Drive metadata: 39156 bytes
+MIME: application/zip

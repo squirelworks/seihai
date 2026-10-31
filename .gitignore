@@ -17,7 +17,9 @@ __pycache__/
 /recovered-drive-tools/**
 !/recovered-drive-tools/**/
 !/recovered-drive-tools/**/*.md
-# Recovered hacks staging: commit analysis docs only; ignore binaries / archives
+# Recovered hacks staging: analysis docs/metadata only; ignore binaries / archives
 /recovered-hacks/**
 !/recovered-hacks/**/
 !/recovered-hacks/**/*.md
+!/recovered-hacks/**/*.json
+!/recovered-hacks/**/*.BLOCKED.txt
