@@ -2,3 +2,6 @@
 **/*.rs.bk
 Cargo.lock
 __pycache__/
+
+# Nested sibling clone for recovery work (own repo: squirelworks/seihai-servertools)
+/seihai-servertools/
