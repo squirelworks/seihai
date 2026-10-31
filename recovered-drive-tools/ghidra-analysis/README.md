@@ -19,6 +19,10 @@ or GServer-v2 sources into MIT crates — see `SALVAGE_PLACEMENT.md`.
 | `gserver13/` | later/related gserver build | See SUMMARY for identity. |
 | `BytecodeViewer/` | GS2 `BytecodeViewer.exe` | Console PE; package also has compiler **source**. |
 | `TextConvert/` | `GRAALtoNWconverter/TextConvert.exe` | Delphi PE — Graal→NW text/level conversion helper. |
+| `gserverstat/` | `gserver_source/gserverstat` | ELF32 account/stats helper; not stripped. |
+| `gserverstat2/` | `gserver_source/gserverstat2` | Near-twin of `gserverstat` (same era). |
+
+Inventory + placement: [`../INVENTORY.md`](../INVENTORY.md), [`../SALVAGE_PLACEMENT.md`](../SALVAGE_PLACEMENT.md).
 
 ## Prefer source over RE when present
 
@@ -34,7 +38,6 @@ or GServer-v2 sources into MIT crates — see `SALVAGE_PLACEMENT.md`.
 | `Graal_Auto_Key`, `Graal_Digger` | Client trainers — **out of scope** for servertools. |
 | `charactergenerator` / `GCD.exe` | Client character tools — low priority for servertools. |
 | `scripteditor.exe` | VB5 GUI editor; OCX-heavy — defer unless GS2 tooling needs it. |
-| `INVENTORY.md` | Not written yet by recovery sibling; used `_catalog.json` + extracted trees instead. |
 | More Drive files | Sibling may still be downloading (`_catalog.json`). Re-run helper as new ELFs/PEs appear. |
 
 ## Re-run

@@ -1,11 +1,9 @@
-# Salvage analysis: gserver.exe
+# Salvage analysis: gserver
 
-- **Binary path (recorded):** `/workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver.exe`
-- **Ghidra language:** x86:LE:32:default / windows
-- **Format:** Portable Executable (PE)
-- **Functions:** 1051 (internal 1007)
-- **Imports / exports:** 141 / 1007
-- **Interesting strings / decompiled:** 1762 / 39
+- **Binary:** `/workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver.exe`
+- **Analyzed (UTC):** 20261031T204818Z
+- **Ghidra:** 12.2
+- **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing).
 
 ## Identity
 
@@ -20,145 +18,243 @@
 ad146b971eb1af76471d439f3f48b843e44c03b9b85f0ec9995877d6ba91bc01  /workspace/recovered-drive-tools/_inbox/extracted/GServersource/gserver.exe
 ```
 
-## Key functions
+## Ghidra program
 
-startServer__12TServerFrameRC7JString@0040274c | parse__13TServerPlayerRC7JString@0040abd0 | connecttodb__Fv@0043edf4 | loginerror__13TServerPlayerRC7JString@00419008 | init_dynamic_string@00468038 | init_dynamic_array@00468aa4 | encryptpassword__FRC7JString@0045009c | init_block@00470774 | init_available_charsets@00461588 | init_alloc_root@00465720 | do_osfx__7ostream@00452cd8 | mainCRTStartup@004011d4 | connect2@0045a738 | init_dbug_state@0045f440 | init_client_errs@00460a0c | init_glob_errs@00463758 | connect@0045a6e0 | bind@0045a6f0 | listen@0045a6f8 | accept@0045a720 | _SetProperties__13TServerPlayerG7JString@00420e20 | parseChat__13TServerPlayer@00426588 | _SendAccount__13TServerPlayerRC7JString@00419588 | _LoadNW__12TServerLevelRC7JString@00431c3c | _SetProperties__10TServerNPCG7JStringb@0043a8c0 | enterLevel__13TServerPlayerG7JStringddT1@0041d118 | _SetProfile__FG7JStringRC7JStringi@00448c54 | _LoadDBAccount__FP13TServerPlayerRC7JStringG7JString@0043f360 | _SaveDBAccount__FP13TServerPlayer@00440840 | _SetAccount__FG7JStringi@004439dc | _GetProperty__13TServerPlayeri@0041ed18 | _SetRCPlayerProps__13TServerPlayerG7JStringP13TServerPlayerb@00418000 | length__C7JString@0044b8c8 | clear__7JString@0044b894 | subJString__C7JStringii@0044ba60 | mysql_real_connect@0045c20c | text__C7JString@0044b8dc | _main@0042ce24 | _SendData__13TServerPlayeriRC7JString@00409630 | _ReadWarpAccounts__Fv@00447a2c
+| Field | Value |
+| --- | --- |
+| Format | Portable Executable (PE) |
+| Language | x86:LE:32:default |
+| Compiler | windows |
+| Functions | 1051 (internal 1007) |
+| Imports | 141 |
+| Exports / entries | 1007 |
+| Interesting strings | 1762 |
+| Decompiled funcs | 39 |
 
-## Top functions
+## Notable symbols (names only)
 
-_SetProperties__13TServerPlayerG7JString@00420e20(sz=20619) | parseChat__13TServerPlayer@00426588(sz=13136) | _SendAccount__13TServerPlayerRC7JString@00419588(sz=12402) | _LoadNW__12TServerLevelRC7JString@00431c3c(sz=9788) | _SetProperties__10TServerNPCG7JStringb@0043a8c0(sz=6932) | enterLevel__13TServerPlayerG7JStringddT1@0041d118(sz=6199) | _SetProfile__FG7JStringRC7JStringi@00448c54(sz=5080) | _LoadDBAccount__FP13TServerPlayerRC7JStringG7JString@0043f360(sz=4880) | __IO_dtoa@00459354(sz=4804) | _SaveDBAccount__FP13TServerPlayer@00440840(sz=4778) | _SetAccount__FG7JStringi@004439dc(sz=4349) | _GetProperty__13TServerPlayeri@0041ed18(sz=4088) | __IO_strtod@004580ac(sz=3991) | _SetRCPlayerProps__13TServerPlayerG7JStringP13TServerPlayerb@00418000(sz=3860) | _AddAccountFromRC__FG7JStringb@0044501c(sz=3826)
+Observed application/helper symbols (no addresses): `SetProperties`, `parseChat`, `SendAccount`, `LoadNW`, `enterLevel`, `SetProfile`, `LoadDBAccount`, `IO_dtoa`, `SaveDBAccount`, `SetAccount`, `GetProperty`, `IO_strtod`, `SetRCPlayerProps`, `AddAccountFromRC`, `startServer`, `parse`, `connecttodb`, `loginerror`, `init_dynamic_string`, `init_dynamic_array`, `encryptpassword`, `init_block`, `init_available_charsets`, `init_alloc_root`, `do_osfx`.
 
-## Sample interesting strings
+Full local function lists stay in untracked `functions.txt` / `functions.csv` under the analysis dir.
 
-```
-004025f0	socket exception: cannot create socket
-00402630	Port address %d is currently used by another programm. Try later!
-00402673	Server started. Port: %d
-004026b0	Couldn't bind the response socket
-004026f0	Response socket established at port 14899
-00402722	data/serverflags.txt
-00402737	data/maxplayers.txt
-00403926	logs/rclog.txt
-00403d45	logs/errorlog.txt
-00404530	TServerFrame::CreatePlayer(): Checking ipbanned.txt...
-00404568	data/ipbanned.txt
-00404590	TServerFrame::CreatePlayer(): Client was IP Banned!
-004045d0	TServerFrame::CreatePlayer(): GetFreePlayerID() returned %d!
-00404650	There are too many players (28000) on this server.
-00404690	TServerFrame::CreatePlayer(): Sent(UNLIMITEDSIG) = %s
-00404fac	RC disconnected:
-00406029	levelnpcs/
-004082b0	TServerPlayer::ClientRecieve(): buffer << sock->Read()
-004082f0	TServerPlayer::ClientRecieve(): sock->error == %d
-00408370	Your Graal.exe has sent to much data (>=128k in the input buffer)
-00408410	Your Graal.exe has sent a wrong data package length.
-00408490	Your Graal.exe has sent an empty data package.
-00409005	The socket to client
-0040909e	The connection to client
-004090d0	The connection to you was blocked for more than one minute (still
-004096b0	Error while sending data to client
-0040a710	TServerPlayer::parse(): Sending Account...
-0040a743	level13.graal
-0040a810	"From jail you can only send PMs to admins (RCs)."
-0040a8b0	The server got uncertified data packages from your connection.
-0040a8fc	disconnects
-0040a910	The server administrator has disconnected you.
-0040a93f	Player
-0040aa09	loaded attributes of player
-0040aa90	loaded player attributes of account
-0040aab6	from world
-0040aacc	set attributes of player
-0040aaf0	set player attributes of account
-0040ab4f	set profile error:
-0040ab63	warped player
-```
-
-## Decompiled
-
-| File | Function | Address |
-| --- | --- | --- |
-| `startServer__12TServerFrameRC7JString_0040274c.c` | `startServer__12TServerFrameRC7JString` | `0040274c` |
-| `connecttodb__Fv_0043edf4.c` | `connecttodb__Fv` | `0043edf4` |
-| `loginerror__13TServerPlayerRC7JString_00419008.c` | `loginerror__13TServerPlayerRC7JString` | `00419008` |
-| `init_dynamic_string_00468038.c` | `init_dynamic_string` | `00468038` |
-| `init_dynamic_array_00468aa4.c` | `init_dynamic_array` | `00468aa4` |
-| `encryptpassword__FRC7JString_0045009c.c` | `encryptpassword__FRC7JString` | `0045009c` |
-| `init_block_00470774.c` | `init_block` | `00470774` |
-| `init_available_charsets_00461588.c` | `init_available_charsets` | `00461588` |
-| `init_alloc_root_00465720.c` | `init_alloc_root` | `00465720` |
-| `do_osfx__7ostream_00452cd8.c` | `do_osfx__7ostream` | `00452cd8` |
-| `mainCRTStartup_004011d4.c` | `mainCRTStartup` | `004011d4` |
-| `connect2_0045a738.c` | `connect2` | `0045a738` |
-| `init_dbug_state_0045f440.c` | `init_dbug_state` | `0045f440` |
-| `init_client_errs_00460a0c.c` | `init_client_errs` | `00460a0c` |
-| `init_glob_errs_00463758.c` | `init_glob_errs` | `00463758` |
-| `connect_0045a6e0.c` | `connect` | `0045a6e0` |
-| `bind_0045a6f0.c` | `bind` | `0045a6f0` |
-| `listen_0045a6f8.c` | `listen` | `0045a6f8` |
-| `accept_0045a720.c` | `accept` | `0045a720` |
-| `_SetProperties__13TServerPlayerG7JString_00420e20.c` | `_SetProperties__13TServerPlayerG7JString` | `00420e20` |
-| `parseChat__13TServerPlayer_00426588.c` | `parseChat__13TServerPlayer` | `00426588` |
-| `_SendAccount__13TServerPlayerRC7JString_00419588.c` | `_SendAccount__13TServerPlayerRC7JString` | `00419588` |
-| `_LoadNW__12TServerLevelRC7JString_00431c3c.c` | `_LoadNW__12TServerLevelRC7JString` | `00431c3c` |
-| `_SetProperties__10TServerNPCG7JStringb_0043a8c0.c` | `_SetProperties__10TServerNPCG7JStringb` | `0043a8c0` |
-| `enterLevel__13TServerPlayerG7JStringddT1_0041d118.c` | `enterLevel__13TServerPlayerG7JStringddT1` | `0041d118` |
-| `_SetProfile__FG7JStringRC7JStringi_00448c54.c` | `_SetProfile__FG7JStringRC7JStringi` | `00448c54` |
-| `_LoadDBAccount__FP13TServerPlayerRC7JStringG7JString_0043f360.c` | `_LoadDBAccount__FP13TServerPlayerRC7JStringG7JString` | `0043f360` |
-| `_SaveDBAccount__FP13TServerPlayer_00440840.c` | `_SaveDBAccount__FP13TServerPlayer` | `00440840` |
-| `_SetAccount__FG7JStringi_004439dc.c` | `_SetAccount__FG7JStringi` | `004439dc` |
-| `_GetProperty__13TServerPlayeri_0041ed18.c` | `_GetProperty__13TServerPlayeri` | `0041ed18` |
-| `_SetRCPlayerProps__13TServerPlayerG7JStringP13TServerPlayerb_00418000.c` | `_SetRCPlayerProps__13TServerPlayerG7JStringP13TServerPlayerb` | `00418000` |
-| `length__C7JString_0044b8c8.c` | `length__C7JString` | `0044b8c8` |
-| `clear__7JString_0044b894.c` | `clear__7JString` | `0044b894` |
-| `subJString__C7JStringii_0044ba60.c` | `subJString__C7JStringii` | `0044ba60` |
-| `mysql_real_connect_0045c20c.c` | `mysql_real_connect` | `0045c20c` |
-| `text__C7JString_0044b8dc.c` | `text__C7JString` | `0044b8dc` |
-| `_main_0042ce24.c` | `_main` | `0042ce24` |
-| `_SendData__13TServerPlayeriRC7JString_00409630.c` | `_SendData__13TServerPlayeriRC7JString` | `00409630` |
-| `_ReadWarpAccounts__Fv_00447a2c.c` | `_ReadWarpAccounts__Fv` | `00447a2c` |
-
-## Imports (head)
+## Imports
 
 ```
-ADVAPI32.DLL :: RegCloseKey @ EXTERNAL:00000001
-ADVAPI32.DLL :: RegEnumValueA @ EXTERNAL:00000002
-ADVAPI32.DLL :: RegOpenKeyExA @ EXTERNAL:00000003
-KERNEL32.DLL :: CloseHandle @ EXTERNAL:00000004
-KERNEL32.DLL :: CreateFileA @ EXTERNAL:00000005
-KERNEL32.DLL :: CreateSemaphoreA @ EXTERNAL:00000006
-KERNEL32.DLL :: DeleteCriticalSection @ EXTERNAL:00000007
-KERNEL32.DLL :: EnterCriticalSection @ EXTERNAL:00000008
-KERNEL32.DLL :: ExitProcess @ EXTERNAL:00000009
-KERNEL32.DLL :: GetCurrentDirectoryA @ EXTERNAL:0000000a
-KERNEL32.DLL :: GetLastError @ EXTERNAL:0000000b
-KERNEL32.DLL :: GetSystemTime @ EXTERNAL:0000000c
-KERNEL32.DLL :: GetWindowsDirectoryA @ EXTERNAL:0000000d
-KERNEL32.DLL :: InitializeCriticalSection @ EXTERNAL:0000000e
-KERNEL32.DLL :: InterlockedDecrement @ EXTERNAL:0000000f
-KERNEL32.DLL :: InterlockedIncrement @ EXTERNAL:00000010
-KERNEL32.DLL :: LeaveCriticalSection @ EXTERNAL:00000011
-KERNEL32.DLL :: ReadFile @ EXTERNAL:00000012
-KERNEL32.DLL :: ReleaseSemaphore @ EXTERNAL:00000013
-KERNEL32.DLL :: SetNamedPipeHandleState @ EXTERNAL:00000014
-KERNEL32.DLL :: SetThreadPriority @ EXTERNAL:00000015
-KERNEL32.DLL :: SetUnhandledExceptionFilter @ EXTERNAL:00000016
-KERNEL32.DLL :: Sleep @ EXTERNAL:00000017
-KERNEL32.DLL :: WaitForSingleObject @ EXTERNAL:00000018
-KERNEL32.DLL :: WaitNamedPipeA @ EXTERNAL:00000019
-KERNEL32.DLL :: WriteFile @ EXTERNAL:0000001a
-MSVCRT.DLL :: _HUGE @ EXTERNAL:0000002a
-MSVCRT.DLL :: __getmainargs @ EXTERNAL:0000002b
-MSVCRT.DLL :: __p__environ @ EXTERNAL:0000002c
-MSVCRT.DLL :: __set_app_type @ EXTERNAL:0000002d
-MSVCRT.DLL :: _beginthread @ EXTERNAL:0000002e
-MSVCRT.DLL :: _cexit @ EXTERNAL:0000002f
-MSVCRT.DLL :: _chdir @ EXTERNAL:0000001b
-MSVCRT.DLL :: _close @ EXTERNAL:0000001c
-MSVCRT.DLL :: _endthread @ EXTERNAL:00000030
-MSVCRT.DLL :: _errno @ EXTERNAL:00000031
-MSVCRT.DLL :: _fdopen @ EXTERNAL:0000001d
-MSVCRT.DLL :: _fileno @ EXTERNAL:0000001e
-MSVCRT.DLL :: _fileno @ EXTERNAL:00000032
-MSVCRT.DLL :: _findclose @ EXTERNAL:00000033
+ADVAPI32.DLL :: RegCloseKey
+ADVAPI32.DLL :: RegEnumValueA
+ADVAPI32.DLL :: RegOpenKeyExA
+KERNEL32.DLL :: CloseHandle
+KERNEL32.DLL :: CreateFileA
+KERNEL32.DLL :: CreateSemaphoreA
+KERNEL32.DLL :: DeleteCriticalSection
+KERNEL32.DLL :: EnterCriticalSection
+KERNEL32.DLL :: ExitProcess
+KERNEL32.DLL :: GetCurrentDirectoryA
+KERNEL32.DLL :: GetLastError
+KERNEL32.DLL :: GetSystemTime
+KERNEL32.DLL :: GetWindowsDirectoryA
+KERNEL32.DLL :: InitializeCriticalSection
+KERNEL32.DLL :: InterlockedDecrement
+KERNEL32.DLL :: InterlockedIncrement
+KERNEL32.DLL :: LeaveCriticalSection
+KERNEL32.DLL :: ReadFile
+KERNEL32.DLL :: ReleaseSemaphore
+KERNEL32.DLL :: SetNamedPipeHandleState
+KERNEL32.DLL :: SetThreadPriority
+KERNEL32.DLL :: SetUnhandledExceptionFilter
+KERNEL32.DLL :: Sleep
+KERNEL32.DLL :: WaitForSingleObject
+KERNEL32.DLL :: WaitNamedPipeA
+KERNEL32.DLL :: WriteFile
+MSVCRT.DLL :: _HUGE
+MSVCRT.DLL :: __getmainargs
+MSVCRT.DLL :: __p__environ
+MSVCRT.DLL :: __set_app_type
+MSVCRT.DLL :: _beginthread
+MSVCRT.DLL :: _cexit
+MSVCRT.DLL :: _chdir
+MSVCRT.DLL :: _close
+MSVCRT.DLL :: _endthread
+MSVCRT.DLL :: _errno
+MSVCRT.DLL :: _fdopen
+MSVCRT.DLL :: _fileno
+MSVCRT.DLL :: _fileno
+MSVCRT.DLL :: _findclose
+MSVCRT.DLL :: _fmode
+MSVCRT.DLL :: _fpreset
+MSVCRT.DLL :: _iob
+MSVCRT.DLL :: _isatty
+MSVCRT.DLL :: _lseek
+MSVCRT.DLL :: _open
+MSVCRT.DLL :: _putenv
+MSVCRT.DLL :: _read
+MSVCRT.DLL :: _setmode
+MSVCRT.DLL :: _sopen
+MSVCRT.DLL :: _strdup
+MSVCRT.DLL :: _unlink
+MSVCRT.DLL :: _write
+MSVCRT.DLL :: abort
+MSVCRT.DLL :: atexit
+MSVCRT.DLL :: atof
+MSVCRT.DLL :: atoi
+MSVCRT.DLL :: atol
+MSVCRT.DLL :: calloc
+MSVCRT.DLL :: ctime
+MSVCRT.DLL :: exit
+MSVCRT.DLL :: fclose
+MSVCRT.DLL :: fflush
+MSVCRT.DLL :: fgets
+MSVCRT.DLL :: findfirst
+MSVCRT.DLL :: findnext
+MSVCRT.DLL :: floor
+MSVCRT.DLL :: fopen
+MSVCRT.DLL :: fprintf
+MSVCRT.DLL :: fputc
+MSVCRT.DLL :: fputs
+MSVCRT.DLL :: fread
+MSVCRT.DLL :: free
+MSVCRT.DLL :: freopen
+MSVCRT.DLL :: fseek
+MSVCRT.DLL :: fstat
+MSVCRT.DLL :: ftime
+MSVCRT.DLL :: fwrite
+MSVCRT.DLL :: getc
+MSVCRT.DLL :: getenv
 ```
+
+_… 61 more in `imports.txt`_
+
+## Exports / entry points
+
+```
+_Accept__7TSocket [function]
+_AddAccountFromRC__FG7JStringb [function]
+_AddAccount__FRC7JStringN20bT3iT0 [function]
+_AddFileSeparators__FG7JString [function]
+_AddLineEnds__FG7JString [function]
+_AddModify__12TServerLevelP13TServerPlayerG7JString [function]
+_AddRowToComp__13TServerPlayer [function]
+_AddToList__12TServerLevelP13TServerPlayer [function]
+_Add__12TJStringListRC7JString [function]
+_Add__5TListPv [function]
+_ApplyAccountChange__13TServerPlayerP13TServerPlayerb [function]
+_Assign__12TJStringListP12TJStringList [function]
+_Assign__12TServerChestP12TJStringList [function]
+_Assign__16TServerLevelLinkP12TJStringList [function]
+_Assign__16TServerLevelLinkRC7JString [function]
+_Assign__5TListP5TList [function]
+_Balloc [function]
+_BaseName [function]
+_Bbase__9streambuf [function]
+_Bcopy [function]
+_Bfree [function]
+_Bind__7TSocketibT2 [function]
+_Binit [function]
+_Brealloc [function]
+_CfgRead__FPcP10CfgStrings [function]
+_Clear__12TJStringList [function]
+_Clear__12TServerLevel [function]
+_Clear__5TList [function]
+_ClientReceive__13TServerPlayer [function]
+_CloseFile [function]
+_Close__7TSocket [function]
+_CompressBuf__FRC7JString [function]
+_CreatePlayer__12TServerFrameP7TSocket [function]
+_DBUGOpenFile [function]
+_DbugExit [function]
+_DbugMalloc [function]
+_DecompressBuf__FRC7JString [function]
+_Delay [function]
+_DelayArg [function]
+_DeleteAccount__FRC7JStringi [function]
+```
+
+## Interesting strings
+
+Useful for CLI flags, config paths, URLs, protocol tokens.
+
+```
+socket exception: cannot create socket
+Port address %d is currently used by another programm. Try later!
+Server started. Port: %d
+Couldn't bind the response socket
+Response socket established at port 14899
+data/serverflags.txt
+data/maxplayers.txt
+logs/rclog.txt
+logs/errorlog.txt
+TServerFrame::CreatePlayer(): Checking ipbanned.txt...
+data/ipbanned.txt
+TServerFrame::CreatePlayer(): Client was IP Banned!
+TServerFrame::CreatePlayer(): GetFreePlayerID() returned %d!
+There are too many players (28000) on this server.
+TServerFrame::CreatePlayer(): Sent(UNLIMITEDSIG) = %s
+RC disconnected:
+levelnpcs/
+TServerPlayer::ClientRecieve(): buffer << sock->Read()
+TServerPlayer::ClientRecieve(): sock->error == %d
+Your Graal.exe has sent to much data (>=128k in the input buffer)
+Your Graal.exe has sent a wrong data package length.
+Your Graal.exe has sent an empty data package.
+The socket to client
+The connection to client
+The connection to you was blocked for more than one minute (still
+Error while sending data to client
+TServerPlayer::parse(): Sending Account...
+level13.graal
+"From jail you can only send PMs to admins (RCs)."
+The server got uncertified data packages from your connection.
+disconnects
+The server administrator has disconnected you.
+Player
+loaded attributes of player
+loaded player attributes of account
+from world
+set attributes of player
+set player attributes of account
+set profile error:
+warped player
+The server got illegal data from your connection.
+' has added an npc in
+Adding npcs is not allowed in this level.
+Login error:
+The server got corrupt login data from your connection.
+TServerPlayer::SendAccount(): Client Connected:
+TServerPlayer::SendAccount(): Client Type = CLIENTPLAYER (%d)
+TServerPlayer::SendAccount(): Client Type = CLIENTRC (%d)
+TServerPlayer::SendAccount(): Version = %s
+You need Graal version 1.38 rev1 - 1.39 rev 1 to play on this server.
+You need RC 2000/7/7 to connect to this server.
+TServerPlayer::SendAccount(): account name = %s
+TServerPlayer::SendAccount(): password = %s
+The password is wrong!
+data/ipgps.txt
+Another RC logged in from the same IP.
+data/settings.txt
+has sent wrong player attributes (
+The server got illegal player attributes data from your connection.
+update level
+```
+
+## Decompile note
+
+Decompiled C was produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour.
+
+## Rebuild / rehost checklist
+
+- [ ] Identify language/runtime from imports (libc, libstdc++, Go runtime, .NET, Python, JVM).
+- [ ] Extract CLI surface from `usage`/`help` strings and decompiled arg parsers.
+- [ ] Note config file paths and env vars from interesting strings.
+- [ ] Map network protocols (ports, URLs, RPC names) before rehosting.
+- [ ] Prefer reimplementation from observed behavior over blind binary reuse when licensing/safety unclear.
+
+## Artifacts
+
+- `prelim/` — file(1), strings, readelf/objdump/rizin/radare2 snapshots
+- `functions.txt`, `functions.csv`
+- `imports.txt`, `exports.txt`
+- `strings_interesting.txt`
+- `decompiled/`
+- `logs/` — analyzeHeadless + script logs
+- `summary_stats.txt` — machine-readable stats
 
