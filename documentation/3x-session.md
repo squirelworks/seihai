@@ -60,3 +60,26 @@ binary · **3.04** a 3.153 value taken from 3.04.
   rows keep 2.31's set without 78–80. That is a prop-parser change, not
   login or framing, so it was not touched here.
 - The Torque front end (start window, themes, chat drawing).
+
+## Lab run, 2026-10-31: 3.153 on the wire
+
+Ato 3.153 (main `7203690`) logged in to the patched lab GServer-v2 (port
+14900, the gs2lib patch that adds `G3D28015`) and loaded `gs2test.nw`. It
+printed `level gs2test.nw: from the server's board, start (30, 32), 1 NPCs`
+and read NPC 300's GS2 script (19 ops, `onCreated`). The two frames that
+carry the player and the level are in
+`crates/seihai-ato/tests/fixtures/lab-3153-gs2test.txt`, and
+`tests/lab_3153_gs2test.rs` replays them. What they show:
+
+- The level comes as LEVELNAME, an empty LEVELBOARD (0), the board behind
+  RAWDATA, LEVELMODTIME and LEVELNAME again, then NPCPROPS (3) for NPC 300
+  and its 131 behind RAWDATA, all in one frame.
+- The first PLAYERPROPS runs from prop 1 to 80 (X2, Y2, Z2 included) and
+  ends with 82 (`guest`). 3.153's own-prop set stops at 80, so Seihai stops
+  reading there, as the client would. Whether the real 3.153 reads 82 is
+  not known.
+- This settles nothing about the listserver shape or the post-login frame
+  of the real 3.153: the client on the wire was Seihai.
+
+Ato now logs these fields under the level line (`seihai-ato/src/fields.rs`),
+for builds with a Torque profile only.

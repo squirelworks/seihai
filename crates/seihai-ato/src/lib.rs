@@ -5,12 +5,14 @@
 //! ([`torque`]) and the start window ([`start_window`]).
 //!
 //! Stage 2: log in to a game server ([`online`]), read what it sends with
-//! the core readers, and keep and log the level ([`level`]).
+//! the core readers, and keep and log the level ([`level`]) with the
+//! board's and props' fields ([`fields`]), for builds with a Torque profile.
 //!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
 //! ([`render`]) and walk it with the arrow keys ([`game`]).
 
 pub mod args;
+pub mod fields;
 pub mod game;
 pub mod level;
 pub mod online;
