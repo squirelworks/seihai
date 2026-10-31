@@ -1,6 +1,6 @@
 # Recovered Hacks Inventory
 
-**Source:** [Hacks](https://drive.google.com/drive/folders/1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK?usp=drive_link) (`1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK)
+**Source:** Owner private Google Drive folder named `Hacks` (URL and folder id omitted from this repo).
 **Listed at:** 2026-10-31T20:49:06.899885+00:00
 **Handling:** Contents treated as untrusted. Download agent did not execute binaries/scripts; static inspection only. Sibling agents may have added _static_extract/ artifacts.
 

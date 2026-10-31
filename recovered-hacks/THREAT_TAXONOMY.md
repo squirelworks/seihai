@@ -1,7 +1,7 @@
 # Threat taxonomy & attack-surface map — Drive `Hacks`
 
 **Generated:** 2026-10-31 (static analysis only; no code execution)  
-**Drive source:** [Hacks](https://drive.google.com/drive/folders/1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK) (`1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK`)  
+**Drive source:** Owner private Google Drive folder named `Hacks` (URL and folder id omitted from this repo)  
 **Local staging:** `/workspace/recovered-hacks/`  
 **Scope note:** Google-drive MCP `list_folder` on the Hacks root currently returns **only** `Trainers/`. Parent Drive folder also holds `Tools`, `Graal clients`, `Graal playerworlds`, etc., but those are outside this Hacks tree. Classification below covers everything present in Hacks + local downloads as of this write.
 

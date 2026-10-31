@@ -53,7 +53,7 @@ Embedded AutoIt script body is **encrypted** in the PE overlay (high-entropy blo
 | Imports | 158 |
 | Interesting strings (export filter) | 34 |
 
-Decompilation is mostly CRT / AutoIt interpreter glue (`FUN_004023b7`, etc.), not a readable user script. Prefer strings + imports for defense IOCs over deep decomp.
+Decompilation is mostly CRT / AutoIt interpreter glue, not a readable user script. Prefer strings + imports for defense IOCs over deep decomp.
 
 ## Artifacts
 

@@ -21,7 +21,7 @@
 1. **`Graal_Digger.zip` dual local entries:** first local header is `Graal_Digger-Howto.txt` (219 B); second is `Graal Digger.exe`. Central directory naming historically mismatched howto vs exe (taxonomy “zip quirk”).
 2. **Deflate stream truncated:** recovered PE is 36111 B vs declared 41893 B (~5782 B missing) → CRC incomplete.
 3. **`upx -d` / `upx -t`:** `OverlayException: invalid overlay size; file is possibly corrupt`.
-4. **Ghidra:** imports **0**, interesting strings **0**, only UPX stub `entry@0044a6b0` recovered — expected for unbroken packed+truncated image.
+4. **Ghidra:** imports **0**, interesting strings **0**, only a UPX stub entry recovered — expected for unbroken packed+truncated image.
 
 ## Static signals still usable for defense
 

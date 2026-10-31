@@ -22,7 +22,7 @@
 
 **Sources used**
 
-- Drive [Hacks](https://drive.google.com/drive/folders/1BAaQCiSUIfU8xBPj2oAR6qVKEJH9X1TK) → `Trainers/` (+ `AutoPrograms by RpgWarrior/`) — re-listed 2026-10-31
+- Owner private Drive folder `Hacks` → `Trainers/` (+ `AutoPrograms by RpgWarrior/`) — re-listed 2026-10-31 (Drive URL omitted)
 - [`INVENTORY.md`](INVENTORY.md) / local static extracts (UPX AutoIt `SEND`/`keybd_event`; VB6 AFK/GTS/GraalLoad strings)
 - [`THREAT_TAXONOMY.md`](THREAT_TAXONOMY.md) Groups 1–5 + RE addendum
 - [`TRAINER_RE_NOTES.md`](TRAINER_RE_NOTES.md) — Ghidra/static IOC synthesis
