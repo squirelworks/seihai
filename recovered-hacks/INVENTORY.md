@@ -48,8 +48,8 @@ Binaries and archives remain on the agent workspace under `recovered-hacks/Train
 
 ## Blockers
 
-- `Trainers/Graal_Miner.zip` — **403 cannotDownloadAbusiveFile — Google identified as malware or spam** (Drive id `1t4vGUTKEgSp7P5l-dK6SHTLQNEBZwKXt`, expected 39156 bytes)
-- `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` — **403 cannotDownloadAbusiveFile — Google identified as malware or spam** (Drive id `131M_bfcLoRV1iOc3M-8Iv6snvYt5W1z3`, expected 39156 bytes)
+- `Trainers/Graal_Miner.zip` — **403 cannotDownloadAbusiveFile — Google identified as malware or spam** (Drive file id omitted; expected 39156 bytes)
+- `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` — **403 cannotDownloadAbusiveFile — Google identified as malware or spam** (Drive file id omitted; expected 39156 bytes)
   - Same reported size as Trainers/Graal_Miner.zip; likely identical duplicate
 
 Owner workaround: Drive API download with `acknowledgeAbuse=true`, or Drive UI “Download anyway”.
@@ -112,28 +112,30 @@ recovered-hacks/
 
 ## Drive originals
 
-| Path | Drive ID | Size | Status | SHA256 |
-|---|---|---:|---|---|
-| `Trainers/AFKBOT.7z` | `19D14pL2_yV21v5NKHq0hKn6awX9XRbLo` | 5001 | OK | `f7ac393a1d6415c1…` |
-| `Trainers/AFKSCROLLBOT.7z` | `15ReWDcFAh46wb2x27yOct5IjVFq_H525` | 5668 | OK | `bd46ee159f3ecaef…` |
-| `Trainers/autoprogs.zip` | `14x6_Idr8-p6U0-EG8UjNFN3YYI9lwuTh` | 111200 | OK | `0cfbfffde3b7ed08…` |
-| `Trainers/capslock.zip` | `1wjdBTiWVUkqahay1MYsW0-e0NMpO3Eif` | 126297 | OK | `4c65b83d528c8d37…` |
-| `Trainers/Graal_Auto_Key.zip` | `1Kjk2Hk8osxmPEnpyyeZbKjAINNZWHTcV` | 38024 | OK | `827d9b5549da0308…` |
-| `Trainers/Graal_Digger.zip` | `1TBjoGjiIhlXSCk5-JyuJxlo8BzL_7G3_` | 39297 | OK | `27e051d29205b797…` |
-| `Trainers/Graal_Miner.zip` | `1t4vGUTKEgSp7P5l-dK6SHTLQNEBZwKXt` | 39156 | BLOCKED | — |
-| `Trainers/Graal_Prayer.zip` | `1A_88uzVrhl_6N6A1Rk-MwmSFTeNww773` | 76631 | OK | `9c86172af8f52755…` |
-| `Trainers/Graal_Random_Walker.zip` | `1YS1s-zrcQ50d8bwAw76vKG7Y7S0v8ZNK` | 38442 | OK | `456991c2269be852…` |
-| `Trainers/Graal_Water_Get.zip` | `1D1IszfqWDPsulwOUAFpLa8_c_AcwZY8Q` | 38746 | OK | `8209e0ff526a55bd…` |
-| `Trainers/Graal_WaterGet.zip` | `1KmNkldEKC71hLRQcLcD4fVqwScOArsMv` | 37327 | OK | `642e9849f5736ea9…` |
-| `Trainers/GraalLoad.zip` | `1Xsco_IlUEf0fU6Vfe7o1tenzThYGX0UH` | 18438 | OK | `ef05589392c3f77f…` |
-| `Trainers/GTS.zip` | `14mb45foDmWlEZ4lFSSSiNn0Nj2YE9xCk` | 8763 | OK | `2b0d01bade67865f…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Auto_Key.zip` | `1hEGqKf5p6f60-WC2MwN5coScx5X-RHY7` | 38024 | OK | `827d9b5549da0308…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Digger.zip` | `1vgLXXkXCwkSsg1xcoeK-FOrA_UOYA1-n` | 39297 | OK | `27e051d29205b797…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` | `131M_bfcLoRV1iOc3M-8Iv6snvYt5W1z3` | 39156 | BLOCKED | — |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Prayer.zip` | `14amnhvjreNhm9ufiRyyJXqT_S8SUAhbO` | 76631 | OK | `9c86172af8f52755…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Random_Walker.zip` | `1AdVk0-I7e_zKJIW5Z5ThbhP1qmQvQqou` | 38442 | OK | `456991c2269be852…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Water_Get_v1.0.zip` | `1y-XB8QVIl-Fqu86xWjRPZ0fm_aykG-Z5` | 38746 | OK | `8209e0ff526a55bd…` |
-| `Trainers/AutoPrograms by RpgWarrior/Graal_Water_Get_v1.1.zip` | `1oP7kc9LV4-mBAo9VHqX_5Nw_9TibvsFw` | 37327 | OK | `642e9849f5736ea9…` |
+Drive file ids omitted (private owner folder). Local paths + sizes + download status retained.
+
+| Path | Size | Status | SHA256 |
+|---|---:|---|---|
+| `Trainers/AFKBOT.7z` | 5001 | OK | `f7ac393a1d6415c1…` |
+| `Trainers/AFKSCROLLBOT.7z` | 5668 | OK | `bd46ee159f3ecaef…` |
+| `Trainers/autoprogs.zip` | 111200 | OK | `0cfbfffde3b7ed08…` |
+| `Trainers/capslock.zip` | 126297 | OK | `4c65b83d528c8d37…` |
+| `Trainers/Graal_Auto_Key.zip` | 38024 | OK | `827d9b5549da0308…` |
+| `Trainers/Graal_Digger.zip` | 39297 | OK | `27e051d29205b797…` |
+| `Trainers/Graal_Miner.zip` | 39156 | BLOCKED | — |
+| `Trainers/Graal_Prayer.zip` | 76631 | OK | `9c86172af8f52755…` |
+| `Trainers/Graal_Random_Walker.zip` | 38442 | OK | `456991c2269be852…` |
+| `Trainers/Graal_Water_Get.zip` | 38746 | OK | `8209e0ff526a55bd…` |
+| `Trainers/Graal_WaterGet.zip` | 37327 | OK | `642e9849f5736ea9…` |
+| `Trainers/GraalLoad.zip` | 18438 | OK | `ef05589392c3f77f…` |
+| `Trainers/GTS.zip` | 8763 | OK | `2b0d01bade67865f…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Auto_Key.zip` | 38024 | OK | `827d9b5549da0308…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Digger.zip` | 39297 | OK | `27e051d29205b797…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` | 39156 | BLOCKED | — |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Prayer.zip` | 76631 | OK | `9c86172af8f52755…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Random_Walker.zip` | 38442 | OK | `456991c2269be852…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Water_Get_v1.0.zip` | 38746 | OK | `8209e0ff526a55bd…` |
+| `Trainers/AutoPrograms by RpgWarrior/Graal_Water_Get_v1.1.zip` | 37327 | OK | `642e9849f5736ea9…` |
 
 ## Extracted + notes inventory
 

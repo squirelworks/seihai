@@ -181,8 +181,8 @@ Duplicates under `AutoPrograms by RpgWarrior/` match Trainers hashes for the sha
 ## Group 4 — Suspected malware (download blocked)
 
 ### Items
-- `Trainers/Graal_Miner.zip` (Drive id `1t4vGUTKEgSp7P5l-dK6SHTLQNEBZwKXt`)
-- `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` (Drive id `131M_bfcLoRV1iOc3M-8Iv6snvYt5W1z3`)
+- `Trainers/Graal_Miner.zip` (private Drive file — id omitted)
+- `Trainers/AutoPrograms by RpgWarrior/Graal_Miner.zip` (private Drive file — id omitted)
 
 Both: **403 `cannotDownloadAbusiveFile`** — *“identified as malware or spam”*; reported size **39156** bytes each (likely duplicates).
 
