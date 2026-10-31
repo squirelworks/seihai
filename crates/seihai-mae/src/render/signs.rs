@@ -216,6 +216,44 @@ pub fn sign_key(pressed: impl Fn(Action) -> bool, held: bool) -> Option<SignKey>
         .then_some(SignKey::Next)
 }
 
+/// The sign keys from one frame to the next.
+///
+/// minifb reports a key as down (`is_key_down`) one frame before it reports
+/// it as pressed (`is_key_pressed`): `update` ages the key times before it
+/// reads the new key events. Taking the presses from one and "a key was down
+/// last frame" from the other made every press look held, so A, S and D did
+/// nothing while a sign was open. Both now come from the same `down`, which
+/// the caller makes "down or pressed this frame".
+///
+/// After reading ends the game keys stay away from the player until every
+/// one is let go, so the S that closes a sign does not also swing the sword
+/// a frame later, and the Up that pushed into a sign does not open it again
+/// straight away.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SignKeys {
+    /// Some game key (switch-to-chat aside) was down last frame.
+    held: bool,
+    /// Reading ended and a game key has stayed down since.
+    after: bool,
+}
+
+impl SignKeys {
+    /// One frame. `reading`: a sign is open. `active`: its keys go to it
+    /// (not to the chat bar or the quit prompt). Returns what the sign does,
+    /// and whether the game keys are kept from the player this frame.
+    pub fn frame(&mut self, reading: bool, active: bool, down: impl Fn(Action) -> bool) -> (Option<SignKey>, bool) {
+        let key = if reading && active { sign_key(&down, self.held) } else { None };
+        let any = Action::ALL.iter().any(|&a| a != Action::SwitchToChat && down(a));
+        if reading {
+            self.after = true;
+        } else if !any {
+            self.after = false;
+        }
+        self.held = any;
+        (key, reading || self.after)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,6 +269,55 @@ mod tests {
         assert_eq!(sign_key(only(Action::SwitchToChat), false), None);
         assert_eq!(sign_key(|_| false, false), None);
         assert_eq!(sign_key(only(Action::Attack), true), None, "a key was still down");
+    }
+
+    /// A key is down a frame before minifb calls it pressed; the caller
+    /// passes "down or pressed", and the press counts once.
+    #[test]
+    fn a_press_counts_on_the_frame_it_goes_down() {
+        let only = |k: Action| move |a: Action| a == k;
+        let none = |_: Action| false;
+        let mut k = SignKeys::default();
+        assert_eq!(k.frame(true, true, only(Action::Act)), (Some(SignKey::Next), true));
+        assert_eq!(k.frame(true, true, only(Action::Act)), (None, true), "pressed a frame late");
+        assert_eq!(k.frame(true, true, none), (None, true));
+        assert_eq!(k.frame(true, true, only(Action::Attack)), (Some(SignKey::Next), true));
+        assert_eq!(k.frame(true, true, none), (None, true));
+        assert_eq!(k.frame(true, true, only(Action::Item)), (Some(SignKey::Next), true));
+        assert_eq!(k.frame(true, true, none), (None, true));
+        assert_eq!(k.frame(true, true, only(Action::Map)), (Some(SignKey::Close), true));
+    }
+
+    #[test]
+    fn the_arrow_that_walked_in_waits_for_release() {
+        let only = |k: Action| move |a: Action| a == k;
+        let mut k = SignKeys::default();
+        assert_eq!(k.frame(false, true, only(Action::Up)), (None, false), "walking");
+        assert_eq!(k.frame(true, true, only(Action::Up)), (None, true), "the sign opened");
+        assert_eq!(k.frame(true, true, |_| false), (None, true));
+        assert_eq!(k.frame(true, true, only(Action::Up)), (Some(SignKey::Back), true));
+    }
+
+    #[test]
+    fn the_key_that_ends_reading_stays_off_the_player_until_let_go() {
+        let only = |k: Action| move |a: Action| a == k;
+        let mut k = SignKeys::default();
+        k.frame(true, true, |_| false);
+        assert_eq!(k.frame(true, true, only(Action::Attack)), (Some(SignKey::Next), true));
+        // The caller ended reading on that S; it is still down or pressed.
+        assert_eq!(k.frame(false, true, only(Action::Attack)), (None, true), "no swing");
+        assert_eq!(k.frame(false, true, only(Action::Attack)), (None, true));
+        assert_eq!(k.frame(false, true, |_| false), (None, false));
+        assert_eq!(k.frame(false, true, only(Action::Attack)), (None, false), "S swings again");
+    }
+
+    #[test]
+    fn keys_wait_while_the_chat_bar_or_quit_prompt_has_them() {
+        let only = |k: Action| move |a: Action| a == k;
+        let mut k = SignKeys::default();
+        assert_eq!(k.frame(true, false, only(Action::Act)), (None, true));
+        assert_eq!(k.frame(true, true, |_| false), (None, true));
+        assert_eq!(k.frame(true, true, only(Action::Act)), (Some(SignKey::Next), true));
     }
 
     /// A 256×224 RGBA sheet where every glyph is opaque in its own colour.

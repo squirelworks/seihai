@@ -56,7 +56,9 @@ While a sign is open the game keys work the sign and nothing else: the player do
 - Up turns back three lines, when not on the first page.
 - Every other game key (Left, Down, Right, D, S, A, the item list key and pause) turns to the next three lines, unless the page on show is not full (the sign has fewer lines than the page's first line plus three); then reading ends. A sign of exactly three lines therefore shows an empty second page before it closes, as in the client.
 - A key counts only when no game key was down the frame before: the arrow that walked into the sign does nothing until it is let go, and keys do not repeat.
-- Esc also closes the sign in Seihai.
+- Esc does not close the sign. As in 2.05 (`TAdventure::FormKeyDown`, which has no sign case), it asks whether to quit; answering no leaves the sign open. Before 2026-10-31 Seihai closed the sign on Esc, so a player pushing up into a sign had it open again at once and Esc never got to the quit prompt.
+- Seihai reads "pressed" and "was down last frame" from the same source (`SignKeys`, down or pressed this frame). minifb reports a key down one frame before it reports it pressed, and taking one from each made every press look held: A, S and D did nothing while a sign was open (fixed 2026-10-31, tests in `render/signs.rs`).
+- After reading ends, the game keys stay off the player until all are let go, so the S that closes a sign does not swing a frame later.
 - The lock is in the session too, not only in the key loop: while `reading` is set, `try_move` takes no step and no turn, `start_swing` refuses, `interact` does nothing (no lift, throw, grab or chest), and `toggle_hide` does nothing. A while hidden does not bring the player out either. Tests: `an_open_sign_takes_the_walk_the_a_key_and_hiding`, `no_swing_while_a_sign_is_open`.
 - The client plays a sound when the page turns and runs `playerendsreading` when reading ends. Neither is done in Seihai yet.
 
