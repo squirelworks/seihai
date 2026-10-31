@@ -17,7 +17,7 @@ Sources, all in Graal_analysis: `protocol/v5x-clients.md`, `protocol/v6x-clients
 | 6.03r7 | `G3D0311C` | 92 | Linux 6.03r7's (60) | Tempus Sans ITC 24 |
 | 6.036 | **missing** | – | – | no binary and no token: **no row**. It is only named by 5.00r7's updater packages (`Graal6.exe` 6.036, probably 6.03r6). |
 
-Every row is client type 5, gen 5, no tamper check, no showimg timer, and follows 3.153 in the version chain (`documentation/version-chain.md` lists each step's changes and unknowns).
+Every row is client type 5, gen 5, no tamper check, no showimg timer, and follows 4.20r8 in the version chain (the 4.x rows, `documentation/v4-profiles.md`, came later the same day; the lobby, the list and the chat are now set there) (`documentation/version-chain.md` lists each step's changes and unknowns).
 
 - **Client ids.** 5.00r7's send wrappers give only the constant ids, a floor. The row is that floor, plus 11 and 38 (seen in the lab), plus the ids both 3.153 and 6.03r7 send (0, 3, 20, 27, 30, 46 and the rest of the 2.x set). 40 and 43 are in neither 5.00r7 nor 6.03r7 and are left out. The 5.12 to 5.31r4 send code was not read, so they keep 5.00r7's set.
 - **Props.** No 5.x or 6.x prop parser was read. The rows keep 3.153's own and other prop sets (X2/Y2/Z2 included, which the lab saw these clients send).
