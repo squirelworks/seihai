@@ -51,7 +51,11 @@ $Seihai = (Resolve-Path $Seihai).Path
 $hostName, $port = $Target -split ':', 2
 if (-not $port) { Write-Error 'target must be HOST:PORT'; exit 2 }
 
-$Ports = @(14921, 14922, 14923, 14801, 14802, 14842, 14900, 14912, 14913)
+# Listserver and gserver ports: the Graal range, plus the target's port
+# (a few servers, such as Jojo's on 30903, sit outside it). dumpcap takes the
+# range; pktmon has no port ranges, so it gets the ports seen so far.
+$PortRange = '14800-14999'
+$Ports = @(14921, 14922, 14923, 14801, 14802, 14842, 14900, 14912, 14913, 14917)
 if ($Ports -notcontains [int]$port) { $Ports += [int]$port }
 
 # Output folder readable only by this user (umask 077 / chmod 700).
@@ -79,7 +83,7 @@ $sha = (& git -C $repo rev-parse --short HEAD 2>$null)
     "version: $Version"
     "account: $Account"
     "port check: $portCheck"
-    "capture ports: $($Ports -join ' ')"
+    "capture ports: dumpcap $PortRange and $port; pktmon $($Ports -join ' ')"
 ) | Out-File -Encoding utf8 (Join-Path $out '00_run_info.txt')
 Write-Host "output: $out"
 Write-Host "port check $Target`: $portCheck"
@@ -105,7 +109,7 @@ function Find-Dumpcap {
 }
 
 function Start-Capture {
-    param([string]$OutBase, [int[]]$Ports)
+    param([string]$OutBase, [int[]]$Ports, [string]$PortRange, [int]$TargetPort)
     $dumpcap = Find-Dumpcap
     if ($dumpcap) {
         $iface = $env:SEIHAI_CAPTURE_IF
@@ -115,7 +119,7 @@ function Start-Capture {
             if ($route) { $iface = $route.InterfaceAlias }
         }
         if (-not $iface) { Write-Warning 'no default-route interface; set SEIHAI_CAPTURE_IF'; return $null }
-        $filter = ($Ports | ForEach-Object { "tcp port $_" }) -join ' or '
+        $filter = "tcp and (portrange $PortRange or port $TargetPort)"
         $file = "$OutBase.pcap"
         $errLog = "$OutBase.dumpcap.txt"
         # -F pcap: classic pcap. dumpcap flushes after each batch, so stopping it
@@ -157,7 +161,7 @@ function Stop-Capture {
 
 $debugRoot = Join-Path (Get-Location).Path '_debug'
 $debugBefore = @(Get-ChildItem $debugRoot -Directory -Filter 'debug-*' -ErrorAction SilentlyContinue | ForEach-Object Name)
-$cap = Start-Capture -OutBase (Join-Path $out 'capture') -Ports $Ports
+$cap = Start-Capture -OutBase (Join-Path $out 'capture') -Ports $Ports -PortRange $PortRange -TargetPort ([int]$port)
 
 $log = New-Object IO.StreamWriter((Join-Path $out 'seihai_output.txt'), $false, (New-Object Text.UTF8Encoding $false))
 $code = 1
