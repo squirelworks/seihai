@@ -179,70 +179,7 @@ FormCreate__12TServerFrame [Function]
 
 ## Interesting strings
 
-Useful for CLI flags, config paths, URLs, protocol tokens.
-
-```
-/lib/ld-linux.so.2
-__printf_fp
-fprintf
-sprintf
-__libc_start_main
-_IO_file_fopen
-_IO_default_pbackfail
-onlinestartlocal.graal
-<body bgcolor="#009933" background="image/fond2b.gif" text="#CCCC99" link="#0000CC" vlink="#0000CC">
-</table>
-accounts/acc
-cgi-bin/newaccounts.txt
-cgi-bin/names.txt
-.comment::00000001	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
-.comment::0000003e	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
-.comment::000004a3	GCC: (GNU) egcs-2.91.66 19990314/Linux (egcs-1.1.2 release)
-.shstrtab::00000023	.note.ABI-tag
-.shstrtab::00000047	.gnu.version
-.shstrtab::00000054	.gnu.version_r
-.shstrtab::0000007e	.init
-.stabstr::00000007	/usr/src/packages/BUILD/glibc-2.1/csu/
-.stabstr::00000376	../include/libc-symbols.h
-.stabstr::00000390	/usr/src/packages/BUILD/glibc-2.1/cc/config.h
-.stabstr::000003bf	../include/libintl.h
-.stabstr::000003d4	../intl/libintl.h
-.stabstr::000003e6	../include/features.h
-.stabstr::000003fc	../include/sys/cdefs.h
-.stabstr::00000413	../misc/sys/cdefs.h
-.stabstr::00000427	/usr/lib/gcc-lib/i486-linux/egcs-2.91.66/include/stddef.h
-.stabstr::00000461	../include/locale.h
-.stabstr::00000475	../locale/locale.h
-.stabstr::00000699	../include/xlocale.h
-.stabstr::000006ae	../locale/xlocale.h
-.stabstr::000007a8	../sysdeps/unix/sysv/linux/_G_config.h
-.stabstr::000007cf	../sysdeps/unix/sysv/linux/bits/types.h
-.stabstr::00000d51	../linuxthreads/sysdeps/pthread/bits/pthreadtypes.h
-.stabstr::00000d85	../sysdeps/unix/sysv/linux/bits/sched.h
-.stabstr::00001327	/home/graal/gserver13/stats/
-.stabstr::00001344	gserver.cpp
-.stabstr::000013d7	/usr/include/unistd.h
-.stabstr::000013ed	/usr/include/features.h
-.stabstr::00001405	/usr/include/sys/cdefs.h
-.stabstr::0000141e	/usr/include/gnu/stubs.h
-.stabstr::00001437	/usr/include/bits/posix_opt.h
-.stabstr::00001455	/usr/include/bits/types.h
-.stabstr::0000146f	/usr/local/lib/gcc-lib/i686-pc-linux-gnu/2.95.2/include/stddef.h
-.stabstr::00001b71	/usr/include/bits/confname.h
-.stabstr::00001b8e	/usr/include/getopt.h
-.stabstr::00001bbc	/usr/include/stdlib.h
-.stabstr::00001de1	/usr/include/sys/types.h
-.stabstr::00001fb3	/usr/include/time.h
-.stabstr::000020f6	/usr/include/endian.h
-.stabstr::0000210c	/usr/include/bits/endian.h
-.stabstr::00002127	/usr/include/sys/select.h
-.stabstr::00002141	/usr/include/bits/select.h
-.stabstr::0000215c	/usr/include/bits/sigset.h
-.stabstr::00002371	/usr/include/sys/sysmacros.h
-.stabstr::0000262c	/usr/include/alloca.h
-.stabstr::00002671	/usr/include/netdb.h
-.stabstr::00002686	/usr/include/rpc/netdb.h
-```
+Same string profile as `gserverstat`, aimed at admin weapon/power leaderboards. Paths still center on `accounts/acc*` and CGI name lists (`cgi-bin/newaccounts.txt`, `cgi-bin/names.txt`). HTML output keeps the green table theme (`image/fond2b.gif` background) and `onlinestartlocal.graal`. Debug/build strings again place the source under a `gserver13/stats/` tree (`gserver.cpp`) with egcs-2.91 / glibc-2.1 toolchain marks. Formatted libc I/O only — no socket/listen strings — matching an offline `stats/admin/*.html` emitter driven by `statmaker`.
 
 ## Decompile note
 
