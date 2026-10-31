@@ -57,7 +57,7 @@ This creates the binary at:
 - Linux / macOS: `target/release/seihai`
 - Windows: `target\release\seihai.exe`
 
-`seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client) or `seihai-ato` (the Torque / 3.x line, which does not draw yet and says so), passing every argument through. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. Keep the three binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
+`seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client) or `seihai-ato` (the Torque / 3.x line, which does not draw yet and says so), passing every argument through. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. Picking 3.04 or 3.153 in `seihai-mae`'s start window (under "All versions") closes it and opens `seihai-ato`'s 3.x start window with the account and password filled in. Keep the three binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
 
 `cargo build` only builds. It does not start the program. To build and run in one step:
 
