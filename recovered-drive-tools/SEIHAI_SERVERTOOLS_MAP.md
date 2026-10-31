@@ -132,8 +132,12 @@ Design: `docs/design/lat-tools.md`. Order: `docs/NEXT.md` LAT track.
 | Lab one-click start scripts, process wrappers | `scripts/lab/` + logic in `crates/setup-core/{lab,run}.rs` |
 | `serveroptions.txt` / public-vs-lab wizards | `crates/setup-core/config/` + `profile`/`checks` + CLI `setup` + `app` Setup page |
 | Listserver host/config helpers | `setup-core/config/listserver_toml.rs` + Host page |
+| Optional lab status-file reader (`playercount.txt` etc.) | `crates/setup-core/` lights/status only — behaviour note first (`SALVAGE_CANDIDATES.md`) |
 | World validators (missing levels, bad ganis, link holes) | `crates/lat-core/check.rs` (+ CLI `check`, Check page) |
 | Live level/NPC/gani edit via staff link | `lat-core/{level,npc,gani,remote}.rs` + new app pages; RC I/O waits on `seihai-rc` |
+| **RC / NC** staff session & RemoteFiles (from `RC [` / `NC [` archives) | **Not** this repo’s crates — land in `squirelworks/seihai-rc` (+ npcserver); pin tag here |
+| **LAT** offline editors / converters / generators | **`seihai`** first; only live helpers into `lat-core` after drawing + RC |
+| **NAT** / GS2 compilers / script editors | analysis-only notes — no Delphi/GS2 paste into MIT |
 | Pure format parsers found in zips | Upstream into `seihai` `seihai-core`, then consume by tag — **not** duplicated here |
 | Docs / lab run notes for a salvage | `docs/lab/YYYY-MM-DD-….md` or `docs/design/` |
 
