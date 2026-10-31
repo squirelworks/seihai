@@ -2,3 +2,24 @@
 **/*.rs.bk
 Cargo.lock
 __pycache__/
+
+# Large local RE toolchain installs (scripts/docs under tools/ghidra stay tracked)
+/tools/jdk/
+/tools/rizin/
+/tools/ghidra/ghidra_*_PUBLIC/
+/tools/ghidra/current
+/tools/ghidra/projects/
+
+# Nested sibling clone for recovery work (own repo: squirelworks/seihai-servertools)
+/seihai-servertools/
+
+# Recovered Drive staging: commit bridge docs only; ignore raw dumps / DBs / binaries
+/recovered-drive-tools/**
+!/recovered-drive-tools/**/
+!/recovered-drive-tools/**/*.md
+# Recovered hacks staging: commit analysis docs only; ignore binaries / archives
+/recovered-hacks/**
+!/recovered-hacks/**/
+!/recovered-hacks/**/*.md
+!/recovered-hacks/**/*.json
+!/recovered-hacks/**/*.BLOCKED.txt
