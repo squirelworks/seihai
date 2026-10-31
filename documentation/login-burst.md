@@ -148,7 +148,9 @@ Not done:
 * The default weapon registration: id 25 (the full weapon) up to 1.37, and
   id 33 (`c(0)` + default weapon id) from 1.38. The stub sent no weapons, and
   neither client sent either id.
-* 1.34 to 1.38 are taken to behave as 1.33. They were not run.
+* The file-request differences above are recorded for 1.33 and 1.39 only.
+  The notes on the 1.34 to 1.38 runs record their props, not their file
+  requests.
 
 ### 1.21 to 1.32
 

@@ -145,7 +145,14 @@ public 2.22 servers did not kick a client that never sent it for 20 s).
   edge crossing when the profile re-sends (see "Gmaps"). 2.31 every 3.2 s: a 50 ms timer counts modulo
   64 and sends at count 31 (`TamperSender::advance`, driven from the game loop).
 - 2.3 has no binary and no captured value, so nothing is sent for it.
-- Not known: whether any server enforces the value.
+- Enforcement, what is known (read-only evidence, 2026-10-31): no server
+  seen so far needs the packet. Four public 2.22 servers did not kick a
+  client that never sent it for 20 s (2026-10-24), and three more (GServer-RS
+  and two gs2) gave a full login without it (`public-gserver-2026-10-30.md`).
+  GServer-v2 ignores id 39. Whether a server checks the *value* is still not
+  known: that needs a client that sends a wrong one, which is not a
+  read-only check. The build box still cannot resolve the listserver
+  (2026-10-31), so no new public check was made from it.
 
 ## 2.00 login
 
