@@ -5,6 +5,19 @@
 - **Ghidra:** 12.2
 - **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing).
 
+## Purpose guess
+
+Offline **HTML leaderboard generator** for classic gserver account stats. Companion shell `statmaker` loops argv modes (`kills`, `deaths`, `rupees`, `highap`, `lowap`, `onlinetime`) and redirects stdout HTML into a htdocs `stats/` tree. Binary is egcs-era ELF32, **not stripped**, sharing account-parse helpers with classic `gserver` (`LoadAccounts`, `ParseAccount`, `SetProperties`). Reads `accounts/acc*`, emits green-themed HTML tables. Not a network service.
+
+## Recommended placement (`SALVAGE_PLACEMENT.md`)
+
+| Placement | `analysis-only` |
+| --- | --- |
+| Why | Legacy gserver-adjacent account dump tooling; behaviour notes only — never paste into MIT crates. |
+| Not | `setup-core` / `lat-core` / `seihai` / `seihai-rc` |
+| Related | `_inbox/extracted/gserver_source/statmaker`, `gserverstats.pl` (Server Lister) |
+| Licence risk | Legacy/GPL-adjacent gserver-era C++ — clean-room notes only |
+
 ## Identity
 
 ```

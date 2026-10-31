@@ -5,6 +5,19 @@
 - **Ghidra:** 12.2
 - **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing).
 
+## Purpose guess
+
+Admin variant of `gserverstat`: same ELF account-scan stack; `statmaker` drives modes `swordpower`, `maxpower`, `glovepower`, `bombpower`, `shieldpower`, `highap` into `stats/admin/*.html`. Offline HTML emitter, not a daemon.
+
+## Recommended placement (`SALVAGE_PLACEMENT.md`)
+
+| Placement | `analysis-only` |
+| --- | --- |
+| Why | Same gserver-era account tooling as `gserverstat`; admin weapon/power leaderboards. |
+| Not | `setup-core` / `lat-core` / `seihai` / `seihai-rc` |
+| Related | `gserverstat`, `statmaker` |
+| Licence risk | Legacy/GPL-adjacent — behaviour notes only |
+
 ## Identity
 
 ```

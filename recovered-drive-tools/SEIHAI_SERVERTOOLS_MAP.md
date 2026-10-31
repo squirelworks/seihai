@@ -169,7 +169,7 @@ World checker can grow now (missing assets, GS1 syntax, `serveroptions` safety, 
 
 ## Related Drive archives (reference only)
 
-Under Drive folder Projects (resolved id `1lIPxxkSTtYxhMyZnU6Fp4a99Sww-7dfl`):
+Under the owner private Drive folder **Projects** (ids omitted):
 
 | Archive | Relevance to servertools |
 |---|---|
