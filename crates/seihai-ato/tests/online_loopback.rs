@@ -31,6 +31,9 @@ fn board(fill: u16) -> Vec<u8> {
     out
 }
 
+/// A script built with gs2-parser (see the fixtures' README).
+const SCRIPT: &[u8] = include_bytes!("../../seihai-core/tests/fixtures/gs2/shared.gs2bc");
+
 fn serve(version: ClientVersion, listener: TcpListener) {
     let (mut s, _) = listener.accept().unwrap();
     s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -56,8 +59,16 @@ fn serve(version: ClientVersion, listener: TcpListener) {
     first.extend(msg(6, b"lab3x.nw"));
     first.extend(board(0x1FF));
     send(first);
-    // PLO_NPCPROPS (3) for NPC 1, in its own frame.
-    send(msg(3, &[gc(0), gc(0), gc(1)]));
+    // PLO_NPCPROPS (3) for NPC 1, in its own frame, then its GS2 script
+    // (PLO_NPCBYTECODE, 131) behind PLO_RAWDATA, as GServer-v2's
+    // `TLevel::getNpcsPacket` sends it.
+    let mut npc = msg(3, &[gc(0), gc(0), gc(1)]);
+    let mut code = vec![gc(131), gc(0), gc(0), gc(1)];
+    code.extend_from_slice(SCRIPT);
+    let n = code.len();
+    npc.extend(msg(100, &[gc((n >> 14) as u8 & 0x7F), gc((n >> 7) as u8 & 0x7F), gc(n as u8 & 0x7F)]));
+    npc.extend(code);
+    send(npc);
     // Keep the socket open until the client hangs up.
     let mut rest = Vec::new();
     let _ = s.read_to_end(&mut rest);
@@ -89,5 +100,8 @@ fn each_3x_build_logs_in_and_logs_the_level() {
             v.label()
         );
         assert_eq!(out.matches("level lab3x.nw").count(), 1, "{out}");
+        // Only 3.153 handles 131: it reads the script and logs its opcodes.
+        let read = out.contains("npc 1: GS2 script, ") && out.contains("OP_CALL");
+        assert_eq!(read, v == ClientVersion::V3153, "{}: {out}", v.label());
     }
 }

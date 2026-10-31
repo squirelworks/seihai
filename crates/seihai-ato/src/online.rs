@@ -6,6 +6,11 @@
 //! and the props the lab run of the real 3.04 showed. The post-login frame
 //! the real client sends once the board is in (file checks and props,
 //! `protocol::login::LoginBurst`) is not sent yet.
+//!
+//! A server NPC's GS2 script (`PLO_NPCBYTECODE`, 131, which 3.153 handles
+//! and 3.04 does not) is kept by core's session state, read with
+//! `scripting::gs2::Script::parse` when the level is logged, and logged
+//! with its opcodes. It is not run.
 
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
@@ -98,6 +103,9 @@ pub fn run(
 fn log_level(store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
     if let (Some(a), Some(level)) = (store.arrival(st), store.level.as_ref()) {
         let _ = writeln!(out, "{}", a.line());
+        for l in a.script_lines() {
+            let _ = writeln!(out, "{l}");
+        }
         shown(level, &a);
     }
 }

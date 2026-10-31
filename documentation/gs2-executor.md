@@ -25,7 +25,7 @@ choice where the client is not followed.
   `FUN_003f590c`. **[bin]**
 
 So the 3.153 receive path in Stage E can hand id 131's payload to the
-reader. The payload's own header still needs reading.
+reader. The payload is read in `gs2-receive.md`.
 
 ## What the VM does
 

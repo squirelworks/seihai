@@ -10,6 +10,7 @@
 
 use seihai_core::assets::Level;
 use seihai_core::protocol::SessionState;
+use seihai_core::scripting::gs2::Script;
 
 /// Where a stored level came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,9 @@ pub struct Arrival {
     pub server_npcs: usize,
     /// NPCs in the local level file (none for a level built from the board).
     pub file_npcs: usize,
+    /// The GS2 scripts the server sent (`PLO_NPCBYTECODE`) for this level's
+    /// NPCs, by NPC id, as the reader took them. They are kept, not run.
+    pub scripts: Vec<(u32, Result<Script, String>)>,
 }
 
 impl Arrival {
@@ -56,6 +60,27 @@ impl Arrival {
             self.server_npcs,
             self.file_npcs
         )
+    }
+
+    /// The log lines for the scripts: one per script, then its opcodes.
+    pub fn script_lines(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for (id, script) in &self.scripts {
+            match script {
+                Ok(s) => {
+                    let names: Vec<&str> = s.functions.iter().map(|f| f.name.as_str()).collect();
+                    out.push(format!(
+                        "npc {id}: GS2 script, {} ops, {} strings, functions [{}]",
+                        s.code.len(),
+                        s.strings.len(),
+                        names.join(", ")
+                    ));
+                    out.extend(s.disassemble().lines().map(|l| format!("  {l}")));
+                }
+                Err(e) => out.push(format!("npc {id}: GS2 script not read: {e}")),
+            }
+        }
+        out
     }
 }
 
@@ -130,17 +155,21 @@ impl LevelStore {
     pub fn arrival(&self, st: &SessionState) -> Option<Arrival> {
         let level = self.level.as_ref()?;
         let name = self.loaded.clone().unwrap_or_default();
-        let server_npcs = st
-            .server_npcs
-            .values()
-            .filter(|(l, _)| l.as_deref().is_none_or(|l| l.eq_ignore_ascii_case(&name)))
-            .count();
+        let here = |l: &Option<String>| l.as_deref().is_none_or(|l| l.eq_ignore_ascii_case(&name));
+        let server_npcs = st.server_npcs.values().filter(|(l, _)| here(l)).count();
+        let scripts = st
+            .npc_bytecode
+            .iter()
+            .filter(|(id, _)| st.server_npcs.get(id).is_some_and(|(l, _)| here(l)))
+            .map(|(&id, code)| (id, Script::parse(code)))
+            .collect();
         Some(Arrival {
             name,
             source: if self.from_board { Source::Board } else { Source::LocalCopy },
             start: st.player_x.zip(st.player_y),
             server_npcs,
             file_npcs: level.npcs.len(),
+            scripts,
         })
     }
 }
