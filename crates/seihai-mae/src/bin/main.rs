@@ -544,7 +544,7 @@ fn main() {
                 println!("         --assets <dir>      your own asset folder (optional). A file it lacks comes");
                 println!("                             from the built-in default set; with no folder the");
                 println!("                             built-in set is all there is, and offline starts in");
-                println!("                             new1.nw");
+                println!("                             the built-in tutorial (--level seihai_tutorial1.nw)");
                 println!("         --cache-dir <dir>   also keep a copy of each download here (downloads go to");
                 println!("                             _cache/ next to the program; without this the old");
                 println!("                             <settings dir>/cache is only read; settings file: cache_dir=)");
@@ -797,6 +797,8 @@ fn main() {
     // GUI when no CLI mode is given. A failed connect or login goes back
     // to the GUI with the error, and a later Join tries again.
     let mut gui_error: Option<String> = launcher_error.take();
+    // "Play the tutorial" in the start window: offline, in the tutorial.
+    let mut tutorial_picked = false;
     if let Some(b) = offline_build {
         if online.take().is_some() {
             eprintln!("{} is offline-only: {}", b.label, b.reason());
@@ -813,6 +815,7 @@ fn main() {
                 let s = Settings::load();
                 if s.offline == Some(true) {
                     online = None;
+                    tutorial_picked = seihai::gui::take_tutorial_pick();
                     offline_build = s.version.as_deref().and_then(seihai::protocol::offline_builds::by_label);
                     if let Some(v) = s.version.as_deref().and_then(ClientVersion::from_label_or_offline) {
                         version = v;
@@ -1040,7 +1043,13 @@ fn main() {
             (None, None) => {}
         }
     }
-    // A fresh install with no folder of its own starts offline in the built-in level.
+    // A fresh install with no folder of its own starts offline in the
+    // built-in tutorial (or, without it, the starter level). The start
+    // window's "Play the tutorial" starts there with any folder.
+    let tutorial = seihai::assets::tutorial::START;
+    if level_name.is_none() && online.is_none() && (resolver.user_root().is_none() || tutorial_picked) && resolver.level(tutorial).is_some() {
+        level_name = Some(tutorial.to_string());
+    }
     if level_name.is_none() && online.is_none() && resolver.user_root().is_none() && resolver.level("new1.nw").is_some() {
         level_name = Some("new1.nw".to_string());
     }
@@ -1124,7 +1133,31 @@ fn main() {
             return;
         }
     };
+    // The tutorial's own sheet and tables, swapped in while a tutorial level
+    // is up (see assets::tutorial). Offline only: online, levels come from
+    // the server.
+    let tutorial_sheet = if online.is_none() {
+        seihai::assets::tutorial::sheet_png().and_then(|d| read_png_rgb(d).ok())
+    } else {
+        None
+    };
+    if tutorial_sheet.is_some() {
+        session.tutorial_tables = seihai::assets::tutorial::tables();
+        eprintln!("tutorial: {}* levels use the built-in tutorial sheet and tables", seihai::assets::tutorial::PREFIX);
+    }
 
+    // The tables first, so a tutorial level can swap them as it loads.
+    match resolver.tile_types() {
+        Some((p, TileTypesFile::Text)) => {
+            eprintln!("tile types: {} (text)", p.display());
+            let _ = session.load_tiletypes(p);
+        }
+        Some((p, TileTypesFile::ArraysDat)) => {
+            eprintln!("tile types: {} (arrays.dat)", p.display());
+            let _ = session.load_tiletypes_arrays(p);
+        }
+        None => eprintln!("tile types: none (walls will not match the real client)"),
+    }
     let offline_level = level_name.clone();
     if let Some(name) = level_name {
         let path = resolver.level_path(&name);
@@ -1151,17 +1184,6 @@ fn main() {
             }
             Err(e) => eprintln!("big map: cannot read {}: {e}", p.display()),
         }
-    }
-    match resolver.tile_types() {
-        Some((p, TileTypesFile::Text)) => {
-            eprintln!("tile types: {} (text)", p.display());
-            let _ = session.load_tiletypes(p);
-        }
-        Some((p, TileTypesFile::ArraysDat)) => {
-            eprintln!("tile types: {} (arrays.dat)", p.display());
-            let _ = session.load_tiletypes_arrays(p);
-        }
-        None => eprintln!("tile types: none (walls will not match the real client)"),
     }
 
     let profile = version.profile();
@@ -1241,7 +1263,10 @@ fn main() {
         // draws the level, chests and image NPCs, but no player, no other
         // players and no HUD (see protocol::lobby).
         let others: &[seihai::protocol::OtherPlayer] = if characters { others } else { &[] };
-        let mut fb = seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h);
+        let mut fb = match &tutorial_sheet {
+            Some((tw, th, t)) if session.tutorial_tables_active() => seihai::render::render_view(session, t, *tw, *th, view_w, view_h),
+            _ => seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h),
+        };
         let (cam_x, cam_y) = seihai::render::camera_origin(session, view_w, view_h);
         // NPCs under and with the players now; `drawoverplayer` NPCs, the
         // showimg images and `drawaslight` NPCs after the player.

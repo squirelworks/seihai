@@ -1661,6 +1661,10 @@ def write_all(out):
         b, links, objs = fn(random.Random(SEED + 2 + (name == "new2")))
         open(os.path.join(out, "levels", name + ".nw"), "w", newline="\n").write(level_text(b, links, objs))
 
+    # the tutorial: its own sheet, tables and levels (tools/gen_tutorial.py)
+    import gen_tutorial
+    gen_tutorial.write_tutorial(out, sys.modules[__name__])
+
 
 def listing(root):
     files = []
