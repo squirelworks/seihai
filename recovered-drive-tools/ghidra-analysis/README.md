@@ -15,6 +15,8 @@ or GServer-v2 sources into MIT crates — see `SALVAGE_PLACEMENT.md`.
 | `ListServer/` | UPX-unpacked `ListServer.exe` | Win32 Delphi PE + `WSOCK32`. Companion `servers.ini`. |
 | `gserver-linux/` | `GServersource/gserver` | ELF32 (paired with **full C++ source** in same archive — prefer source). Decompiles: `main`, `TServerFrame::startServer`, `TServerPlayer::parse*`, `LoadNW`, DB account helpers. |
 | `gserver-win/` | `GServersource/gserver.exe` | Win32 PE of same era gserver. |
+| `gserver_pe_GServersource/` | same Win PE (alt batch path) | Duplicate/parallel run of `gserver.exe`. |
+| `gserver13/` | later/related gserver build | See SUMMARY for identity. |
 | `BytecodeViewer/` | GS2 `BytecodeViewer.exe` | Console PE; package also has compiler **source**. |
 | `TextConvert/` | `GRAALtoNWconverter/TextConvert.exe` | Delphi PE — Graal→NW text/level conversion helper. |
 
