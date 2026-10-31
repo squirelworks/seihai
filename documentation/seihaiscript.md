@@ -89,7 +89,7 @@ Corpus: 3,306 scripts (2,947 plus 359 records from the binary levels): 352 with 
 
 **Scheduler.** Ticks are 50 ms. Timeouts round up to a tick and fire in order of tick, then creation. The same script and the same seed produce the same run. Limits: 10,000 loop passes, 200,000 steps per run, call depth 64, expression depth 400, parser depth 200. `callnpc`, `callweapon`, `triggeraction` and `movementfinished` are queued and run after the caller finishes (at most 1,000 per drain).
 
-**Touch.** `playertouchsme` is edge-triggered against the NPC's rectangle (2 by 2 tiles by default; `setshape 1,w,h` is in pixels), tested with the player's foot point.
+**Touch.** `playertouchsme` is edge-triggered against the NPC's rectangle, tested with the player's foot point. The rectangle is `setshape 1,w,h` (pixels) if the script set one, else the NPC's picture (its image part, or the whole image once it is loaded), else 2 by 2 tiles. The picture size came in on 2026-10-31: 2gta's north exit on `onlinestartlocal.nw` is a wide image NPC at 29,0 that could not be touched as 2 by 2.
 
 **Host.** `scripting::engine::host::SessionScripts` wires an offline session to the engine. Scripts run by default; `--no-scripts` turns them off.
 

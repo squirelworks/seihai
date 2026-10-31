@@ -2954,6 +2954,9 @@ fn main() {
                 dirty = true;
             }
             if moved {
+                scripts.size_npcs(&session, |name| {
+                    npc_images.get(name).filter(|(w, _)| *w > 0).map(|(w, px)| (*w, (px.len() / (*w as usize * 4)) as u32))
+                });
                 scripts.touch(&mut session);
             }
             ft.mark("network and game");
