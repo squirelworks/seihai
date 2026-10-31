@@ -226,9 +226,18 @@ impl ChatFont {
 /// i,@Arial@b@Start,x,y`): what follows the last `@`. `None` for a name
 /// that is not a text image (it does not start with `@`). Such a name is
 /// drawn, never downloaded.
-pub fn text_image_text(name: &str) -> Option<&str> {
+///
+/// The one Wingdings letter seen in use, `è` (2gta's menu pointer,
+/// `@Wingdings@è`), is Wingdings' right arrow; it becomes `→`, which the
+/// chat fonts have.
+pub fn text_image_text(name: &str) -> Option<String> {
     let rest = name.strip_prefix('@')?;
-    Some(rest.rsplit('@').next().unwrap_or(rest))
+    let text = rest.rsplit('@').next().unwrap_or(rest);
+    let font = rest.split('@').next().unwrap_or("");
+    if font.eq_ignore_ascii_case("wingdings") {
+        return Some(text.chars().map(|c| if c == 'è' { '→' } else { c }).collect());
+    }
+    Some(text.to_string())
 }
 
 /// A text image as an RGBA picture (width, pixels): the text in white on a
@@ -237,6 +246,7 @@ pub fn text_image_text(name: &str) -> Option<&str> {
 /// real client's text size are not followed yet: the chat font is used.
 pub fn text_image(font: Option<&ChatFont>, name: &str) -> Option<(u32, Vec<u8>)> {
     let text = text_image_text(name)?;
+    let text = text.as_str();
     let (w, h, cov) = match font {
         Some(f) => {
             let line = f.render(text);
@@ -247,6 +257,8 @@ pub fn text_image(font: Option<&ChatFont>, name: &str) -> Option<(u32, Vec<u8>)>
             let h = 7;
             let mut cov = vec![0u8; (w * h) as usize];
             for (i, c) in text.chars().enumerate() {
+                // The built-in letters are ASCII only.
+                let c = if c == '→' { '>' } else { c };
                 for (row, bits) in font::glyph(c).iter().enumerate() {
                     for col in 0..5 {
                         if bits >> (4 - col) & 1 != 0 {
@@ -408,9 +420,10 @@ pub fn draw_nick_text(fb: &mut Framebuffer, font: Option<&ChatFont>, nick: &str,
 mod tests {
     #[test]
     fn text_image_names_give_their_text() {
-        assert_eq!(super::text_image_text("@b@Start"), Some("Start"));
-        assert_eq!(super::text_image_text("@Arial@b@Start game"), Some("Start game"));
-        assert_eq!(super::text_image_text("@@@"), Some(""));
+        assert_eq!(super::text_image_text("@b@Start").as_deref(), Some("Start"));
+        assert_eq!(super::text_image_text("@Arial@b@Start game").as_deref(), Some("Start game"));
+        assert_eq!(super::text_image_text("@@@").as_deref(), Some(""));
+        assert_eq!(super::text_image_text("@Wingdings@è").as_deref(), Some("→"));
         assert_eq!(super::text_image_text("graalsplash1.png"), None);
     }
 

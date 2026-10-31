@@ -28,6 +28,22 @@ pub enum Action {
     Pause,
 }
 
+/// The actions in script `keydown` order (see [`KeyMap::keydown_bits`]):
+/// A is the action key, S the attack, D the item.
+pub const KEYDOWN_ORDER: [Action; 11] = [
+    Action::Up,
+    Action::Left,
+    Action::Down,
+    Action::Right,
+    Action::Act,
+    Action::Attack,
+    Action::Item,
+    Action::Map,
+    Action::SwitchToChat,
+    Action::ItemList,
+    Action::Pause,
+];
+
 impl Action {
     pub const ALL: [Action; 11] = [
         Action::Up,
@@ -145,6 +161,13 @@ impl KeyMap {
 
     pub fn down(&self, window: &minifb::Window, action: Action) -> bool {
         self.keys(action).iter().any(|k| window.is_key_down(*k))
+    }
+
+    /// The held keys as script `keydown(i)` numbers them: bit i for index
+    /// i, in the order 2.05's `newfeatures2001.txt` gives ("0..3:
+    /// movement, 4..6 A/S/D, 7 map, 8 tab, 9 Q, 10 P").
+    pub fn keydown_bits(&self, window: &minifb::Window) -> u16 {
+        KEYDOWN_ORDER.iter().enumerate().filter(|(_, a)| self.down(window, **a)).fold(0, |b, (i, _)| b | 1 << i)
     }
 
     /// Any of the four direction actions is held.

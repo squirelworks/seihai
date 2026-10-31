@@ -347,12 +347,16 @@ fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::as
 }
 
 /// Top-left pixel of the view in level pixels: the camera centres on
-/// the middle of the player's 48×48 box (player x/y + 1.5 tiles).
-fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
+/// the middle of the player's 48×48 box (player x/y + 1.5 tiles), or on a
+/// script's `setfocus` point.
+pub fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
     let t = TILE_PX as f32;
+    // The view's centre: a script's `setfocus` point, else the middle of
+    // the player's 48-pixel box.
+    let (cx, cy) = session.view_focus.unwrap_or((session.player_x + 1.5, session.player_y + 1.5));
     (
-        ((session.player_x + 1.5) * t - (view_tiles_w as f32 * t) / 2.0) as i32,
-        ((session.player_y + 1.5) * t - (view_tiles_h as f32 * t) / 2.0) as i32,
+        (cx * t - (view_tiles_w as f32 * t) / 2.0) as i32,
+        (cy * t - (view_tiles_h as f32 * t) / 2.0) as i32,
     )
 }
 

@@ -59,3 +59,70 @@ fn the_debug_dump_holds_every_npc_script() {
     assert!(dump.contains("//// npc 0: - at 2,2 (3 lines)\nif (created) {\n  message a;\n}\n"), "{dump}");
     assert!(dump.contains("//// npc 1: fallpal.png at 28,30 (1 lines)\n// second\n"), "{dump}");
 }
+
+/// 2gta's title, cut down: the player goes off the board (y 65), the view
+/// is held on 30,30, and S (`keydown(5)`) picks "Start".
+const TITLE: &str = "if (playerenters) { freezeplayer 99; playery=65; showstats 0; timeout=0.05; }
+if (timeout) {
+  hideplayer 0.1;
+  setfocus 30,30;
+  showimg 202,@b@Start,29,40;
+  if (keydown(5)) { resetfocus; setlevel2 speciesselect.nw,31.5,30; }
+  timeout=0.05;
+}";
+
+fn title(version: ClientVersion) -> (OfflineSession, SessionScripts) {
+    let mut s = OfflineSession::new();
+    s.current_level = Some(Level::parse(&format!("GLEVNW01\nNPC - 32 30\n{TITLE}\nNPCEND\n")).unwrap());
+    s.player_x = 30.0;
+    s.player_y = 30.0;
+    let mut sc = SessionScripts::new(version);
+    sc.load_level(&mut s, "splashscreen.nw");
+    (s, sc)
+}
+
+#[test]
+fn the_title_holds_the_view_and_s_starts() {
+    let (mut s, mut sc) = title(ClientVersion::V222);
+    assert_eq!(s.player_y, 65.0);
+    sc.tick(&mut s, 50);
+    assert_eq!(s.view_focus, Some((30.0, 30.0)));
+    assert!(s.script_hide_ms > 0);
+    assert!(s.pending_link.is_none());
+    // A (bit 4) is not S.
+    s.keys_down = 1 << 4;
+    sc.tick(&mut s, 50);
+    assert!(s.pending_link.is_none());
+    s.keys_down = 1 << 5;
+    sc.tick(&mut s, 50);
+    assert_eq!(s.view_focus, None, "resetfocus");
+    let (dest, x, y) = s.pending_link.clone().expect("setlevel2");
+    assert_eq!((dest.as_str(), x, y), ("speciesselect.nw", 31.5, 30.0));
+}
+
+#[test]
+fn keydown_is_false_while_paused() {
+    let (mut s, mut sc) = title(ClientVersion::V222);
+    s.keys_down = 1 << 5;
+    s.paused = true;
+    sc.tick(&mut s, 50);
+    assert!(s.pending_link.is_none());
+}
+
+/// 2.05 has no executor for `setfocus` (`gs1.rs`): the view stays on the player.
+#[test]
+fn setfocus_does_nothing_in_205() {
+    let (mut s, mut sc) = title(ClientVersion::V205);
+    sc.tick(&mut s, 50);
+    assert_eq!(s.view_focus, None);
+}
+
+#[test]
+fn a_new_level_follows_the_player_again() {
+    let (mut s, mut sc) = title(ClientVersion::V222);
+    sc.tick(&mut s, 50);
+    assert!(s.view_focus.is_some());
+    s.current_level = Some(Level::parse("GLEVNW01\n").unwrap());
+    sc.load_level(&mut s, "other.nw");
+    assert_eq!(s.view_focus, None);
+}

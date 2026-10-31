@@ -1224,10 +1224,7 @@ fn main() {
         // players and no HUD (see protocol::lobby).
         let others: &[seihai::protocol::OtherPlayer] = if characters { others } else { &[] };
         let mut fb = seihai::render::render_view(session, &sheet, sw, sh, view_w, view_h);
-        let (cam_x, cam_y) = (
-            ((session.player_x + 1.5) * 16.0 - (view_w as f32 * 16.0) / 2.0) as i32,
-            ((session.player_y + 1.5) * 16.0 - (view_h as f32 * 16.0) / 2.0) as i32,
-        );
+        let (cam_x, cam_y) = seihai::render::camera_origin(session, view_w, view_h);
         // NPCs under and with the players now; `drawoverplayer` NPCs, the
         // showimg images and `drawaslight` NPCs after the player.
         let npc_art = seihai::render::NpcArt {
@@ -2962,6 +2959,8 @@ fn main() {
             ft.mark("network and game");
             let dt = scripts_clock.elapsed().as_millis() as u64;
             scripts_clock = Instant::now();
+            // `keydown(i)` reads these; typing a chat line holds no keys.
+            session.keys_down = if input.is_open() { 0 } else { keymap.keydown_bits(&window) };
             scripts.tick(&mut session, dt);
             ft.mark("scripts");
             // A script asked for a level change (setlevel / setlevel2).
