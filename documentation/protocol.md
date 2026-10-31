@@ -449,7 +449,7 @@ a gmap, sends no cell prop and no 35.
   `revisit_answer_without_mod_time_restores_the_parked_level`). The `35` a
   client sends for a neighbour it holds (a non-zero mod time) was never
   captured: the lab only had a cold cache, so Seihai always sends 0.
-- No `PLO_BIGMAP`/`MINIMAP` map screen (171/172).
+- `PLO_BIGMAP` (171) feeds the M map (`map-screen.md`). No minimap from `PLO_MINIMAP` (172).
 - `PLO_BOARDHEIGHTS` (185) is decoded only. The layout is from the 2.17.1,
   2.22 and 2.31 receive handlers; no capture of a server sending it, and no
   note of what the client does with the heights. Left open.
