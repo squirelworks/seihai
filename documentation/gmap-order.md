@@ -66,3 +66,39 @@ next message it sends. 2.31 (no cadence) is unchanged: 46 and the props in one f
 Confirmed: the four 2.22 rows above (tests in `protocol/walkcadence.rs` and `net/mod.rs`). Inferred: 2.17
 and 3.04 cross the same way (their cadence matches 2.22's, but no crossing was captured). Not run yet: a lab walk of the 2x2 gmap with
 Seihai 2.22 against the real client after this change.
+
+## Walking back into a gmap level (lab item 6, 2026-10-30)
+
+Lab, 2.22 walk around a 2x2 gmap: Seihai sent `PLI_NPCPROPS` again on every crossing back into a level
+(`GANI idle` for a shopkeeper, `GANI idle` and `BODY body.png` for a warp NPC), because the level's
+scripts were loaded afresh and `created` re-ran `setcharani`. The real 2.22 sent no NPC props on the
+same walk. Now a level that is still loaded as a neighbour keeps its scripts: leaving it parks its NPC
+objects and `level.` variables (`ScriptWorld::park_level`), and walking back in resumes them without
+`created`. A level dropped from the neighbourhood, or any level after leaving the gmap, starts afresh.
+`playerenters` still fires on each entry (not captured either way). Timeouts due while parked fire once
+on return. Test: `re_entering_a_loaded_gmap_level_resumes_its_scripts`.
+
+The NPC props side does the same (live rerun, 2026-10-30: with the scripts kept, `GANI idle` and `BODY`
+still went out on each crossing back, because the sync forgot what it had sent and replayed the
+server's older stored records). `ServerNpcSync::switch_level` parks what the server has for a gmap
+level's NPCs and brings it back on re-entry, and the stored records are not replayed into a level whose
+NPCs are still linked. Test: `walking_back_into_a_gmap_level_sends_nothing_again`.
+
+The second live rerun still showed `GANI idle` (and `BODY`) for the two character NPCs of `minipw_1_1`
+before every crossing, in every direction. Their records come with that level's data when it is sent
+as a neighbour, but `SessionState` filed them under the player's level and the game loop added them to
+it, running their `created`. A record now belongs to the level being sent (the last `PLO_LEVELNAME`),
+and only the player's level takes updates as they come; a neighbour's wait in `server_npcs` until it is
+entered. Test: `a_neighbours_npcs_are_kept_for_the_neighbour`.
+
+The third rerun showed GANI leaving `minipw_1_1` and the full first-entry set coming back into it. In the
+game loop the step that crosses moves the session into the new cell at once, but the network side's cell
+(and `loaded_level`) change only later in the same frame, in the crossing block. The NPC link and the
+script load, which run in between, took the old level's name: the old level's server records were put on
+the new level, and its scripts were parked and resumed under the wrong name. On a gmap both now take the
+session's cell level (`OfflineSession::level_name`). No unit test covers the loop order; the lab rerun is
+the check.
+
+Still open: on the **first** entry of a level the 2.22 build sends `VISFLAGS` for each NPC and the props
+its `created` sets (`BODY`), the 2.05 rule (`documentation/ledges-push-pull.md`). The real 2.22 sent no NPC
+props at all on the same walk. Which props 2.22 sends, if any, is not captured, so this is not changed here.

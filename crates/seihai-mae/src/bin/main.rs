@@ -2602,12 +2602,21 @@ fn main() {
                 let mut todo: Vec<(u32, seihai::protocol::npcprops::NpcProps)> = Vec::new();
                 if session.level_serial != npc_link_serial {
                     npc_link_serial = session.level_serial;
-                    npc_sync.clear();
-                    let here = net_state.current_level_name();
+                    // On a gmap the step that crossed already moved the
+                    // session into the new cell; the network side learns it
+                    // later in this frame (the crossing block below), so the
+                    // level is the session's, not the server's.
+                    let here = session.gmap.as_ref().and(session.level_name()).or_else(|| net_state.current_level_name());
+                    // Back in a gmap level still loaded: its NPCs are linked
+                    // and the server has what was sent; its stored records
+                    // are older, so they are not replayed.
+                    let resumed = npc_sync.switch_level(here.as_deref(), session.gmap.is_some())
+                        && session.current_level.as_ref().is_some_and(|l| l.npcs.iter().any(|n| n.server_id.is_some()));
                     todo.extend(
                         net_state
                             .server_npcs
                             .iter()
+                            .filter(|_| !resumed)
                             .filter(|(_, (l, _))| l.as_deref().zip(here.as_deref()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b)))
                             .map(|(&id, (_, p))| (id, p.clone())),
                     );
@@ -2644,7 +2653,8 @@ fn main() {
         if !no_scripts {
             if session.level_serial != scripts_serial {
                 scripts_serial = session.level_serial;
-                let label = loaded_level.clone().or_else(|| offline_level.clone()).unwrap_or_default();
+                // On a gmap the cell's level (see the NPC link above).
+                let label = session.gmap.as_ref().and(session.level_name()).or_else(|| loaded_level.clone()).or_else(|| offline_level.clone()).unwrap_or_default();
                 scripts.load_level(&mut session, &label);
                 // Pictures of this level's NPCs (online they were asked for when the
                 // level arrived; a second pass asks for nothing twice).
