@@ -56,6 +56,10 @@ lock-out. The reach, the hit judgement and the hurt sprite come from the
 2.05 template; no 1.39 hit handler was traced (`chain.rs` lists this as
 unknown). 1.33 to 1.38 still have no combat row.
 
+Hurt mode also keeps one blast from hurting more than once. Without it, a
+1.39 on hastur lost three half hearts to its own bomb (run of 2026-10-31
+15:00); the 40-tick hurt mode now takes the later pieces off.
+
 ## Checked
 
 - `crates/seihai-mae/tests/builtin_139.rs`: the poses come from the user's
