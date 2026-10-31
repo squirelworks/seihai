@@ -42,8 +42,8 @@ Seihai is a client, so it receives the 178; it cannot send one. On the lab's GSe
 
 ## Not done
 
-- Ids 109 and 198 (5.24 on) and 111 (6.03r7) are in the server-id sets but not decoded.
-- The 6.x form of a frame of 0xFFFF bytes or more (length `0xFFFF`, then a 4-byte length) is not read.
+- Ids 109 and 198 (5.24 on) are in the server-id sets but not decoded. 111 (6.03r7) carries no fields: the client saves the whole body as `creationtime.dat` and sends nothing back (6.03 decompile), so Seihai drops it.
+- The 6.x rows read the 6.x form of a frame of 0xFFFF bytes or more: `FF FF`, then the length as a `u32be` (`protocol.gen5_long_frames`, `FrameLen::Long`). It was read in the Linux 6.01r1 and 6.03r7 builds; 6.00r2 takes it from 6.01r1. No server has been seen sending it, and GServer-v2 never does.
 - The machine-field values and the base-file requests, above.
 - No public check: this session's network could not resolve `listserver.graal.in`, so which port the public service takes 5.x/6.x logins on was not checked. Use `--online host:port` or the launcher's direct box.
 - The chat bar on these builds is the server's GUI script; Seihai keeps its own.
