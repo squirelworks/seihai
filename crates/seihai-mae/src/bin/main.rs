@@ -763,6 +763,8 @@ fn main() {
     let mut scripts = SessionScripts::new(version);
     let mut scripts_serial = u64::MAX;
     let mut scripts_clock = Instant::now();
+    // The clock of the view's glide over a big-map edge link.
+    let mut glide_clock = Instant::now();
     // Server NPCs (`PLO_NPCPROPS`): the level they were linked into, and
     // the values the server has for each (see `offline/servernpcs.rs`).
     let mut npc_link_serial = u64::MAX;
@@ -1645,6 +1647,10 @@ fn main() {
     let mut show_help = false;
     let started = Instant::now();
     let mut warp_since: Option<Instant> = None;
+    // Online on a big map: since when the new level's tiles are awaited
+    // (its name came, its board has not). The last frame stays up
+    // meanwhile, so an edge crossing shows no black frame.
+    let mut board_wait: Option<Instant> = None;
     let mut hearts_repair_sent = false;
     // Where our own link request lands the player, held by the destination's
     // name until the server names that level (see `LinkArrival`).
@@ -1796,6 +1802,10 @@ fn main() {
                         let got = files.process(&mut net_state);
                         send_file_msgs(conn.as_mut(), got.send);
                         weapon_recheck |= !got.written.is_empty();
+                        if !got.written.is_empty() {
+                            // A big-map neighbour may be among them.
+                            session.big_map_view.retry();
+                        }
                         list_recheck |= !got.written.is_empty();
                         if !got.written.is_empty() {
                             look_not_received.clear();
@@ -2020,7 +2030,13 @@ fn main() {
                         // server's level). The real clients ask for no
                         // level file.
                         level_from_board = false;
+                        // On a big map the level being left stays drawn
+                        // on its side of the new one.
+                        if let Some(old) = loaded_level.as_deref() {
+                            session.keep_level_for_big_map(old);
+                        }
                         session.current_level = None;
+                        board_wait = Some(Instant::now());
                         if let Some(path) = resolver.level_at_mod_time(&file, net_state.server_mod_time(&file)) {
                             match session.load_level(&path) {
                                 Ok(()) => eprintln!("level {file} (local copy at the server's mod time)"),
@@ -3189,7 +3205,9 @@ fn main() {
                     }
                 }
             }
-            // Check links after every move, online or offline.
+            // Check links after every move, online or offline. Online the
+            // level is the server's, by the name it gave.
+            session.online_level = if conn.is_some() { net_state.current_level_name() } else { None };
             let in_link = session.check_links();
             if !in_link {
                 missing_level.clear();
@@ -3275,16 +3293,45 @@ fn main() {
             }
         }
 
-        // Big map: ask for the level across a near edge before the player
-        // walks the link, so it is here when they cross. Once per name per
-        // connection.
+        // Big map: ask for the level across an edge once that edge can come
+        // into view, so it is drawn past the edge and here when the player
+        // crosses. Once per name per connection.
         if let (Some(map), Some(here), true, true) =
             (session.big_map.as_ref(), net_state.current_level_name(), conn.is_some(), session.warp_pending.is_none())
         {
-            for file in map.big_map_ahead(&here, session.player_x, session.player_y, &mut gmap_asked) {
+            let near = seihai::gmap::big_map_ahead_distance(view_w, view_h);
+            for file in map.big_map_ahead_within(&here, session.player_x, session.player_y, near, &mut gmap_asked) {
                 // Logged even when the request waits for a free slot.
                 eprintln!("asking for {file} ahead (big map neighbour)");
                 send_file_msgs(conn.as_mut(), files.need(&file));
+            }
+        }
+
+        // Big map: draw the levels next door past the edges, so the world
+        // reads as one and an edge link changes nothing on screen. Online
+        // only what the server already sent (this connection's downloads,
+        // or its cache folder); offline the local files. Drawing only: no
+        // message goes out here.
+        {
+            let here = if conn.is_some() { net_state.current_level_name() } else { session.level_name() };
+            let online = conn.is_some();
+            let mut load = |name: &str| -> Option<Level> {
+                if online {
+                    match files.store.memory_file(name) {
+                        Some(m) => Level::from_bytes(&m.data).ok(),
+                        None => resolver.cached_level(name).and_then(|p| Level::load(p).ok()),
+                    }
+                } else {
+                    resolver.level(name).and_then(|p| Level::load(p).ok())
+                }
+            };
+            if session.sync_big_map(here.as_deref(), &mut load) {
+                dirty = true;
+            }
+            let glide_ms = glide_clock.elapsed().as_millis() as u64;
+            glide_clock = Instant::now();
+            if session.tick_seam_glide(glide_ms) {
+                dirty = true;
             }
         }
 
@@ -3992,7 +4039,10 @@ fn main() {
         if image_anims.update(&mut npc_images, anim_now, |n| files.store.read(n).or_else(|| resolver.image(n).and_then(|p| std::fs::read(p).ok()))) {
             dirty = true;
         }
-        if dirty {
+        if session.current_level.is_some() {
+            board_wait = None;
+        }
+        if dirty && !seihai::gmap::hold_frame_for_board(session.big_map.is_some(), session.current_level.is_some(), board_wait.map(|t| t.elapsed())) {
             let my_nick = my_name_timer.active().then(|| me(&net_state, &account));
             let own_failed = (files.requests.has_failed(session.looks.body_name()), files.requests.has_failed(session.looks.head_name()));
             scene = draw(&session, &net_state.others, &my_chat, my_nick.as_deref(), &npc_images, weapon_bar.current_image(), own_failed, characters(&lobby_server));
