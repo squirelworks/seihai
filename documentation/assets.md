@@ -352,8 +352,12 @@ Two `#[ignore]` tests use the real folder (`SEIHAI_DATA_222=<folder>`):
   coverage report decodes it too and gives its size. The reader was checked
   against Pillow's first frame on 738 real GIFs (all of the 1.21 build, and
   the GIFs of the 5th and 15th Graal builds: heads, swords, shields, weapon
-  icons, tile sheets, level art); every one was pixel-equal. MNG is found,
-  not decoded. The folder holds 28 `.mng` and no GIF.
+  icons, tile sheets, level art); every one was pixel-equal. MNG is decoded
+  too (`assets/mng.rs`, 2026-10-31): every image path reads its first frame,
+  and NPC, `showimg` and player images play the rest (`npc-images.md`,
+  "Animated `.mng` images"). The folder holds 28 `.mng` and no GIF; all 28
+  decode, and their 134 frames were pixel-equal to Pillow's decode of the
+  embedded PNGs laid on the canvas the same way.
 - **Tiledef matching.** The files parse; how a client matches `prefix` against
   a level name and what types other than 0 and 1 mean (the folder uses 4) is
   not in the notes, so no sheet is chosen from them.

@@ -129,3 +129,53 @@ Confirmed: the lower-casing, by a test that failed before the change
 client sends waiting names in their own case (its list code keeps the name
 strings; the case of a waiting name was not re-read in the decompile).
 Not tested: a lab run with more than four missing NPC images.
+
+## Animated `.mng` images (2026-10-31)
+
+The light fixtures on Graal the Adventure did not show. The lamps by the
+stairs next to Cat's Pub are image NPCs whose picture is `bluelampani.mng`
+(the 2.22 folder ships it in `levels/images`): a 32 x 64 lamp with three
+frames, the yellow light growing, stored with delays of 100, 0 and 0 ticks
+and `TERM` repeat for ever. Seihai had no MNG reader, so the file was asked
+for, arrived, failed to read ("not a PNG") and the NPC drew nothing. The
+real 2.22 client draws the lamp and flickers it: its two screenshots from the
+2gta run (Graal_analysis `live-runs/2gta-222-2026-10-30`, `gta-start.png`
+and `walk1.png`) catch it on the dim first frame and on the bright last one,
+both lamps on the same frame.
+
+* **Reading.** `assets::mng` reads the part of MNG Graal's `gif2mng`
+  writes: `MHDR`, `FRAM` (framing mode, one-shot or default delay), `TERM`,
+  `DEFI` positions, a global `PLTE`/`tRNS`, and one PNG stream per frame.
+  Modes 3 and 4 clear the canvas; 1 and 2 draw over it. `read_png_rgba`
+  hands an MNG to it and gets the first frame, so heads, bodies, emoticons,
+  item icons and NPC images all show an `.mng` now. A file's claimed size is
+  checked like a PNG's (`MAX_IMAGE_PIXELS`), and at most 256 frames are kept.
+* **Playing.** `assets::ImageAnimations` keeps the MNGs found in the
+  client's image map (`npc_images`) and, before each draw, writes the frame
+  due into the map's entry, then asks for a redraw when it changed. So the
+  renderer is unchanged, and everything that draws from that map animates:
+  NPC images, `showimg` images, weapon images, and heads such as
+  `head11.mng` (a blink). A recoloured body is stored under another key and
+  stays on its first frame. All animations share one clock from the moment
+  they are first seen, so lamps with the same file flicker together.
+* **Timing.** A frame lasts its `FRAM` delay in `MHDR` ticks. **A delay of 0
+  lasts 100 ms** (`mng::ZERO_DELAY_MS`): read literally, the lamp would show
+  its first frame only, which the real client's screenshots rule out. 100 ms
+  is Seihai's choice (what GIF viewers use for 0, and Seihai's GANI step);
+  the client's own value was not read. `TERM` action 3 repeats
+  `iteration_max` times (`0x7FFFFFFF` and up: for ever) and rests on the last
+  frame; any other `TERM`, or none, plays once.
+* **Not read.** `LOOP`/`ENDL`, delta images, `JNG`, `BASI`. None of the 28
+  MNGs of the 2.22 folder uses them.
+
+Tests: `assets::mng` unit tests (frames, delays, loops, mode 4 and `DEFI`,
+the image map swap; `real_bluelampani` is `#[ignore]` and reads the lamp
+from `SEIHAI_DATA_222`), and `npc_images::mng_npc_draws_and_animates`, which
+draws an NPC with a gif2mng-style lamp through `draw_npcs` and checks the
+colour change on the MNG's clock.
+
+Lab check (GServer-v2 beta4 on loopback, 2.22): `onlinestartlocal.nw` with
+two `NPC bluelampani.mng` lines and the file in `world/images`. Seihai logged
+`requesting bluelampani.mng`, then `image bluelampani.mng`; screenshots 50
+ms apart showed three different pictures in turn, both lamps on the same
+frame.
