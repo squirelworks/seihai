@@ -1,0 +1,59 @@
+---
+description: Binding Seihai project rules (licences, labs, git). Never break these.
+alwaysApply: true
+---
+
+# Seihai binding rules
+
+**Owner:** Squirrel (GitHub `squirelworks`). **Merges and tags:** Chiaki only. Open
+PRs; never merge, never push to `main`/`seihai`, never create a tag or release.
+
+## Licences: clean-room Rust, GPL only in the fork
+
+- GPL-3.0, may carry GPL code: **`seihai-gserver-v2`** (fork of GServer-v2, branch
+  `seihai`) and **`seihai-gs2lib`** (branch `seihai`). Nothing else.
+- MIT OR Apache-2.0, clean-room: **`seihai-gserver`, `seihai-listserver`, `seihai-rc`,
+  `seihai-npcserver`, `seihai-servertools`**.
+- In the clean-room repos: **copy, port or translate nothing** from GServer-v2, gs2lib,
+  gs2-parser, graal-listserver, pyReborn, reborn-protocol, or any decompile. Not
+  functions, not tables, not comments. Reading the fork to learn behaviour is fine;
+  packet ids and wire formats are facts and may be used. Write Rust from Seihai's
+  protocol docs, lab captures and tests.
+- The Rust repos depend on `seihai-core` (`squirelworks/seihai`) **by git tag only**
+  (current: `v0.0.5`). When core lacks something, add it in `seihai` in its own PR,
+  ask for a tag, then bump the tag in its own PR. Never fork core code into a server repo.
+- Fork duties: keep `LICENSE.md` and upstream credits; every changed file gets
+  `// Modified by the Seihai project, YYYY-MM-DD: see CHANGES-SEIHAI.md.` at the top;
+  every change gets a row in `CHANGES-SEIHAI.md`.
+
+## No real servers, no decompiles
+
+- **No real server IPs, ports or hostnames** (public Graal servers, the official
+  listserver) in code, docs, tests, config or UI. Use `127.0.0.1`, `127.0.0.2`, the lab
+  ports (14802, 14803, 14804, 14900, 14921–14923), or placeholders `<listserver-host>`,
+  `<public-host>`. No built-in "known servers" list. Site/upgrade URLs default to empty.
+- No decompiled source, no binary offsets (`0x00…`, `FUN_…`). Decompile findings are
+  written as plain behaviour only.
+- Never run old Graal tools from the archives on a real machine (`ListServer.exe`
+  phones home).
+
+## Labs
+
+- **Loopback only**: servers you start yourself on `127.0.0.1` (or `127.0.0.2` as a
+  fake outside interface), in a container, VM or CI runner.
+- **No public servers** and no opening ports to the internet without Squirrel's OK.
+- **Never use Squirrel's own machines** for labs or builds.
+- Never test against public Graal servers or with real player accounts.
+- Every fix needs a test or a recorded lab run in the repo's `docs/lab/`
+  (client + version, server + commit, before, after, log/pcap names).
+
+## Git and PRs
+
+- One change per branch and PR. Commit message: short summary, then why, then which
+  real clients were checked (or "none").
+- Every PR passes `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test` on Linux, Windows and macOS (Rust), or `seihai-release.yml` (fork).
+  Chiaki merges once Linux is green; keep Windows and macOS green too.
+- Tick the matching box in the repo's `docs/NEXT.md` in the same PR.
+- **Stop and ask Squirrel** (leave the task, go to the next) where a task says
+  "Squirrel decides".
