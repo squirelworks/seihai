@@ -63,6 +63,12 @@ sends packet 13 with the position one tile above the chest. It sends no rupee or
 props update. Seihai now opens chests only when facing north.
 (Not checked on 2.05.)
 
+The real 2.22 on GServer-RS (148.113.172.167:14801, 2026-10-31) did the same
+for three chests: packet 13 (`PLI_ITEMDEL`) at `(x, y - 1)` 1.19 to 1.20 s
+after each `PLI_OPENCHEST`, and the server answered the chest with the new
+rupee count. Seihai sends the same packet 13, 24 item ticks after the open,
+in the builds that send `PLI_ITEMDEL` on an item timeout (1.38 on).
+
 ## Signs
 
 A sign record has no draw routine (its object is a plain one). Signs are not
