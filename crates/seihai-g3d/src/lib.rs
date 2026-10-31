@@ -6,6 +6,11 @@
 //! `client-behaviour.md`), which were checked against the real client and
 //! server in a loopback lab.
 //!
+//! See `ARCHITECTURE.md` next to `Cargo.toml` for the data flow, what is
+//! taken from the client and what is a stand-in, and the open tasks.
+//!
+//! - [`config`]: `graal3dconfig.txt` (look and UDP options).
+//! - [`admin`]: the admin protocol ids and encoders (scaffold).
 //! - [`codec`]: the `+32` text codec and the zlib frames.
 //! - [`props`]: the player property table.
 //! - [`session`]: the TCP session and the peer-to-peer UDP socket.
@@ -15,8 +20,10 @@
 //! - [`model`]: the player model and its walk animation.
 //! - [`view`]: the scene: level, players and the chat log.
 
+pub mod admin;
 pub mod bmp;
 pub mod codec;
+pub mod config;
 pub mod model;
 pub mod props;
 pub mod render;

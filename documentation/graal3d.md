@@ -107,6 +107,7 @@ put the line in the log and sent it.
 
 ## Next
 
-- The real client's collision test and camera height, from the binary.
-- Nicknames: Graal3D shows none over players; a player list might help.
-- The F1 / F2 option windows (UDP options, the look editor).
+The open tasks (G3D-1 to G3D-9), the module map and the lab recipe are in
+`crates/seihai-g3d/ARCHITECTURE.md`. The look and UDP options now come from
+the install's `graal3dconfig.txt` when `--assets` points at it; its server
+address is never used.

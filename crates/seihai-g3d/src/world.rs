@@ -6,6 +6,14 @@
 //! how it decides was not read. Seihai stands the player on the highest
 //! face under it that is no more than [`STEP`] above its feet, and refuses
 //! a step where there is none (a wall, or off the level).
+//!
+//! Two seams are kept for the faithful versions (see the crate's
+//! `ARCHITECTURE.md`, tasks G3D-1 and G3D-2):
+//! - [`Collider`]: what the walker asks of the level. [`Ground`] is
+//!   Seihai's stand-in; a port of the real face test implements the same
+//!   trait and replaces it in `main.rs` without touching [`Walker`].
+//! - [`CameraRig`]: the follow camera's numbers. Distance and turn rate
+//!   are the client's; height, look point and field of view are stand-ins.
 
 use crate::props::Player;
 use crate::render::V3;
@@ -25,14 +33,53 @@ pub const FALL: f32 = 10.0;
 /// that blocks (Seihai's choices).
 pub const STEP: f32 = 16.0;
 pub const BODY: f32 = 50.0;
-/// Follow camera distance.
+/// Follow camera distance (the client's).
 pub const CAM_DIST: f32 = 220.0;
-/// Follow camera turn per tick, in degrees.
+/// Follow camera turn per tick, in degrees (the client's).
 pub const CAM_TURN: f32 = 5.0;
-/// Camera height over the player's feet, and the point it looks at
-/// (Seihai's choice; the real values were not read).
+/// Camera height over the player's feet, and the point it looks at.
+/// TODO(G3D-2): stand-ins; read the real values from the client's camera
+/// routine and replace them here.
 pub const CAM_HEIGHT: f32 = 70.0;
 pub const LOOK_HEIGHT: f32 = 25.0;
+
+/// The follow camera's numbers in one place, so a faithful set can
+/// replace the stand-ins without touching the camera code.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CameraRig {
+    pub distance: f32,
+    pub turn: f32,
+    pub height: f32,
+    pub look_height: f32,
+    /// Horizontal field of view in degrees. TODO(G3D-2): stand-in.
+    pub fov: f32,
+}
+
+impl Default for CameraRig {
+    fn default() -> Self {
+        CameraRig { distance: CAM_DIST, turn: CAM_TURN, height: CAM_HEIGHT, look_height: LOOK_HEIGHT, fov: 70.0 }
+    }
+}
+
+/// What walking asks of the level. TODO(G3D-1): [`Ground`] is a stand-in;
+/// a port of the client's per-face test implements this trait.
+pub trait Collider {
+    /// The highest surface at (x, z) no higher than `max_y`.
+    fn height(&self, x: f32, z: f32, max_y: f32) -> Option<f32>;
+    /// Whether something solid at (x, z) is in the way of a body whose
+    /// feet are below `lo` and whose head is at `hi`.
+    fn blocked(&self, x: f32, z: f32, lo: f32, hi: f32) -> bool;
+}
+
+impl Collider for Ground {
+    fn height(&self, x: f32, z: f32, max_y: f32) -> Option<f32> {
+        Ground::height(self, x, z, max_y)
+    }
+
+    fn blocked(&self, x: f32, z: f32, lo: f32, hi: f32) -> bool {
+        Ground::blocked(self, x, z, lo, hi)
+    }
+}
 
 /// Upward-facing level triangles, for standing on.
 #[derive(Default)]
@@ -114,13 +161,15 @@ pub struct FollowCam {
     pub pos: V3,
     /// Where it looks, in degrees about y (0 = +z, 90 = +x).
     pub yaw: f32,
+    pub rig: CameraRig,
 }
 
 impl FollowCam {
     /// Behind a player facing `angle`.
     pub fn behind(p: &Player) -> FollowCam {
         let (s, c) = (p.angle as f32).to_radians().sin_cos();
-        FollowCam { pos: [p.x - s * CAM_DIST, p.y + CAM_HEIGHT, p.z - c * CAM_DIST], yaw: p.angle as f32 }
+        let rig = CameraRig::default();
+        FollowCam { pos: [p.x - s * rig.distance, p.y + rig.height, p.z - c * rig.distance], yaw: p.angle as f32, rig }
     }
 
     pub fn tick(&mut self, p: &Player) {
@@ -128,24 +177,24 @@ impl FollowCam {
         let d = (dx * dx + dz * dz).sqrt();
         if d > 1e-3 {
             // Close the gap by ((d − 220) / 220)² / 10 of it per tick.
-            let gap = d - CAM_DIST;
-            let k = ((gap / CAM_DIST).powi(2) / 10.0).min(1.0);
+            let gap = d - self.rig.distance;
+            let k = ((gap / self.rig.distance).powi(2) / 10.0).min(1.0);
             let step = gap.signum() * gap.abs().max(1.0) * k.max(0.02);
             self.pos[0] += dx / d * step.clamp(-d, d);
             self.pos[2] += dz / d * step.clamp(-d, d);
         }
-        self.pos[1] += (p.y + CAM_HEIGHT - self.pos[1]) * 0.3;
+        self.pos[1] += (p.y + self.rig.height - self.pos[1]) * 0.3;
         let want = dx.atan2(dz).to_degrees();
         let mut turn = (want - self.yaw + 540.0).rem_euclid(360.0) - 180.0;
-        let max = if turn.abs() > 90.0 { CAM_TURN * 3.0 } else { CAM_TURN };
+        let max = if turn.abs() > 90.0 { self.rig.turn * 3.0 } else { self.rig.turn };
         turn = turn.clamp(-max, max);
         self.yaw = (self.yaw + turn).rem_euclid(360.0);
     }
 
     pub fn target(&self, p: &Player) -> V3 {
         let (s, c) = self.yaw.to_radians().sin_cos();
-        let d = CAM_DIST;
-        [self.pos[0] + s * d, p.y + LOOK_HEIGHT, self.pos[2] + c * d]
+        let d = self.rig.distance;
+        [self.pos[0] + s * d, p.y + self.rig.look_height, self.pos[2] + c * d]
     }
 }
 
@@ -172,7 +221,7 @@ impl Walker {
     }
 
     /// Move `p` one tick. `cam` gives the view direction.
-    pub fn tick(&mut self, p: &mut Player, cam: &FollowCam, inp: Input, ground: &Ground) {
+    pub fn tick(&mut self, p: &mut Player, cam: &FollowCam, inp: Input, ground: &dyn Collider) {
         // Facing: the camera-to-player direction.
         let (dx, dz) = (p.x - cam.pos[0], p.z - cam.pos[2]);
         let view = if dx * dx + dz * dz > 1.0 { dx.atan2(dz).to_degrees() } else { p.angle as f32 };
@@ -321,7 +370,7 @@ mod tests {
     }
 
     fn walk(p: &mut Player, w: &mut Walker, g: &Ground, inp: Input, n: usize) {
-        let cam = FollowCam { pos: [p.x, p.y + CAM_HEIGHT, p.z - CAM_DIST], yaw: 0.0 };
+        let cam = FollowCam { pos: [p.x, p.y + CAM_HEIGHT, p.z - CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
         for _ in 0..n {
             w.tick(p, &cam, inp, g);
         }
@@ -369,7 +418,7 @@ mod tests {
     #[test]
     fn camera_keeps_its_distance() {
         let p = Player { x: 0.0, z: 0.0, ..Player::default() };
-        let mut c = FollowCam { pos: [0.0, 70.0, -600.0], yaw: 0.0 };
+        let mut c = FollowCam { pos: [0.0, 70.0, -600.0], yaw: 0.0, rig: CameraRig::default() };
         for _ in 0..400 {
             c.tick(&p);
         }
