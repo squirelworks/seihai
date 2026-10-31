@@ -1085,6 +1085,8 @@ fn main() {
     // The real 2.00's props carry the knockback position every 100 ms,
     // every other step (lab, 2026-10-30 lan-200j).
     session.knock_send_steps = if version == ClientVersion::V200 { 2 } else { 1 };
+    // Baddy pictures by the build's extension (2.0x names `.gif`).
+    session.baddy_image_ext = profile.files.image_ext.to_string();
     // Who drops bush and pot items: the 1.x roll, or the server.
     session.set_drops(profile.drops);
     let view_w = 40u32;
@@ -1159,6 +1161,9 @@ fn main() {
         if let Some(sp) = &sprites {
             seihai::render::draw_floor_items(&mut fb, session, pose_sheet(sp), cam_x, cam_y);
         }
+        // The baddies, with the level's objects under the players.
+        let frame = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64) / 50;
+        seihai::render::draw_baddies(&mut fb, session, &seihai::render::BaddyArt { sprites: sprites.as_ref().map(pose_sheet), images: npc_imgs }, cam_x, cam_y, frame);
         // On a gmap another player's position is local to its own cell.
         let own_cell = session.gmap.as_ref().map(|w| w.cell);
         let others: Vec<seihai::protocol::OtherPlayer> = others
@@ -1301,6 +1306,7 @@ fn main() {
         }
         seihai::render::draw_npcs(&mut fb, session, &npc_art, cam_x, cam_y, seihai::render::NpcPass::AbovePlayers);
         seihai::render::draw_npc_messages(&mut fb, session, &npc_art, chat_font.as_ref(), cam_x, cam_y);
+        seihai::render::draw_baddy_verses(&mut fb, session, chat_font.as_ref(), cam_x, cam_y);
         ui::draw_other_labels(&mut fb, chat_font.as_ref(), others, (cam_x, cam_y));
         ui::draw_bubble(&mut fb, chat_font.as_ref(), my_chat, dx, dy, session.carried.is_some());
         if let Some(nick) = my_nick {
@@ -2051,6 +2057,20 @@ fn main() {
                             (arrow.x, arrow.y) = (arrow.x + dx, arrow.y + dy);
                             session.receive_arrow(&arrow, Some(sender));
                         }
+                        seihai::protocol::LevelObject::BaddiesClear => session.clear_baddies(),
+                        seihai::protocol::LevelObject::BaddyProps { level, payload } => {
+                            // A neighbour's baddies on a gmap are not ours.
+                            let here = net_state.current_level_name();
+                            let ours = net_state.gmap.is_none()
+                                || match (level.as_deref(), here.as_deref()) {
+                                    (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                                    _ => true,
+                                };
+                            if ours {
+                                session.receive_baddy_props(&payload);
+                            }
+                        }
+                        seihai::protocol::LevelObject::BaddyHurt(payload) => session.receive_baddy_hurt(&payload),
                     }
                 }
                 if entered || (warped && session.warp_pending.is_some()) {
@@ -2289,6 +2309,30 @@ fn main() {
             }
             for id in session.take_shots() {
                 scripts.shot(&mut session, id);
+            }
+            // Baddies: the AI offline or as the level leader, the sword
+            // and touch tests, and what goes to the server.
+            session.baddy_role = seihai::offline::BaddyRole { online: conn.is_some(), leader: net_state.is_leader };
+            {
+                let own_cell = session.gmap.as_ref().map(|w| w.cell);
+                let others: Vec<(u16, f32, f32)> = net_state
+                    .others
+                    .iter()
+                    .map(|o| {
+                        let (x, y) = o.position_from(own_cell);
+                        (o.id, x, y)
+                    })
+                    .collect();
+                if session.tick_baddies(dt, &others) {
+                    dirty = true;
+                }
+            }
+            let baddy_sends = session.take_baddy_sends();
+            if let (false, Some(c)) = (baddy_sends.is_empty(), conn.as_mut()) {
+                if let Err(e) = c.send_messages(&baddy_sends) {
+                    eprintln!("send failed: {e}");
+                    conn = None;
+                }
             }
             let arrow_sends = session.take_arrow_sends();
             if !arrow_sends.is_empty() {
@@ -3518,6 +3562,13 @@ fn main() {
                 }
             }
             wanted.push(("bodies", session.looks.body_name().to_string()));
+            // Each baddy's picture, and the bow of the archer and the swamp soldier.
+            for bd in &session.baddies {
+                wanted.push(("baddies", bd.image_name(&session.baddy_image_ext)));
+                if bd.kind == 3 || bd.kind == 4 {
+                    wanted.push(("baddies", format!("{}{}", seihai::baddies::BOW_IMAGE, session.baddy_image_ext)));
+                }
+            }
             if look_image_pass(&wanted, &resolver, &mut files, conn.as_mut(), &mut npc_images, &mut look_tried, &mut look_not_received) {
                 dirty = true;
             }

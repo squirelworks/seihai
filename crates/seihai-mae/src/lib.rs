@@ -4,7 +4,7 @@
 // their old names so `seihai::protocol`, `crate::offline` and the rest
 // still resolve.
 pub use seihai_core::{
-    arrows, assets, bombs, chatlists, combat, dev, difftest, filecache, gmap, items, life, looks, net, npcart, offline, pose,
+    arrows, assets, baddies, bombs, chatlists, combat, dev, difftest, filecache, gmap, items, life, looks, net, npcart, offline, pose,
     protocol, scripting, servercache, throwing, viewer,
 };
 
