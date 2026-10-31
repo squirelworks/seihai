@@ -1436,6 +1436,7 @@ fn main() {
     let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None, (false, false), characters(&lobby_server));
     let fb = scene.clone();
     let mut buffer: Vec<u32> = Vec::new();
+    let mut presenter = seihai::present::Presenter::default();
 
     let server_name = lobby_server.clone().or(Settings::load().last_server_name);
     let title = profile.window_title(server_name.as_deref().filter(|_| online.is_some()));
@@ -3856,17 +3857,18 @@ fn main() {
             eprintln!("{line}");
             net_state.push_chat(ChatKind::Admin, "Seihai".into(), line);
         }
-        buffer.clear();
-        buffer.extend(
-            frame
-                .pixels
-                .chunks(3)
-                .map(|c| ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | (c[2] as u32)),
-        );
         ft.mark("overlays");
-        let _ = window.update_with_buffer(&buffer, fb.width as usize, fb.height as usize);
+        // Only a changed frame goes to the window: sending one scales it
+        // and copies every pixel to the X server (see `seihai::present`).
+        // An unchanged pass still polls input and keeps the 16 ms pace.
+        if presenter.should_send(&frame.pixels, frame.width as usize, frame.height as usize, window.get_size(), Instant::now()) {
+            seihai::present::rgb_to_0rgb(&frame.pixels, &mut buffer);
+            let _ = window.update_with_buffer(&buffer, frame.width as usize, frame.height as usize);
+        } else {
+            window.update();
+        }
         ft.mark("present");
-        slow_log.report(&ft);
+        slow_log.report(&ft, presenter.sent);
 
         fps_count += 1;
         if fps_since.elapsed() >= Duration::from_secs(1) {
@@ -3912,13 +3914,15 @@ struct SlowFrameLog {
     /// averages logged every five seconds.
     sums: Vec<(&'static str, Duration)>,
     passes: u32,
+    /// Frames sent to the window, at the start of this log period.
+    sent_since: u64,
     since: Option<Instant>,
 }
 
 impl SlowFrameLog {
     const SLOW: Duration = Duration::from_millis(100);
 
-    fn report(&mut self, ft: &FrameTimes) {
+    fn report(&mut self, ft: &FrameTimes, sent: u64) {
         let total = ft.began.elapsed();
         if std::env::var_os("SEIHAI_FRAME_LOG").is_some() {
             self.passes += 1;
@@ -3933,7 +3937,9 @@ impl SlowFrameLog {
                 let secs = since.elapsed().as_secs_f64();
                 let parts: Vec<String> =
                     self.sums.iter().map(|(n, d)| format!("{n} {:.1}", d.as_secs_f64() * 1000.0 / self.passes as f64)).collect();
-                eprintln!("frames: {:.1} fps, average ms ({})", self.passes as f64 / secs, parts.join(", "));
+                let shown = sent.saturating_sub(self.sent_since) as f64 / secs;
+                eprintln!("frames: {:.1} fps, {shown:.1} sent to the window a second, average ms ({})", self.passes as f64 / secs, parts.join(", "));
+                self.sent_since = sent;
                 self.sums.clear();
                 self.passes = 0;
                 self.since = Some(Instant::now());
