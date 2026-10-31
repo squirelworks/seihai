@@ -887,8 +887,8 @@ fn lamp_mng(w: u32, h: u32, colours: &[[u8; 3]], delays: &[u32]) -> Vec<u8> {
         fram.extend_from_slice(&d.to_be_bytes());
         chunk(&mut out, b"FRAM", &fram);
         let mut png = Vec::new();
-        let px: Vec<u8> = (0..w * h).flat_map(|_| *c).collect();
-        seihai::assets::write_png_rgb(&mut png, w, h, &px).unwrap();
+        // Graal's MNG frames are palette images (the client refuses others).
+        seihai::assets::write_png_indexed(&mut png, w, h, &vec![0; (w * h) as usize], c).unwrap();
         out.extend_from_slice(&png[8..]);
     }
     chunk(&mut out, b"MEND", &[]);
@@ -899,10 +899,11 @@ fn lamp_mng(w: u32, h: u32, colours: &[[u8; 3]], delays: &[u32]) -> Vec<u8> {
 /// delays 100, 0, 0) drew nothing: the image reader took PNG and GIF only.
 /// Now the first frame is read like any picture, and `ImageAnimations`
 /// plays the frames in the image map, so the drawn NPC changes colour on
-/// the MNG's clock, a 0 delay lasting `ZERO_DELAY_MS`.
+/// the MNG's clock, a 0 delay lasting one 50 ms game tick (`TICK_MS`), as
+/// in the client.
 #[test]
 fn mng_npc_draws_and_animates() {
-    use seihai::assets::{mng::ZERO_DELAY_MS, ImageAnimations};
+    use seihai::assets::{mng::TICK_MS, ImageAnimations};
     let data = lamp_mng(32, 64, &[RED, GREEN, BLUE], &[100, 0, 0]);
     let (s, _sc) = session("NPC lamp.mng 2 2\nNPCEND\n");
     let mut imgs = images();
@@ -917,11 +918,11 @@ fn mng_npc_draws_and_animates() {
     assert_eq!(at(&draw(&s, &imgs), 40, 40), RED);
     assert!(anims.update(&mut imgs, 100, read));
     assert_eq!(at(&draw(&s, &imgs), 40, 40), GREEN);
-    assert!(!anims.update(&mut imgs, 100 + u64::from(ZERO_DELAY_MS) - 1, read));
-    assert!(anims.update(&mut imgs, 100 + u64::from(ZERO_DELAY_MS), read));
+    assert!(!anims.update(&mut imgs, 100 + u64::from(TICK_MS) - 1, read));
+    assert!(anims.update(&mut imgs, 100 + u64::from(TICK_MS), read));
     assert_eq!(at(&draw(&s, &imgs), 40, 40), BLUE);
     // Loops: back to the first frame after one pass.
-    assert!(anims.update(&mut imgs, 100 + 2 * u64::from(ZERO_DELAY_MS), read));
+    assert!(anims.update(&mut imgs, 100 + 2 * u64::from(TICK_MS), read));
     assert_eq!(at(&draw(&s, &imgs), 40, 40), RED);
     // The whole 32 x 64 picture is drawn, the NPC at tile (2, 2).
     let fb = draw(&s, &imgs);

@@ -143,10 +143,8 @@ real 2.22 client draws the lamp and flickers it: its two screenshots from the
 and `walk1.png`) catch it on the dim first frame and on the bright last one,
 both lamps on the same frame.
 
-* **Reading.** `assets::mng` reads the part of MNG Graal's `gif2mng`
-  writes: `MHDR`, `FRAM` (framing mode, one-shot or default delay), `TERM`,
-  `DEFI` positions, a global `PLTE`/`tRNS`, and one PNG stream per frame.
-  Modes 3 and 4 clear the canvas; 1 and 2 draw over it. `read_png_rgba`
+* **Reading.** `assets::mng` reads MNG the way the client does (next
+  section). `read_png_rgba`
   hands an MNG to it and gets the first frame, so heads, bodies, emoticons,
   item icons and NPC images all show an `.mng` now. A file's claimed size is
   checked like a PNG's (`MAX_IMAGE_PIXELS`), and at most 256 frames are kept.
@@ -158,13 +156,8 @@ both lamps on the same frame.
   `head11.mng` (a blink). A recoloured body is stored under another key and
   stays on its first frame. All animations share one clock from the moment
   they are first seen, so lamps with the same file flicker together.
-* **Timing.** A frame lasts its `FRAM` delay in `MHDR` ticks. **A delay of 0
-  lasts 100 ms** (`mng::ZERO_DELAY_MS`): read literally, the lamp would show
-  its first frame only, which the real client's screenshots rule out. 100 ms
-  is Seihai's choice (what GIF viewers use for 0, and Seihai's GANI step);
-  the client's own value was not read. `TERM` action 3 repeats
-  `iteration_max` times (`0x7FFFFFFF` and up: for ever) and rests on the last
-  frame; any other `TERM`, or none, plays once.
+* **Timing.** See *Graal's MNG is not standard MNG* below: frames count
+  down in 50 ms game ticks, so the lamp's 0-delay frames show for 50 ms.
 * **Not read.** `LOOP`/`ENDL`, delta images, `JNG`, `BASI`. None of the 28
   MNGs of the 2.22 folder uses them.
 
@@ -179,3 +172,38 @@ two `NPC bluelampani.mng` lines and the file in `world/images`. Seihai logged
 `requesting bluelampani.mng`, then `image bluelampani.mng`; screenshots 50
 ms apart showed three different pictures in turn, both lamps on the same
 frame.
+
+## Graal's MNG is not standard MNG (2026-10-31)
+
+Every client from 1.34 to 2.22 (1.34, 1.38, 1.39, 2.05 rev 2 and 2.22
+checked: the same `TMNGAnimation` unit, the same step and tick code) and
+`gif2mng.exe` read `.mng` with Graal's own loader, not with libmng. Read
+from `Graal_222.exe` (the loader, the step to the next frame, the frame
+draw, and the game-tick handler that counts frames down) and from
+`gif2mng.exe` (the same loader). `assets::mng` now follows it; the first version (PR #322) read the files as standard MNG.
+
+| | Standard MNG | Graal |
+|---|---|---|
+| Chunks | many | `MHDR`, `FRAM`, `TERM`, `IHDR`, `PLTE`, `tRNS`, `IDAT`, `IEND`, `MEND`; names compared in upper case; `DEFI`, `BACK` and the rest skipped |
+| Frame images | any PNG | colour type 3, bit depth 4 or 8 only; anything else and the file does not load ("MNG loading failed!"); no `MHDR`: 100 ticks a second |
+| Placement | `DEFI`, framing modes lay images over each other or clear | every frame at (0, 0); its palette indices replace the canvas's; the framing mode only changes the timing |
+| Transparency | alpha per palette entry | one index: the first `tRNS` entry that is 0; partial alpha is opaque; a frame's own `tRNS`, else one outside any frame, else none |
+| Palette | | a frame's own `PLTE`, else the file's (outside any frame, or the first frame's) |
+| Delays | `FRAM` delay for the frame it starts | the loader's own sum (doc of `read_mng`): for gif2mng's files each frame gets the delay of the `FRAM` before it and the last one 1 tick more; then `max(1, centiseconds / 5)` 50 ms game ticks, so a 0 is 50 ms |
+| `TERM` | action, delay, count | action not read; count N plays N times then stops on the last frame; 0, or above 2^31, or a short `TERM`: for ever; none: once |
+
+What changed in Seihai: the lamp's frames are now 100, 50 and 50 ms (they
+were 100, 100, 100); a 0 delay is one tick, every delay rounds down to
+whole ticks (70 ms is 50); the last frame gets the lead tick; frames
+replace each other; `DEFI` is ignored; partial alpha is opaque; a non
+palette frame fails the file; a `TERM` count of 0 loops for ever.
+
+Corpus: the MNGs of the 1.38, 1.39, 1.41.1, NW beta 1 and 2, 2.05 rev 2 and
+2.22 archives in project files, 310 files, 82 different. All are gif2mng
+output (palette 8 bit, `MHDR` 1000 ticks, simplicity 1, which claims no
+features although they use `FRAM` and `TERM`); 10 carry a stray byte after
+`MEND`. Seihai's frames and times for all 1,166 frames were equal to an
+independent Python model of the client's loader (Pillow for the pixels).
+The newer gif2mng (2004) writes `TERM` 0x7FFFFFFF and framing mode 3, so in
+its files (`head11.mng`, `head21.mng`) the long delay falls on the last
+frame: 50, 50, 50, 5500 ms.
