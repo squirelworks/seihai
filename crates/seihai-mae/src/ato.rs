@@ -24,7 +24,7 @@ pub const PASSWORD_ENV: &str = "SEIHAI_ATO_PASSWORD";
 
 /// True for a build that runs in `seihai-ato`. The token says it, as in
 /// `seihai-launcher`: `GNW` for the 2D builds, `G3D` for the 3.x ones. The
-/// 5.x and 6.x builds also send `G3D` tokens, but play on the flat path
+/// 4.x, 5.x and 6.x builds also send `G3D` tokens, but play on the flat path
 /// here (their profile has the Login lobby).
 pub fn runs_in_ato(v: ClientVersion) -> bool {
     v.token().starts_with("G3D") && v.profile().protocol.lobby.is_none()

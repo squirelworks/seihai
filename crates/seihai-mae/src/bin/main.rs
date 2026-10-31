@@ -795,7 +795,7 @@ fn main() {
 
         if let Some(addr) = &online {
             // If this looks like a listserver, fetch the list and pick a gserver.
-            // The 5.x/6.x builds have no listserver: they log in to the address
+            // The 4.x to 6.x builds have no listserver: they log in to the address
             // as their Login server.
             if version.profile().protocol.lobby.is_some() {
                 eprintln!("{}: logging in to {addr} as the Login server; nothing but the level is drawn until it sends a server warp (178)", version.label());
@@ -1147,7 +1147,7 @@ fn main() {
                 own_failed: (bool, bool),
                 characters: bool|
      -> Framebuffer {
-        // A 5.x/6.x build in Login mode (the first server, before its warp)
+        // A 4.x to 6.x build in Login mode (the first server, before its warp)
         // draws the level, chests and image NPCs, but no player, no other
         // players and no HUD (see protocol::lobby).
         let others: &[seihai::protocol::OtherPlayer] = if characters { others } else { &[] };
@@ -1390,7 +1390,7 @@ fn main() {
     // AP and a typed `showname` (2.05); other players' always shows.
     let mut my_name_timer = seihai::chatlists::BubbleTimer::start();
     let mut my_name_ap = session.alignment;
-    // 5.x/6.x: the server reached first is the Login lobby, named by the
+    // 4.x to 6.x: the server reached first is the Login lobby, named by the
     // client; a server warp (178) names the next one (see protocol::lobby).
     let mut lobby_server: Option<String> = profile.protocol.lobby.filter(|_| online.is_some()).map(|l| l.first_server.to_string());
     let characters = |lobby_server: &Option<String>| !lobby_server.as_deref().is_some_and(seihai::protocol::lobby::is_login_mode);
