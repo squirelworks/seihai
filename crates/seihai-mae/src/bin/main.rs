@@ -2146,7 +2146,7 @@ fn main() {
                     // warp (or login), 46 alone.
                     let own_link = session.warp_pending.is_some();
                     if let (Some(el), Some(c)) = (enter_level.as_mut(), conn.as_mut()) {
-                        let extras = enter_level_extras(own_link, &session.player_update());
+                        let extras = enter_level_extras(version, own_link, &session.player_update());
                         if let Err(e) = el.send_pending(c, &extras) {
                             eprintln!("enter-level send failed: {e}");
                         }
