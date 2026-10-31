@@ -848,9 +848,16 @@ fn main() {
             // If this looks like a listserver, fetch the list and pick a gserver.
             // The 4.x to 6.x builds have no listserver: they log in to the address
             // as their Login server.
-            if version.profile().protocol.lobby.is_some() {
-                eprintln!("{}: logging in to {addr} as the Login server; nothing but the level is drawn until it sends a server warp (178)", version.label());
-                if !follow_serverwarp {
+            if let Some(lobby) = version.profile().protocol.lobby {
+                let s = Settings::load();
+                let picked = (s.last_server.as_deref() == Some(addr.as_str())).then_some(s.last_server_name).flatten();
+                let first = seihai::protocol::lobby::first_server_name(&lobby, picked.as_deref());
+                if !seihai::protocol::lobby::is_login_mode(&first) {
+                    eprintln!("{}: logging in to {addr} as the game server {first:?} (picked from the server list)", version.label());
+                } else {
+                    eprintln!("{}: logging in to {addr} as the Login server; nothing but the level is drawn until it sends a server warp (178)", version.label());
+                }
+                if !follow_serverwarp && seihai::protocol::lobby::is_login_mode(&first) {
                     eprintln!("server warps are off (--no-serverwarp or follow_serverwarp=0), so this build will stay in Login mode");
                 }
             } else if addr.contains("14921") || addr.contains("14922") || addr.contains("14923") || addr.contains("listserver") {
@@ -991,6 +998,8 @@ fn main() {
     };
     let cache_for = |addr: &str, name: Option<&str>| seihai::servercache::cache_dir_for(&cache_root, addr, name);
     let cache_dir = online.as_deref().and_then(|a| cache_for(a, server_name(a).as_deref()));
+    // The list name of the server we are about to join, if it was picked from a list.
+    let picked_server_name = online.as_deref().and_then(server_name);
     // The cache in the Seihai folder (`_cache/<host>_<port>`), searched and
     // written before the settings' one.
     let seihai_dir = seihai::servercache::seihai_dir();
@@ -1462,7 +1471,13 @@ fn main() {
     let mut my_name_ap = session.alignment;
     // 4.x to 6.x: the server reached first is the Login lobby, named by the
     // client; a server warp (178) names the next one (see protocol::lobby).
-    let mut lobby_server: Option<String> = profile.protocol.lobby.filter(|_| online.is_some()).map(|l| l.first_server.to_string());
+    // A server picked from a server list is a game server already and starts
+    // under its own name (see `lobby::first_server_name`).
+    let mut lobby_server: Option<String> = profile
+        .protocol
+        .lobby
+        .filter(|_| online.is_some())
+        .map(|l| seihai::protocol::lobby::first_server_name(&l, picked_server_name.as_deref()));
     let characters = |lobby_server: &Option<String>| !lobby_server.as_deref().is_some_and(seihai::protocol::lobby::is_login_mode);
     let mut scene = draw(&session, &[], &my_chat, Some(&me(&net_state, &account)), &npc_images, None, (false, false), characters(&lobby_server));
     let fb = scene.clone();

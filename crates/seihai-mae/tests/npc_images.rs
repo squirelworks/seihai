@@ -514,6 +514,31 @@ fn a_gani_that_does_not_loop_plays_once_then_follows_setbackto() {
     assert_eq!((n.ani.as_deref(), n.ani_frame), (Some("hit"), 1));
 }
 
+/// hastur (6.00r2): the gralat NPCs' gani prop is `zlttp_gralats,3`, the
+/// name and then its parameter. The file asked for is `zlttp_gralats.gani`
+/// (the server answered "not found" for `zlttp_gralats,3.gani`), and the NPC
+/// plays it once it is loaded, whatever the value.
+#[test]
+fn a_gani_prop_with_parameters_names_the_file_before_the_comma() {
+    use seihai::npcart::ani_file;
+    assert_eq!(ani_file("zlttp_gralats,3"), "zlttp_gralats");
+    assert_eq!(ani_file("idle"), "idle");
+    assert_eq!(ani_file(""), "");
+    let mut s = OfflineSession::new();
+    s.current_level = Some(Level::parse("GLEVNW01\nNPC - 5 5\nNPCEND\nNPC - 9 5\nNPCEND\n").unwrap());
+    s.current_level.as_mut().unwrap().npcs[0].ani = Some("zlttp_gralats,3".into());
+    s.current_level.as_mut().unwrap().npcs[1].ani = Some("zlttp_gralats,1".into());
+    assert_eq!(s.wanted_npc_anis(), vec!["zlttp_gralats".to_string()]);
+    let two = "LOOP\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\n\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n";
+    s.set_npc_gani("zlttp_gralats", Gani::parse(two).unwrap());
+    assert!(s.wanted_npc_anis().is_empty());
+    assert!(s.npc_gani("zlttp_gralats,3").is_some());
+    assert!(s.tick_npc_anis(100));
+    let n = &s.current_level.as_ref().unwrap().npcs[0];
+    // The prop keeps its parameter (the server sync compares it as sent).
+    assert_eq!((n.ani.as_deref(), n.ani_frame), (Some("zlttp_gralats,3"), 1));
+}
+
 #[test]
 fn ani_names_are_read_like_the_scripts_write_them() {
     use seihai::npcart::ani_name;
