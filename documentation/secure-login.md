@@ -20,6 +20,11 @@ and a server that knows it still takes every classic login as before.
 
 ## Goals and limits
 
+**Seihai only.** Real Graal clients (1.x to 6.x) cannot be changed, so
+their logins stay in the clear, as they always were; nothing here can fix
+that. `SEI00001` protects the password only for players using Seihai. A
+server that turns on `require_secure_login` locks every real client out.
+
 - The account, the password and the rest of the classic login tail are
   secret and tamper-proof in transit, against passive listeners and, once
   the server's key is pinned, against an active man in the middle.
@@ -196,9 +201,11 @@ vector set (fixed X25519 and Ed25519 keys) is a TODO for the fork's tests.
 - `SEI00002`: keep the AEAD keys and encrypt the whole session (each frame
   sealed with a counter nonce) in place of gen-3/gen-5.
 - OPAQUE (RFC 9807) so the server never sees the password.
-- Gserver to listserver account checks (`VERIACC2`) still carry the
-  password in the clear on that link; secure that link too, or have the
-  gserver check accounts itself.
+- Optional, only if Squirrel asks: gserver to listserver account checks
+  (`VERIACC2`) carry the player's password in the clear on that
+  server-to-server link. Both ends are ours, so the same handshake could
+  cover it (the gserver pins the listserver's key), or the gserver can
+  check accounts itself.
 - RC logins (`seihai-rc`) through the same handshake.
 - The GUI login screen: a "secure login" tick box and the fingerprint prompt.
 
