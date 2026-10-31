@@ -450,6 +450,8 @@ fn main() {
     let mut launcher_error: Option<String> = None;
     let mut cli_mode = false;
     let mut list_only = false;
+    // `--secure-login` / `--server-key`: the Seihai secure login (SEI00001).
+    let mut secure_login: Option<seihai::net::SecureLogin> = None;
     let mut check_assets = false;
     let mut level_info: Vec<String> = Vec::new();
     let mut version_chain = false;
@@ -565,6 +567,21 @@ fn main() {
             "--no-sound" => cli_sound = Some(false),
             "--sound" => cli_sound = Some(true),
             "--no-save-downloads" => cli_save_downloads = Some(false),
+            "--secure-login" => {
+                if secure_login.is_none() {
+                    secure_login = Some(seihai::net::SecureLogin::trust_on_first_use());
+                }
+            }
+            "--server-key" => {
+                i += 1;
+                match args.get(i).and_then(|k| seihai::protocol::seclogin::decode_key(k)) {
+                    Some(k) => secure_login = Some(seihai::net::SecureLogin::pinned(k)),
+                    None => {
+                        eprintln!("--server-key needs the server's key (43 characters of base64, as the server prints it)");
+                        std::process::exit(2);
+                    }
+                }
+            }
             "--no-builtin" => no_builtin = true,
             "--password-env" => {
                 i += 1;
@@ -606,6 +623,13 @@ fn main() {
                 println!("       seihai --online host:port --list-only [--account A --password-env VAR] [--version 2.22]");
                 println!("         --list-only         fetch and print the server list from a listserver,");
                 println!("                             then exit; no login to a gserver, no prompt");
+                println!("         --secure-login      log in with the Seihai secure login (token SEI00001):");
+                println!("                             the account and password go encrypted, the session");
+                println!("                             then runs as --version. The server's key is trusted");
+                println!("                             on the first visit and pinned in known_servers.txt");
+                println!("                             in the settings folder; a changed key is refused.");
+                println!("                             Only Seihai-stack servers know it.");
+                println!("         --server-key KEY    as --secure-login, trusting only this server key");
                 println!("         --send-tampercheck  as 2.17, 2.22 and 2.31: send PLI_TAMPERCHECK (39) after");
                 println!("                             login, and again as that build does (default: off;");
                 println!("                             GServer-v2 ignores it)");
@@ -773,7 +797,7 @@ fn main() {
             eprintln!("--list-only needs --online host:port (a listserver)");
             std::process::exit(2);
         };
-        match Connection::fetch_server_list(addr, version, &account, &password) {
+        match Connection::fetch_server_list_secure(addr, version, &account, &password, secure_login.as_ref()) {
             Ok(reply) => {
                 if let Some(err) = &reply.error {
                     eprintln!("listserver error: {err}");
@@ -922,7 +946,7 @@ fn main() {
                     eprintln!("server warps are off (--no-serverwarp or follow_serverwarp=0), so this build will stay in Login mode");
                 }
             } else if addr.contains("14921") || addr.contains("14922") || addr.contains("14923") || addr.contains("listserver") {
-                match Connection::fetch_server_list(addr, version, &account, &password) {
+                match Connection::fetch_server_list_secure(addr, version, &account, &password, secure_login.as_ref()) {
                     Ok(reply) => {
                         if let Some(err) = &reply.error {
                             eprintln!("listserver error: {err}");
@@ -959,9 +983,9 @@ fn main() {
                     None,
                 ),
             ];
-            match seihai::net::login_gserver_with(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck, true, |n| {
+            match seihai::net::login_gserver_secure(addr, version, seihai::net::random_key(), &account, &password, send_tampercheck, true, |n| {
                 login_file_check(assets.as_deref(), &login_caches, version, n)
-            }) {
+            }, secure_login.as_ref()) {
                 Ok(mut sess) => {
                     eprintln!("logged in to {addr} as {account} ({})", version.profile().summary());
                     if sess.tamper_unavailable {
@@ -3588,7 +3612,7 @@ fn main() {
                     warp_retry = Some(seihai::net::warp_retry::WarpRetry::new(w.clone(), Instant::now()));
                 }
                 let result = match target {
-                    Some(a) => seihai::net::login_gserver_with(
+                    Some(a) => seihai::net::login_gserver_secure(
                         &a,
                         version,
                         seihai::net::random_key(),
@@ -3597,6 +3621,7 @@ fn main() {
                         send_tampercheck,
                         false,
                         |n| login_file_check(resolver.user_root().map(|r| r.root.as_path()), &[game_cache_for(&a), cache_for(&a, Some(&w.display_name()))], version, n),
+                        secure_login.as_ref(),
                     )
                     .map(|s| (a, s))
                     .map_err(|e| e.to_string()),
