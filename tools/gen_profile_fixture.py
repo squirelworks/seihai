@@ -11,7 +11,8 @@ The TSV is the cleaned per-version data (ids and numbers only) that the unit tes
   version-profiles/2.22-2.31.toml                    ([[version]] list, 2.22/2.3/2.31)
   version-profiles/3.04-3.153.toml                   ([[version]] list, 3.04/3.153)
   version-profiles/4.04-4.20.toml                    ([[version]] list, 4.04r2, 4.20r6, 4.20r8)
-  version-profiles/5.00-6.03.toml                    ([[version]] list, 5.00r7 to 6.03r7)
+  version-profiles/5.00-6.03.toml                    ([[version]] list, 5.00r7 to 6.03r7; an entry
+                                                      with inferred = true is basis `inf`)
 Needs Python 3.11 (tomllib). Columns:
   label token basis plo pli own_max npc_max other tamper list_port list_host list_kind list_status
   built_in_host built_in_port
@@ -130,7 +131,7 @@ for doc56 in (tomllib.load(open(root / 'version-profiles/4.04-4.20.toml', 'rb'))
               tomllib.load(open(root / 'version-profiles/5.00-6.03.toml', 'rb'))):
   for v in doc56['version']:
       pli = ranges(expand(v['pli_sent']))
-      rows.append(dict(label=v['label'], token=v['token'], basis='bin',
+      rows.append(dict(label=v['label'], token=v['token'], basis='inf' if v.get('inferred') else 'bin',
                        plo=v['plo_known'], pli=pli if v.get('pli_sent_complete') else '>' + pli, own='-',
                        npc='-', other=None, tamper=1 if doc56['defaults']['lobby'].get('tampercheck') else 0,
                        port='-', ls={}))
