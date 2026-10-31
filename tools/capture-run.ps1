@@ -2,9 +2,9 @@
 # Windows version of tools/capture-run.sh; same options and output.
 #
 # Usage, from the seihai folder:
-#   .\tools\capture-run.ps1 [--target HOST:PORT] [--version V] [--account A]
+#   .\tools\capture-run.ps1 --target HOST:PORT [--version V] [--account A]
 #       [--password-file F] [--seihai PATH] [--out DIR] [-- extra seihai args]
-# Defaults: listserver.graal.in:14922, 2.22, guest, target\release\seihai.exe, _debug.
+# --target is required (no default server). Defaults: 2.22, guest, target\release\seihai.exe, _debug.
 #
 # The password comes from --password-file, else GRAAL_PW in the environment,
 # else a hidden prompt. It reaches Seihai only through --password-env GRAAL_PW.
@@ -19,7 +19,7 @@
 #
 # No param block on purpose: PowerShell would take --target as its own syntax.
 
-$Target = 'listserver.graal.in:14922'
+$Target = $null
 $Version = '2.22'
 $Account = 'guest'
 $PasswordFile = $null
@@ -46,6 +46,7 @@ for ($i = 0; $i -lt $rest.Count; $i++) {
     }
 }
 
+if (-not $Target) { Write-Error '--target HOST:PORT is required (try --help)'; exit 2 }
 if (-not (Test-Path $Seihai)) { Write-Error "no seihai at $Seihai; run cargo build --release first"; exit 1 }
 $Seihai = (Resolve-Path $Seihai).Path
 $hostName, $port = $Target -split ':', 2
