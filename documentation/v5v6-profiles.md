@@ -41,7 +41,7 @@ Seihai is a client, so it receives the 178; it cannot send one. On the lab's GSe
 
 ## 5.12's cipher step count
 
-5.12 steps the gen-5 iterator `len / 4` times, rounded down, on zlib and bz2 frames (still at most 4), leaves a partial last group alone, and sends every frame compressed (`Gen5::round_down`, `protocol.gen5_round_down`). Every other build rounds up. This is faithful to the client, so a 5.12 profile talks to a server that steps as 5.12 does. GServer-v2 does not, and the lab puts its translating proxy between them (it keys on the `G3D14097` token).
+5.12 steps the gen-5 iterator `len / 4` times, rounded down, on zlib and bz2 frames (still at most 4), leaves a partial last group alone, and sends every frame compressed (`Gen5::round_down`, `protocol.gen5_round_down`). Every other build rounds up. This is faithful to the client, so a 5.12 profile talks to a server that steps as 5.12 does. GServer-v2 rounds up. The two counts agree when a body is a multiple of 4 bytes or 16 bytes or longer, so Seihai pads 5.12's zlib streams to a multiple of 4 with empty stored blocks (`zlib_compress_len4`), and 5.12 plays on GServer-v2 with no proxy. The real 5.12 does not pad, so it still needs the lab's translating proxy (it keys on the `G3D14097` token).
 
 ## Lab check (item 6)
 
