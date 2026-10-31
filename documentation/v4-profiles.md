@@ -64,14 +64,35 @@ C>S ids seen from the real clients: 2, 4, 9, 23, 24, 34, 37, 38, 44, 46, 152, 15
 
 **Flags.** A probe weapon on the 4.04r2 account ran `setplayerprop #c`, `setstring gr.probe,1`, `setstring client.probe,2` and `set probeflag` on `playerenters`. The real client sent only 18 `client.probe=2`. So the 4.x client runs GS1 weapon scripts but sends only `client.` string flags to the server. Seihai's lobby builds (4.x to 6.x) now do the same (`Connection::queue_flag`). Whether 5.x and 6.x send `client.` flags only was not run; they follow 4.20r8 in the chain.
 
-**Walk.** Seihai's lobby builds now send `SPRITE, X2, Y2` in each walk update (`net::position_message_precise`), checked on the lab: GServer-v2 relays them to the real 4.04r2 as S>C 8 with X/Y and X2/Y2, and the real client got Seihai's chat. The real client sends only the props that changed and adds GANI `walk`/`idle`; Seihai sends all three each step and no GANI (as for the builds without a walk cadence). The 2.31 row walks the same way since a lab run of the real 2.31 (`lab-231-walk.md`); so do 2.3 and 3.153, which have X2/Y2 (`precise_pos`) but were never run.
+**Walk.** Seihai's lobby builds now send `SPRITE, X2, Y2` in each walk update (`net::position_message_precise`), checked on the lab: GServer-v2 relays them to the real 4.04r2 as S>C 8 with X/Y and X2/Y2, and the real client got Seihai's chat. The real client sends only the props that changed and adds GANI `walk`/`idle`; Seihai sent all three each step and no GANI (as for the builds without a walk cadence); the 4.x builds now walk on the real client's cadence ("After-login messages" below), and 5.x and 6.x still send all three. The 2.31 row walks the same way since a lab run of the real 2.31 (`lab-231-walk.md`); so do 2.3 and 3.153, which have X2/Y2 (`precise_pos`) but were never run.
 
-Still open: the base-file requests (23 `basepackage.gupd`, `bigmap.txt`), 152 and 154 after the login, the nickname and the rest of the own props in the login burst, and GANI in walk updates are not sent by Seihai. The real client keeps the chat bar open after Enter.
+Still open after this run: the base-file requests, 152 and 154, the nickname and own props, and GANI in walk updates. They are done now; see "After-login messages" below. The real client keeps the chat bar open after Enter.
+
+## After-login messages, nickname and walk GANI (second lab run, 2026-10-31)
+
+The same lab, rebuilt in a fresh container: the real 4.04r2 from the unpacked installer, the seihai-lab server pack (stock gs2lib), `warpproxy.py` on 14900. The real client was captured again, then it stayed in the game server while Seihai 4.04r2 and 4.20r8 logged in next to it. Logs and screenshots: project folder `v4/lab-4x-after-login-2026-10-31/`.
+
+What the 4.x profiles now send (`protocol::lobby::LobbyLogin` and `LobbyBurst`, `protocol::walkcadence` in its precise form):
+
+| When | Real 4.04r2 | Seihai 4.04r2 / 4.20r8 now |
+|---|---|---|
+| Frame after the login line | 37 `English`, `basepackage.gupd` twice, `bigmap.txt` in the first (Login) session only | the same |
+| `basepackage.gupd` | 23 with no copy; **47 (`VERIFYWANTSEND`) with the CRC-32 of the cached copy** once it has one (kept in `updatepackages/`, per server under `updatepackages/<server>/`) | the same: 47 when a cache of that server holds the file under `updatepackages/`, else 23 |
+| After 182 | 23 `idle.gani` + 157 `idle`; the head image; 152 `pmguilds` and `pmservers`; 154 lister options and `verifybuddies`; 46; 44 window titles; 23 for the default weapons' images; 2 own props; 24 | the same order and frames. 44 lists Seihai's own window title (`Graal 4.04r2 - Login`) |
+| Own props | 0 `Real404` (the start screen's Nickname field), 18 20, 31 0, 33 0, 52 `English`, 75 `win`, 76 1252 | 0 is `--nick`, the `nickname=` setting or the start window's Nickname field (4.x and later), else the account; the rest the same |
+| Walk | 2 `GANI walk` + SPRITE (when it changed) + the axis that moved on the first step, then X2 and/or Y2 every 50 ms (both on a diagonal), `GANI idle` alone the tick after the last step | the same, byte for byte in the lab (`walk1#n'p`, `n'\x80`, ..., `*$idle`) |
+| Sword | 2 `GANI sword` alone, `idle` about 250 ms later | the same (`*%sword`, `*$idle` 242 ms later) |
+| Focus | STATUS 21 alone on losing the focus, 20 alone on getting it back; no position | the same; before the after-burst frames nothing is sent |
+| 24 | `GCHAR 9` at the end of the after-burst frames, then every 5.142 to 5.151 s | with `--send-showimg`, period 5145 ms |
+| A GANI it asks for | 23 `x.gani` and 157 `x` (checksum 0) | the same, for every GANI Seihai asks for |
+
+The real client showed Seihai's player as `SeihaiNick` in the level and in its player list (`rv3.png`).
+
+Not done: the client's checks of its own GUI images (`plisticononline.png`, `state.png`, `sword1.png`, `plistcat_*.png`, `playerlist_open.png`, 34 `pics1.png`), which come from its scripted server-list and player-list windows; Seihai has neither. Pushing, grabbing, carrying and the bow were not compared again. 5.x and 6.x keep their old after-login behaviour (`LOBBY_500` has no after-login messages): 5.00r7 asks for the package with 47 or 23 as well (Graal_analysis #145), but its other messages were not recorded.
 
 ## Not done
 
 - The Mac 4.20r6 send ids beyond 162. A scan of `li r4, id` before a virtual call at the send slot finds 0, 3, 20, 25, 27, 38, 40, 43, 45, 46, 93, 98, 155, 156 and 159 as well, and not 14, 15, 22-24, 26, 37, 44, 79, 80 or 92, but that slot is not proven to be the send call on every object, so the row is unchanged.
 - Running the real 4.20r6: it is a PowerPC Mach-O on Carbon, OpenGL and AGL, so it needs Mac OS X 10.3 or 10.4 for PowerPC, for example under `qemu-system-ppc -M mac99`. No OS image is in the project yet.
 - The 4.04r2 send ids (taken from 4.20r8).
-- The base-file requests after the language (`basepackage.gupd`, `bigmap.txt`) are not sent, as for 5.x.
 - The stock 4.20r8 engine is in a password-protected archive; only the packet-logger copy was read.

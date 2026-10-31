@@ -82,6 +82,8 @@ pub struct Launcher {
     list: ListEndpoint,
     account: String,
     password: String,
+    /// The nickname the 4.x builds send (empty: the account).
+    nickname: String,
     version: String,
     assets: String,
     status: String,
@@ -111,6 +113,7 @@ impl Launcher {
             ),
             account: s.account.clone().unwrap_or_default(),
             password: s.password.clone().unwrap_or_default(),
+            nickname: s.nickname.clone().unwrap_or_default(),
             version: s.version.clone().unwrap_or_else(|| "2.05".into()),
             assets: s
                 .assets
@@ -151,6 +154,7 @@ impl Launcher {
         let mut s = Settings::load();
         s.account = Some(self.account.clone());
         s.password = Some(self.password.clone());
+        s.nickname = Some(self.nickname.clone()).filter(|n| !n.trim().is_empty());
         s.version = Some(self.version.clone());
         s.assets = Some(self.assets.clone().into());
         s.set_assets_for(self.version_enum().label(), &self.version_assets);
@@ -289,6 +293,10 @@ impl eframe::App for Launcher {
             ui.text_edit_singleline(&mut self.account);
             ui.label("Password");
             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+            if self.version_enum().profile().protocol.lobby.is_some() {
+                ui.label("Nickname");
+                ui.add(egui::TextEdit::singleline(&mut self.nickname).hint_text(self.account.as_str()));
+            }
             ui.label("Version");
             let before = self.version.clone();
             let shown: &[ClientVersion] = if self.show_advanced {
