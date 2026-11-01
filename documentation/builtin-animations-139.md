@@ -48,13 +48,12 @@ name `walk` instead and are unchanged.
 
 ## Sword and hurt mode
 
-The 1.39 profile had no combat row, so S did nothing at all. It now has
-`COMBAT_139`: the 2.05 rules with one swing step per 50 ms tick. The capture
-shows S 6, 8 and 10 at 100 ms intervals and then the idle sprite, and the
-video gives a 5-tick swing that cuts the bush in front and a 40-tick hurt
-lock-out. The reach, the hit judgement and the hurt sprite come from the
-2.05 template; no 1.39 hit handler was traced (`chain.rs` lists this as
-unknown). 1.33 to 1.38 still have no combat row.
+The 1.39 profile has `COMBAT_139`: the 2.05 sword box (0 to 4 tiles ahead,
+under 2 sideways) with one swing step per 50 ms tick. The capture shows
+S 6, 8 and 10 at 100 ms intervals and then the idle sprite, and the video
+gives a 5-tick swing that cuts the bush in front and a 40-tick hurt
+lock-out. Sword power, AP immunity and the hurt sprite are still the 2.05
+template. Knockback is five tiles. 1.33 to 1.38 still have no combat row.
 
 Hurt mode also keeps one blast from hurting more than once. Without it, a
 1.39 on hastur lost three half hearts to its own bomb (run of 2026-10-31
@@ -78,7 +77,7 @@ Hurt mode also keeps one blast from hurting more than once. Without it, a
 - Emotion icons on Ctrl+letter (1.38+) are not drawn.
 - The 1.39 profile window (F7 Profile, `PLI_PROFILEGET`/`SET`, `PLO_PROFILE`
   is parsed but not shown), and the 1.39 player list options window.
-- 1.39's own death sequence (no death row; the server's hearts still apply).
+- A live 1.39 death on a lab server (the profile now has `DEATH_139`: timer 30, dead bit after 27, respawn hearts to the maximum).
 - Whether 1.39's spin attack exists; `spin` is offered when the status has
   the spin bit, as in 2.05.
 - What a 1.39 does with a character NPC's animation prop is not traced; the
