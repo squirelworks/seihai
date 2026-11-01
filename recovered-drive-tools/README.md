@@ -1,3 +1,5 @@
 # Recovered Drive-tools notes
 
-These notes now live in [squirelworks/seihai-servertools](https://github.com/squirelworks/seihai-servertools) at `recovered-drive-tools/`.
+Original Graal tool research lives in [squirelworks/Graal_analysis](https://github.com/squirelworks/Graal_analysis) at `recovered-drive-tools/`.
+
+This repository is the Seihai rebuild, not that archive.

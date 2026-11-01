@@ -1,6 +1,6 @@
 # Ghidra headless salvage pipeline
 
-Recover and understand ops/server binaries (seihai-servertools) with Ghidra headless analysis. Treat inputs as recovered tooling — focus on purpose, CLI, protocols, config paths, and how to rebuild or rehost them.
+Headless helper for recovered original Graal tooling. Treat inputs as archive binaries. Focus on purpose, CLI, protocols, config paths, and behaviour.
 
 ## Layout
 
@@ -13,7 +13,7 @@ Recover and understand ops/server binaries (seihai-servertools) with Ghidra head
 | `/workspace/tools/jdk/current` | Temurin JDK 25 (required by Ghidra 12.2) |
 | `/workspace/tools/rizin/bin` | Optional rizin static install for prelim snapshots |
 
-Committed hand-written summaries now live in squirelworks/seihai-servertools at `recovered-drive-tools/`. This repo keeps a pointer at `recovered-drive-tools/README.md`.
+Committed hand-written summaries live in [squirelworks/Graal_analysis](https://github.com/squirelworks/Graal_analysis) at `recovered-drive-tools/` and `recovered-hacks/`. This repo keeps pointers at `recovered-drive-tools/README.md` and `recovered-hacks/README.md`.
 
 A local scratch tree (not committed here) can still hold new summaries at:
 
@@ -96,7 +96,7 @@ Do not copy `local-out/` into `SUMMARY.md`. Describe behaviour in your own words
 
 ## Batch from recovered Drive inventory
 
-When a sibling recovery agent populates a local `/workspace/recovered-drive-tools/` scratch tree (the committed inventory moved; see `recovered-drive-tools/README.md`):
+When a local `/workspace/recovered-drive-tools/` scratch tree is populated (the committed inventory is in Graal_analysis; see `recovered-drive-tools/README.md`):
 
 ```bash
 INV=/workspace/recovered-drive-tools/INVENTORY.md
