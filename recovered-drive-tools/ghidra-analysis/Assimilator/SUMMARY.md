@@ -8,12 +8,12 @@
 
 GAT-era **batch file converter / checker** branded around Graal assets (archive name “GIF2PNG”).
 
-Observed behaviour from filter and status strings:
+Observed behaviour:
 
-- File open filters for **Graal scripts/levels/gani**: `*.graal`, `*.nw`, `*.txt`, `*.gscript`, `*.gani`.
-- Maintains a checklist of files; errors when the list is empty or nothing is unchecked.
-- Shows a **Graal Version:** status field (often “N/A” when unset).
-- Offline graphics/admin utility — not a network service.
+- Batch-checks and converts graphics-admin assets: classic scripts, levels, plain text, and animations.
+- Keeps a checklist and reports an error when the list is empty or nothing is selected.
+- Shows a client-version status that stays blank when no client is configured.
+- Offline graphics utility — not a network service.
 
 ## Recommended placement
 

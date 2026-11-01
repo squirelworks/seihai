@@ -11,9 +11,9 @@
 
 Observed menu/behaviour surface:
 
-- Open/close/play/test Graal-related documents; set Graal folder.
-- Insert templates: NPC script, weapon, baddy scripting, chat command, function, if-statement, take-item, puthorse/putleaps, light2.png-style 3D light NPC notes.
-- Find-NPC helper (`npcprogramming.rtf`), paste script, save/save-as.
+- Open, close, play, and test documents, and set the client folder.
+- Insert templates: NPC script, weapon, baddy scripting, chat command, function, conditional, take-item, horse and leap placement, and a note about a 3D light NPC.
+- A find-NPC helper backed by a rich-text guide, paste script, save and save-as.
 - Built-in “upgrade/download” path (do **not** use — external fetch; ignore for lab).
 
 Prefer GS2 compiler **source** under `GS2 Compiler.rar` for modern script tooling notes; this editor is historical UX reference only.

@@ -10,10 +10,10 @@ Stock **Graal Remote Control** from the classic `rc.rar` line (sibling of `rc2.r
 
 Observed behaviour:
 
-- Title **Graal Remote Control** / **Graal RemoteControl**; **Graal Server List** connect UI (“Connecting to server …”, disconnect / cannot-connect messages).
-- Registry **`Software\Graal`**, `onlinestartlocal.graal`, password fields.
-- NPC tooling: attributes, script/flags from NPC, NPC level list, local NPCs, delete-NPC confirm; “Connected to NPC-Server”; player count labels.
-- Account/player edit units (`UEditAccountPlayer`, `TPlayerStats`); Winsock `connect`; zlib deflate embedded.
+- Classic remote-control window title and a server-list connect screen (connecting, disconnect, and cannot-connect messages).
+- Preferences live in the application registry. A local startup script and password fields appear.
+- NPC tooling: attributes, script and flags from an NPC, an NPC level list, local NPCs, and a delete confirmation. It reports when the NPC server is connected, and it shows a player count.
+- Account and player editors. Winsock connect. Embedded deflate.
 
 Comparative baseline for `remotecontrol_custom/` (Agret) and `RemoteControl-NW/`.
 

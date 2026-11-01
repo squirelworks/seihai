@@ -7,15 +7,15 @@
 
 ## Purpose (plain behaviour)
 
-Classic **Graal NPC Control** staff client for talking to an NPC server / world control port (banner string **GServer2 NPC Control 2001/07/13** / **Graal NPC Control**).
+Classic **NPC Control** staff client for an NPC server or world control port. The banner dates it to a July 2001 GServer2-era build.
 
 Observed behaviour:
 
-- Reads **`controlconfig.txt`** with at least `servername`, `serverport`, and `password` (also mirrored under `Software\Graal` registry).
-- UI title **NPC Control** / **Graal NPC Control**; connection status “Connected at port …”, failures “Cannot connect to the server!”, “Decompression error!”.
-- Manages **NPCs** and **weapons**: delete confirms, “Script from Class”, “Script of weapon …”, local-NPC unit (`ULocalNPCs`).
-- Opens RTF/text script files; references `onlinestartlocal.graal` and sample level names (lab-only — ignore any embedded world names for public use).
-- Ships zlib deflate strings (compressed wire or packed payloads) — note behaviour only.
+- Reads a small text config for the server name, port, and password, and mirrors those preferences in the application registry.
+- The window is titled as NPC Control. It reports a connected port, a failed connect, and a decompression failure.
+- Manages NPCs and weapons: delete confirms, take a script from a class, edit a weapon script, and a local-NPC list.
+- Opens rich-text and plain script files, and references a local startup script plus sample level names (ignore any embedded world names).
+- Ships deflate helpers for compressed wire or packed payloads.
 
 Sibling pack also includes `RemoteControl-NW.exe` (see that SUMMARY) for the RC side of the same era.
 

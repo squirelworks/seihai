@@ -6,14 +6,14 @@
 
 ## Purpose (plain behaviour)
 
-Offline **Graal Reborn / Tiles Editor** (Luke Graham / 39ster line; “Ports by Cadavrez” credit). Qt resource paths under `:/MainWindow/…`.
+Offline **tile editor** in the Reborn line (Luke Graham / 39ster, with a ports credit). Qt resources hang off the main window.
 
-Observed editor capabilities from UI strings:
+Observed editor capabilities:
 
-- Edit **levels / tiles**, links, chests (“Edit Graal Chest”), screenshots / map image export, preload overworld levels.
-- **NPC** editing: anonymous/external NPC classes, player-hurt verse, delete/close dirty-NPC prompts.
-- Painting / layers / grid-snap / translucency tools (icon resource names).
-- Script-ish side panel (fugue script icons, `rule_cpp.xml`) — still an offline Document editor, not a live RC session.
+- Edit levels and tiles, links, and chests, export a screenshot or map image, and preload overworld levels.
+- NPC editing: anonymous and external classes, a verse played when a player is hurt, and prompts when closing a dirty NPC.
+- Painting, layers, grid snap, and translucency.
+- A script-ish side panel (script icons and a C++ highlighting rule) — still an offline document editor, not a live remote-control session.
 
 Prefer promoting format/Document behaviour into **`seihai`** level-editor / shared edit crates; live LAT once RC exists belongs in **`lat-core`**.
 

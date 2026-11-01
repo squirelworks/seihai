@@ -7,9 +7,9 @@
 
 ## Purpose (plain behaviour)
 
-Community **Matriark** build of classic **gserver** (pack labelled 1.39). Same product niche as `gserver-linux` / `gserver13` / Win PE twins: world daemon with MySQL account/profile tables, guilds path, RC/NPC session surfaces, and HTML-ish leaderboard queries (kills/deaths/onlinetime/alignment). Static link + strip hide symbols; strings show account load/save failures, adminlevel lookups, decompress errors, and `gserver.db` naming.
+Community **Matriark** build of classic **gserver** (pack labelled 1.39). Same product niche as `gserver-linux` / `gserver13` / Win PE twins: world daemon with database account and profile tables, a guilds path, remote-control and NPC session surfaces, and leaderboard-style queries (kills, deaths, time online, alignment). Static link and strip hide symbols. Strings show account load and save failures, admin-level lookups, decompress errors, and a local database file name.
 
-Pack-local bugs note (behaviour only): head/shield/sword path checks disagree with send paths under `/levels`; guild nickname clash needs a leading `*`; possible server-flag/account overflow (unspecified). Prefer **`GServersource` C++ trees** over deep decompile of this stripped image.
+Pack-local bugs note (behaviour only): head, shield, and sword path checks disagree with the paths used when sending level files; a guild nickname clash requires a marker prefix; a possible server-flag or account overflow is mentioned without detail. Prefer the **GServersource C++ trees** over deep decompile of this stripped image.
 
 **Do not run** against public networks.
 

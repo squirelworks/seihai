@@ -9,6 +9,7 @@ __pycache__/
 /tools/ghidra/ghidra_*_PUBLIC/
 /tools/ghidra/current
 /tools/ghidra/projects/
+/tools/ghidra/local-out/
 
 # Nested sibling clone for recovery work (own repo: squirelworks/seihai-servertools)
 /seihai-servertools/

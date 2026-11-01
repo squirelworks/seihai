@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Headless salvage analysis wrapper for recovered seihai-servertools binaries.
-# Usage: analyze_tool.sh <binary_path> <output_dir> [max_decomp_funcs]
+# Usage: analyze_tool.sh <binary_path> <summary_dir> [max_decomp_funcs]
+#
+# Raw Ghidra output (imports, strings, decompilation, disassembly) goes to
+# tools/ghidra/local-out/<tool>/ which is gitignored. <summary_dir> receives
+# SUMMARY.md only, and only when that file does not already exist. Fill the
+# summary in by hand. Do not paste string or import dumps into it.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,15 +19,21 @@ TIMEOUT_PER_FILE="${GHIDRA_ANALYSIS_TIMEOUT:-1200}"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <binary_path> <output_dir> [max_decomp_funcs]
+Usage: $(basename "$0") <binary_path> <summary_dir> [max_decomp_funcs]
 
-Runs Ghidra analyzeHeadless with auto-analysis, then exports:
+Runs Ghidra analyzeHeadless with auto-analysis.
+
+Raw artifacts (gitignored, under GHIDRA_LOCAL_OUT):
   functions.txt / functions.csv
   imports.txt / exports.txt
   strings_interesting.txt
   decompiled/*.c (+ INDEX.txt)
-  SUMMARY.md
   prelim/ (file, strings, readelf/objdump/rizin snapshots)
+  logs/ and summary_stats.txt (counts only; no string bodies)
+
+<summary_dir>/SUMMARY.md is created only if missing, as a hand-edit stub
+with program counts. An existing summary is left alone. Never paste raw
+strings, imports, or decompiled code into that file.
 
 Environment:
   GHIDRA_HOME              default: $SCRIPT_DIR/current
@@ -30,22 +41,26 @@ Environment:
   GHIDRA_HEADLESS_MAXMEM   default: 4G
   GHIDRA_ANALYSIS_TIMEOUT  seconds per file (default 1200)
   GHIDRA_PROJECTS_DIR      default: $SCRIPT_DIR/projects
+  GHIDRA_LOCAL_OUT         default: $SCRIPT_DIR/local-out
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 2 ]]; then
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
-  exit $([[ $# -lt 2 ]] && echo 2 || echo 0)
+  exit 0
+fi
+if [[ $# -lt 2 ]]; then
+  usage >&2
+  exit 2
 fi
 
-BINARY="$(readlink -f "$1")"
-OUT_DIR="$(mkdir -p "$2" && cd "$2" && pwd)"
-MAX_DECOMP="${3:-40}"
-
-if [[ ! -f "$BINARY" ]]; then
-  echo "ERROR: binary not found: $BINARY" >&2
+if [[ ! -f "$1" ]]; then
+  echo "ERROR: binary not found: $1" >&2
   exit 1
 fi
+BINARY="$(readlink -f "$1")"
+SUMMARY_DIR="$(mkdir -p "$2" && cd "$2" && pwd)"
+MAX_DECOMP="${3:-40}"
 if [[ ! -x "$GHIDRA_HOME/support/analyzeHeadless" ]]; then
   echo "ERROR: analyzeHeadless not found under $GHIDRA_HOME" >&2
   echo "Install Ghidra and symlink it to $SCRIPT_DIR/current" >&2
@@ -62,18 +77,28 @@ export GHIDRA_HEADLESS_MAXMEM="$MAXMEM"
 
 TOOL_NAME="$(basename "$BINARY")"
 TOOL_NAME="${TOOL_NAME%.*}"
-SAFE_NAME="$(echo "$TOOL_NAME" | tr -c 'A-Za-z0-9._+-' '_')"
+# printf, not echo: echo adds a newline and tr turns that newline into a trailing underscore.
+SAFE_NAME="$(printf '%s' "$TOOL_NAME" | tr -c 'A-Za-z0-9._+-' '_')"
 PROJECT_NAME="salvage_${SAFE_NAME}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-PRELIM="$OUT_DIR/prelim"
-LOG_DIR="$OUT_DIR/logs"
-mkdir -p "$PRELIM" "$LOG_DIR" "$PROJECTS_DIR" "$OUT_DIR/decompiled"
+RAW_ROOT="${GHIDRA_LOCAL_OUT:-$SCRIPT_DIR/local-out}"
+RAW_DIR="$RAW_ROOT/$SAFE_NAME"
+PRELIM="$RAW_DIR/prelim"
+LOG_DIR="$RAW_DIR/logs"
+mkdir -p "$PRELIM" "$LOG_DIR" "$PROJECTS_DIR" "$RAW_DIR/decompiled"
+
+cat >"$RAW_DIR/DO_NOT_COMMIT.txt" <<EOF
+Gitignored local salvage output for ${TOOL_NAME}.
+Do not copy imports, strings, disassembly, decompiled C, or addresses
+into a committed SUMMARY.md. Write that summary by hand.
+EOF
 
 echo "==> Salvage analysis"
-echo "    binary : $BINARY"
-echo "    output : $OUT_DIR"
-echo "    ghidra : $GHIDRA_HOME"
-echo "    java   : $($JAVA_HOME/bin/java -version 2>&1 | head -1)"
+echo "    binary  : $BINARY"
+echo "    raw out : $RAW_DIR"
+echo "    summary : $SUMMARY_DIR"
+echo "    ghidra  : $GHIDRA_HOME"
+echo "    java    : $($JAVA_HOME/bin/java -version 2>&1 | head -1)"
 
 # --- Preliminary RE snapshots (fast, no Ghidra) ---
 {
@@ -88,7 +113,7 @@ echo "    java   : $($JAVA_HOME/bin/java -version 2>&1 | head -1)"
 } >"$PRELIM/file.txt" 2>&1
 
 strings -a -n 4 "$BINARY" >"$PRELIM/strings_all.txt" 2>/dev/null || true
-# interesting-ish filter for summary (paths, flags, urls, keywords)
+# Local filter only. Hits stay under local-out and are not copied into SUMMARY.md.
 grep -E -i \
   '(^/[A-Za-z]|[A-Za-z]:\\|[.](conf|cfg|ini|json|xml|ya?ml|toml|properties|log)\b|https?://|--[a-zA-Z]|usage|help|version|config|listen|bindtextdomain|socket|passwd|password|gserver|graal|seihai|\bnpc\b)' \
   "$PRELIM/strings_all.txt" 2>/dev/null | head -n 500 >"$PRELIM/strings_interesting_raw.txt" || true
@@ -126,7 +151,7 @@ set +e
   -analysisTimeoutPerFile "$TIMEOUT_PER_FILE" \
   -max-cpu "${GHIDRA_MAX_CPU:-2}" \
   -scriptPath "$SCRIPTS_DIR" \
-  -postScript ExportSalvageArtifacts.java "$OUT_DIR" "$MAX_DECOMP" \
+  -postScript ExportSalvageArtifacts.java "$RAW_DIR" "$MAX_DECOMP" \
   -scriptlog "$SCRIPT_LOG" \
   -log "$HEADLESS_LOG"
 GHIDRA_RC=$?
@@ -136,174 +161,67 @@ if [[ $GHIDRA_RC -ne 0 ]]; then
   echo "WARNING: analyzeHeadless exited with code $GHIDRA_RC (see $HEADLESS_LOG)" >&2
 fi
 
-# --- SUMMARY.md ---
-SUMMARY="$OUT_DIR/SUMMARY.md"
-STATS="$OUT_DIR/summary_stats.txt"
+# --- SUMMARY.md (hand-written; stub only if missing) ---
+SUMMARY="$SUMMARY_DIR/SUMMARY.md"
+STATS="$RAW_DIR/summary_stats.txt"
 
 get_stat() {
-  local key="$1"
+  local key="$1" val=""
   if [[ -f "$STATS" ]]; then
-    grep -E "^${key}=" "$STATS" | head -1 | cut -d= -f2-
+    val="$(grep -E "^${key}=" "$STATS" | head -1 | cut -d= -f2- || true)"
   fi
+  printf '%s' "$val"
 }
 
-{
-  echo "# Salvage analysis: ${TOOL_NAME}"
-  echo
-  echo "- **Binary:** \`$BINARY\`"
-  echo "- **Analyzed (UTC):** ${STAMP}"
-  echo "- **Ghidra:** $(grep -E '^application.version=' "$GHIDRA_HOME/Ghidra/application.properties" 2>/dev/null | cut -d= -f2 || echo unknown)"
-  echo "- **Purpose focus:** recover CLI, protocols, config paths, and rebuild/rehost notes for seihai-servertools (ops/server tooling — not malware inventing)."
-  echo
-
-  echo "## Identity"
-  echo
-  echo '```'
-  cat "$PRELIM/file.txt" 2>/dev/null || true
-  echo '```'
-  echo
-
-  # Seihai binding rules: no FUN_/binary offsets/public hosts in committed docs.
-  # Local artifacts under this out dir may still carry addresses; SUMMARY.md must not.
-  scrub_host() {
-    sed -E \
-      -e 's#[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]"]*[Gg][Rr][Aa][Aa][Ll][^[:space:]"]*#<public-url>#g' \
-      -e 's#\b[[:alnum:]._-]*graalonline\.com\b#<public-host>#gI'
-  }
-  names_only_from_stat() {
-    # "name@addr(sz=N) | ..." -> backtick-quoted unique names, drop FUN_/entry
-    local raw="$1"
-    [[ -z "$raw" ]] && return 0
-    echo "$raw" | tr '|' '\n' | sed -E 's/@[0-9A-Fa-f]+.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
-      | grep -Ev '^(FUN_|FID_conflict:|entry$|thunk_)' | grep -E '^[A-Za-z_~]' \
-      | awk '!seen[$0]++' | head -n 25 \
-      | sed 's/.*/`&`/' | paste -sd ', ' -
-  }
-
-  if [[ -f "$STATS" ]]; then
-    echo "## Ghidra program"
+if [[ -f "$SUMMARY" ]]; then
+  echo "==> Left existing SUMMARY.md untouched (hand-written): $SUMMARY"
+else
+  GHIDRA_VER="$(grep -E '^application.version=' "$GHIDRA_HOME/Ghidra/application.properties" 2>/dev/null | cut -d= -f2 || echo unknown)"
+  {
+    echo "# Salvage analysis: ${TOOL_NAME}"
     echo
-    echo "| Field | Value |"
-    echo "| --- | --- |"
-    echo "| Format | $(get_stat executable_format) |"
-    echo "| Language | $(get_stat language) |"
-    echo "| Compiler | $(get_stat compiler) |"
-    echo "| Functions | $(get_stat function_count) (internal $(get_stat internal_function_count)) |"
-    echo "| Imports | $(get_stat import_count) |"
-    echo "| Exports / entries | $(get_stat export_count) |"
-    echo "| Interesting strings | $(get_stat interesting_string_count) |"
-    echo "| Decompiled funcs | $(get_stat decompiled_count) |"
+    echo "Hand-written summary. Replace the placeholders below."
+    echo "Do not paste strings, import lists, symbol dumps, addresses, or decompiled code."
+    echo "Raw exporter output is gitignored under \`tools/ghidra/local-out/${SAFE_NAME}/\`."
     echo
-  else
-    echo "## Ghidra program"
+    echo "- **Binary:** \`${TOOL_NAME}\`"
+    echo "- **Analyzed (UTC):** ${STAMP}"
+    echo "- **Ghidra:** ${GHIDRA_VER}"
     echo
-    echo "_Ghidra export stats missing — headless may have failed. Check logs under \`logs/\`._"
+    echo "## Purpose"
     echo
-  fi
-
-  echo "## Notable symbols (names only)"
-  echo
-  _names="$(names_only_from_stat "$(get_stat key_functions)")"
-  if [[ -z "$_names" ]]; then
-    _names="$(names_only_from_stat "$(get_stat top_functions)")"
-  fi
-  if [[ -n "$_names" ]]; then
-    echo "Observed application/helper symbols (no addresses): ${_names}."
+    echo "_What the tool does, which screens or commands it has, which file formats or protocol roles it touches, and what Seihai could learn._"
     echo
-  else
-    echo "Most symbols were anonymous compiler stubs; prefer imports and strings for behaviour."
+    echo "## Placement"
     echo
-  fi
-  echo "Full local function lists stay in untracked \`functions.txt\` / \`functions.csv\` under the analysis dir."
-  echo
-
-  echo "## Imports"
-  echo
-  if [[ -f "$OUT_DIR/imports.txt" && -s "$OUT_DIR/imports.txt" ]]; then
-    echo '```'
-    # Strip Ghidra external addresses / ordinals from committed SUMMARY lines.
-    head -n 80 "$OUT_DIR/imports.txt" | sed -E 's/ @ EXTERNAL:[0-9A-Fa-f]+//; s/ @[0-9A-Fa-f]{4,}//g'
-    echo '```'
+    echo "_analysis-only / sibling repo / out-of-scope. See SALVAGE_PLACEMENT.md._"
     echo
-    local_count=$(wc -l <"$OUT_DIR/imports.txt" | tr -d ' ')
-    if [[ "$local_count" -gt 80 ]]; then
-      echo "_… $((local_count - 80)) more in \`imports.txt\`_"
+    echo "## Program (counts only)"
+    echo
+    if [[ -f "$STATS" ]]; then
+      echo "| Field | Value |"
+      echo "| --- | --- |"
+      echo "| Format | $(get_stat executable_format) |"
+      echo "| Language | $(get_stat language) |"
+      echo "| Compiler | $(get_stat compiler) |"
+      echo "| Functions | $(get_stat function_count) (internal $(get_stat internal_function_count)) |"
+      echo "| Import count | $(get_stat import_count) |"
+      echo "| Export count | $(get_stat export_count) |"
+      echo "| Interesting-string count | $(get_stat interesting_string_count) |"
+      echo "| Decompiled locally | $(get_stat decompiled_count) — not committed |"
+      echo
+    else
+      echo "_Ghidra export stats missing — headless may have failed. Read the log in the local-out folder. Do not paste it here._"
       echo
     fi
-  else
-    echo "_None exported (static binary, failed analysis, or no externals)._"
-    echo
-  fi
+    if [[ $GHIDRA_RC -ne 0 ]]; then
+      echo "Headless exit code: ${GHIDRA_RC}. See the local log; do not paste it into this file."
+      echo
+    fi
+  } >"$SUMMARY"
+  echo "==> Wrote summary stub (edit by hand before committing): $SUMMARY"
+fi
 
-  echo "## Exports / entry points"
-  echo
-  if [[ -f "$OUT_DIR/exports.txt" && -s "$OUT_DIR/exports.txt" ]]; then
-    echo '```'
-    head -n 40 "$OUT_DIR/exports.txt" | sed -E 's/ @[0-9A-Fa-f]+ / /g; s/\bFUN_[0-9A-Fa-f]+\b//g'
-    echo '```'
-    echo
-  else
-    echo "_None listed._"
-    echo
-  fi
-
-  echo "## Interesting strings"
-  echo
-  echo "Useful for CLI flags, config paths, URLs, protocol tokens."
-  echo
-  if [[ -f "$OUT_DIR/strings_interesting.txt" && -s "$OUT_DIR/strings_interesting.txt" ]]; then
-    echo '```'
-    head -n 60 "$OUT_DIR/strings_interesting.txt" | sed -E 's/^[0-9A-Fa-f]{4,}[[:space:]]+//' | scrub_host
-    echo '```'
-    echo
-  elif [[ -f "$PRELIM/strings_interesting_raw.txt" && -s "$PRELIM/strings_interesting_raw.txt" ]]; then
-    echo "_Ghidra string pass empty; raw \`strings\` filter:_"
-    echo
-    echo '```'
-    head -n 60 "$PRELIM/strings_interesting_raw.txt" | scrub_host
-    echo '```'
-    echo
-  else
-    echo "_No interesting strings matched filters._"
-    echo
-  fi
-
-  echo "## Decompile note"
-  echo
-  echo "Decompiled C may be produced locally for salvage reading only. Per Seihai binding rules, this repo does not commit decompiled source, anonymous decompiler names, or binary offsets. Describe findings as plain behaviour."
-  echo
-  if [[ -f "$OUT_DIR/decompiled/INDEX.txt" && -s "$OUT_DIR/decompiled/INDEX.txt" ]]; then
-    echo "_Local \`decompiled/\` present (gitignored) — do not paste into MIT crates or this SUMMARY._"
-    echo
-  fi
-
-  echo "## Rebuild / rehost checklist"
-  echo
-  echo "- [ ] Identify language/runtime from imports (libc, libstdc++, Go runtime, .NET, Python, JVM)."
-  echo "- [ ] Extract CLI surface from \`usage\`/\`help\` strings and decompiled arg parsers."
-  echo "- [ ] Note config file paths and env vars from interesting strings."
-  echo "- [ ] Map network protocols (ports, URLs, RPC names) before rehosting."
-  echo "- [ ] Prefer reimplementation from observed behavior over blind binary reuse when licensing/safety unclear."
-  echo
-
-  echo "## Artifacts"
-  echo
-  echo "- \`prelim/\` — file(1), strings, readelf/objdump/rizin/radare2 snapshots"
-  echo "- \`functions.txt\`, \`functions.csv\`"
-  echo "- \`imports.txt\`, \`exports.txt\`"
-  echo "- \`strings_interesting.txt\`"
-  echo "- \`decompiled/\`"
-  echo "- \`logs/\` — analyzeHeadless + script logs"
-  echo "- \`summary_stats.txt\` — machine-readable stats"
-  echo
-  if [[ $GHIDRA_RC -ne 0 ]]; then
-    echo "## Status"
-    echo
-    echo "**analyzeHeadless exit code:** $GHIDRA_RC — review \`$HEADLESS_LOG\`."
-    echo
-  fi
-} >"$SUMMARY"
-
-echo "==> Wrote $SUMMARY"
+echo "==> Raw artifacts: $RAW_DIR"
 echo "==> Done (ghidra_rc=$GHIDRA_RC)"
 exit "$GHIDRA_RC"

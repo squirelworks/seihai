@@ -6,7 +6,7 @@
 
 ## Purpose (plain behaviour)
 
-Offline **New World level / world generator**. UI branded “Graal Level Generator”; magic/token `GLEVNW01` appears in the image. Operator loads a **map image**, then **Generate World** into a `levels\` tree. Companion assets include `levelgen.png` / `bigmap.txt`. NW time-related tokens (`nwyear`, `nwmonth`, `nwday`, `nwhour`, …) and level options such as `canwarp` show up in strings. Not a network service.
+Offline **New World level / world generator**. The window is branded as a level generator, and the output file starts with a short magic that marks a New World level. The operator loads a map image, then generates a world into a levels directory. The pack also holds a sample map image and a large map text table. Strings cover New World calendar fields (year, month, day, hour, and smaller units) and per-level options such as whether warping is allowed. Not a network service.
 
 Sibling LAT generators exist for classic Graal, terrain, and dungeon variants — same offline-content role.
 

@@ -4,7 +4,7 @@ Produced by `/workspace/tools/ghidra/analyze_tool.sh`.
 Pipeline docs: `/workspace/tools/ghidra/README.md`.  
 Placement: `seihai-servertools/docs/design/SALVAGE_PLACEMENT.md` · inventory: [`../INVENTORY.md`](../INVENTORY.md).
 
-Focus: purpose, CLI, protocols, config paths for rebuild/rehost notes. Do **not** paste decompiled Delphi/GPL or GServer-v2 sources into MIT crates. Committed `SUMMARY.md` files must stay Seihai-safe (no Drive ids/URLs, no `FUN_*`, no binary offsets).
+Focus: purpose, CLI, protocols, and config roles for rebuild notes. Do **not** paste decompiled Delphi/GPL or GServer-v2 sources into MIT crates. Committed `SUMMARY.md` files are hand-written prose only: no string dumps, import lists, decompiler names, or binary offsets. Raw exporter output belongs in gitignored `tools/ghidra/local-out/`.
 
 ## Completed
 
@@ -18,7 +18,7 @@ Focus: purpose, CLI, protocols, config paths for rebuild/rehost notes. Do **not*
 | `scripteditor/` | Senolen `scripteditor.exe` 2.53 | `analysis-only` | NAT GS1 script editor UX; prefer GS2 sources for modern notes. |
 | `PNGView/` | GAT `PNGView.exe` | `analysis-only` | Offline PNG viewer beside Assimilator. |
 | `serverlist3/` | `slist/serverlist3` | `analysis-only` | ELF32 classic listserver; `clientsport`/`serversport`/`playerlimit`. Prefer C# rewrite tree. |
-| `ListServer/` | UPX-unpacked `ListServer.exe` | `analysis-only` | Win32 Delphi + WSOCK32; `servers.ini`. Do not run. |
+| `ListServer/` | UPX-unpacked `ListServer.exe` | `analysis-only` | Win32 Delphi plus Winsock; an ini server list. Do not run. |
 | `gserver-linux/` | `GServersource/gserver` | `analysis-only` | ELF32 — prefer paired C++ source. |
 | `gserver-win/` | `GServersource/gserver.exe` | `analysis-only` | Win32 PE same era/hash as pe alias. |
 | `gserver13/` | `gserver_source/gserver13` | `analysis-only` | Classic Linux gserver ELF. |
@@ -62,3 +62,5 @@ Focus: purpose, CLI, protocols, config paths for rebuild/rehost notes. Do **not*
   /path/to/bin \
   /workspace/recovered-drive-tools/ghidra-analysis/<name> [max_decomp]
 ```
+
+Raw files land in gitignored `tools/ghidra/local-out/<tool>/`. Edit `SUMMARY.md` by hand; the script will not overwrite it and will not paste strings or imports into it.
