@@ -1,6 +1,11 @@
 // Headless salvage export: functions, imports/exports, interesting strings,
 // decompiled C for key functions, and machine-readable summary stats.
 // Args: <outputDir> [maxDecompFuncs]
+//
+// outputDir must be a gitignored local folder (tools/ghidra/local-out/ by
+// default). This script writes raw strings, import names, addresses, and
+// decompiled C. None of that may be copied into a committed SUMMARY.md.
+// summary_stats.txt is counts and symbol names only — no string bodies.
 //@category Salvage
 //@runtime Java
 
@@ -415,7 +420,6 @@ public class ExportSalvageArtifacts extends GhidraScript {
 		lines.add("executable_format=" + currentProgram.getExecutableFormat());
 		lines.add("language=" + currentProgram.getLanguageID().getIdAsString());
 		lines.add("compiler=" + currentProgram.getCompilerSpec().getCompilerSpecID().getIdAsString());
-		lines.add("image_base=" + currentProgram.getImageBase());
 		lines.add("function_count=" + functions.size());
 		long internal = functions.stream().filter(f -> !f.external && !f.thunk).count();
 		lines.add("internal_function_count=" + internal);
@@ -425,7 +429,7 @@ public class ExportSalvageArtifacts extends GhidraScript {
 		lines.add("decompiled_count=" + decompiled);
 		lines.add("key_function_count=" + keyFuncs.size());
 
-		// Names only in stats that feed committed SUMMARY.md (no addresses / FUN_).
+		// Local stats only. Do not copy these names into a committed summary.
 		StringBuilder top = new StringBuilder();
 		int n = 0;
 		for (FuncRec f : functions) {
@@ -458,25 +462,8 @@ public class ExportSalvageArtifacts extends GhidraScript {
 			keys.append(sn);
 		}
 		lines.add("key_functions=" + keys);
-
-		// Sample interesting strings for summary
-		StringBuilder ss = new StringBuilder();
-		int sc = 0;
-		for (String s : strings) {
-			if (sc++ >= 25) {
-				break;
-			}
-			String only = s.contains("\t") ? s.substring(s.indexOf('\t') + 1) : s;
-			only = only.replace('|', '/');
-			if (only.length() > 80) {
-				only = only.substring(0, 77) + "...";
-			}
-			if (ss.length() > 0) {
-				ss.append(" | ");
-			}
-			ss.append(only);
-		}
-		lines.add("sample_strings=" + ss);
+		lines.add("string_bodies=omitted");
+		lines.add("note=raw strings, imports, and decompiled C stay in this directory; do not commit them");
 
 		writeLines(file, lines);
 	}

@@ -8,14 +8,16 @@ Recover and understand ops/server binaries (seihai-servertools) with Ghidra head
 | --- | --- |
 | `current` → `ghidra_12.2_PUBLIC/` | Installed Ghidra release (gitignored) |
 | `ghidra_scripts/ExportSalvageArtifacts.java` | Post-analysis export script |
-| `analyze_tool.sh` | One-shot wrapper: prelim RE + headless + `SUMMARY.md` |
+| `analyze_tool.sh` | One-shot wrapper: prelim RE + headless. Raw files stay in `local-out/`. |
 | `projects/` | Scratch Ghidra projects (deleted per run by default) |
 | `/workspace/tools/jdk/current` | Temurin JDK 25 (required by Ghidra 12.2) |
 | `/workspace/tools/rizin/bin` | Optional rizin static install for prelim snapshots |
 
-Analysis outputs for recovered Drive binaries go under:
+Hand-written summaries for recovered Drive binaries go under:
 
-`/workspace/recovered-drive-tools/ghidra-analysis/<toolname>/`
+`/workspace/recovered-drive-tools/ghidra-analysis/<toolname>/SUMMARY.md`
+
+Raw exporter output (strings, imports, decompilation, disassembly) goes to gitignored `local-out/` and is not committed.
 
 ## Versions
 
@@ -63,7 +65,7 @@ export JAVA_HOME=/workspace/tools/jdk/current
   /workspace/recovered-drive-tools/ghidra-analysis/toolname
 ```
 
-Optional third arg: max functions to decompile (default `40`).
+The second argument is the directory for a hand-written `SUMMARY.md`. The script creates a counts-only stub there if the file is missing, and leaves an existing summary alone. Optional third arg: max functions to decompile (default `40`).
 
 ```bash
 /workspace/tools/ghidra/analyze_tool.sh ./gscripts-old \
@@ -74,18 +76,21 @@ Optional third arg: max functions to decompile (default `40`).
 
 ```
 ghidra-analysis/<tool>/
-  SUMMARY.md                 # human overview
-  summary_stats.txt          # key=value stats
+  SUMMARY.md                 # hand-written prose only (the only committed analysis note)
+
+tools/ghidra/local-out/<tool>/    # gitignored
+  summary_stats.txt          # counts; string bodies omitted
   functions.txt|.csv
   imports.txt
   exports.txt
   strings_interesting.txt
   decompiled/
-    INDEX.txt
-    <func>_<addr>.c
   prelim/                    # file/strings/readelf/rizin/radare2
-  logs/                      # analyzeHeadless + script logs
+  logs/
+  DO_NOT_COMMIT.txt
 ```
+
+Do not copy `local-out/` into `SUMMARY.md`. Describe behaviour in your own words.
 
 ## Batch from recovered Drive inventory
 
@@ -115,9 +120,13 @@ $GHIDRA/support/analyzeHeadless \
   -postScript ExportSalvageArtifacts.java /tmp/out 40
 ```
 
+Point `-postScript` at a gitignored directory (`local-out/` or `/tmp`). Do not point it at a path whose text files would be committed.
+
 ## Notes
 
 - Headless deletes the scratch project by default (`-deleteProject`) so reruns stay clean.
-- Decompilation targets entry points, name-matched helpers (`main`, `usage`, `config`, `listen`, …), then large/hot functions.
-- Interesting-string filters bias toward paths, CLI flags, URLs, config extensions, and seihai/gserver-related tokens.
-- Do not invent malware or exploit payloads; salvage for rebuild/rehost of legitimate server/ops tools only.
+- Decompilation targets entry points, name-matched helpers, then large or busy functions. That C stays under `local-out/`.
+- Interesting-string filters bias toward paths, CLI flags, URLs, config extensions, and server-related tokens. Those hits stay under `local-out/` and are not written into `SUMMARY.md`.
+- `summary_stats.txt` records counts only. It does not embed string bodies.
+- Do not invent malware or exploit payloads; salvage for rebuild or rehost notes of legitimate server and ops tools only.
+- Committed summaries are prose: what the tool does, which screens or formats it touches, and what Seihai could learn. No string dumps, import lists, or addresses.

@@ -7,7 +7,7 @@
 
 ## Purpose guess
 
-Windows **list / server-directory** helper for classic Graal. Delphi VCL + Winsock (`listen` / `bind` / `connect` / `closesocket`). Reads **`servers.ini`**, stores client prefs under `Software\Graal\Client`, shows connect-to-server UI with version/players fields. Bundled zlib/deflate. Companion to ELF `serverlist3` — different packaging, same product niche.
+Windows **list / server-directory** helper for classic Graal. Delphi visual library plus Winsock listen, bind, connect, and close. It reads an ini list of servers, stores client preferences in the application registry, and shows a connect dialog with version and player-count fields. Bundled deflate. Companion to the ELF listserver — different packaging, same product niche.
 
 **Do not run** this PE (or the packed original) against public networks.
 
@@ -32,7 +32,7 @@ Windows **list / server-directory** helper for classic Graal. Delphi VCL + Winso
 
 ## Behaviour (plain prose)
 
-Most symbols are anonymous Delphi stubs; behaviour comes from imports and strings: socket listen/connect path, `servers.ini` config, Graal client registry hive, JPEG/UI chrome. No MySQL client strings (unlike static ELF `serverlist3`) — this build looks more like a lightweight Win32 lister/client companion than the full Linux auth listserver.
+Most symbols are anonymous Delphi stubs. Behaviour comes from the import surface and the string table: a socket listen and connect path, a local server-list config, a client preferences hive, and JPEG UI chrome. No database client (unlike the static ELF listserver) — this build looks like a lightweight Windows lister rather than the full Linux auth directory.
 
 ## Artifacts (local)
 

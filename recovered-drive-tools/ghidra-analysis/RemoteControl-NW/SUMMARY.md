@@ -11,8 +11,8 @@
 
 Same family as classic `rc.rar` / Custom Agret RC:
 
-- Reads **`controlconfig.txt`**; account/player edit units (`UEditAccountPlayer`, `UPlayerStats`), DB accounts list with attribute search examples (`adminlevel`, `adminworlds`, `blocked`, …).
-- Staff actions: admin message / admin-to-all, edit account, update level, disconnect, ban players, attach “- away” when player list closed, HTML-in-PM toggles.
+- Reads the same kind of text config as the other Delphi remote controls. Account and player editors, and a database account list that can search attributes such as admin level, admin worlds, and block state.
+- Staff actions: admin message and broadcast, edit account, update level, disconnect, ban, mark a player away when the list closes, and a toggle for HTML in private messages.
 - Winsock connect path; zlib deflate embedded.
 - Comparative sample for NW protocol quirks vs v1 RC / GTK RC3.
 

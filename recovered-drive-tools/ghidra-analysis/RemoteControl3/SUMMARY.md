@@ -11,12 +11,12 @@ Staff **Remote Control** client for classic Graal servers. UI is **GTK** on Wind
 
 Observed behaviour from symbols and strings (no offsets):
 
-- Shows a **Graal Servers** list, version field, password field (optional “don’t save password”), and **Connect**.
-- Talks to a **listserver / server pick** path (`serverlist_connect`, `ConnectToSelectedServer`, `startframe_connect`) and to an **NPC server** (`connectToNPCServer`, “NPCServer connected” label).
-- After connect: **player list** (refresh, mass PM, admin message), **NPC list / local NPCs**, level-NPC dump, folder/config pages, profile / rights / account / access edit windows.
-- Staff actions reflected in UI copy: ban time/reason, warp-to-player, warp players, disconnect, update level, away-mode when closing player list, optional “separate NC from RC chat”.
-- Embeds **bzip2/zlib** compress helpers (`handle_compress`, inflate/deflate) and password encrypt/decrypt helpers — treat as opaque wire behaviour for clean-room notes.
-- Syntax highlighters mention `text/x-graalscript`, ini, pascal, cpp — in-RC script editing surface.
+- Shows a server list, a version field, a password field that need not be saved, and a connect action.
+- Talks to a listserver or server-pick path and to a separate NPC server, with a label once that NPC server is connected.
+- After connect: a player list (refresh, mass private message, admin message), an NPC list and local NPCs, a level-NPC dump, folder and config pages, and profile, rights, account, and access editors.
+- Staff actions: ban with time and reason, warp to a player, warp players, disconnect, update level, away mode when the player list closes, and an option to keep NPC-control chat separate from remote-control chat.
+- Embeds bzip2 and zlib compress helpers and password encrypt/decrypt helpers. Treat the wire encoding as opaque for clean-room notes.
+- Syntax highlighters for Graal script, ini, Pascal, and C++ — an in-client script editing surface.
 
 **Do not run** this PE against public hosts; lab loopback only if ever needed.
 
@@ -38,7 +38,7 @@ Observed behaviour from symbols and strings (no offsets):
 | Interesting strings | ~405 |
 | Decompiled (local only) | 25 — **not committed** |
 
-Named helpers (names only): `mainSort`, `Init`, `serverlist_connect`, `connectToNPCServer`, `ConnectToSelectedServer`, `encryptPassword` / `decryptPassword`, `bindSocket` / `connectSocket`, `handle_compress`, window builders for player list / profile / rights / account / options / access.
+Named areas, without addresses: sorting and init, listserver connect, NPC-server connect, connect to the selected server, password encrypt and decrypt, socket bind and connect, compression handling, and window builders for the player list, profile, rights, account, options, and access.
 
 ## Artifacts (local, gitignored except this SUMMARY)
 

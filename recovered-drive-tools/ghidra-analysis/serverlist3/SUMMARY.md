@@ -7,7 +7,7 @@
 
 ## Purpose guess
 
-Classic **Graal list / login server** (ELF32, statically linked, not stripped). One process listens for client and gserver connections, serves the public server directory, and backs account auth against MySQL. Takes a **full path to a configuration file** as argv; refuses to start if that file is missing. Emits console lines such as “Server lister started” with lister/gserver port context, player-limit accounting, and disconnect notices.
+Classic **list / login server** (ELF32, statically linked, not stripped). One process listens for client and game-server connections, serves the public server directory, and backs account auth against a database. It takes a full path to a configuration file as its only argument and refuses to start if that file is missing. The console reports that the lister has started, with the client and game-server port context, player-limit accounting, and disconnect notices.
 
 ## Recommended placement (`SALVAGE_PLACEMENT.md`)
 
@@ -46,11 +46,11 @@ eb5272ab1653f93fc00b41368caa52d7af565f16e3d575a18e4c1ba1e1da87c3
 
 ## Behaviour (plain prose)
 
-Config keys observed in the image include **clientsport**, **serversport**, and **playerlimit**. Runtime side-files include `maxplayers.txt`, `playercount.txt`, and `playerstats.txt` for free/used player budget.
+The config covers the client listen port, the game-server listen port, and a player cap. Side files track the free and used player budget: a maximum, a live count, and a small stats file.
 
-SQL shapes (behaviour only): account rows with encrypted password, email, block/ban fields, admin level/worlds; serverlist rows with name, language, description, homepage, version, playercount, ip, port, and a freshness window on `lastwrite` (~10 minutes). Connection refusals surface as wrong-password or “not allowed to connect from” style messages. GServer side traffic is framed as world connections (“GServer for world … connected”).
+Database shapes (behaviour only): account rows hold an encrypted password, email, block and ban fields, and admin level and worlds. Directory rows hold the world name, language, description, a homepage, client version, player count, address, and port, and they go stale if the last update is older than about ten minutes. Refusals are a wrong password or a source that is not allowed to connect. Game servers register as a world connection.
 
-Network stack is classic Berkeley sockets plus a bundled MySQL C client (TCP and UNIX-socket path strings, SSL option names). Compression helpers (zlib/deflate) are present. Typoed UI/ops string “Configuraton not found” confirms this era build.
+The network stack is Berkeley sockets plus a bundled database client (TCP and a local socket path, with SSL option names). Compression helpers are present. The missing-config notice is misspelled, which marks this era build.
 
 ## Prefer source / rewrite over deep RE
 
@@ -61,7 +61,7 @@ Network stack is classic Berkeley sockets plus a bundled MySQL C client (TCP and
 
 - [x] Identify language/runtime: static ELF32 C++/gcc + MySQL client + zlib.
 - [x] CLI: config file path required as sole parameter.
-- [x] Config keys: clientsport, serversport, playerlimit; side-files for player budgets.
+- [x] Config: client port, game-server port, player cap; side files for player budgets.
 - [x] Protocols: client list/login + gserver registration; MySQL account/serverlist tables.
 - [ ] Prefer clean-room / C# rewrite notes over binary reuse.
 

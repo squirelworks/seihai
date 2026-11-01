@@ -52,7 +52,7 @@ CLI: `BytecodeViewer <script file>`. Opens the capture, **skips the first byte**
 2. Segmented payload named in source as: integer/unknown purpose, function names, strings, bytecode.
 3. Opcode pretty-print driven by `BytecodeViewer_defs.txt` (index=`name` lines) loaded from the working directory.
 
-Big-endian helpers and Graal short decoding (`GShort`) match other GS2 tooling. No network listen/bind — offline file viewer only. Win32 I/O (`CreateFile` family via CRT) dominates imports.
+Big-endian short decoding matches other GS2 tooling. No network listen or connect — offline file viewer only. Ordinary Windows file I/O through the C runtime dominates imports.
 
 ## Prefer source over RE
 

@@ -6,15 +6,15 @@
 
 ## Purpose (plain behaviour)
 
-Community-modified **Graal Remote Control** (“Modified by Agret” / “Agret's Blue RC” branding, `controlconfig.txt` with nickname/UI colour keys). Classic Delphi VCL RC rather than the GTK RemoteControl3 line. Companion **`Agret_RC.exe`** in the same folder is a **UPX-packed** PE; static `upx -d` yields a different hash from this `remotecontrol.exe` (variant build, not a byte-identical pack).
+Community-modified remote control (Agret branding, a blue theme, and a text config with nickname and UI colour keys). Classic Delphi visual library rather than the GTK RemoteControl3 line. Companion **`Agret_RC.exe`** in the same folder is a **UPX-packed** PE; a static unpack yields a different hash from this `remotecontrol.exe` (variant build, not a byte-identical pack).
 
-Observed behaviour from strings/imports:
+Observed behaviour:
 
-- Window title **Graal Remote Control**; connects via Winsock (`connect`) to a chosen server from a **Graal Server List** UI (“Connecting to server …”, failure/disconnect messages).
-- Tracks **Players:** count and **NPC-Server** connection state (“Connected to NPC-Server”).
-- Config/registry: `Software\Graal`, `onlinestartlocal.graal`, flags such as `dontsavepassword`, icon toggles for player list / NPC list / local NPCs, label keys for players and NPC server.
-- NPC tooling: attributes, script-from-NPC, flags-from-NPC, NPC level list, local NPCs unit, delete-NPC confirm dialog.
-- Account/player edit surfaces (`UEditAccountPlayer`, `TPlayerStats`).
+- Classic remote-control window title. Winsock connect to a server chosen from a server list, with connecting, failure, and disconnect messages.
+- Tracks the player count and whether the NPC server is connected.
+- Preferences live in the application registry, next to a local startup script, a flag to avoid saving the password, and toggles for the player list, the NPC list, and local NPCs.
+- NPC tooling: attributes, script and flags taken from an NPC, an NPC level list, local NPCs, and a delete confirmation.
+- Account and player editors.
 - Same general staff RC role as stock Delphi RC packs (`rc.rar` / `rc2.rar` lineage) — useful comparative sample for `seihai-rc` wire behaviour.
 
 **Do not run** against public servers.

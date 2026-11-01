@@ -7,5 +7,6 @@ projects/
 *.lock
 *.log
 
-# Local analysis scratch
+# Local analysis scratch (raw strings, imports, decompilation — never commit)
+local-out/
 /tmp/
