@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/seihai-core", "crates/seihai-mae", "crates/seihai-ato", "crates/seihai-g3d", "crates/seihai-launcher", "tools/level-editor"]
+members = ["crates/seihai-core", "crates/seihai-mae", "crates/seihai-ato", "crates/seihai-g3d", "crates/seihai-launcher", "crates/seihai-draw", "tools/level-editor"]
 resolver = "2"
 
 [workspace.package]
