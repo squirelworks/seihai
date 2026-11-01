@@ -45,19 +45,22 @@ Environment:
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 2 ]]; then
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
-  exit $([[ $# -lt 2 ]] && echo 2 || echo 0)
+  exit 0
+fi
+if [[ $# -lt 2 ]]; then
+  usage >&2
+  exit 2
 fi
 
+if [[ ! -f "$1" ]]; then
+  echo "ERROR: binary not found: $1" >&2
+  exit 1
+fi
 BINARY="$(readlink -f "$1")"
 SUMMARY_DIR="$(mkdir -p "$2" && cd "$2" && pwd)"
 MAX_DECOMP="${3:-40}"
-
-if [[ ! -f "$BINARY" ]]; then
-  echo "ERROR: binary not found: $BINARY" >&2
-  exit 1
-fi
 if [[ ! -x "$GHIDRA_HOME/support/analyzeHeadless" ]]; then
   echo "ERROR: analyzeHeadless not found under $GHIDRA_HOME" >&2
   echo "Install Ghidra and symlink it to $SCRIPT_DIR/current" >&2
@@ -74,7 +77,8 @@ export GHIDRA_HEADLESS_MAXMEM="$MAXMEM"
 
 TOOL_NAME="$(basename "$BINARY")"
 TOOL_NAME="${TOOL_NAME%.*}"
-SAFE_NAME="$(echo "$TOOL_NAME" | tr -c 'A-Za-z0-9._+-' '_')"
+# printf, not echo: echo adds a newline and tr turns that newline into a trailing underscore.
+SAFE_NAME="$(printf '%s' "$TOOL_NAME" | tr -c 'A-Za-z0-9._+-' '_')"
 PROJECT_NAME="salvage_${SAFE_NAME}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RAW_ROOT="${GHIDRA_LOCAL_OUT:-$SCRIPT_DIR/local-out}"
