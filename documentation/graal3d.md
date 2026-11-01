@@ -105,9 +105,20 @@ textured level, both players posed, and both chat lines in the log. The
 window under Xvfb walked with the arrow keys, and Enter, typing and Enter
 put the line in the log and sent it.
 
+## Worlds and assets
+
+A Graal3D world is **not** a 2D Graal board. The server pushes level text as a
+DirectX retained-mode `.x` mesh; BMPs named by that mesh, and the eight player
+`.x` parts plus their textures, must already sit in each client's `--assets`
+folder. There are no tiles, GANIs, NPCs or level links. See Graal_analysis
+`graal3d/formats.md` and the milestones below for authoring and a future
+default asset root.
+
 ## Next
 
-The open tasks (G3D-1 to G3D-9), the module map and the lab recipe are in
+Milestones (client fidelity, Rust hosting, world content, stack knock-ons):
+`documentation/plannedmilestones.md`, section "Graal3D (February 2000)".
+The open task ids (G3D-1 to G3D-9), the module map and the lab recipe are in
 `crates/seihai-g3d/ARCHITECTURE.md`. The look and UDP options now come from
 the install's `graal3dconfig.txt` when `--assets` points at it; its server
 address is never used.

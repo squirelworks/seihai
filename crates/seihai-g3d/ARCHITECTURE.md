@@ -64,45 +64,51 @@ examples/model.rs   renders the model in several poses to a BMP
 | Hand frames are children of the arms | inferred from mesh coordinates | model |
 | Walk speeds, run delay, jump table, back-walk rule | fact (client binary) | world |
 | Camera distance 220 and 5°/tick turn | fact | world::CameraRig |
-| Camera height, look point, field of view | **stand-in** (G3D-2) | world::CameraRig |
-| Collision | **stand-in** (G3D-1) | world::Ground via Collider |
+| Camera height, look point, field of view | **stand-in in code** (G3D-2); numbers are in Graal_analysis `graal3d/camera.md` | world::CameraRig |
+| Collision | **stand-in in code** (G3D-1); rule is in Graal_analysis `graal3d/collision.md` | world::Ground via Collider |
 | Prop 5 back to 0 when stopping | stand-in | world::Walker |
 | Shading, light | stand-in (D3D RM not copied) | render |
 
 ## Open tasks
 
-Each one is a branch and a PR. Run `cargo test -p seihai-g3d` and
+Ordered milestones (M1–M5, what hosting needs, what is out of scope):
+`documentation/plannedmilestones.md`, "Graal3D (February 2000)". Each task
+below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 `cargo clippy -p seihai-g3d --all-targets` before pushing.
 
-- **G3D-1 Faithful collision.** Read how the client's movement routine tests
-  a step against the level faces (it loads every face of the level mesh for
-  this), write it up in Graal_analysis `graal3d/client-behaviour.md`, then
-  implement a new `Collider` in `world.rs` and use it in `main.rs`
-  (`Game::ground`). Keep `Ground` for tests or delete it. Done when the new
-  collider passes the existing walker tests that still hold, plus tests
-  for the real rule, and the lab screenshot walk still works.
-- **G3D-2 Camera numbers.** Read the camera height, look point and the
-  Direct3D view's field of view from the client's camera routine; set them
-  in `CameraRig::default()`. Done when documented and the TODOs are gone.
-- **G3D-3 Torque 3D servers** (not this crate): Ato Stage 4, held until
-  a capture of a 3.x/4.x Torque connect exists.
-- **G3D-4 Options windows.** F1 "Hardware options" (fixed UDP port, no UDP)
-  and F2 "Player look" (props 6–11, 17), written back with
+- **G3D-1 Faithful collision (M1).** Plain behaviour is in Graal_analysis
+  `graal3d/collision.md` (#164). Implement a new `Collider` in `world.rs`
+  and use it in `main.rs` (`Game::ground`). Keep `Ground` for tests or
+  delete it. Done when the new collider passes the existing walker tests
+  that still hold, plus tests for the real rule, and the lab screenshot
+  walk still works.
+- **G3D-2 Camera numbers (M1).** Plain behaviour is in Graal_analysis
+  `graal3d/camera.md` (#163): follow 220, look height +80, turn ±5°/tick,
+  pitch −0.15 rad, field 0.5 (~53.13°). Set them in `CameraRig::default()`.
+  Done when the TODOs are gone and a lab screenshot still looks sane.
+- **G3D-3 Torque 3D servers** (not this crate; held): Ato Stage 4, until a
+  capture of a 3.x/4.x Torque connect exists. See
+  `documentation/ato-3d-path.md`.
+- **G3D-4 Options windows (M1).** F1 "Hardware options" (fixed UDP port, no
+  UDP) and F2 "Player look" (props 6–11, 17), written back with
   `Config::to_text`. Needs `Session::connect` to take a fixed UDP port.
-- **G3D-5 Admin session.** `--admin`: log in with `admin::login`, show the
-  account list (50) and player list (55), send 61–64 from `admin.rs`.
+- **G3D-5 Admin session (M2).** `--admin`: log in with `admin::login`, show
+  the account list (50) and player list (55), send 61–64 from `admin.rs`.
   The account-record layout for 52/53/60 needs a lab capture first.
-- **G3D-6 Without assets.** Draw players as coloured boxes when the meshes
-  are missing, and say once which files are missing.
-- **G3D-7 Start window.** The client's connect window (nickname, host,
+- **G3D-6 Without assets (M1).** Draw players as coloured boxes when the
+  meshes are missing, and say once which files are missing.
+- **G3D-7 Start window (M1).** The client's connect window (nickname, host,
   port, account, password) in egui, like `seihai-ato`'s start window, and
   the launcher's GUI version list offering "Graal3D".
-- **G3D-8 Lab with two real clients.** Needs Microsoft's `d3drm.dll` in
+- **G3D-8 Lab with two real clients (M2).** Needs Microsoft's `d3drm.dll` in
   the Wine prefix (DirectX redistributable; the container's network policy
   blocked it). Then capture real UDP between two real clients and check
   Seihai against it.
-- **G3D-9 A Graal3D server in Rust** (optional): port the Python reference
-  server's behaviour from `protocol.md` into the Seihai server stack.
+- **G3D-9 A Graal3D server in Rust (M3).** Port the Python reference server's
+  behaviour from `protocol.md` into a **separate** Rust binary (sibling to
+  this client, not a stage of `seihai-gserver`). Worlds stay `.x` + local
+  BMPs; see plannedmilestones M4 / M5 for content and servertools lab
+  start.
 
 Code markers: `grep -rn "TODO(G3D-" crates/seihai-g3d`.
 
