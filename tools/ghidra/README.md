@@ -13,7 +13,9 @@ Recover and understand ops/server binaries (seihai-servertools) with Ghidra head
 | `/workspace/tools/jdk/current` | Temurin JDK 25 (required by Ghidra 12.2) |
 | `/workspace/tools/rizin/bin` | Optional rizin static install for prelim snapshots |
 
-Hand-written summaries for recovered Drive binaries go under:
+Committed hand-written summaries now live in squirelworks/seihai-servertools at `recovered-drive-tools/`. This repo keeps a pointer at `recovered-drive-tools/README.md`.
+
+A local scratch tree (not committed here) can still hold new summaries at:
 
 `/workspace/recovered-drive-tools/ghidra-analysis/<toolname>/SUMMARY.md`
 
@@ -94,7 +96,7 @@ Do not copy `local-out/` into `SUMMARY.md`. Describe behaviour in your own words
 
 ## Batch from recovered Drive inventory
 
-When a sibling recovery agent populates `/workspace/recovered-drive-tools/` (see `INVENTORY.md`):
+When a sibling recovery agent populates a local `/workspace/recovered-drive-tools/` scratch tree (the committed inventory moved; see `recovered-drive-tools/README.md`):
 
 ```bash
 INV=/workspace/recovered-drive-tools/INVENTORY.md
