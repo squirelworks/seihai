@@ -17,7 +17,7 @@ offline-only builds (`offline-only-builds.md`).
 | Files | modtime in `PLO_FILE`, large files, `LARGEFILESIZE`, default image extension | file replies |
 | Levels | `.graal`, `.zelda` (Z3-V1, every build), `.nw`, `.gmap`, level heights, cached level links (`PLI 30`) | F5 level picker |
 | Health | the client-side death sequence (`life.death`: timer, input lock, dead bit, respawn hearts by AP, `PLI 14` claim) | death and respawn; see `health-death.md` |
-| UI | server list style (direct, one list, tabs), Up/Down chat recall, HUD art, gserver minimap, built-in editor, ganis, emoticons, configurable keys, log window, ghost mode, server name in the title | launcher, game loop |
+| UI | server list style (direct, one list, tabs), Up/Down chat recall, HUD art, gserver minimap, built-in editor, ganis, emoticons, configurable keys, log window, ghost mode, server name in the title, main-form outer size | launcher, game loop |
 
 There are 26 rows: 2.02 rev 2, 2.03 and 2.04 are rows of their own, because
 each differs on the wire from the build before (LANGUAGE at 2.02 rev 2,
@@ -44,6 +44,11 @@ The 3.x login and framing, locked against unknown, is in `3x-session.md`.
   Each version can point at its own asset folder (`assets.<label>=` in the
   settings file), so it can use that install's images.
 - **Game window**: the title follows the version (2.05+ add the server name).
+  The row also records the main form's outer size (title bar and borders
+  included): 648×509 for 1.21, 648×508 for 1.28 beta 2 through 1.39, 648×514
+  for 1.41 and for 2.01 through the 2.1 test builds, 648×507 for NewMain 1.42
+  and 2.00, and 644×507 for 2.17 through 2.31. A build with no form of its
+  own keeps the previous size. The view Seihai draws stays 640×480.
   The minimap appears from 2.1 (set by the game server). Up/Down recall of
   typed chat lines appears in 1.39. F4 (the editor) is gone in
   2.3+, and F5 only lists the level formats the version can open. While online F4 is refused with a chat line; F5 is Seihai's level window in every build (see `implementation.md`).
