@@ -8,6 +8,96 @@ What remains after the current gmaps / script engine / differential testing work
 - [x] Script engine. The NPC and weapon script vocabulary, with a per-version delta table already mined from the builds. (c42e8fa)
 - [x] Differential testing. Run the same scripted session against the real Wine client and Seihai in the lab, and diff the wire frames. (f8127f4)
 
+## Graal3D (February 2000)
+
+Separate side project (`GR3DV002`): its own client and server protocol, not the
+2D gserver path and not the Torque 3D of 3.x–5.x. User notes:
+`documentation/graal3d.md`. Task ids and module map:
+`crates/seihai-g3d/ARCHITECTURE.md`. Wire and formats:
+Graal_analysis `graal3d/`.
+
+**Worlds are not old 2D levels.** There is no `.nw` / `.graal` / GANI / tile /
+NPC path. A world is DirectX text `.x` meshes plus local BMPs (textures and
+player parts are never sent on the wire). Hosting today means the original
+Wine `GServer.exe` or Graal_analysis `graal3d/reference-server/`;
+`seihai-gserver` does not speak this protocol.
+
+### Done
+
+- [x] `seihai-g3d` plays online: login, props, level receive, UDP peers, chat,
+  software draw of textured `.x` levels and the eight-part player model,
+  walk / jump / follow camera (`documentation/graal3d.md`; #331, #332).
+- [x] Plain-behaviour notes that unblock client fidelity: collision
+  (`graal3d/collision.md`, Graal_analysis #164) and camera / FOV
+  (`graal3d/camera.md`, #163). Live Wine confirmation of both still wants
+  native `d3drm.dll` (G3D-8).
+
+### M1 — Client fidelity (`seihai-g3d`)
+
+Analysis for the first two is ready; code still uses stand-ins.
+
+- [ ] **G3D-1** Faithful per-face collision (`world::Collider` from
+  `collision.md`).
+- [ ] **G3D-2** Camera height, look point and field 0.5 / ~53.13° from
+  `camera.md` (replace `CameraRig` stand-ins).
+- [ ] **G3D-4** F1 hardware options and F2 player look; write
+  `graal3dconfig.txt`.
+- [ ] **G3D-6** Draw without `--assets` (coloured boxes; name missing files).
+- [ ] **G3D-7** Connect window and launcher "Graal3D" entry.
+
+### M2 — Admin and real-client lab
+
+- [ ] **G3D-5** Admin session (`--admin`): account / player lists and
+  kick / message; account-record layout still needs a lab capture.
+- [ ] **G3D-8** Two real `Graal3D.exe` clients under Wine with native
+  `d3drm.dll`; capture UDP and match Seihai.
+
+### M3 — Hosting (Rust Graal3D server)
+
+- [ ] **G3D-9** Port the Python reference server into a **separate** Rust
+  binary (same `GR3DV002` facts as `protocol.md` / `formats.md`). Not a
+  stage of `seihai-gserver` (different codec, ids, 3D floats, peer UDP, no
+  board / NPC / file-transfer game). Home crate: prefer next to
+  `seihai-g3d` in this workspace unless packaging says otherwise.
+- Done when: `seihai-g3d` and, where Wine + `d3drm` allow, the real client
+  log into the Rust host on loopback; level text and prop / UDP rules match
+  the reference server's lab session.
+
+### M4 — World content and assets
+
+New worlds are authored as `.x` + BMP, not converted from 2D boards.
+
+- [ ] Document the authoring contract in `documentation/graal3d.md` (or a
+  short `graal3d-worlds.md`): text `.x` only, materials and texture file
+  names, BMP bit depths the client reads, player mesh set, `startlevel.x`
+  naming, accounts / guilds beside the server.
+- [ ] Optional built-in or generated **default Graal3D asset root** (shipped
+  demo meshes / textures under a clear licence, or a generator), distinct
+  from the 2D `assets/default/` set; `--assets` / `--check` path for it.
+- [ ] Keep `--level-info` on `.x` as the smoke check; add a small world-folder
+  check (every texture named by a level or player prop exists) once M3 or
+  servertools wants it.
+- Out of scope here: the 2D offline level editor (`tools/level-editor`) and
+  LAT `.nw` editing — they stay 2D-only unless a later milestone adds an
+  `.x` editor (Squirrel decides).
+
+### M5 — Stack knock-ons (after M3)
+
+Only pieces that actually touch February 2000 Graal3D:
+
+| Area | Effect | Milestone |
+|---|---|---|
+| `seihai-servertools` | Lab start / stop for a Graal3D host; optional `.x`+BMP world check | Add a Graal3D lab kind once M3 exists (`seihai-servertools` `docs/NEXT.md`) |
+| `seihai-gserver` | None on the wire | Keep stages 1–7 2D / gen-5 only; PLAN notes G3D-9 is a sibling host |
+| `seihai-listserver` | Feb 2000 client/server never talk to the list | No work for this era. HQ tag `3 ` / level 4 stays **Torque-era** (with Ato Stage 4), not this milestone |
+| `seihai-rc` / `seihai-npcserver` | No RC/NC and no NPC scripting in either Graal3D binary | No milestone |
+| `seihai-ato` Stage 4 | Different 3D (Torque on UDP port+1) | **Held** as G3D-3 / `documentation/ato-3d-path.md` until a Torque capture exists |
+
+### Held (not February 2000)
+
+- [ ] **G3D-3 / Ato Stage 4** Torque 3D servers for 3.x–5.x. Needs a connect
+  capture and a Torque-speaking lab host. Do not invent wire bytes.
+
 ## Next
 - Asset generation track (items 17–21): [x] item 17, inventory of the playerworld archives (`documentation/asset-inventory.md` and `.tsv`: counts by type per world, starter-set candidates, reader pass rates); [x] item 18, reference sheet measurements (`documentation/asset-reference.md` and `.tsv`: tile id mapping checked against the real 2048x512 sheet and against real levels, palette types, PNG failure cases, body/head/sword/shield/GANI/sound layouts, the foot-test and 128-column constraints a default set must meet; numbers only, no art; found `assets::tile_src_rect` uses a different, unused mapping), [x] item 19, a self-contained default asset root `assets/default/` (47.8 KB, 17 files at item 19, all original and generated by `tools/gen_default_assets.py` from code: 2048x512 tile sheet and type table, body/head/sword/shield/sprites/state sheets, idle/walk/swim GANIs, footstep and splash WAVs, two starter levels; `documentation/default-assets.md`; contract test `client/tests/default_assets.rs`), [x] item 20, the set compiled into the binary and wired in as the last resolver layer (a missing, empty or partial `--assets` falls back file by file; `--check-assets` with no `--assets` checks the built-in set and passes for 1.39, 2.05, 2.17, 2.22 and 2.31; per-server download cache `<cache root>/<host>_<port>[~name]/` searched first, written by downloads only, never the built-in set; built-in files are asked for with `WANTFILE` and no mod time; `walk.gani` and the step sounds are asked for at the first steps only when no copy exists; built-in levels offline only; chests and signs drawn from the board, no placeholder boxes; `documentation/file-cache.md`, `default-assets.md`, `client/tests/builtin_wiring.rs`), [ ] item 21 optional generator tool (mostly covered by `tools/gen_default_assets.py`). See `documentation/chiaki-next.md`.
 - GANI expansion (item 22): [x] `sword.gani` (5 steps, `sword.wav` after step 0, `SETBACKTO idle`), `sit.gani` (1 step) and `hurt.gani` (1 step) in the default set, generated by `tools/gen_default_assets.py` (body rows 9 to 12, sword cells placed by the GANI, synthesised `sword.wav`; the set is 54.7 KB in 21 files, original, `--check` passes); the S key plays the sword animation in step with the swing and queues its sound, an accepted hit shows the hurt pose for 500 ms (offline session included), then back to idle; `Gani::setback_to`, `pose.rs`, `render::draw_gani_frame`; `client/tests/poses.rs`. Open: no key for sit; the walk poses are still not drawn for the local player; other players' swings and hurts are not drawn with the GANIs; the hurt file name and duration are Seihai's convention (`documentation/default-assets.md`, "Poses").
