@@ -60,6 +60,18 @@ numpad 4 / 6 or Left / Right step sideways (which turns the follow camera),
 numpad 5 or Space jumps, numpad 0 turns the follow camera off and on, Enter
 opens and sends the chat line, Esc closes it or quits.
 
+F1 opens "Hardware options" and F2 "Player look", the client's two option
+windows. Hardware options has the fixed UDP port (default 14898, for a
+router that forwards one port) and "Don't use UDP"; they are used from the
+next connect. Player look has the body and head models, the body texture,
+and the arm, shoe and hand colours; OK sends them at once (props 6–8, 10,
+11 and 17). Model and texture names are plain file names in the Graal3D
+folder. OK writes `graal3dconfig.txt` in `--assets` back (without
+`--assets` the change lasts for the session only), keeping any saved
+`password` line and the file's line ends. The windows' names and fields are
+the client's; their layout, and when the UDP options take effect, are
+Seihai's. The game keeps talking to the server while a window is open.
+
 ## What it does
 
 | Part | Module | Notes |

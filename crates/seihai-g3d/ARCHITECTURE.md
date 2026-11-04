@@ -21,6 +21,8 @@ main.rs      CLI, the Game struct (one tick = network + movement), the three
              Without --online a window run opens the start window first
 start_window.rs  the connect form (egui): nickname, host, port, account,
              password, with the client's defaults
+options.rs   F1 "Hardware options" and F2 "Player look" (egui), editing
+             the Config; main.rs saves it and ticks the session meanwhile
 lib.rs       module list
 codec.rs     +32 codec, u16 BE + zlib frames, Deframer, § line breaks
 props.rs     Prop enum (ids 0–17, 50, 51), Player state, Differ (per-tick
@@ -75,6 +77,8 @@ examples/model.rs   renders the model in several poses to a BMP
 | Shading, light | stand-in (D3D RM not copied) | render |
 | Connect form fields and defaults (Stefan, loopback, 14901, guest / guest) | fact (Graal_analysis `graal3d/README.md`, `TConnectFrame`) | start_window |
 | Connect form layout and button names | stand-in (positions not read) | start_window |
+| F1 / F2 window names and fields; fixed UDP port default 14898 | fact (Graal_analysis `graal3d/README.md`, `formats.md`) | options, session::Udp |
+| F1 / F2 layout, OK / Cancel, UDP options used from the next connect, look sent at once | stand-in (handlers not read) | options, main.rs |
 
 ## Open tasks
 
@@ -95,9 +99,12 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 - **G3D-3 Torque 3D servers** (not this crate; held): Ato Stage 4, until a
   capture of a 3.x/4.x Torque connect exists. See
   `documentation/ato-3d-path.md`.
-- **G3D-4 Options windows (M1).** F1 "Hardware options" (fixed UDP port, no
-  UDP) and F2 "Player look" (props 6–11, 17), written back with
-  `Config::to_text`. Needs `Session::connect` to take a fixed UDP port.
+- **G3D-4 Options windows (M1). Done.** `options.rs`: F1 "Hardware
+  options" (fixed UDP port, "Don't use UDP"; `session::Udp`, used from the
+  next connect) and F2 "Player look" (props 6–8, 10, 11, 17; sent in the
+  next props diff). OK writes `graal3dconfig.txt` back with
+  `Config::to_text_over`, which keeps a saved `password` line and `\r\n`
+  line ends. The session keeps ticking while a window is open.
 - **G3D-5 Admin session (M2).** `--admin`: log in with `admin::login`, show
   the account list (50) and player list (55), send 61–64 from `admin.rs`.
   The account-record layout for 52/53/60 needs a lab capture first.

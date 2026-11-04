@@ -5,7 +5,8 @@
 //! Seihai reads it from the asset folder for the player's look and the UDP
 //! options. The server address in the shipped file is a 2000-era public
 //! host: Seihai parses it but never connects to it on its own; the server
-//! always comes from `--online`.
+//! comes from `--online` or the start window. The F1 and F2 windows
+//! (`options.rs`) edit the rest and write it back.
 
 use crate::props::Player;
 
@@ -98,8 +99,27 @@ impl Config {
         p.hand_colour = self.hand_colour;
     }
 
-    /// The file text, in the shipped key order.
-    // TODO(G3D-4): the F2 "Player look" window writes this back.
+    /// The text to write over `existing` (the file as it is on disk now):
+    /// [`Config::to_text`], plus any `password` line of `existing` kept as
+    /// it was. Seihai never writes a password of its own, but the write-back
+    /// from the option windows must not drop one the player saved. Windows
+    /// line ends (`\r\n`, as the shipped file has) are kept.
+    pub fn to_text_over(&self, existing: &str) -> String {
+        let mut out = self.to_text();
+        for line in existing.lines() {
+            if line.split_once('=').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("password")) {
+                out += line;
+                out.push('\n');
+            }
+        }
+        if existing.contains("\r\n") {
+            out = out.replace('\n', "\r\n");
+        }
+        out
+    }
+
+    /// The file text, in the shipped key order. The option windows
+    /// (`options.rs`) write it back through [`Config::to_text_over`].
     pub fn to_text(&self) -> String {
         let mut out = String::new();
         if let Some(a) = &self.server_addr {
@@ -147,5 +167,19 @@ mod tests {
         assert_eq!((p.arm_colour, p.shoe_colour, p.body_texture.as_str()), (0x00FF00, 0x800000, "body1.bmp"));
         assert!(!c.to_text().contains("secret"));
         assert!(c.to_text().ends_with("foo=bar\n"));
+    }
+
+    #[test]
+    fn a_write_back_keeps_the_saved_password_line() {
+        let existing = "noudp=false\npassword=kept\nPassword = also\n";
+        let mut c = Config::parse(existing);
+        c.no_udp = true;
+        let out = c.to_text_over(existing);
+        assert!(out.contains("noudp=true\n"));
+        assert!(out.ends_with("password=kept\nPassword = also\n"));
+        assert_eq!(Config::default().to_text_over(""), Config::default().to_text());
+        let crlf = c.to_text_over("noudp=false\r\npassword=kept\r\n");
+        assert!(crlf.contains("noudp=true\r\n"));
+        assert!(crlf.ends_with("password=kept\r\n") && !crlf.replace("\r\n", "").contains('\n'));
     }
 }
