@@ -1,0 +1,30 @@
+name: CI
+
+# Pull request and main-branch checks on all three platforms.
+# Releases stay in release.yml (tags and manual runs only).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Keep text fixtures (levels, ganis, scripts) byte-for-byte on Windows.
+      - name: No line-ending conversion
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Linux audio headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --workspace
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
