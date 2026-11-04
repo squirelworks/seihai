@@ -35,6 +35,11 @@ Seihai's, since the client's positions were not read, and it never offers
 the server address in `graal3dconfig.txt`. `--no-window` and `--screenshot`
 still need `--online`.
 
+In the `seihai` start window, "Graal3D (February 2000, own server)" at the
+end of the Version list closes it and opens this connect form, with the
+account and password from that window (an empty one keeps the client's
+default) and the asset folder set for Graal3D there.
+
 The port defaults to the shipped server's. `--assets` is a Graal3D install
 folder: the protocol never sends textures or the player meshes, so they
 come from there (as they did for the real client). Without it the level
