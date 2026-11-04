@@ -333,8 +333,12 @@ fn cli_paint_writes_a_new_file_and_leaves_the_input_alone() {
     assert_eq!(doc.tile(4, 5), Some(0x1F0));
     assert_eq!(doc.tile(6, 6), Some(0x1F0));
     assert_ne!(doc.tile(7, 6), Some(0x1F0));
-    // in place, on a copy
-    let copy = scratch("cli-inplace.nw");
+    // in place, on a copy in a folder of its own: other tests save into
+    // the shared scratch folder at the same time, and each save writes a
+    // short-lived temporary file there
+    let own = scratch("cli-inplace");
+    std::fs::create_dir_all(&own).unwrap();
+    let copy = own.join("cli-inplace.nw");
     std::fs::copy(&input, &copy).unwrap();
     assert!(run(&["paint", copy.to_str().unwrap(), "0", "0", "1", "1", "77", "--in-place"]).status.success());
     assert_eq!(Document::open(&copy).unwrap().tile(0, 0), Some(77));
