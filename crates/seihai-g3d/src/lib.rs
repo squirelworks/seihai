@@ -19,6 +19,7 @@
 //!   walking, jumping and the follow camera.
 //! - [`model`]: the player model and its walk animation.
 //! - [`view`]: the scene: level, players and the chat log.
+//! - [`start_window`]: the connect form shown when no server is given.
 
 pub mod admin;
 pub mod bmp;
@@ -28,6 +29,7 @@ pub mod model;
 pub mod props;
 pub mod render;
 pub mod session;
+pub mod start_window;
 pub mod view;
 pub mod world;
 pub mod xfile;
