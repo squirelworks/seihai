@@ -51,13 +51,20 @@ impl StallWatch {
             loop {
                 std::thread::sleep(CHECK_EVERY.min(limit));
                 let Some(s) = weak.upgrade() else { return };
+                // Read the pause flag before the last mark. `resume` marks
+                // first and then clears the flag, so a cleared flag means
+                // the resume mark is already visible here. Read the other
+                // way round, a resume landing between the two reads paired
+                // the old mark with "not paused" and reported the modal
+                // window's time as a stall.
+                let paused = s.paused.load(Ordering::Acquire);
                 let last = s.last_ms.load(Ordering::Acquire);
                 let now = s.start.elapsed().as_millis() as u64;
                 if let Some(r) = reported.filter(|&r| r != last) {
                     report(&format!("main loop: moved on after {:.1} s", (last.saturating_sub(r)) as f64 / 1000.0));
                     reported = None;
                 }
-                if s.paused.load(Ordering::Acquire) {
+                if paused {
                     continue;
                 }
                 if reported.is_none() && now.saturating_sub(last) >= limit.as_millis() as u64 {
