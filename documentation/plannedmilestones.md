@@ -40,7 +40,7 @@ Analysis for the first two is ready; code still uses stand-ins.
   `collision.md`).
 - [x] **G3D-2** Camera height, look point and field 0.5 / ~53.13° from
   `camera.md` (replace `CameraRig` stand-ins).
-- [ ] **G3D-4** F1 hardware options and F2 player look; write
+- [x] **G3D-4** F1 hardware options and F2 player look; write
   `graal3dconfig.txt`.
 - [x] **G3D-6** Draw without `--assets` (coloured boxes; name missing files).
 - [x] **G3D-7** Connect window and launcher "Graal3D" entry.

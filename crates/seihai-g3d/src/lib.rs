@@ -20,12 +20,14 @@
 //! - [`model`]: the player model and its walk animation.
 //! - [`view`]: the scene: level, players and the chat log.
 //! - [`start_window`]: the connect form shown when no server is given.
+//! - [`options`]: the F1 "Hardware options" and F2 "Player look" windows.
 
 pub mod admin;
 pub mod bmp;
 pub mod codec;
 pub mod config;
 pub mod model;
+pub mod options;
 pub mod props;
 pub mod render;
 pub mod session;

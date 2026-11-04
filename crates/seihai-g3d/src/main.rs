@@ -15,7 +15,10 @@
 //! With a window: numpad 8 / 2 (or Up / Down) walk forward and back,
 //! numpad 4 / 6 (or Left / Right) step sideways, numpad 5 (or Space)
 //! jumps, numpad 0 turns the follow camera off and on, Enter opens and
-//! sends the chat line, Esc closes it or quits.
+//! sends the chat line, Esc closes it or quits. F1 opens "Hardware
+//! options" (fixed UDP port, "Don't use UDP"; used from the next connect)
+//! and F2 "Player look" (models, body texture and colours; sent at once).
+//! Both write `graal3dconfig.txt` in `--assets` back on OK.
 //!
 //! `--assets` is the Graal3D folder (textures and player meshes; the
 //! server sends neither). `--no-window` only logs. `--screenshot` renders
@@ -23,9 +26,10 @@
 //! `--turn` steps right), writes it as a BMP and exits.
 
 use seihai_g3d::config::Config;
+use seihai_g3d::options::{self, Page};
 use seihai_g3d::props::Player;
 use seihai_g3d::render::Frame;
-use seihai_g3d::session::{self, Event, Login, Session, TICK};
+use seihai_g3d::session::{self, Event, Login, Session, Udp, TICK};
 use seihai_g3d::start_window;
 use seihai_g3d::view::{self, Assets, ChatLog, Scene, HEIGHT, WIDTH};
 use seihai_g3d::world::{FollowCam, Ground, Input, Walker};
@@ -142,15 +146,13 @@ fn main() -> ExitCode {
     let assets = a.assets.as_ref().map(PathBuf::from);
     // The look and UDP options from the install's graal3dconfig.txt. Its
     // server address is never used: the server is --online or the one
-    // typed in the start window.
-    // TODO(G3D-4): fixedport / fixedudpport (bind UDP to a set port).
-    let cfg = assets.as_ref().and_then(|d| std::fs::read_to_string(d.join("graal3dconfig.txt")).ok()).map(|t| Config::parse(&t));
-    if let Some(c) = &cfg {
-        c.apply_look(&mut me);
-    }
-    let no_udp = a.no_udp || cfg.as_ref().is_some_and(|c| c.no_udp);
+    // typed in the start window. Without the file, the shipped values.
+    let cfg_path = assets.as_ref().map(|d| d.join(CONFIG_FILE));
+    let cfg = cfg_path.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| Config::parse(&t)).unwrap_or_default();
+    cfg.apply_look(&mut me);
+    let udp = Udp::from_options(a.no_udp || cfg.no_udp, cfg.fixed_port, cfg.fixed_udp_port);
     let dir = a.levels.clone().map(Into::into).unwrap_or_else(|| session::default_level_dir(assets.as_deref()));
-    let s = match Session::connect(&addr, &Login { account, password }, me, !no_udp, Some(dir.clone())) {
+    let s = match Session::connect(&addr, &Login { account, password }, me, udp, Some(dir.clone())) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("seihai-g3d: {addr}: {e}");
@@ -166,7 +168,23 @@ fn main() -> ExitCode {
     } else if let Some(out) = &a.screenshot {
         screenshot(&a, &mut g, out)
     } else {
-        windowed(&mut g)
+        windowed(&mut g, cfg, cfg_path)
+    }
+}
+
+/// The client's settings file, in the Graal3D folder.
+const CONFIG_FILE: &str = "graal3dconfig.txt";
+
+/// Write the options back over the file, keeping a saved password line.
+fn save_config(c: &Config, path: Option<&PathBuf>) {
+    let Some(path) = path else {
+        println!("options: no --assets folder, so {CONFIG_FILE} is not written");
+        return;
+    };
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    match std::fs::write(path, c.to_text_over(&existing)) {
+        Ok(()) => println!("options: saved {}", path.display()),
+        Err(e) => eprintln!("seihai-g3d: {}: {e}", path.display()),
     }
 }
 
@@ -370,7 +388,7 @@ impl minifb::InputCallback for TypedChars {
     }
 }
 
-fn windowed(g: &mut Game) -> ExitCode {
+fn windowed(g: &mut Game, mut cfg: Config, cfg_path: Option<PathBuf>) -> ExitCode {
     use minifb::{Key, KeyRepeat, Window, WindowOptions};
     let mut w = match Window::new("Seihai G3D", WIDTH, HEIGHT, WindowOptions { resize: true, ..WindowOptions::default() }) {
         Ok(w) => w,
@@ -407,6 +425,45 @@ fn windowed(g: &mut Game) -> ExitCode {
         }
         if typing.is_none() && w.is_key_pressed(Key::NumPad0, KeyRepeat::No) {
             g.follow = !g.follow;
+        }
+        let page = if typing.is_some() {
+            None
+        } else if w.is_key_pressed(Key::F1, KeyRepeat::No) {
+            Some(Page::Hardware)
+        } else if w.is_key_pressed(Key::F2, KeyRepeat::No) {
+            Some(Page::Look)
+        } else {
+            None
+        };
+        if let Some(page) = page {
+            // The session keeps ticking (standing still) while it is open.
+            let mut keepalive = || match g.tick(Input::default()) {
+                Ok(ev) => {
+                    ev.iter().for_each(|e| log(&g.s, e));
+                    !g.s.is_closed()
+                }
+                Err(e) => {
+                    eprintln!("seihai-g3d: {e}");
+                    g.failed = true;
+                    false
+                }
+            };
+            match options::run(page, &cfg, &mut keepalive) {
+                Ok(Some(c)) => {
+                    if page == Page::Look {
+                        c.apply_look(&mut g.s.me);
+                    }
+                    cfg = c;
+                    save_config(&cfg, cfg_path.as_ref());
+                }
+                Ok(None) => {}
+                Err(e) => eprintln!("seihai-g3d: the {} window: {e}", page.title()),
+            }
+            if g.failed || g.s.is_closed() {
+                break;
+            }
+            next = Instant::now();
+            continue;
         }
         let held = |k: &[Key]| typing.is_none() && k.iter().any(|&k| w.is_key_down(k));
         let inp = Input {

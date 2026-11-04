@@ -98,6 +98,29 @@ pub struct LevelFile {
     pub error: Option<String>,
 }
 
+/// How the peer-to-peer UDP socket is bound: the "Hardware options"
+/// (`noudp`, `fixedport`, `fixedudpport` in `graal3dconfig.txt`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Udp {
+    /// "Don't use UDP": no socket, prop 15 is 0.
+    Off,
+    /// Any free port (the default).
+    Any,
+    /// The fixed UDP port, for a router or firewall that forwards one port.
+    Fixed(u16),
+}
+
+impl Udp {
+    /// From the file's three keys; "Don't use UDP" wins.
+    pub fn from_options(no_udp: bool, fixed: bool, port: u16) -> Udp {
+        match (no_udp, fixed) {
+            (true, _) => Udp::Off,
+            (false, true) => Udp::Fixed(port),
+            (false, false) => Udp::Any,
+        }
+    }
+}
+
 /// What the client logs in with.
 #[derive(Debug, Clone, Default)]
 pub struct Login {
@@ -123,13 +146,13 @@ pub struct Session {
 }
 
 impl Session {
-    /// Connect, bind UDP (unless `udp` is false) and send the login with
+    /// Connect, bind UDP (as `udp` says) and send the login with
     /// the first props line in one frame, as the real client does.
     pub fn connect(
         addr: &str,
         login: &Login,
         mut me: Player,
-        udp: bool,
+        udp: Udp,
         level_dir: Option<PathBuf>,
     ) -> io::Result<Session> {
         let target = addr.to_socket_addrs()?.next().ok_or_else(|| {
@@ -138,18 +161,32 @@ impl Session {
         let tcp = TcpStream::connect_timeout(&target, Duration::from_secs(10))?;
         tcp.set_nodelay(true)?;
         tcp.set_read_timeout(Some(TICK))?;
-        let udp = if udp {
-            let bind: SocketAddr = match target.ip() {
-                IpAddr::V4(_) => (Ipv4Addr::UNSPECIFIED, 0).into(),
-                IpAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, 0).into(),
-            };
-            let s = UdpSocket::bind(bind)?;
-            s.set_nonblocking(true)?;
-            me.udp_port = s.local_addr()?.port() as u32;
-            Some(s)
-        } else {
-            me.udp_port = 0;
-            None
+        let port = match udp {
+            Udp::Off => None,
+            Udp::Any => Some(0),
+            Udp::Fixed(p) => Some(p),
+        };
+        let udp = match port {
+            Some(port) => {
+                let bind: SocketAddr = match target.ip() {
+                    IpAddr::V4(_) => (Ipv4Addr::UNSPECIFIED, port).into(),
+                    IpAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, port).into(),
+                };
+                let s = UdpSocket::bind(bind).map_err(|e| {
+                    if port == 0 {
+                        e
+                    } else {
+                        io::Error::new(e.kind(), format!("fixed UDP port {port}: {e}"))
+                    }
+                })?;
+                s.set_nonblocking(true)?;
+                me.udp_port = s.local_addr()?.port() as u32;
+                Some(s)
+            }
+            None => {
+                me.udp_port = 0;
+                None
+            }
         };
         let mut s = Session {
             tcp,
@@ -515,7 +552,7 @@ mod tests {
             account: "alice".into(),
             password: "pw1".into(),
         };
-        let mut s = Session::connect(&addr, &login, me, false, None).unwrap();
+        let mut s = Session::connect(&addr, &login, me, Udp::Off, None).unwrap();
         let mut ev = Vec::new();
         for _ in 0..40 {
             ev.extend(s.tick().unwrap());
@@ -550,5 +587,27 @@ mod tests {
             udp: false
         }));
         assert!(ev.contains(&Event::PlayerLeft { id: 2 }));
+    }
+
+    #[test]
+    fn udp_options() {
+        assert_eq!(Udp::from_options(true, true, 14898), Udp::Off);
+        assert_eq!(Udp::from_options(false, true, 14898), Udp::Fixed(14898));
+        assert_eq!(Udp::from_options(false, false, 14898), Udp::Any);
+    }
+
+    #[test]
+    fn a_fixed_udp_port_is_bound_and_sent() {
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap().to_string();
+        let free = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let s = Session::connect(&addr, &Login::default(), Player::default(), Udp::Fixed(free), None).unwrap();
+        assert_eq!(s.me.udp_port, free as u32);
+        // The port is taken now: a second client with the same fixed port
+        // is refused with the port named.
+        let e = Session::connect(&addr, &Login::default(), Player::default(), Udp::Fixed(free), None).err().unwrap();
+        assert!(e.to_string().contains(&format!("fixed UDP port {free}")), "{e}");
+        let off = Session::connect(&addr, &Login::default(), Player::default(), Udp::Off, None).unwrap();
+        assert_eq!(off.me.udp_port, 0);
     }
 }
