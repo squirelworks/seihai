@@ -67,8 +67,9 @@ pub struct Camera {
 pub const NEAR: f32 = 2.0;
 
 impl Camera {
-    /// A camera at `pos` looking at `target`, with a horizontal field of
-    /// view of `fov_deg` on a frame `w` pixels wide.
+    /// A camera at `pos` looking at `target`, with a field of view of
+    /// `fov_deg` across `w` pixels (the frame's longer side, which is how
+    /// Direct3D Retained Mode scales its square window).
     pub fn look_at(pos: V3, target: V3, fov_deg: f32, w: usize) -> Camera {
         let fwd = norm(sub(target, pos));
         let right = norm(cross([0.0, 1.0, 0.0], fwd));

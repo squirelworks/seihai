@@ -12,8 +12,8 @@
 //! - [`Collider`]: what the walker asks of the level. [`Ground`] is
 //!   Seihai's stand-in; a port of the real face test implements the same
 //!   trait and replaces it in `main.rs` without touching [`Walker`].
-//! - [`CameraRig`]: the follow camera's numbers. Distance and turn rate
-//!   are the client's; height, look point and field of view are stand-ins.
+//! - [`CameraRig`]: the follow camera's numbers, all the client's
+//!   (Graal_analysis `graal3d/camera.md`).
 
 use crate::props::Player;
 use crate::render::V3;
@@ -33,31 +33,39 @@ pub const FALL: f32 = 10.0;
 /// that blocks (Seihai's choices).
 pub const STEP: f32 = 16.0;
 pub const BODY: f32 = 50.0;
-/// Follow camera distance (the client's).
+/// Follow camera distance.
 pub const CAM_DIST: f32 = 220.0;
-/// Follow camera turn per tick, in degrees (the client's).
+/// Follow camera turn per tick, in degrees.
 pub const CAM_TURN: f32 = 5.0;
-/// Camera height over the player's feet, and the point it looks at.
-/// TODO(G3D-2): stand-ins; read the real values from the client's camera
-/// routine and replace them here.
-pub const CAM_HEIGHT: f32 = 70.0;
-pub const LOOK_HEIGHT: f32 = 25.0;
+/// The height over the player that the camera follows on y.
+pub const CAM_HEIGHT: f32 = 80.0;
+/// The camera closes a tenth of its y gap per tick.
+pub const CAM_Y_RATE: f32 = 0.1;
+/// After aiming at the player the camera turns by −0.15 rad about its own
+/// x axis. Direct3D Retained Mode is left-handed, so that lifts the view.
+pub const CAM_PITCH: f32 = -0.15;
+/// The client never sets the viewport field, so it keeps the library's
+/// initial 0.5: a square window of ±0.5 on the front plane at 1, which
+/// opens 2 × atan(0.5) ≈ 53.13° on each axis.
+pub const CAM_FOV: f32 = 53.1301;
 
-/// The follow camera's numbers in one place, so a faithful set can
-/// replace the stand-ins without touching the camera code.
+/// The follow camera's numbers in one place. All are the client's
+/// (Graal_analysis `graal3d/camera.md`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CameraRig {
     pub distance: f32,
     pub turn: f32,
     pub height: f32,
-    pub look_height: f32,
-    /// Horizontal field of view in degrees. TODO(G3D-2): stand-in.
+    pub y_rate: f32,
+    /// Radians about the camera's x axis after aiming at the player.
+    pub pitch: f32,
+    /// Field of view in degrees across the frame's longer side.
     pub fov: f32,
 }
 
 impl Default for CameraRig {
     fn default() -> Self {
-        CameraRig { distance: CAM_DIST, turn: CAM_TURN, height: CAM_HEIGHT, look_height: LOOK_HEIGHT, fov: 70.0 }
+        CameraRig { distance: CAM_DIST, turn: CAM_TURN, height: CAM_HEIGHT, y_rate: CAM_Y_RATE, pitch: CAM_PITCH, fov: CAM_FOV }
     }
 }
 
@@ -176,14 +184,17 @@ impl FollowCam {
         let (dx, dz) = (p.x - self.pos[0], p.z - self.pos[2]);
         let d = (dx * dx + dz * dz).sqrt();
         if d > 1e-3 {
-            // Close the gap by ((d − 220) / 220)² / 10 of it per tick.
+            // Close the gap by ((d − 220) / 220)² / 10 of it per tick; the
+            // client skips the move when that factor is 0 or at least 100.
             let gap = d - self.rig.distance;
-            let k = ((gap / self.rig.distance).powi(2) / 10.0).min(1.0);
-            let step = gap.signum() * gap.abs().max(1.0) * k.max(0.02);
-            self.pos[0] += dx / d * step.clamp(-d, d);
-            self.pos[2] += dz / d * step.clamp(-d, d);
+            let k = (gap / self.rig.distance).powi(2) / 10.0;
+            if k > 0.0 && k < 100.0 {
+                let step = (gap * k).clamp(-d, d);
+                self.pos[0] += dx / d * step;
+                self.pos[2] += dz / d * step;
+            }
         }
-        self.pos[1] += (p.y + self.rig.height - self.pos[1]) * 0.3;
+        self.pos[1] += (p.y + self.rig.height - self.pos[1]) * self.rig.y_rate;
         let want = dx.atan2(dz).to_degrees();
         let mut turn = (want - self.yaw + 540.0).rem_euclid(360.0) - 180.0;
         let max = if turn.abs() > 90.0 { self.rig.turn * 3.0 } else { self.rig.turn };
@@ -191,10 +202,17 @@ impl FollowCam {
         self.yaw = (self.yaw + turn).rem_euclid(360.0);
     }
 
+    /// The point the view looks at: aimed at the player's position, then
+    /// turned by the rig's pitch about the camera's own x axis. A negative
+    /// pitch lifts the view (left-handed axes).
     pub fn target(&self, p: &Player) -> V3 {
-        let (s, c) = self.yaw.to_radians().sin_cos();
+        let (dx, dy, dz) = (p.x - self.pos[0], p.y - self.pos[1], p.z - self.pos[2]);
+        let h = (dx * dx + dz * dz).sqrt();
+        let (hx, hz) = if h > 1e-3 { (dx / h, dz / h) } else { self.yaw.to_radians().sin_cos() };
+        let elev = dy.atan2(h) - self.rig.pitch;
+        let (s, c) = elev.sin_cos();
         let d = self.rig.distance;
-        [self.pos[0] + s * d, p.y + self.rig.look_height, self.pos[2] + c * d]
+        [self.pos[0] + hx * c * d, self.pos[1] + s * d, self.pos[2] + hz * c * d]
     }
 }
 
@@ -416,13 +434,52 @@ mod tests {
     }
 
     #[test]
-    fn camera_keeps_its_distance() {
-        let p = Player { x: 0.0, z: 0.0, ..Player::default() };
-        let mut c = FollowCam { pos: [0.0, 70.0, -600.0], yaw: 0.0, rig: CameraRig::default() };
+    fn camera_closes_the_gap_by_the_clients_factor() {
+        let p = Player::default();
+        let mut c = FollowCam { pos: [0.0, 80.0, -600.0], yaw: 0.0, rig: CameraRig::default() };
+        // First tick: gap 380, factor (380 / 220)² / 10.
+        c.tick(&p);
+        let k = (380.0f32 / 220.0).powi(2) / 10.0;
+        assert!((c.pos[2] - (-600.0 + 380.0 * k)).abs() < 1e-3, "{}", c.pos[2]);
+        // It never overshoots, and the factor shrinks with the gap, so the
+        // last stretch is slow.
+        let mut last = -c.pos[2];
         for _ in 0..400 {
             c.tick(&p);
+            let d = -c.pos[2];
+            assert!(d < last && d > CAM_DIST, "{d}");
+            last = d;
         }
-        let d = (c.pos[0].powi(2) + c.pos[2].powi(2)).sqrt();
-        assert!((d - CAM_DIST).abs() < 15.0, "{d}");
+        assert!((last - 244.4).abs() < 0.5, "{last}");
+        // At exactly 220 the factor is 0 and the camera stays put.
+        let mut still = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        still.tick(&p);
+        assert_eq!(still.pos[2], -CAM_DIST);
+    }
+
+    #[test]
+    fn camera_follows_80_above_by_a_tenth_a_tick() {
+        let p = Player { y: 100.0, ..Player::default() };
+        let mut c = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        c.tick(&p);
+        assert!((c.pos[1] - 90.0).abs() < 1e-4, "{}", c.pos[1]);
+        assert_eq!(FollowCam::behind(&Player::default()).pos[1], 80.0);
+    }
+
+    #[test]
+    fn view_aims_at_the_player_then_lifts_by_the_pitch() {
+        let p = Player::default();
+        let c = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        let t = c.target(&p);
+        let (dy, dz) = (t[1] - c.pos[1], t[2] - c.pos[2]);
+        let to_player = (-80.0f32).atan2(CAM_DIST);
+        assert!((dy.atan2(dz) - (to_player + 0.15)).abs() < 1e-4);
+        assert!(t[0].abs() < 1e-4);
+    }
+
+    #[test]
+    fn field_is_the_library_default() {
+        assert!((CAM_FOV - 2.0 * 0.5f32.atan().to_degrees()).abs() < 1e-3);
+        assert_eq!(CameraRig::default().fov, CAM_FOV);
     }
 }

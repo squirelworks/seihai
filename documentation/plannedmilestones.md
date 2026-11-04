@@ -38,7 +38,7 @@ Analysis for the first two is ready; code still uses stand-ins.
 
 - [ ] **G3D-1** Faithful per-face collision (`world::Collider` from
   `collision.md`).
-- [ ] **G3D-2** Camera height, look point and field 0.5 / ~53.13° from
+- [x] **G3D-2** Camera height, look point and field 0.5 / ~53.13° from
   `camera.md` (replace `CameraRig` stand-ins).
 - [ ] **G3D-4** F1 hardware options and F2 player look; write
   `graal3dconfig.txt`.

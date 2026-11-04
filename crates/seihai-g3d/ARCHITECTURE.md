@@ -64,7 +64,8 @@ examples/model.rs   renders the model in several poses to a BMP
 | Hand frames are children of the arms | inferred from mesh coordinates | model |
 | Walk speeds, run delay, jump table, back-walk rule | fact (client binary) | world |
 | Camera distance 220 and 5°/tick turn | fact | world::CameraRig |
-| Camera height, look point, field of view | **stand-in in code** (G3D-2); numbers are in Graal_analysis `graal3d/camera.md` | world::CameraRig |
+| Camera height 80, y follow 1/10, pitch −0.15 rad, field 0.5 (~53.13°) | fact (Graal_analysis `graal3d/camera.md`; the field is the library default) | world::CameraRig |
+| Camera aims at the player's feet | inferred (player frame origin not read) | world::FollowCam::target |
 | Collision | **stand-in in code** (G3D-1); rule is in Graal_analysis `graal3d/collision.md` | world::Ground via Collider |
 | Prop 5 back to 0 when stopping | stand-in | world::Walker |
 | Shading, light | stand-in (D3D RM not copied) | render |
@@ -82,10 +83,9 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
   delete it. Done when the new collider passes the existing walker tests
   that still hold, plus tests for the real rule, and the lab screenshot
   walk still works.
-- **G3D-2 Camera numbers (M1).** Plain behaviour is in Graal_analysis
-  `graal3d/camera.md` (#163): follow 220, look height +80, turn ±5°/tick,
-  pitch −0.15 rad, field 0.5 (~53.13°). Set them in `CameraRig::default()`.
-  Done when the TODOs are gone and a lab screenshot still looks sane.
+- **G3D-2 Camera numbers (M1). Done.** `CameraRig::default()` carries the
+  Graal_analysis `graal3d/camera.md` (#163) numbers. Live confirmation
+  under Wine still waits on G3D-8.
 - **G3D-3 Torque 3D servers** (not this crate; held): Ato Stage 4, until a
   capture of a 3.x/4.x Torque connect exists. See
   `documentation/ato-3d-path.md`.
