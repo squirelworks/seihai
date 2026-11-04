@@ -27,4 +27,4 @@ jobs:
       - name: Build
         run: cargo build --workspace
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
