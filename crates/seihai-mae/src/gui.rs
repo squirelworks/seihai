@@ -1,5 +1,6 @@
 //! Settings and connect window.
 
+use crate::ato::{Target, GRAAL3D_LABEL};
 use crate::net::Connection;
 use crate::protocol::offline_builds::{self, OfflineBuild};
 use crate::protocol::{ClientVersion, ServerList};
@@ -95,7 +96,8 @@ pub struct Launcher {
     direct: String,
     /// Asset folder for the selected version only.
     version_assets: String,
-    /// Set when a 3.x build was picked: the window closes and Ato starts.
+    /// Set when a 3.x build or Graal3D was picked: the window closes and
+    /// Ato or G3D starts.
     ato: Arc<Mutex<Option<crate::ato::Handoff>>>,
 }
 
@@ -165,20 +167,20 @@ impl Launcher {
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
-    /// A 3.x build was picked: save the form and close, so Ato starts with
-    /// it. The saved version stays the last classic one, so the next
-    /// settings window does not open on a build it cannot run.
-    fn hand_to_ato(&self, ctx: &egui::Context, version: ClientVersion) {
+    /// A 3.x build or Graal3D was picked: save the form and close, so Ato
+    /// or G3D starts with it. The saved version stays the last classic one,
+    /// so the next settings window does not open on a build it cannot run.
+    fn hand_to_ato(&self, ctx: &egui::Context, target: Target) {
         let mut s = Settings::load();
         s.account = Some(self.account.clone());
         s.password = Some(self.password.clone());
         s.assets = Some(self.assets.clone().into());
-        s.set_assets_for(version.label(), &self.version_assets);
+        s.set_assets_for(self.assets_label(), &self.version_assets);
         s.last_server = None;
         s.offline = None;
         s.save();
         *self.ato.lock().unwrap() = Some(crate::ato::Handoff {
-            version,
+            target,
             account: self.account.clone(),
             password: self.password.clone(),
             assets: Some(self.version_assets.clone()),
@@ -198,6 +200,9 @@ impl Launcher {
     /// The label the per-version asset folder is saved under: the offline
     /// build's own, so it never shares its `plays_as` row's folder.
     fn assets_label(&self) -> &str {
+        if self.version == GRAAL3D_LABEL {
+            return GRAAL3D_LABEL;
+        }
         self.offline_build().map_or(self.version_enum().label(), |b| b.label)
     }
 
@@ -321,6 +326,9 @@ impl eframe::App for Launcher {
                             ui.selectable_value(&mut self.version, b.label.to_string(), b.display());
                         }
                     }
+                    ui.separator();
+                    ui.selectable_value(&mut self.version, GRAAL3D_LABEL.to_string(), "Graal3D (February 2000, own server)")
+                        .on_hover_text("The standalone 3D side project, with its own server. Opens Seihai G3D's connect window.");
                 });
             ui.checkbox(&mut self.show_advanced, "All versions");
             if self.version != before {
@@ -331,8 +339,10 @@ impl eframe::App for Launcher {
                     .assets_for(&label)
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
-                if self.offline_build().is_none() && crate::ato::runs_in_ato(v) {
-                    self.hand_to_ato(ctx, v);
+                if self.version == GRAAL3D_LABEL {
+                    self.hand_to_ato(ctx, Target::Graal3D);
+                } else if self.offline_build().is_none() && crate::ato::runs_in_ato(v) {
+                    self.hand_to_ato(ctx, Target::Ato(v));
                 }
             }
             let profile = self.version_enum().profile();
@@ -458,8 +468,8 @@ fn run_inner(mut error: Option<String>) -> Option<String> {
                 Ok(Box::new(l))
             }),
         );
-        // A 3.x build was picked: Ato takes over. If it cannot start, the
-        // window comes back with the reason.
+        // A 3.x build or Graal3D was picked: Ato or G3D takes over. If it
+        // cannot start, the window comes back with the reason.
         let Some(handoff) = ato.lock().unwrap().take() else { return Settings::load().last_server };
         let why = handoff.start();
         eprintln!("seihai-mae: {why}");

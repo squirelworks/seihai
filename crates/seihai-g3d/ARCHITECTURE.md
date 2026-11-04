@@ -104,10 +104,12 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 - **G3D-6 Without assets (M1). Done.** `model::part_box` stands in for a
   missing part mesh, and `Assets::take_missing` names each missing file
   once (`main.rs` logs it).
-- **G3D-7 Start window (M1). Half done.** `start_window.rs` is the
-  client's connect form (nickname, host, port, account, password) in
-  egui; a window run without `--online` shows it first. Still open: the
-  launcher's GUI version list offering "Graal3D".
+- **G3D-7 Start window (M1). Done.** `start_window.rs` is the client's
+  connect form (nickname, host, port, account, password) in egui; a
+  window run without `--online` shows it first. "Graal3D" at the end of
+  the launcher's Version list starts `seihai-g3d` with the account,
+  password (in `SEIHAI_G3D_PASSWORD`) and that entry's asset folder
+  (`seihai-mae` `ato.rs`, `Target::Graal3D`).
 - **G3D-8 Lab with two real clients (M2).** Needs Microsoft's `d3drm.dll` in
   the Wine prefix (DirectX redistributable; the container's network policy
   blocked it). Then capture real UDP between two real clients and check

@@ -43,7 +43,7 @@ Analysis for the first two is ready; code still uses stand-ins.
 - [ ] **G3D-4** F1 hardware options and F2 player look; write
   `graal3dconfig.txt`.
 - [x] **G3D-6** Draw without `--assets` (coloured boxes; name missing files).
-- [ ] **G3D-7** Connect window and launcher "Graal3D" entry.
+- [x] **G3D-7** Connect window and launcher "Graal3D" entry.
 
 ### M2 — Admin and real-client lab
 
