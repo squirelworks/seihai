@@ -93,11 +93,13 @@ under Wine and, separately, the Graal_analysis reference server:
 | Walking | `world` | 8 units a tick, 12 after 25 ticks. Back alone walks backwards along the direction faced when the key went down. ±4000 on x and z. Starting to walk sets prop 5 to 0 or 20 at random, and each walking tick moves it on by one. |
 | Jumping | `world` | Up 10, 10, 9, 8, 6, 3, 1 a tick, then the table back down and 10 a tick until landing. Letting go early starts the fall at once. A new jump needs the key pressed again. |
 | Ground | `world` | Seihai's own rule, since the real face test was not read: stand on the highest upward face under the player no more than 16 above the feet, and refuse a step into a surface between 16 and 50 above them. |
-| Camera | `world` | Follows at 220 units, closing the gap by `((d − 220) / 220)² / 10` a tick and turning up to 5° a tick. The player's facing (prop 4) is the camera-to-player direction. The camera height and look point are Seihai's choices. |
+| Camera | `world` | Follows at 220 units, closing the gap by `((d − 220) / 220)² / 10` a tick (no move when that factor is 0 or at least 100) and turning up to 5° a tick. On y it closes a tenth of the gap to 80 above the player a tick. It aims at the player, then lifts the view by 0.15 rad. The field is the library default 0.5, about 53.13° across the frame's longer side. Numpad 0 stops the follow but not the aim. The player's facing (prop 4) is the camera-to-player direction. |
 | Chat log | `view` | `nick: text` at the bottom left, x 5, newest at the bottom, white, 10 s a line. There are no chat bubbles in Graal3D. |
 
 Seihai's choices where the binary wasn't read: prop 5 returns to 0 (the
-standing pose) when the player stops; the field of view; the light.
+standing pose) when the player stops; the light. The point the camera aims
+at is the player's feet position, since the client's player frame origin
+was not read.
 
 `cargo run -p seihai-g3d --example model -- GRAAL3D_FOLDER out.bmp` draws the
 model from the front and the side at walk times 0, 1, 11 and 21.

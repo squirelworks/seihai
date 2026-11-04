@@ -178,7 +178,7 @@ pub struct Scene<'a> {
 
 pub fn draw(f: &mut Frame, a: &mut Assets, s: Scene) {
     f.clear(SKY);
-    let cam = Camera::look_at(s.cam.pos, s.cam.target(s.me), s.cam.rig.fov, f.w);
+    let cam = Camera::look_at(s.cam.pos, s.cam.target(s.me), s.cam.rig.fov, f.w.max(f.h));
     if let Some(level) = s.level {
         for m in &level.meshes {
             draw_mesh(f, &cam, m, &Placement::world(), &a.textures);
