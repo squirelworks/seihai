@@ -16,12 +16,24 @@ server in Graal_analysis.
 ## Running it
 
 ```
+seihai --version graal3d [--nick N] [--account A] [--password-env VAR] \
+       [--assets GRAAL3D_FOLDER] [--levels DIR] [--no-udp]
 seihai --version graal3d --online HOST[:PORT] --account A --password-env VAR \
        [--nick N] [--assets GRAAL3D_FOLDER] [--levels DIR] [--no-udp]
 seihai-g3d ... --no-window [--first-level] [--say TEXT] [--walk TICKS] [--seconds N]
 seihai-g3d ... --screenshot FILE.bmp [--walk TICKS] [--turn TICKS] [--say TEXT]
 seihai-g3d --level-info FILE.x
 ```
+
+Without `--online`, the start window asks first, like the client's connect
+form: nickname, host, port, account and password, filled with the client's
+defaults (nickname `Stefan`, host `127.0.0.1`, port 14901, account and
+password `guest`) and with any of `--nick`, `--account` and
+`--password-env` given. Enter or Connect logs in; Esc, Quit or closing it
+exits. An empty nickname logs in as the account. The form's layout is
+Seihai's, since the client's positions were not read, and it never offers
+the server address in `graal3dconfig.txt`. `--no-window` and `--screenshot`
+still need `--online`.
 
 The port defaults to the shipped server's. `--assets` is a Graal3D install
 folder: the protocol never sends textures or the player meshes, so they

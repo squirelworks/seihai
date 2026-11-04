@@ -17,7 +17,10 @@ addresses, no decompiled code (project rule).
 
 ```
 main.rs      CLI, the Game struct (one tick = network + movement), the three
-             run modes: window (minifb), --no-window (log), --screenshot
+             run modes: window (minifb), --no-window (log), --screenshot.
+             Without --online a window run opens the start window first
+start_window.rs  the connect form (egui): nickname, host, port, account,
+             password, with the client's defaults
 lib.rs       module list
 codec.rs     +32 codec, u16 BE + zlib frames, Deframer, § line breaks
 props.rs     Prop enum (ids 0–17, 50, 51), Player state, Differ (per-tick
@@ -70,6 +73,8 @@ examples/model.rs   renders the model in several poses to a BMP
 | Prop 5 back to 0 when stopping | stand-in | world::Walker |
 | Boxes for missing part meshes, sizes from the shipped meshes | stand-in (the client has none) | model::part_box |
 | Shading, light | stand-in (D3D RM not copied) | render |
+| Connect form fields and defaults (Stefan, loopback, 14901, guest / guest) | fact (Graal_analysis `graal3d/README.md`, `TConnectFrame`) | start_window |
+| Connect form layout and button names | stand-in (positions not read) | start_window |
 
 ## Open tasks
 
@@ -99,9 +104,10 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 - **G3D-6 Without assets (M1). Done.** `model::part_box` stands in for a
   missing part mesh, and `Assets::take_missing` names each missing file
   once (`main.rs` logs it).
-- **G3D-7 Start window (M1).** The client's connect window (nickname, host,
-  port, account, password) in egui, like `seihai-ato`'s start window, and
-  the launcher's GUI version list offering "Graal3D".
+- **G3D-7 Start window (M1). Half done.** `start_window.rs` is the
+  client's connect form (nickname, host, port, account, password) in
+  egui; a window run without `--online` shows it first. Still open: the
+  launcher's GUI version list offering "Graal3D".
 - **G3D-8 Lab with two real clients (M2).** Needs Microsoft's `d3drm.dll` in
   the Wine prefix (DirectX redistributable; the container's network policy
   blocked it). Then capture real UDP between two real clients and check

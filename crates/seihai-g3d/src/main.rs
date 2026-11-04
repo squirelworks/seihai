@@ -1,10 +1,16 @@
 //! Seihai G3D — a client for Graal3D (February 2000).
 //!
+//!   seihai-g3d [--nick N] [--account A] [--password-env VAR] [--assets DIR] [--levels DIR] [--no-udp]
 //!   seihai-g3d --online host[:port] --account A --password-env VAR
 //!              [--nick N] [--assets DIR] [--levels DIR] [--no-udp]
 //!   seihai-g3d ... --no-window [--first-level] [--say TEXT] [--walk TICKS] [--seconds N]
 //!   seihai-g3d ... --screenshot FILE.bmp [--walk TICKS] [--turn TICKS]
 //!   seihai-g3d --level-info FILE.x
+//!
+//! Without `--online`, the start window (the client's connect form) asks
+//! for the nickname, host, port, account and password first, filled with
+//! the client's defaults and any of `--nick`, `--account` and
+//! `--password-env` given. Quit closes it without connecting.
 //!
 //! With a window: numpad 8 / 2 (or Up / Down) walk forward and back,
 //! numpad 4 / 6 (or Left / Right) step sideways, numpad 5 (or Space)
@@ -20,6 +26,7 @@ use seihai_g3d::config::Config;
 use seihai_g3d::props::Player;
 use seihai_g3d::render::Frame;
 use seihai_g3d::session::{self, Event, Login, Session, TICK};
+use seihai_g3d::start_window;
 use seihai_g3d::view::{self, Assets, ChatLog, Scene, HEIGHT, WIDTH};
 use seihai_g3d::world::{FollowCam, Ground, Input, Walker};
 use seihai_g3d::xfile::XFile;
@@ -99,17 +106,43 @@ fn main() -> ExitCode {
             }
         };
     }
-    let Some(addr) = a.online.as_deref().map(session::with_default_port) else {
+    let password = a.password_env.as_deref().and_then(|v| std::env::var(v).ok());
+    let (addr, account, password, nick) = if let Some(o) = a.online.as_deref() {
+        let account = a.account.clone().unwrap_or_else(|| "guest".into());
+        let nick = a.nick.clone().unwrap_or_else(|| account.clone());
+        (session::with_default_port(o), account, password.unwrap_or_default(), nick)
+    } else if a.no_window || a.screenshot.is_some() {
         eprintln!("seihai-g3d: needs --online host[:port] (or --level-info FILE)");
         return ExitCode::from(2);
+    } else {
+        let mut form = start_window::ConnectForm::default();
+        if let Some(acc) = &a.account {
+            form.account = acc.clone();
+            form.nick = a.nick.clone().unwrap_or_else(|| acc.clone());
+        }
+        if let Some(n) = &a.nick {
+            form.nick = n.clone();
+        }
+        if let Some(p) = password {
+            form.password = p;
+        }
+        let form = match start_window::run(form) {
+            Ok(Some(f)) => f,
+            Ok(None) => return ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("seihai-g3d: the start window: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let Ok(addr) = form.addr() else { return ExitCode::from(2) };
+        let nick = form.nick_or_account();
+        (addr, form.account.trim().to_string(), form.password, nick)
     };
-    let password = a.password_env.as_deref().and_then(|v| std::env::var(v).ok()).unwrap_or_default();
-    let account = a.account.clone().unwrap_or_else(|| "guest".into());
-    let nick = a.nick.clone().unwrap_or_else(|| account.clone());
     let mut me = Player { nick, ..Player::default() };
     let assets = a.assets.as_ref().map(PathBuf::from);
     // The look and UDP options from the install's graal3dconfig.txt. Its
-    // server address is never used: the server is always --online.
+    // server address is never used: the server is --online or the one
+    // typed in the start window.
     // TODO(G3D-4): fixedport / fixedudpport (bind UDP to a set port).
     let cfg = assets.as_ref().and_then(|d| std::fs::read_to_string(d.join("graal3dconfig.txt")).ok()).map(|t| Config::parse(&t));
     if let Some(c) = &cfg {
