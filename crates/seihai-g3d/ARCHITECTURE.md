@@ -67,6 +67,7 @@ examples/model.rs   renders the model in several poses to a BMP
 | Camera height, look point, field of view | **stand-in in code** (G3D-2); numbers are in Graal_analysis `graal3d/camera.md` | world::CameraRig |
 | Collision | **stand-in in code** (G3D-1); rule is in Graal_analysis `graal3d/collision.md` | world::Ground via Collider |
 | Prop 5 back to 0 when stopping | stand-in | world::Walker |
+| Boxes for missing part meshes, sizes from the shipped meshes | stand-in (the client has none) | model::part_box |
 | Shading, light | stand-in (D3D RM not copied) | render |
 
 ## Open tasks
@@ -95,8 +96,9 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 - **G3D-5 Admin session (M2).** `--admin`: log in with `admin::login`, show
   the account list (50) and player list (55), send 61–64 from `admin.rs`.
   The account-record layout for 52/53/60 needs a lab capture first.
-- **G3D-6 Without assets (M1).** Draw players as coloured boxes when the
-  meshes are missing, and say once which files are missing.
+- **G3D-6 Without assets (M1). Done.** `model::part_box` stands in for a
+  missing part mesh, and `Assets::take_missing` names each missing file
+  once (`main.rs` logs it).
 - **G3D-7 Start window (M1).** The client's connect window (nickname, host,
   port, account, password) in egui, like `seihai-ato`'s start window, and
   the launcher's GUI version list offering "Graal3D".

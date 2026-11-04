@@ -202,7 +202,16 @@ impl Game {
             cam.tick(&self.s.me);
         }
         self.chat.tick();
+        self.report_missing();
         Ok(ev)
+    }
+
+    /// Name each file the asset folders lack, once.
+    fn report_missing(&mut self) {
+        let missing = self.assets.take_missing();
+        if !missing.is_empty() {
+            eprintln!("seihai-g3d: not in the asset folders (drawn without them): {}", missing.join(", "));
+        }
     }
 
     fn say(&mut self, text: &str) {
@@ -227,6 +236,7 @@ impl Game {
             typing,
         };
         view::draw(f, &mut self.assets, scene);
+        self.report_missing();
     }
 }
 

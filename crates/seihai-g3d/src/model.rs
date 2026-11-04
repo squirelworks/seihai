@@ -13,6 +13,7 @@
 //! Keys are interpolated linearly (positions) and by slerp (rotations).
 
 use crate::render::{compose, Mat, IDENTITY, V3};
+use crate::xfile::{Material, Mesh};
 
 /// Which colour prop tints a part.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -163,6 +164,36 @@ fn rot_matrix(q: [f32; 4]) -> [[f32; 3]; 3] {
     [[m[0][0], m[1][0], m[2][0]], [m[0][1], m[1][1], m[2][1]], [m[0][2], m[1][2], m[2][2]]]
 }
 
+/// Each part's extent in its own frame, `[min, max]`, measured from the
+/// meshes shipped with Graal3D and rounded to whole units. Only used to
+/// stand in for a missing mesh (Seihai's choice; the client has no
+/// fallback).
+pub const BOXES: [[V3; 2]; 8] = [
+    [[-12.0, -4.0, -14.0], [12.0, 20.0, 14.0]],
+    [[-12.0, 4.0, -14.0], [12.0, 29.0, 4.0]],
+    [[-11.0, -14.0, -5.0], [1.0, 0.0, 5.0]],
+    [[-1.0, -14.0, -5.0], [11.0, 0.0, 5.0]],
+    [[-12.0, -18.0, -3.0], [-5.0, -10.0, 3.0]],
+    [[5.0, -18.0, -3.0], [12.0, -10.0, 3.0]],
+    [[-5.0, -8.0, -11.0], [5.0, -3.0, 7.0]],
+    [[-5.0, -8.0, -11.0], [5.0, -3.0, 7.0]],
+];
+
+/// A box mesh for part `i` (see [`BOXES`]), one white material.
+pub fn part_box(i: usize) -> Mesh {
+    let [lo, hi] = BOXES[i];
+    let vertices = (0..8).map(|k| [if k & 1 == 0 { lo[0] } else { hi[0] }, if k & 2 == 0 { lo[1] } else { hi[1] }, if k & 4 == 0 { lo[2] } else { hi[2] }]).collect();
+    let faces = vec![vec![0, 2, 3, 1], vec![4, 5, 7, 6], vec![0, 1, 5, 4], vec![2, 6, 7, 3], vec![0, 4, 6, 2], vec![1, 3, 7, 5]];
+    Mesh {
+        name: None,
+        vertices,
+        face_materials: vec![0; faces.len()],
+        faces,
+        materials: vec![Material { name: None, colour: [1.0; 4], texture: None }],
+        uvs: Vec::new(),
+    }
+}
+
 /// A part's own frame at time `t`, relative to its parent.
 pub fn local(p: &Part, t: f32) -> Mat {
     let pos: V3 = match between(p.pos, t) {
@@ -199,6 +230,21 @@ pub fn time(anim: u16) -> f32 {
 mod tests {
     use super::*;
     use crate::render::transform;
+
+    #[test]
+    fn part_boxes_cover_their_extent() {
+        for (i, [lo, hi]) in BOXES.iter().enumerate() {
+            let m = part_box(i);
+            assert_eq!((m.vertices.len(), m.faces.len()), (8, 6));
+            for k in 0..3 {
+                assert!(lo[k] < hi[k], "part {i} axis {k}");
+                assert!(m.vertices.iter().all(|v| v[k] == lo[k] || v[k] == hi[k]));
+            }
+        }
+        // The left and right parts mirror each other on x.
+        assert_eq!(BOXES[2][0][0], -BOXES[3][1][0]);
+        assert_eq!(BOXES[4][0][0], -BOXES[5][1][0]);
+    }
 
     #[test]
     fn standing_pose() {

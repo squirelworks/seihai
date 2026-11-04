@@ -3,8 +3,9 @@
 //! Files come from the asset folder (the Graal3D install: textures and
 //! the player meshes) and the level folder (levels the server sent). The
 //! protocol never sends textures or models, so without an asset folder
-//! the level draws in its material colours and players as their parts'
-//! colours where the meshes are missing.
+//! the level draws in its material colours and each player part whose
+//! mesh is missing draws as a coloured box ([`model::part_box`]). Each
+//! missing file is named once ([`Assets::take_missing`]).
 
 use crate::bmp::{self, Image};
 use crate::model::{self, Tint};
@@ -13,7 +14,7 @@ use crate::render::{draw_mesh, yaw_at, Camera, Frame, Placement};
 use crate::session::safe_file_name;
 use crate::world::{self, FollowCam};
 use crate::xfile::XFile;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[path = "../../seihai-mae/src/render/font.rs"]
@@ -32,12 +33,28 @@ pub struct Assets {
     dirs: Vec<PathBuf>,
     textures: HashMap<String, Image>,
     meshes: HashMap<String, Option<XFile>>,
+    /// Files looked for and not found (or not readable), lower case.
+    missing: HashSet<String>,
+    /// Those not yet handed out by [`Assets::take_missing`].
+    unreported: Vec<String>,
 }
 
 impl Assets {
     /// Look for files in these folders, first match wins.
     pub fn new(dirs: Vec<PathBuf>) -> Assets {
-        Assets { dirs, textures: HashMap::new(), meshes: HashMap::new() }
+        Assets { dirs, textures: HashMap::new(), meshes: HashMap::new(), missing: HashSet::new(), unreported: Vec::new() }
+    }
+
+    fn note_missing(&mut self, name: &str) {
+        let key = name.to_ascii_lowercase();
+        if self.missing.insert(key) {
+            self.unreported.push(name.to_string());
+        }
+    }
+
+    /// Files found missing since the last call, each named once per run.
+    pub fn take_missing(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.unreported)
     }
 
     fn read(&self, name: &str) -> Option<Vec<u8>> {
@@ -49,10 +66,13 @@ impl Assets {
         let key = name.to_ascii_lowercase();
         if !self.meshes.contains_key(&key) {
             let x = self.read(name).and_then(|b| XFile::parse(&b).ok());
-            if let Some(x) = &x {
-                for t in x.textures() {
-                    self.texture(&t);
+            match &x {
+                Some(x) => {
+                    for t in x.textures() {
+                        self.texture(&t);
+                    }
                 }
+                None => self.note_missing(name),
             }
             self.meshes.insert(key.clone(), x);
         }
@@ -61,11 +81,14 @@ impl Assets {
 
     fn texture(&mut self, name: &str) {
         let key = name.to_ascii_lowercase();
-        if self.textures.contains_key(&key) {
+        if key.is_empty() || self.textures.contains_key(&key) || self.missing.contains(&key) {
             return;
         }
-        if let Some(img) = self.read(name).and_then(|b| bmp::decode(&b).ok()) {
-            self.textures.insert(key, img);
+        match self.read(name).and_then(|b| bmp::decode(&b).ok()) {
+            Some(img) => {
+                self.textures.insert(key, img);
+            }
+            None => self.note_missing(name),
         }
     }
 
@@ -122,7 +145,13 @@ pub fn draw_player(f: &mut Frame, cam: &Camera, a: &mut Assets, p: &Player, lift
             Tint::Hand => Some(p.hand_colour),
             Tint::Shoe => Some(p.shoe_colour),
         };
-        let Some(x) = a.mesh(file).cloned() else { continue };
+        let Some(x) = a.mesh(file).cloned() else {
+            // No mesh: a box the part's size, in its tint colour (or the
+            // skin colour for the head, white for the body).
+            let colour = tint.unwrap_or(if i == model::HEAD { p.hand_colour } else { 0xFFFFFF });
+            draw_mesh(f, cam, &model::part_box(i), &Placement { m: pose[i], tint: Some(colour) }, &a.textures);
+            continue;
+        };
         for mut m in x.meshes {
             // Props 8 and 9 replace the body and head textures.
             if let Some(t) = tex {
@@ -201,5 +230,34 @@ pub fn text(f: &mut Frame, x: i32, y: i32, s: &str, c: u32) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn behind(p: &Player) -> Camera {
+        let cam = FollowCam::behind(p);
+        Camera::look_at(cam.pos, cam.target(p), cam.rig.fov, WIDTH)
+    }
+
+    #[test]
+    fn missing_meshes_draw_as_boxes_and_are_named_once() {
+        let mut a = Assets::new(vec![std::env::temp_dir().join("seihai-g3d-no-such-folder")]);
+        let p = Player::default();
+        let mut f = Frame::new(WIDTH, HEIGHT);
+        f.clear(SKY);
+        draw_player(&mut f, &behind(&p), &mut a, &p, 0.0);
+        let drawn = f.px.iter().filter(|&&c| c != SKY).count();
+        assert!(drawn > 500, "only {drawn} pixels drawn");
+        let missing = a.take_missing();
+        for m in ["head.x", "body.x", "armright.x", "footleft.x"] {
+            assert!(missing.iter().any(|n| n == m), "{m} not in {missing:?}");
+        }
+        assert!(!missing.iter().any(String::is_empty));
+        // Drawing again names nothing new.
+        draw_player(&mut f, &behind(&p), &mut a, &p, 0.0);
+        assert!(a.take_missing().is_empty());
     }
 }

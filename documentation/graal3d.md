@@ -26,7 +26,12 @@ seihai-g3d --level-info FILE.x
 The port defaults to the shipped server's. `--assets` is a Graal3D install
 folder: the protocol never sends textures or the player meshes, so they
 come from there (as they did for the real client). Without it the level
-draws in its material colours and players are not drawn.
+draws in its material colours and each player part whose mesh is missing
+draws as a box of the part's size, in its colour prop (the head in the hand
+colour, the body white). The log names each missing file once:
+`seihai-g3d: not in the asset folders (drawn without them): …`. The box
+sizes are Seihai's, measured from the shipped meshes; the real client has
+no such fallback.
 
 Each level file is saved in `--levels` (by default `levels/` in the asset
 folder, or a folder in the system temp directory). The server's level name
