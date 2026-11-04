@@ -14,16 +14,16 @@ choice where the client is not followed.
 
 - 3.153 handles id 131 (`PLO_NPCBYTECODE`), which 3.04 does not
   (`Graal_analysis/protocol/v3x-clients.md`). **[bin]**
-- Its loader (`FUN_003c9a80`) reads segment 4 and decodes the same
-  operand markers `F0`–`F6` with the same widths as `gs2-opcodes.md`. A
-  short operand ends the read. The writer just before it (`FUN_003c9230`)
-  emits a function table with `public.` names. **[bin]**
-- Its VM is `FUN_003dc954`. Its switch has a case for every opcode the
+- Its bytecode loader reads segment 4 and decodes the same operand
+  markers `F0`–`F6` with the same widths as `gs2-opcodes.md`. A short
+  operand ends the read. Next to it, the client has a writer that emits
+  a function table with `public.` names. **[bin]**
+- Its VM is a single dispatch loop. Its switch has a case for every opcode the
   gs2-parser compiler emits except 11 (`OP_WAITFOR`). It also has cases for
   45–47 and 66–67, which the compiler never emits (still stubs, see
   `gs2-commands.md`).
-  3.153 also contains a GS2 compiler of its own: a flex scanner in
-  `FUN_003f590c`. **[bin]**
+  3.153 also contains a GS2 compiler of its own, built on a flex
+  scanner. **[bin]**
 
 So the 3.153 receive path in Stage E can hand id 131's payload to the
 reader. The payload is read in `gs2-receive.md`.
@@ -57,7 +57,7 @@ The stack holds up to 256 entries. Each entry is a type tag (0 the
 | `OP_INC`, `OP_DEC` | change the variable on top, which stays there | bin |
 | arithmetic 60–65 | on the numbers in the two top entries. `x / 0` is 0 | bin |
 | `OP_NOT`, `OP_UNARYSUB`, `OP_ABS`, `OP_SIN`, `OP_COS`, `OP_ARCTAN` | on the top number | bin |
-| `OP_INT`, bitwise 76–79 | through the client's double-to-int conversion (`0x3d3ab8`), which rounds down: `int(-1.5)` is -2 | bin |
+| `OP_INT`, bitwise 76–79 | through the client's double-to-int conversion, which rounds down: `int(-1.5)` is -2 | bin |
 | `OP_RANDOM` | `S1 + r·(S0 − S1)`, `r` from the client's generator | bin |
 | `OP_MIN`, `OP_MAX` | the smaller or larger of the two by the comparison below | bin |
 | comparisons 70–75 | a three-way compare: two strings as text, two numbers as numbers within a small epsilon, a string against a number as the number it reads as | bin |
