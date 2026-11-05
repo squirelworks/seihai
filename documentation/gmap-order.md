@@ -102,7 +102,7 @@ the check.
 ## NPC props on entry for 2.22 (2026-10-31)
 
 2.22 sends NPC props under the 2.05 rule (`documentation/ledges-push-pull.md`): a prop goes out when it
-differs from the server's copy. Two Mirae captures of the real 2.22 settle it:
+differs from the server's copy. Two Windows PC captures of the real 2.22 settle it:
 
 * `lan-222r`, a direct login into `minipw.gmap` (about 23 s): no C>S `PLI_NPCPROPS` at all. Earlier
   sessions had already given the server the values the NPCs' scripts set, so nothing differed.
@@ -115,7 +115,7 @@ keeps the 2.05 rule like the other builds. The test `npc_entry` feeds the server
 `lan-222g` and checks that Seihai sends the real client's two messages byte for byte, in the server's order
 (warp NPC, then clothes NPC).
 
-**2.31 is different** (Mirae, 2026-10-31, `lan-231c`). On the same link into `testworld`, with the
+**2.31 is different** (Windows PC, 2026-10-31, `lan-231c`). On the same link into `testworld`, with the
 server's copy still lacking the looks and message, the real 2.31 sent no `PLI_NPCPROPS` anywhere in the
 run; its first frame after the level held only `TAMPERCHECK` and `PLAYERPROPS X2`. So on 2.31
 `ServerNpcSync::settle_first` is on: the first round after an NPC links only learns what its script set.
