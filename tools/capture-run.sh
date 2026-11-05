@@ -12,7 +12,7 @@
 #   --seihai PATH         the binary (default target/release/seihai)
 #   --out DIR             parent folder for the output (default _debug)
 #
-# Example: tools/capture-run.sh --target 192.168.1.20:14802 --version 2.05
+# Example: tools/capture-run.sh --target <gserver-host>:14802 --version 2.05
 #
 # Run it from the repo root. Needs tcpdump; sudo is used only when tcpdump
 # lacks capture rights. Seihai's debug folder (packets.log, script.log) is
