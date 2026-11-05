@@ -292,16 +292,22 @@ fn draw_hearts(fb: &mut Framebuffer, s: &Sheet, v: &HudValues) {
     }
 }
 
-/// A sword or glove power beside its icon. The client prints it in its
-/// world-text font; Seihai uses its own. [position from the routine, font
-/// inferred]
+/// A sword or glove power beside its icon. The client prints it in the
+/// `graalconfig.txt` font, the one it uses for names and chat (Tempus Sans
+/// ITC, cell 24, bold), white over a blue shadow: traced under Wine in the
+/// 2.0x and 2.1x builds (Graal_analysis
+/// `client-internals/rebuild-traces-2026-11-05.md`). Seihai still uses its
+/// own font here. [position from the routine, font traced]
 fn draw_small_number(fb: &mut Framebuffer, n: i32, x: i32, y: i32) {
     let text = n.to_string();
     fb.draw_text_outlined(x - text.len() as i32 * CELL_W / 2, y, &text, [0xFF, 0xFF, 0xFF]);
 }
 
-/// A key name on a button. The client uses 26 pt Helvetica, white with a
-/// black shadow one pixel down and right; Seihai doubles its own font.
+/// A key name on a button. The client asks for `Helvetica`, cell 26, bold
+/// (Windows gives Arial), and draws it black at +1, +1 and then white, with
+/// the text origin one pixel right of and two below the button's corner:
+/// (16, 32), (81, 32), (146, 32), traced under Wine in the 2.0x and 2.1x
+/// builds. Seihai doubles its own font.
 fn draw_big_letter(fb: &mut Framebuffer, c: char, x: i32, y: i32) {
     let g = glyph(c.to_ascii_uppercase());
     for (ox, oy, rgb) in [(1, 1, [0, 0, 0]), (0, 0, [0xFF, 0xFF, 0xFF])] {

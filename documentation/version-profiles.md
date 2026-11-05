@@ -114,3 +114,19 @@ Graal_analysis `version-profiles/matrix/` has the cross-era matrix (1998 to
 - Client→server and server→client sets for 2.1–2.16 and 2.3 are inferred (no binary); 2.22 ids 36, 42 and 45 are unmatched in the binary, so 2.22 does not send 36 or 45.
 - 2.31 keeps PLI 44 in its send set (a real 2.31 client answered the server's process-list request with it); Seihai never sends it.
 - 2.3 (inferred) has no tamper-check constant, so `--send-tampercheck` sends nothing for it.
+- Window caption: the rows give Seihai's own title ("Graal <version>",
+  with the server from 2.05). The real captions are "Graal" (1.x to 2.05),
+  `G r a a l` with random space padding offline in 2.22, 2.31 and 4.04r2,
+  and "Graal: <server>" online in 2.31. Not modelled, on purpose: the
+  version in the title tells the player which profile is running.
+- Full screen (Alt+Enter) is not modelled. 1.x and the 2.0x builds switch
+  to 640 × 480; 2.17.1, 2.22 and 2.31 switch to `graalconfig.txt`'s
+  `fullscreenmode` (1024 × 768 as installed), and Shift on Start or
+  Training, or `startinfullscreen`, starts there.
+- 2.31 hides Show More and Donations until the listserver sends a site page
+  (id 3) or an upgrade page (id 5); Seihai reads both and prints them with
+  `--list-only`, but its launcher shows neither yet.
+- HUD text (key names, sword and glove power) is still Seihai's pixel font;
+  the traced fonts are in `hud.md`.
+- Sources for these four: Graal_analysis
+  `client-internals/rebuild-traces-2026-11-05.md` (graal-delphi v0.0.4).
