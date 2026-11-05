@@ -34,7 +34,7 @@ names a base point `B = (15, 15)`.
 | Arrow count | 0x10 | as above | two digits at x 374 and 386 |
 | Hearts | 0x20 | big (40·half, 0, 40, 44), small (80 + 31·half, 0, 31, 33) | see below |
 | Buttons | 0x01 | (202, 0, 22, 33), the same cell for all three | x 15, 80 and 145 at y 30. Only the first is drawn when weapons are off |
-| Key names | 0x01 | text | on each button: 26 pt Helvetica, white, with a black copy one pixel down and right. A small copy of the item-list key (key 9) sits above the D button at (147, 27) |
+| Key names | 0x01 | text | on each button: `Helvetica` cell 26 bold (Arial on Windows), black at +1, +1 and then white, from (16, 32), (81, 32) and (146, 32). A small copy of the item-list key (key 9), `Helvetica` cell 10 bold, sits above the D button: (147, 27) in the 2.05 read, (146, 27) in the Wine trace |
 | Glove icon | 0x01 | sprite 145 (power ≥ 2), with sprite 325 drawn over it (power ≥ 3) | (40, 29). The power is printed at (60, 31) when it is ≥ 2 |
 | Sword icon | 0x01 | sprite 17 of the player's sword image | (105, 31), drawn when the player has a sword image. The sword power is printed at (125, 31) |
 | Selected weapon | 0x01 | the weapon's whole image | x 170, centred on y 45 |
@@ -53,6 +53,14 @@ names a base point `B = (15, 15)`.
     * Row `k + 1` sits 20·(k + 1) px lower and moves `round(17.5·(k + 1)) − 35`
       px sideways.
     * The whole block is 10 px lower while power is below 6 hearts.
+* **Text.** The key names and the Q were traced under Wine with
+  `WINEDEBUG=+font` in 2.1 test 2, 2.1 test 3, 2.17.1 and NewMain 24 and 26,
+  and the 2.0x builds draw them the same way. The sword and glove powers use
+  the `graalconfig.txt` font (Tempus Sans ITC, cell 24, bold), white over a
+  blue shadow, as the names under characters do. Seihai still draws all of
+  these in its own pixel font. Source: Graal_analysis
+  `client-internals/rebuild-traces-2026-11-05.md` (from graal-delphi #121
+  and #138).
 * **Weapons off.** The client's weapons flag also gates the S and D keys.
   When it is off, only the A button, its key name and the AP bar are drawn.
   Seihai has no "weapons off" state yet, so it always passes on.
@@ -77,6 +85,16 @@ names a base point `B = (15, 15)`.
   AP bar.
 * **Positions.** The screen positions for these builds are the 2.05 ones.
   No routine from these builds was read.
+* **1.21 and 1.28 beta 2 (measured).** Matching their sheets against
+  captures of the real clients puts the three buttons (22 × 30 each, from
+  x 158, 180 and 202 on `state.gif`) at x 15, 80 and 145, y 30; the sword
+  picture (28 × 28 from `sword1.gif`) at (105, 31); the counts centred on
+  x 280 with the bombs at x 326 and the arrows at x 374, y 48, in the digit
+  sprites of `sprites.gif` (sprite-table entries 268 to 277, 12 px apart);
+  and the hearts 45 px apart from (442, 24). That is the 2.05 layout apart
+  from the hearts. The digits for 1.33 to 1.37 are probably the same
+  sprite-table entries; not checked. The 1998 betas' layouts are in
+  Graal_analysis `client-internals/beta-hud-layouts.tsv`.
 
 ## Open
 
