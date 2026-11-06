@@ -3,6 +3,12 @@
 The Torque / 3.x client line: Graal 3.04 (Linux, Jan 2004) and 3.153 (Mac,
 Feb 2005).
 
+Open **Torque3D** (MIT) lives in `../../vendor/Torque3D` (git submodule). At
+startup this binary prints `TORQUE_GAME_ENGINE_VERSION_STRING` from that tree
+(the same value as in `Engine/source/app/version.h`). That is the real upstream
+Torque version string, not a Rust reimplementation. See
+`documentation/torque-lineage.md` for the proprietary Graal DLL gap.
+
 The 3.x clients still speak gen-5 framing and use the same board, gmap and
 GS1 formats as 2.22 and 2.31, so this crate shares `seihai-core` with the
 2.x client (`seihai-mae`). What is 3.x-only lives here.
