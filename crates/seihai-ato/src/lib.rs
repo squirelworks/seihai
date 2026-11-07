@@ -10,6 +10,11 @@
 //!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
 //! ([`render`]) and walk it with the arrow keys ([`game`]).
+//!
+//! The Torque reimplementation for eras 3–5 lives in `torque::engine`
+//! and is part of the default build. `--features era6` leaves it out.
+//! The product default follows the selected era: on for v3, v4 and v5,
+//! off for v6 and later. The stub era defaults to v3.
 
 pub mod args;
 pub mod fields;

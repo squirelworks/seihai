@@ -7,6 +7,16 @@ The 3.x clients still speak gen-5 framing and use the same board, gmap and
 GS1 formats as 2.22 and 2.31, so this crate shares `seihai-core` with the
 2.x client (`seihai-mae`). What is 3.x-only lives here.
 
+Ato also owns the Torque reimplementation for v3, v4 and v5
+(`src/torque/engine`). It is compiled into the default build. It is on
+when the selected era is 3, 4 or 5, and off for era 6 and later
+(`--features era6`). v3, v4 and v5 are three different module sets.
+v3 is the full TGE surface plus `GuiGraalCtrl`. v4 and v5
+each enable their own 2D subset and 3D subset. The stub's era defaults
+to v3, which is the full set when nobody has picked. graal-client-repro
+owns how the original engine was shaped. This crate owns what a new
+client runs. They share notes, not code. See `src/torque/engine/README.md`.
+
 ## Stage 1
 
 - `args`: the command line. `seihai-launcher` passes the user's arguments

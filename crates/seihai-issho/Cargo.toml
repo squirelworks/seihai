@@ -1,0 +1,19 @@
+[package]
+name = "seihai-issho"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The v6 client profile (quattro_lib). The `seihai` launcher starts this
+# binary when `--version` is a 6.x row. No `--version` stays on seihai-mae.
+# This crate does not depend on seihai-ato and has no Torque code.
+[lib]
+name = "seihai_issho"
+path = "src/lib.rs"
+
+[[bin]]
+name = "seihai-issho"
+path = "src/main.rs"
+
+[dependencies]
+seihai-core = { path = "../seihai-core", default-features = false }
