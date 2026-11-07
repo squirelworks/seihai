@@ -18,10 +18,6 @@ use seihai_ato::{args, game, online, start_window, torque, wire::Wire};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    eprintln!(
-        "seihai-ato: Torque3D MIT engine version {} (submodule `vendor/Torque3D`, see documentation/torque-lineage.md)",
-        seihai_ato::TORQUE_GAME_ENGINE_VERSION
-    );
     let a = args::parse(std::env::args().skip(1));
     let version = match args::build(&a) {
         Ok(v) => v,
@@ -61,21 +57,8 @@ fn main() -> ExitCode {
         eprintln!("seihai-ato: --no-window needs --online host:port");
         return ExitCode::from(2);
     };
-    let login = online::Login {
-        account,
-        password,
-        nick,
-        language: "English".into(),
-    };
-    match online::run(
-        &addr,
-        version,
-        &login,
-        a.assets.map(Into::into),
-        a.first_level,
-        &mut std::io::stdout(),
-        &mut |_, _| {},
-    ) {
+    let login = online::Login { account, password, nick, language: "English".into() };
+    match online::run(&addr, version, &login, a.assets.map(Into::into), a.first_level, &mut std::io::stdout(), &mut |_, _| {}) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("seihai-ato: {e}");

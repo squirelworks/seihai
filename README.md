@@ -5,12 +5,11 @@ An open client for Graal Reborn listservers and gservers. It plays offline level
 ## First time setup
 
 1. Install Rust from [rustup.rs](https://rustup.rs/).
-2. Clone the repo and fetch the **Torque3D MIT** submodule (engine sources pinned under `vendor/Torque3D`; `seihai-ato` prints that tree's engine version; see `documentation/torque-lineage.md`):
+2. Clone the repo:
 
 ```bash
 git clone https://github.com/squirelworks/seihai.git
 cd seihai
-git submodule update --init --recursive
 ```
 
 You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `.git`) before any of the commands below. If you are in a parent folder, `git` and `cargo` will fail with "not a git repository" and "could not find Cargo.toml".
@@ -50,7 +49,6 @@ cargo build --release
 ```bash
 cd seihai
 git pull origin main
-git submodule update --init --recursive
 cargo build --release
 ```
 
