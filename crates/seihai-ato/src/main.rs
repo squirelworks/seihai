@@ -4,6 +4,7 @@
 //!   seihai-ato --version 3.04 --print-profile
 //!   seihai-ato --version 3.04 --online host:port --account A --password-env VAR
 //!              [--assets DIR] [--no-window] [--first-level]
+//!              [--noudp] [--fixedport] [--fixedudpport PORT]
 //!
 //! With `--online`, Start logs in at that game server, logs each level the
 //! server sends (its name, the start position and the NPC count) and draws
@@ -30,6 +31,13 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    let udp = match args::udp_prefs(&a) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
     if a.print_profile {
         print!("{}", Wire::of(version).report());
         if let Some(t) = torque::of(version) {
@@ -38,6 +46,12 @@ fn main() -> ExitCode {
                 t.game, t.protocol, t.class_table_types, t.class_ids_12bit, t.length_prefixes
             );
         }
+        println!(
+            "torque udp: listed port + 1, unless {}; local {} when set (default {})",
+            torque::GRAAL_PREF_NO_UDP,
+            torque::GRAAL_PREF_FIXED_UDP_PORT,
+            torque::DEFAULT_FIXED_UDP_PORT
+        );
         return ExitCode::SUCCESS;
     }
     let password = match a.password_env.as_deref() {
@@ -49,7 +63,7 @@ fn main() -> ExitCode {
     if !a.no_window {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
-        return match game::run(version, w, a.assets.map(Into::into)) {
+        return match game::run(version, w, a.assets.map(Into::into), udp) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("seihai-ato: could not open the window: {e}");
@@ -66,6 +80,7 @@ fn main() -> ExitCode {
         password,
         nick,
         language: "English".into(),
+        udp,
     };
     match online::run(
         &addr,

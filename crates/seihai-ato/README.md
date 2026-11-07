@@ -24,9 +24,12 @@ GS1 formats as 2.22 and 2.31, so this crate shares `seihai-core` with the
   `seihai-core::protocol::chain` (nothing restated).
 - `torque`: the Torque connect profile per protocol number (9 for 3.04,
   19 for 3.153 and 4.04r2, 21 for 4.20r6, 24 for 5.12): game string, class
-  table, 12-bit class ids, 14-bit length prefixes, and the port rule
-  (listed port + 1). Data only. Source: Graal_analysis
-  `torque/wire-by-build.md`.
+  table, 12-bit class ids, 14-bit length prefixes, and the UDP socket.
+  On login the socket connects to the listed host on port + 1 unless
+  `$pref::Graal::noudp` is set, and binds `$pref::Graal::fixedudpport` when
+  that port is set (`--noudp`, `--fixedport`, `--fixedudpport`). The socket
+  is Seihai's. Torque3D v4.0.3 is the submodule pin, not the 3.04 client
+  and not the code that binds. No handshake bytes are sent.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). With `--online`,
   Start hands the form to Stage 2; otherwise the buttons say what the real
@@ -36,7 +39,8 @@ GS1 formats as 2.22 and 2.31, so this crate shares `seihai-core` with the
 
 - `online`: log in at a game server (`--online host:port`) with core's
   login, which already carries the 3.04 and 3.153 login frames from the
-  lab run of the real 3.04, and read every frame with the core readers.
+  lab run of the real 3.04, read every frame with the core readers, and
+  open the Torque UDP socket beside that login.
 - `level`: keep the level the way `seihai-mae` does (a local copy at the
   server's mod time if `--assets` has one, otherwise the server's board,
   with the server's links, chests and signs on it) and log it once the
@@ -56,6 +60,7 @@ The output of a loopback run (`tests/online_loopback.rs`) looks like:
 
 ```
 logged in at 127.0.0.1:14900 as lab (3.04)
+torque udp: 127.0.0.1:<local> -> 127.0.0.1:14901 (listed port + 1; ephemeral local port)
 level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the server, 0 in the file)
 ```
 
@@ -79,5 +84,6 @@ into is noted on the status bar and dropped.
 The server list, offline mode, the post-login frame the real 3.x client
 sends once the board is in (file checks and props, which carry the
 nickname and language), sending the walk, level changes, NPCs, other
-players, GANI art, and the Torque UDP side. The clients' background images are not shipped,
+players, GANI art, and the Torque handshake (the UDP socket opens; nothing
+is sent on it). The clients' background images are not shipped,
 so the start window's panel is a plain fill.

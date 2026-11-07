@@ -15,12 +15,18 @@
 //! Under the level line come the fields the server sent with it (board,
 //! links, chests, signs, the player's props and each server NPC's props,
 //! [`crate::fields`]). Only builds with a Torque profile log them.
+//!
+//! The login also opens Seihai's Torque UDP socket on the listed host at
+//! port + 1 ([`crate::torque::open_udp`]), unless `$pref::Graal::noudp` is
+//! set. No Torque handshake is written.
 
 use crate::level::{Arrival, LevelStore};
+use crate::torque;
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
 use seihai_core::net::{login_gserver, random_key};
 use seihai_core::protocol::{ClientVersion, SessionState};
 use std::io::Write;
+use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
@@ -34,6 +40,8 @@ pub struct Login {
     pub password: String,
     pub nick: String,
     pub language: String,
+    /// Torque UDP prefs for the socket opened beside this login.
+    pub udp: torque::GraalUdpPrefs,
 }
 
 /// How long the server must stay quiet after a level is stored before it
@@ -43,8 +51,9 @@ const SETTLE: Duration = Duration::from_millis(300);
 /// Log in at `addr` and log every level the server sends to `out`, until
 /// the server closes the connection or, with `first_level_only`, the first
 /// level is stored. `assets` is an asset folder whose levels may stand in
-/// for the board at the server's mod time. `shown` gets each level as it
-/// is logged (the game view draws it).
+/// for the board at the server's mod time. `login.udp` selects the Torque
+/// UDP socket opened beside that login. `shown` gets each level as it is
+/// logged (the game view draws it).
 pub fn run(
     addr: &str,
     version: ClientVersion,
@@ -54,28 +63,65 @@ pub fn run(
     out: &mut impl Write,
     shown: &mut dyn FnMut(&Level, &Arrival),
 ) -> Result<(), String> {
+    let listed = addr
+        .to_socket_addrs()
+        .map_err(|e| e.to_string())?
+        .next()
+        .ok_or_else(|| format!("no address for {addr}"))?;
+    // Held until this function returns, which is the life of the TCP login.
+    let udp_sock =
+        torque::open_udp(listed.ip(), listed.port(), login.udp).map_err(|e| e.to_string())?;
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
     };
-    let mut s = login_gserver(addr, version, random_key(), &login.account, &login.password, false).map_err(|e| e.to_string())?;
+    let mut s = login_gserver(
+        addr,
+        version,
+        random_key(),
+        &login.account,
+        &login.password,
+        false,
+    )
+    .map_err(|e| e.to_string())?;
     for w in &s.warnings {
         let _ = writeln!(out, "warning: {w}");
     }
-    let _ = writeln!(out, "logged in at {addr} as {} ({})", login.account, version.label());
+    let _ = writeln!(
+        out,
+        "logged in at {addr} as {} ({})",
+        login.account,
+        version.label()
+    );
+    match &udp_sock {
+        Some(sock) => {
+            let _ = writeln!(out, "torque udp: {}", sock.describe());
+        }
+        None => {
+            let _ = writeln!(out, "torque udp: off ({})", torque::GRAAL_PREF_NO_UDP);
+        }
+    }
     let frames = s.conn.spawn_reader().map_err(|e| e.to_string())?;
     let mut st = SessionState::for_version(version);
     let mut store = LevelStore::default();
     // A level was stored and has not been logged yet.
     let mut owed = false;
     loop {
-        let wait = if owed { SETTLE } else { Duration::from_secs(3600) };
+        let wait = if owed {
+            SETTLE
+        } else {
+            Duration::from_secs(3600)
+        };
         match frames.recv_timeout(wait) {
             Ok(Ok(body)) => {
                 st.apply_body(&body);
                 let before = st.current_level_name();
                 // A new level ends the one owed: log it as it stood.
-                if owed && store.level_name().is_some_and(|n| before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))) {
+                if owed
+                    && store.level_name().is_some_and(|n| {
+                        before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))
+                    })
+                {
                     log_level(version, &store, &st, out, shown);
                     owed = false;
                 }
@@ -85,7 +131,10 @@ pub fn run(
                 if owed {
                     log_level(version, &store, &st, out, shown);
                 }
-                let why = st.disconnect_message.take().unwrap_or_else(|| e.to_string());
+                let why = st
+                    .disconnect_message
+                    .take()
+                    .unwrap_or_else(|| e.to_string());
                 let _ = writeln!(out, "connection closed: {why}");
                 return Ok(());
             }
@@ -104,7 +153,13 @@ pub fn run(
     }
 }
 
-fn log_level(version: ClientVersion, store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
+fn log_level(
+    version: ClientVersion,
+    store: &LevelStore,
+    st: &SessionState,
+    out: &mut impl Write,
+    shown: &mut dyn FnMut(&Level, &Arrival),
+) {
     if let (Some(a), Some(level)) = (store.arrival(st), store.level.as_ref()) {
         let _ = writeln!(out, "{}", a.line());
         for l in crate::fields::lines(version, level, &a.name, st) {

@@ -4,9 +4,10 @@
 //! Graal wire that 2.31 does not ([`wire`]), its Torque connect profile
 //! ([`torque`]) and the start window ([`start_window`]).
 //!
-//! Stage 2: log in to a game server ([`online`]), read what it sends with
-//! the core readers, and keep and log the level ([`level`]) with the
-//! board's and props' fields ([`fields`]), for builds with a Torque profile.
+//! Stage 2: log in to a game server ([`online`]), open the Torque UDP socket
+//! beside that login ([`torque`]), read what the server sends with the core
+//! readers, and keep and log the level ([`level`]) with the board's and
+//! props' fields ([`fields`]), for builds with a Torque profile.
 //!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
 //! ([`render`]) and walk it with the arrow keys ([`game`]).

@@ -29,6 +29,17 @@ pub struct Args {
     pub no_window: bool,
     /// `--first-level`: disconnect once the first level is stored.
     pub first_level: bool,
+    /// `--noudp`: `$pref::Graal::noudp`. Do not open the Torque UDP socket.
+    pub no_udp: bool,
+    /// `--fixedport`: `$pref::Graal::fixedport`. Bind
+    /// [`crate::torque::DEFAULT_FIXED_UDP_PORT`] unless `--fixedudpport`
+    /// passed a number.
+    pub fixed_port: bool,
+    /// `--fixedudpport PORT`: `$pref::Graal::fixedudpport`. Setting it also
+    /// turns the fixed local port on.
+    pub fixed_udp_port: Option<String>,
+    /// `--fixedudpport` was present. Distinguished from a missing value.
+    fixed_udp_port_set: bool,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
@@ -50,6 +61,12 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--assets" => a.assets = it.next().or(a.assets),
             "--no-window" => a.no_window = true,
             "--first-level" => a.first_level = true,
+            "--noudp" => a.no_udp = true,
+            "--fixedport" => a.fixed_port = true,
+            "--fixedudpport" => {
+                a.fixed_udp_port_set = true;
+                a.fixed_udp_port = it.next().or(a.fixed_udp_port);
+            }
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
             }
@@ -59,18 +76,47 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
     a
 }
 
+/// The Torque UDP prefs from `--noudp`, `--fixedport`, and `--fixedudpport`.
+pub fn udp_prefs(a: &Args) -> Result<crate::torque::GraalUdpPrefs, String> {
+    if a.fixed_udp_port_set && a.fixed_udp_port.is_none() {
+        return Err("seihai-ato: --fixedudpport needs a port".into());
+    }
+    let port = match &a.fixed_udp_port {
+        Some(s) => {
+            let port: u16 = s
+                .parse()
+                .map_err(|_| format!("seihai-ato: --fixedudpport {s:?} is not a port"))?;
+            if port == 0 {
+                return Err("seihai-ato: --fixedudpport must be between 1 and 65535".into());
+            }
+            Some(port)
+        }
+        None => None,
+    };
+    Ok(crate::torque::GraalUdpPrefs::from_flags(
+        a.no_udp,
+        a.fixed_port,
+        port,
+    ))
+}
+
 /// The 3.x builds Ato runs.
 pub const BUILDS: [ClientVersion; 2] = [ClientVersion::V304, ClientVersion::V3153];
 
 /// The build to run. No `--version` gives 3.153, the newer of the two.
 /// A label that is not a 3.x build is an error, with the labels Ato knows.
 pub fn build(a: &Args) -> Result<ClientVersion, String> {
-    let Some(label) = a.version.as_deref() else { return Ok(ClientVersion::V3153) };
+    let Some(label) = a.version.as_deref() else {
+        return Ok(ClientVersion::V3153);
+    };
     match ClientVersion::from_label(label) {
         Some(v) if BUILDS.contains(&v) => Ok(v),
         _ => {
             let known: Vec<&str> = BUILDS.iter().map(|v| v.label()).collect();
-            Err(format!("seihai-ato runs the 3.x builds ({}); {label:?} is not one of them", known.join(", ")))
+            Err(format!(
+                "seihai-ato runs the 3.x builds ({}); {label:?} is not one of them",
+                known.join(", ")
+            ))
         }
     }
 }
@@ -93,6 +139,27 @@ mod tests {
         assert_eq!(a.online.as_deref(), Some("127.0.0.1:14900"));
         assert_eq!(a.assets.as_deref(), Some("dir"));
         assert!(!a.no_window && !a.first_level);
+        assert!(!a.no_udp && !a.fixed_port && a.fixed_udp_port.is_none());
+        let prefs = udp_prefs(&a).unwrap();
+        assert!(!prefs.no_udp && !prefs.fixed_port);
+    }
+
+    #[test]
+    fn udp_prefs_follow_the_three_graal_flags() {
+        let a = p("--noudp --fixedudpport 14923 --version 3.04");
+        assert_eq!(a.version.as_deref(), Some("3.04"));
+        let prefs = udp_prefs(&a).unwrap();
+        assert!(prefs.no_udp && prefs.fixed_port);
+        assert_eq!(prefs.fixed_udp_port, 14923);
+        let prefs = udp_prefs(&p("--fixedport")).unwrap();
+        assert!(!prefs.no_udp && prefs.fixed_port);
+        assert_eq!(prefs.fixed_udp_port, crate::torque::DEFAULT_FIXED_UDP_PORT);
+        let prefs = udp_prefs(&p("--fixedudpport 14921")).unwrap();
+        assert!(prefs.fixed_port);
+        assert_eq!(prefs.fixed_udp_port, 14921);
+        assert!(udp_prefs(&p("--fixedudpport nope")).is_err());
+        assert!(udp_prefs(&p("--fixedudpport 0")).is_err());
+        assert!(udp_prefs(&p("--fixedudpport")).is_err());
     }
 
     #[test]

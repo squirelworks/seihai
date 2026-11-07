@@ -48,7 +48,8 @@ binary · **3.04** a 3.153 value taken from 3.04.
 - **`STATUS` bit 1** in the real 3.04's first props, and its first `gr.y`:
   not traced.
 - **UDP channel** (2.05 P2P codec, id 15 every 5.1 s, ids 0, 22, 26): known
-  for 3.04 (cap) but Seihai has no UDP socket for any build, so it is not sent.
+  for 3.04 (cap). Seihai opens the Torque UDP socket on listed port + 1 but
+  does not send this peer channel, so those datagrams are not sent.
 
 ## Not started (out of scope)
 

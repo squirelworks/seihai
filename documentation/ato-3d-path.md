@@ -9,9 +9,18 @@ The precondition is met. On 2026-10-31 at 02:19 UTC, Ato 3.153 (main
 `gs2test.nw` from the server's board, with NPC 300 and its GS2 script
 (`3x-session.md`, "Lab run, 2026-10-31"). The 3.04 run is still owed.
 
-The 3D path itself is **not started**, because nothing on the wire backs it.
-The flat path (Stages 2 and 3) is enough for now: it shows that a 3.x login
-and level receive work, and it is what a lab run can check.
+The 3D handshake is still **not started**, because nothing on the wire backs
+the connect request. The flat path (Stages 2 and 3) is what a lab run can
+check.
+
+On 2026-11-07 `seihai-ato` does open the UDP socket on login: the listed
+host, port + 1, unless `$pref::Graal::noudp` is set, with
+`$pref::Graal::fixedudpport` as the local port when that port is set. Ato
+has no server list yet, so every `--online` login opens it. The real client
+opens Torque only for a listed name that starts with `3 `
+(`torque::is_3d_server`); that gate remains for when the list exists. Tests
+bind `127.0.0.1`. No handshake bytes are sent. The socket is Seihai's, not
+Torque3D v4.0.3's NetInterface and not the 3.04 binary.
 
 ## Why it waits
 
@@ -41,8 +50,9 @@ and level receive work, and it is what a lab run can check.
 - **The gate.** The same one as the Stage 2 fields: `torque::of(version)`.
   It applies only when the listed server is a 3D server. A 2D server keeps
   the flat path.
-- **Connect only first.** Open the UDP socket and send the connect request
-  for the build's profile. Read the accept and check its protocol number
-  against `TorqueProfile::protocol`, then log the outcome. No ghosts, moves
-  or drawing until the accept is matched byte for byte against the capture.
+- **Connect only first.** The UDP socket now opens. Still to do: send the
+  connect request for the build's profile, read the accept, and check its
+  protocol number against `TorqueProfile::protocol`, then log the outcome.
+  No ghosts, moves or drawing until the accept is matched byte for byte
+  against the capture.
 - **The flat view stays** as the fallback and as the view for 2D servers.

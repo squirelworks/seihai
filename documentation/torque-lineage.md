@@ -17,6 +17,10 @@ A companion pack (`graal_findings.tar_ca53.gz`, unpacked for review only — **n
 
 There is **no** single obvious public git tree today that is a drop-in **Torque Game Engine 1.x** source snapshot comparable to the MIT Torque3D repo, so the **Torque3D `v4.0.3` submodule pin is unchanged**: it remains the buildable open Torque lineage in-tree. Later work could submodule classic TGE **if** a clearly licensed, fetchable tree is identified.
 
+## Socket Seihai opens
+
+`seihai-ato` binds its own UDP socket on login (`seihai_ato::torque::open_udp`). The remote port is the listed game port plus one, on the same host. `$pref::Graal::noudp` leaves the socket closed. `$pref::Graal::fixedudpport` is the local port when `$pref::Graal::fixedport` is set or a fixed port is passed. Loopback listed hosts bind that same loopback address. This bind is not performed by the Torque3D v4.0.3 submodule. v4.0.3 is not the 3.04 TGE binary named above. No Torque handshake is written to the socket.
+
 `seihai-ato` prints the engine version string defined in `vendor/Torque3D/Engine/source/app/version.h` (`TORQUE_GAME_ENGINE_VERSION_STRING`) at startup; integration tests assert that string is non-empty after a normal clone with submodules.
 
 ## Clone and build
