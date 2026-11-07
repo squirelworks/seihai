@@ -20,3 +20,11 @@ seihai-core = { path = "../seihai-core", default-features = false }
 # The start window. Same versions as seihai-mae.
 eframe = "0.29"
 egui = "0.29"
+
+[features]
+# v6 and later: leave the Torque reimplementation out of the binary.
+# The default build does not enable this, so `torque::engine` is compiled.
+# The product default follows the selected era and is on for v3, v4 and v5.
+# Do not add `era6` to the default features. `--all-features` selects it
+# and therefore omits the engine.
+era6 = []

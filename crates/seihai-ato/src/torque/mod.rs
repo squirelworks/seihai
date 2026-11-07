@@ -6,8 +6,18 @@
 //! `torque/network.md`); only 5.12 was also seen live. Ato runs 3.04 and
 //! 3.153; the 4.x and 5.12 rows are here so a later Torque client picks
 //! its profile by protocol number in one place.
+//!
+//! The reimplementation for eras 3–5 is `engine`, compiled unless the
+//! `era6` feature is set. This profile table is not that engine.
 
 use seihai_core::protocol::ClientVersion;
+
+/// Torque reimplementation for eras 3–5.
+///
+/// The default build compiles it. `--features era6` leaves it out
+/// (v6 and later). See `engine/README.md`.
+#[cfg(not(feature = "era6"))]
+pub mod engine;
 
 /// One Torque connect profile, keyed by the protocol number the client
 /// sends twice (current and minimum) and wants back exactly in the accept.
@@ -128,5 +138,26 @@ mod tests {
         assert!(is_3d_server("3 Seihai Test"));
         assert!(!is_3d_server("Seihai 3"));
         assert_eq!(udp_port(14800), 14801);
+    }
+}
+
+#[cfg(test)]
+mod engine_gate {
+    #[cfg(not(feature = "era6"))]
+    #[test]
+    fn default_build_compiles_the_engine() {
+        assert_eq!(super::engine::Era::default(), super::engine::Era::Era3);
+        assert!(super::engine::torque_enabled(super::engine::Era::Era3));
+        assert!(super::engine::torque_enabled(super::engine::Era::Era4));
+        assert!(super::engine::torque_enabled(super::engine::Era::Era5));
+        assert!(!super::engine::torque_enabled(super::engine::Era::Era6));
+    }
+
+    #[cfg(feature = "era6")]
+    #[test]
+    fn era6_build_leaves_the_engine_out() {
+        // `engine` is not a module in this build. Compiling this test is
+        // the check that the rest of the crate still builds without it.
+        assert!(cfg!(feature = "era6"));
     }
 }
