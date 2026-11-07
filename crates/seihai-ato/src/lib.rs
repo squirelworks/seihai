@@ -10,15 +10,6 @@
 //!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
 //! ([`render`]) and walk it with the arrow keys ([`game`]).
-//!
-//! The real Torque lineage engine sources live in `vendor/Torque3D` (MIT).
-//! [`TORQUE_GAME_ENGINE_VERSION`] is read from that tree at build time.
-
-mod torque_engine_version {
-    include!(concat!(env!("OUT_DIR"), "/torque_engine_version.rs"));
-}
-
-pub use torque_engine_version::TORQUE_GAME_ENGINE_VERSION;
 
 pub mod args;
 pub mod fields;
@@ -29,16 +20,3 @@ pub mod render;
 pub mod start_window;
 pub mod torque;
 pub mod wire;
-
-#[cfg(test)]
-mod torque_engine_version_tests {
-    use super::TORQUE_GAME_ENGINE_VERSION;
-
-    #[test]
-    fn submodule_version_is_nonempty() {
-        assert!(
-            !TORQUE_GAME_ENGINE_VERSION.is_empty(),
-            "TORQUE_GAME_ENGINE_VERSION from vendor/Torque3D/Engine/source/app/version.h"
-        );
-    }
-}
