@@ -1,0 +1,3 @@
+[submodule "vendor/Torque3D"]
+	path = vendor/Torque3D
+	url = https://github.com/TorqueGameEngines/Torque3D.git

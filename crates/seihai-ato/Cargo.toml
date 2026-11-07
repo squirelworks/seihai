@@ -3,6 +3,7 @@ name = "seihai-ato"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+build = "build.rs"
 
 # The Torque / 3.x client line. Stage 1: the 3.x wire facts (token, the
 # 3.x-only ids, the Torque profile) and the start window. Stage 2: log in,
