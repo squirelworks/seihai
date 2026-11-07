@@ -145,12 +145,26 @@ mod tests {
     /// Time spent paused (a modal window open) is not a stall.
     #[test]
     fn a_paused_loop_is_quiet() {
-        let (w, rx) = watch(100);
+        let limit_ms = 100;
+        let limit = Duration::from_millis(limit_ms);
+        let (w, rx) = watch(limit_ms);
         w.mark("scripts");
         w.pause();
         assert!(rx.recv_timeout(Duration::from_millis(500)).is_err());
+        let resumed = Instant::now();
         w.resume("level picker");
-        assert!(rx.recv_timeout(Duration::from_millis(60)).is_err());
+        // Not a fixed 60 ms timeout: `recv_timeout` may return later than
+        // asked, and the watch reports once this limit passes with no mark
+        // (it only wakes that often). A line after the limit is the watch
+        // doing its job. A line before the limit is the pause/resume bug.
+        let wait = limit.saturating_sub(resumed.elapsed());
+        if let Ok(line) = rx.recv_timeout(wait) {
+            let elapsed = resumed.elapsed();
+            assert!(
+                elapsed >= limit,
+                "stall line {elapsed:?} after resume, before the {limit:?} limit: {line}"
+            );
+        }
         drop(w);
     }
 
