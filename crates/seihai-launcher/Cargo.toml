@@ -6,13 +6,14 @@ license.workspace = true
 
 # The `seihai` command. The package is named `seihai` too, so
 # `cargo build --release -p seihai` names it; a plain
-# `cargo build --release` builds it together with both clients. It reads the version-profile table and starts
-# `seihai-mae` (1.x and 2.x builds) or `seihai-ato` (the Torque / 3.x
-# builds). It has no window, no renderer and no Torque code of its own, and
-# neither client depends on it.
+# `cargo build --release` builds it together with the clients. It reads the version-profile table and starts
+# `seihai-mae` (1.x, 2.x, and the 4.x/5.x flat path), `seihai-ato` (the Torque / 3.x
+# builds), or `seihai-issho` (v6). It has no window, no renderer and no Torque code of its own, and
+# neither client depends on it. A 7.x label is rejected.
 [[bin]]
 name = "seihai"
 path = "src/main.rs"
 
 [dependencies]
 seihai-core = { path = "../seihai-core", default-features = false }
+seihai-issho = { path = "../seihai-issho" }
