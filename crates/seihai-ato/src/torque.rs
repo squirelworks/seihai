@@ -6,24 +6,8 @@
 //! `torque/network.md`); only 5.12 was also seen live. Ato runs 3.04 and
 //! 3.153; the 4.x and 5.12 rows are here so a later Torque client picks
 //! its profile by protocol number in one place.
-//!
-//! **Graal 3.04 Linux (Gemini pack, string scan):** The real client exposes
-//! TorqueScript preferences named `$pref::Graal::fixedport`,
-//! `$pref::Graal::fixedudpport`, and `$pref::Graal::noudp` alongside stock Torque
-//! networking symbols (`GameConnection`, `ConnectionProtocol`, …). Seihai does
-//! not parse those prefs; the portable UDP rule for listing remains
-//! [`udp_port`] (listed TCP game port plus one on the same host).
 
 use seihai_core::protocol::ClientVersion;
-
-/// TorqueScript preference names reported by string scan of Graal 3.04 Linux
-/// (`graalexe` / Gemini `TorqueEngine_DeepDive.md`). Documented for parity with
-/// the real client; Seihai does not read these from config.
-pub const GRAAL_PREF_FIXED_PORT: &str = "$pref::Graal::fixedport";
-/// See [`GRAAL_PREF_FIXED_PORT`].
-pub const GRAAL_PREF_FIXED_UDP_PORT: &str = "$pref::Graal::fixedudpport";
-/// See [`GRAAL_PREF_FIXED_PORT`].
-pub const GRAAL_PREF_NO_UDP: &str = "$pref::Graal::noudp";
 
 /// One Torque connect profile, keyed by the protocol number the client
 /// sends twice (current and minimum) and wants back exactly in the accept.
@@ -144,12 +128,5 @@ mod tests {
         assert!(is_3d_server("3 Seihai Test"));
         assert!(!is_3d_server("Seihai 3"));
         assert_eq!(udp_port(14800), 14801);
-    }
-
-    #[test]
-    fn gemini_304_graal_torque_pref_names() {
-        assert_eq!(GRAAL_PREF_FIXED_PORT, "$pref::Graal::fixedport");
-        assert_eq!(GRAAL_PREF_FIXED_UDP_PORT, "$pref::Graal::fixedudpport");
-        assert_eq!(GRAAL_PREF_NO_UDP, "$pref::Graal::noudp");
     }
 }

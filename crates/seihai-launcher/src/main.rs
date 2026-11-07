@@ -55,14 +55,7 @@ fn line_for(p: &VersionProfile) -> Line {
 /// Modes that never start a client session: the capture viewer and the
 /// printing tools. They are `seihai-mae`'s whatever the version, so
 /// `seihai --version-chain --version 3.153` keeps working.
-const MAE_TOOLS: &[&str] = &[
-    "--version-chain",
-    "--check-assets",
-    "--level-info",
-    "--list-only",
-    "--help",
-    "-h",
-];
+const MAE_TOOLS: &[&str] = &["--version-chain", "--check-assets", "--level-info", "--list-only", "--help", "-h"];
 
 /// The value of the last `--version`, as `seihai-mae` reads it.
 fn version_arg(args: &[String]) -> Option<&str> {
@@ -75,10 +68,7 @@ fn version_arg(args: &[String]) -> Option<&str> {
 /// `--version` values for the February 2000 Graal3D. It has its own
 /// server and wire, so it is not a row of the profile table.
 fn is_graal3d(v: &str) -> bool {
-    matches!(
-        v.to_ascii_lowercase().as_str(),
-        "graal3d" | "g3d" | "gr3dv002"
-    )
+    matches!(v.to_ascii_lowercase().as_str(), "graal3d" | "g3d" | "gr3dv002")
 }
 
 /// The line to start for these arguments. An unknown version goes to
@@ -87,11 +77,8 @@ fn pick(args: &[String]) -> (Line, Option<&'static VersionProfile>) {
     if version_arg(args).is_some_and(is_graal3d) {
         return (Line::G3d, None);
     }
-    let tool = args.first().map(String::as_str) == Some("capture")
-        || args.iter().any(|a| MAE_TOOLS.contains(&a.as_str()));
-    let profile = version_arg(args)
-        .and_then(ClientVersion::from_label)
-        .map(ClientVersion::profile);
+    let tool = args.first().map(String::as_str) == Some("capture") || args.iter().any(|a| MAE_TOOLS.contains(&a.as_str()));
+    let profile = version_arg(args).and_then(ClientVersion::from_label).map(ClientVersion::profile);
     match profile {
         Some(p) if !tool => (line_for(p), Some(p)),
         _ => (Line::Mae, profile),
@@ -127,7 +114,7 @@ fn main() {
     let (line, profile) = pick(&args);
     if line == Line::Ato {
         let label = profile.map_or("3.x", |p| p.label);
-        eprintln!("seihai: {label} is a Torque / 3.x build; starting seihai-ato (Graal TCP login; Torque UDP game port is listed port + 1, see seihai_ato::torque::udp_port)");
+        eprintln!("seihai: {label} is a Torque / 3.x build; seihai-ato draws it with the flat 2D fallback (no Torque 3D yet)");
     }
     let bin = find_binary(line);
     if dry_run {
@@ -204,30 +191,20 @@ mod tests {
         assert_eq!(pick(&args("--version")).0, Line::Mae);
         assert_eq!(pick(&args("--version-chain --version 3.153")).0, Line::Mae);
         assert_eq!(pick(&args("--check-assets --version 3.04")).0, Line::Mae);
-        assert_eq!(
-            pick(&args("capture show f.pcap --version 3.153")).0,
-            Line::Mae
-        );
+        assert_eq!(pick(&args("capture show f.pcap --version 3.153")).0, Line::Mae);
     }
 
     /// Every row is one line or the other, by its label's major version.
     #[test]
     fn every_profile_has_a_line() {
         for p in seihai_core::protocol::PROFILES {
-            let want = if p.label.starts_with("3.") {
-                Line::Ato
-            } else {
-                Line::Mae
-            };
+            let want = if p.label.starts_with("3.") { Line::Ato } else { Line::Mae };
             assert_eq!(line_for(p), want, "{}", p.label);
         }
     }
 
     #[test]
     fn passwords_are_hidden() {
-        assert_eq!(
-            shown(&args("--account a --password secret --version 2.22")),
-            "--account a --password **** --version 2.22"
-        );
+        assert_eq!(shown(&args("--account a --password secret --version 2.22")), "--account a --password **** --version 2.22");
     }
 }
