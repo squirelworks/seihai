@@ -378,14 +378,40 @@ mod tests {
     }
 
     #[test]
+    fn listed_loopback_uses_that_address() {
+        let second = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
+        assert_eq!(bind_ip_for(second), second);
+        assert_eq!(
+            bind_ip_for(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        );
+        assert_eq!(
+            bind_ip_for(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+            IpAddr::V6(Ipv6Addr::LOCALHOST)
+        );
+    }
+
+    #[test]
     fn second_loopback_address_binds_there() {
-        let server = UdpSocket::bind("127.0.0.2:0").unwrap();
+        let host: IpAddr = "127.0.0.2".parse().unwrap();
+        let server = match UdpSocket::bind(SocketAddr::new(host, 0)) {
+            Ok(socket) => socket,
+            // macOS configures only 127.0.0.1 on lo0 unless an alias is
+            // added. CI adds 127.0.0.2 before the tests. Without that
+            // alias the bind cannot succeed; the address choice itself
+            // is `listed_loopback_uses_that_address`. Linux and Windows
+            // have the whole 127/8, so a miss there is a real failure.
+            Err(e) if e.kind() == io::ErrorKind::AddrNotAvailable && cfg!(target_os = "macos") => {
+                eprintln!("skip second_loopback_address_binds_there: {host} is not assigned ({e})");
+                return;
+            }
+            Err(e) => panic!("bind {host}: {e}"),
+        };
         server
             .set_read_timeout(Some(std::time::Duration::from_secs(2)))
             .unwrap();
         let remote_port = server.local_addr().unwrap().port();
         let listed = remote_port.wrapping_sub(1);
-        let host: IpAddr = "127.0.0.2".parse().unwrap();
         let sock = open_udp(host, listed, GraalUdpPrefs::default())
             .unwrap()
             .expect("socket");
