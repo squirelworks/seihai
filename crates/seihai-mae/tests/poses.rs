@@ -239,16 +239,23 @@ fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
         let mut fb = Framebuffer::new(64, 64);
         draw_player_sprites(
             &mut fb,
-            &a.body.1,
-            a.body.0,
-            4,
-            &a.head.1,
-            a.head.0,
-            4,
-            Some((&a.sprites.1, a.sprites.0, 4)),
+            seihai::render::Sheet {
+                px: &a.body.1,
+                w: a.body.0,
+                bpp: 4,
+            },
+            seihai::render::Sheet {
+                px: &a.head.1,
+                w: a.head.0,
+                bpp: 4,
+            },
+            (Some((&a.sprites.1, a.sprites.0, 4))).map(|(px, w, bpp)| seihai::render::Sheet {
+                px,
+                w,
+                bpp,
+            }),
             dir,
-            8,
-            8,
+            (8, 8),
             false,
         );
         assert_eq!(

@@ -333,7 +333,15 @@ pub fn draw(
         let ix = x + (c.w - iw) / 2;
         let iy = y + PAD;
         match images.get(i).copied().flatten() {
-            Some(im) => fb.blit_sprite(im.px, im.w, 4, 0, 0, iw, ih, ix, iy),
+            Some(im) => fb.blit_sprite(
+                crate::render::Sheet {
+                    px: im.px,
+                    w: im.w,
+                    bpp: 4,
+                },
+                (0, 0, iw, ih),
+                (ix, iy),
+            ),
             None => {
                 let edge = if selected {
                     [0x60, 0x40, 0x10]

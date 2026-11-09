@@ -141,11 +141,14 @@ fn npc_ani_of(session: &OfflineSession, name: &str) -> Option<String> {
     let lower = name.to_ascii_lowercase();
     let stem = lower.strip_suffix(".gani")?;
     let last = stem.rsplit('/').next().unwrap_or(stem);
-    let found = [stem, last]
-        .into_iter()
-        .find(|k| session.npc_ganis.contains_key(*k))
-        .map(str::to_string);
-    found
+
+    if session.npc_ganis.contains_key(stem) {
+        Some(stem.to_string())
+    } else if session.npc_ganis.contains_key(last) {
+        Some(last.to_string())
+    } else {
+        None
+    }
 }
 
 fn load_pose_gani(resolver: &AssetResolver, session: &mut OfflineSession, name: &str) {
@@ -1761,18 +1764,21 @@ fn main() {
                 };
                 draw_other_player(
                     &mut fb,
-                    b,
-                    *bw,
-                    4,
-                    h,
-                    *hw,
-                    4,
-                    sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)),
+                    seihai::render::Sheet {
+                        px: b,
+                        w: *bw,
+                        bpp: 4,
+                    },
+                    seihai::render::Sheet {
+                        px: h,
+                        w: *hw,
+                        bpp: 4,
+                    },
+                    (sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)))
+                        .map(|(px, w, bpp)| seihai::render::Sheet { px, w, bpp }),
                     other.dir,
-                    other.x,
-                    other.y,
-                    cam_x,
-                    cam_y,
+                    (other.x, other.y),
+                    (cam_x, cam_y),
                 );
             }
         }
@@ -1866,16 +1872,20 @@ fn main() {
             (Some(_), Some(_)) if session.blink_off() || session.figure_hidden() => {}
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
-                b,
-                *bw,
-                4,
-                h,
-                *hw,
-                4,
-                sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)),
+                seihai::render::Sheet {
+                    px: b,
+                    w: *bw,
+                    bpp: 4,
+                },
+                seihai::render::Sheet {
+                    px: h,
+                    w: *hw,
+                    bpp: 4,
+                },
+                (sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)))
+                    .map(|(px, w, bpp)| seihai::render::Sheet { px, w, bpp }),
                 session.player_dir,
-                dx,
-                dy,
+                (dx, dy),
                 session.in_water,
             ),
             _ if gif_art => {}
@@ -2046,6 +2056,11 @@ fn main() {
             return;
         }
     };
+    // The replacement accepts integer FPS and cannot express the existing 16 ms interval.
+    #[expect(
+        deprecated,
+        reason = "preserve the existing 16 ms presentation interval"
+    )]
     window.limit_update_rate(Some(std::time::Duration::from_millis(16)));
     // Declared after `window`, so it is dropped before the window it draws into.
     #[cfg(all(
@@ -2363,7 +2378,7 @@ fn main() {
                             // A neighbour's file (gmap) is not the current level.
                             let is_current = net_state
                                 .current_level_name()
-                                .map_or(true, |c| c.eq_ignore_ascii_case(name));
+                                .is_none_or(|c| c.eq_ignore_ascii_case(name));
                             if name.ends_with(".nw") && !is_current {
                                 eprintln!("loaded {name}");
                             } else if name.ends_with(".nw") {
@@ -2622,7 +2637,7 @@ fn main() {
                 if let Some(name) = &net_state.current_level_name() {
                     if loaded_level
                         .as_deref()
-                        .map_or(true, |l| !l.eq_ignore_ascii_case(name))
+                        .is_none_or(|l| !l.eq_ignore_ascii_case(name))
                     {
                         entered = true;
                         // The first level after login is not a "level change":
@@ -2764,15 +2779,12 @@ fn main() {
                 // `sethead` chat command, for one).
                 if let Some(h) = net_state.own_head.take() {
                     session.looks.head = Some(h);
-                    dirty = true;
                 }
                 if let Some(b) = net_state.own_body.take() {
                     session.looks.body = Some(b);
-                    dirty = true;
                 }
                 if let Some(c) = net_state.own_colors.take() {
                     session.looks.colors = c;
-                    dirty = true;
                 }
                 for (own, new) in session
                     .looks
@@ -2782,7 +2794,6 @@ fn main() {
                 {
                     if let Some(a) = new.take() {
                         *own = Some(a);
-                        dirty = true;
                     }
                 }
                 // Hearts, AP and STATUS the server gave.
@@ -4858,7 +4869,7 @@ fn main() {
                 if !pressed {
                     continue;
                 }
-                match ui::editor_key(profile.ui.editor, &profile.label, frames.is_some(), is_f4) {
+                match ui::editor_key(profile.ui.editor, profile.label, frames.is_some(), is_f4) {
                     ui::EditorKey::Refuse(msg) => {
                         net_state.push_chat(ChatKind::Admin, "Seihai".into(), msg);
                     }
@@ -5146,7 +5157,7 @@ fn main() {
             && (session.carried.is_none()
                 || session
                     .lift_ticks
-                    .map_or(true, |t| t >= seihai::offline::LIFT_CARRIED_TICK))
+                    .is_none_or(|t| t >= seihai::offline::LIFT_CARRIED_TICK))
         {
             let sprite = carry_pending.take().flatten();
             if let (Some(c), true) = (conn.as_mut(), session.carried.is_some()) {

@@ -449,7 +449,8 @@ fn ganis_parse_with_the_documented_structure() {
         other => panic!("unexpected sheet {other}"),
     };
     // name, steps, sound cues as (step, file)
-    let want: [(&str, usize, Vec<(usize, &str)>); 6] = [
+    type ExpectedGani = (&'static str, usize, Vec<(usize, &'static str)>);
+    let want: [ExpectedGani; 6] = [
         ("idle", 1, vec![]),
         ("walk", 8, vec![(0, "steps2.wav"), (4, "steps2.wav")]),
         ("swim", 8, vec![(0, "water.wav")]),
@@ -539,7 +540,7 @@ fn ganis_parse_with_the_documented_structure() {
         "Seihai ships no hat"
     );
     let shield_at = [(36, 16), (6, 16), (8, 24), (34, 16)];
-    for dir in 0..4usize {
+    for (dir, position) in shield_at.iter().enumerate() {
         let row = &idle.frames[0].rows[dir];
         let ids: Vec<u32> = row.iter().map(|p| p.sprite_id).collect();
         let (d, s) = (dir as u32, 10 + dir as u32);
@@ -550,7 +551,7 @@ fn ganis_parse_with_the_documented_structure() {
         };
         assert_eq!(ids, want);
         let sh = row.iter().find(|p| p.sprite_id == s).unwrap();
-        assert_eq!((sh.x, sh.y), shield_at[dir]);
+        assert_eq!((sh.x, sh.y), *position);
     }
     // the shield is in idle, walk and sword only, as in the stock GANIs
     for (name, has) in [

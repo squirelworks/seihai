@@ -366,8 +366,8 @@ pub fn board_image(doc: &Document, sheet: &Sheet, show: [bool; LAYERS]) -> Frame
     if !show[0] {
         fb.fill_rect(0, 0, px as i32, px as i32, [40, 40, 40]);
     }
-    for layer in 0..LAYERS {
-        if !show[layer] {
+    for (layer, visible) in show.iter().enumerate().take(LAYERS) {
+        if !visible {
             continue;
         }
         for y in 0..SIZE {

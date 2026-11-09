@@ -137,7 +137,15 @@ fn has(s: &Sheet, r: Rect) -> bool {
 
 fn blit(fb: &mut Framebuffer, s: &Sheet, r: Rect, x: i32, y: i32) {
     if has(s, r) {
-        fb.blit_sprite(s.px, s.w, s.bpp, r.0, r.1, r.2, r.3, x, y);
+        fb.blit_sprite(
+            crate::render::Sheet {
+                px: s.px,
+                w: s.w,
+                bpp: s.bpp,
+            },
+            (r.0, r.1, r.2, r.3),
+            (x, y),
+        );
     }
 }
 
@@ -166,7 +174,15 @@ fn sprite(
     if !draw_sprite(fb, sheet, tables, id, x, y) {
         if let Some((sx, sy, w, h)) = icon_rect(id) {
             if has(&sheet, Rect(sx, sy, w, h)) {
-                fb.blit_sprite(sheet.px, sheet.w, sheet.bpp, sx, sy, w, h, x, y);
+                fb.blit_sprite(
+                    crate::render::Sheet {
+                        px: sheet.px,
+                        w: sheet.w,
+                        bpp: sheet.bpp,
+                    },
+                    (sx, sy, w, h),
+                    (x, y),
+                );
             }
         }
     }
@@ -222,9 +238,9 @@ pub fn draw_hud(
         let old = matches!(art, HudArt::Letters | HudArt::LettersChat) || three_buttons(s);
         let lettered = matches!(art, HudArt::Letters | HudArt::LettersChat);
         let shown = if v.weapons { 3 } else { 1 };
-        for i in 0..shown {
+        for (i, &old_button) in BUTTONS_OLD.iter().enumerate().take(shown) {
             let x = bx + i as i32 * BUTTON_STEP;
-            blit(fb, s, if old { BUTTONS_OLD[i] } else { BUTTON }, x, by + 15);
+            blit(fb, s, if old { old_button } else { BUTTON }, x, by + 15);
             if !lettered {
                 draw_big_letter(fb, v.keys[i], x + 2, by + 17 + 4);
             }

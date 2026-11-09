@@ -172,10 +172,10 @@ fn painting_changes_only_the_rectangle_and_keeps_every_other_line() {
     let changed = doc.paint(20, 30, 5, 4, 1234).unwrap();
     assert_eq!(changed, 20);
     assert!(doc.is_modified());
-    for y in 0..SIZE {
-        for x in 0..SIZE {
+    for (y, row) in before.iter().enumerate() {
+        for (x, value) in row.iter().enumerate() {
             let inside = (20..25).contains(&x) && (30..34).contains(&y);
-            let want = if inside { 1234 } else { before[y][x] };
+            let want = if inside { 1234 } else { *value };
             assert_eq!(doc.tile(x, y), Some(want), "({x}, {y})");
         }
     }

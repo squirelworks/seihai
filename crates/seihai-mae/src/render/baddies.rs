@@ -22,7 +22,15 @@ fn blit(fb: &mut Framebuffer, sheet: Sheet<'_>, r: (i32, i32, i32, i32), sx: i32
     if r.0 < 0 || r.1 < 0 || r.0 + r.2 > sheet.w as i32 || r.1 + r.3 > rows as i32 {
         return;
     }
-    fb.blit_sprite(sheet.px, sheet.w, sheet.bpp, r.0, r.1, r.2, r.3, sx, sy);
+    fb.blit_sprite(
+        crate::render::Sheet {
+            px: sheet.px,
+            w: sheet.w,
+            bpp: sheet.bpp,
+        },
+        (r.0, r.1, r.2, r.3),
+        (sx, sy),
+    );
 }
 
 /// Draw the session's baddies from the camera `(cam_x, cam_y)`. `frame`

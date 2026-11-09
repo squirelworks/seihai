@@ -51,7 +51,15 @@ pub const LINES_PER_PAGE: usize = 3;
 
 fn glyph(fb: &mut Framebuffer, sheet: &Sheet, g: u8, x: i32, y: i32) {
     let (sx, sy) = (i32::from(g % 16) * 16, i32::from(g / 16) * 32);
-    fb.blit_sprite(sheet.px, sheet.w, sheet.bpp, sx, sy, 16, 32, x, y);
+    fb.blit_sprite(
+        crate::render::Sheet {
+            px: sheet.px,
+            w: sheet.w,
+            bpp: sheet.bpp,
+        },
+        (sx, sy, 16, 32),
+        (x, y),
+    );
 }
 
 fn advance(g: u8) -> i32 {

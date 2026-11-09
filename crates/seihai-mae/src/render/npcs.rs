@@ -81,7 +81,15 @@ fn blit_image(
     if effect.is_on() {
         blit_effect(fb, px, w, (sx, sy, sw, sh), dx, dy, effect, light);
     } else {
-        fb.blit_sprite(px, img.0, 4, sx, sy, sw, sh, dx, dy);
+        fb.blit_sprite(
+            crate::render::Sheet {
+                px,
+                w: img.0,
+                bpp: 4,
+            },
+            (sx, sy, sw, sh),
+            (dx, dy),
+        );
     }
 }
 

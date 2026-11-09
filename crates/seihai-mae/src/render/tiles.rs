@@ -13,8 +13,6 @@ use std::collections::HashSet;
 
 /// Width of a tile in pixels.
 pub const TILE_PX: u32 = 16;
-/// Columns on the default `pics1.png` sheet.
-pub const SHEET_COLS: u32 = 128;
 /// Rows on the default `pics1.png` sheet.
 pub const SHEET_ROWS: u32 = 32;
 
@@ -112,16 +110,17 @@ impl Framebuffer {
     /// Transparent pixels (alpha 0, or magenta 255,0,255) are skipped.
     pub fn blit_sprite(
         &mut self,
-        src: &[u8],
-        src_w: u32,
-        bpp: usize,
-        sx: i32,
-        sy: i32,
-        sw: i32,
-        sh: i32,
-        dx: i32,
-        dy: i32,
+        sheet: Sheet<'_>,
+        source: (i32, i32, i32, i32),
+        destination: (i32, i32),
     ) {
+        let Sheet {
+            px: src,
+            w: src_w,
+            bpp,
+        } = sheet;
+        let (sx, sy, sw, sh) = source;
+        let (dx, dy) = destination;
         for ty in 0..sh {
             for tx in 0..sw {
                 let px = dx + tx;
@@ -149,10 +148,10 @@ impl Framebuffer {
 
     /// Draw a simple HUD: health bar and rupee bar.
     pub fn draw_hud(&mut self, health: i32, rupees: i32) {
-        let hp = health.max(0).min(100);
+        let hp = health.clamp(0, 100);
         self.fill_rect(4, 4, 100, 8, [0x40, 0x00, 0x00]);
         self.fill_rect(4, 4, hp, 8, [0xC0, 0x20, 0x20]);
-        let ru = rupees.max(0).min(100);
+        let ru = rupees.clamp(0, 100);
         self.fill_rect(110, 4, 50, 8, [0x00, 0x40, 0x00]);
         self.fill_rect(110, 4, ru / 2, 8, [0x20, 0xC0, 0x20]);
     }
@@ -195,7 +194,15 @@ impl Framebuffer {
             } else {
                 32
             };
-            self.blit_sprite(sheet, sheet_w, 16, sx, 0, 4 + i * 18, 4, 16, 16);
+            self.blit_sprite(
+                crate::render::Sheet {
+                    px: sheet,
+                    w: sheet_w,
+                    bpp: 16,
+                },
+                (sx, 0, 4 + i * 18, 4),
+                (16, 16),
+            );
         }
     }
 
@@ -517,23 +524,43 @@ pub fn draw_player_marker(fb: &mut Framebuffer, in_water: bool, dx: i32, dy: i32
 /// the camera origin in level pixels.
 pub fn draw_other_player(
     fb: &mut Framebuffer,
-    body: &[u8],
-    body_w: u32,
-    body_bpp: usize,
-    head: &[u8],
-    head_w: u32,
-    head_bpp: usize,
-    sprites: Option<(&[u8], u32, usize)>,
+    body: Sheet<'_>,
+    head: Sheet<'_>,
+    sprites: Option<Sheet<'_>>,
     dir: u8,
-    level_x: f32,
-    level_y: f32,
-    cam_x: i32,
-    cam_y: i32,
+    level: (f32, f32),
+    camera: (i32, i32),
 ) {
+    let (level_x, level_y) = level;
+    let (cam_x, cam_y) = camera;
+    let Sheet {
+        px: body,
+        w: body_w,
+        bpp: body_bpp,
+    } = body;
+    let Sheet {
+        px: head,
+        w: head_w,
+        bpp: head_bpp,
+    } = head;
     let dx = (level_x * TILE_PX as f32) as i32 - cam_x;
     let dy = (level_y * TILE_PX as f32) as i32 - cam_y;
     draw_player_sprites(
-        fb, body, body_w, body_bpp, head, head_w, head_bpp, sprites, dir, dx, dy, false,
+        fb,
+        crate::render::Sheet {
+            px: body,
+            w: body_w,
+            bpp: body_bpp,
+        },
+        crate::render::Sheet {
+            px: head,
+            w: head_w,
+            bpp: head_bpp,
+        },
+        sprites,
+        dir,
+        (dx, dy),
+        false,
     );
 }
 ///
@@ -546,20 +573,27 @@ pub fn draw_other_player(
 /// the shadow at 0,0 24×12.
 pub fn draw_player_sprites(
     fb: &mut Framebuffer,
-    body: &[u8],
-    body_w: u32,
-    body_bpp: usize,
-    head: &[u8],
-    head_w: u32,
-    head_bpp: usize,
-    sprites: Option<(&[u8], u32, usize)>,
+    body: Sheet<'_>,
+    head: Sheet<'_>,
+    sprites: Option<Sheet<'_>>,
     dir: u8,
-    dx: i32,
-    dy: i32,
+    at: (i32, i32),
     in_water: bool,
 ) {
+    let (dx, dy) = at;
+    let Sheet {
+        px: body,
+        w: body_w,
+        bpp: body_bpp,
+    } = body;
+    let Sheet {
+        px: head,
+        w: head_w,
+        bpp: head_bpp,
+    } = head;
     // (shadow, body, head) offsets per direction, from idle.gani.
-    const OFFSETS: [((i32, i32), (i32, i32), (i32, i32)); 4] = [
+    type Offset = (i32, i32);
+    const OFFSETS: [(Offset, Offset, Offset); 4] = [
         ((12, 34), (8, 16), (8, 2)),
         ((12, 36), (12, 16), (12, 2)),
         ((12, 34), (8, 16), (8, 2)),
@@ -571,51 +605,48 @@ pub fn draw_player_sprites(
     if in_water {
         // Swimming: only the head, lowered to the water line.
         fb.blit_sprite(
-            head,
-            head_w,
-            head_bpp,
-            0,
-            d * 32,
-            32,
-            32,
-            dx + h.0,
-            dy + h.1 + 14,
+            crate::render::Sheet {
+                px: head,
+                w: head_w,
+                bpp: head_bpp,
+            },
+            (0, d * 32, 32, 32),
+            (dx + h.0, dy + h.1 + 14),
         );
     } else {
-        if let Some((spr, spr_w, spr_bpp)) = sprites {
+        if let Some(Sheet {
+            px: spr,
+            w: spr_w,
+            bpp: spr_bpp,
+        }) = sprites
+        {
             fb.blit_sprite(
-                spr,
-                spr_w,
-                spr_bpp,
-                0,
-                0,
-                24,
-                12,
-                dx + shadow.0,
-                dy + shadow.1,
+                crate::render::Sheet {
+                    px: spr,
+                    w: spr_w,
+                    bpp: spr_bpp,
+                },
+                (0, 0, 24, 12),
+                (dx + shadow.0, dy + shadow.1),
             );
         }
         fb.blit_sprite(
-            body,
-            body_w,
-            body_bpp,
-            d * 32,
-            0,
-            32,
-            32,
-            dx + b.0,
-            dy + b.1,
+            crate::render::Sheet {
+                px: body,
+                w: body_w,
+                bpp: body_bpp,
+            },
+            (d * 32, 0, 32, 32),
+            (dx + b.0, dy + b.1),
         );
         fb.blit_sprite(
-            head,
-            head_w,
-            head_bpp,
-            0,
-            d * 32,
-            32,
-            32,
-            dx + h.0,
-            dy + h.1,
+            crate::render::Sheet {
+                px: head,
+                w: head_w,
+                bpp: head_bpp,
+            },
+            (0, d * 32, 32, 32),
+            (dx + h.0, dy + h.1),
         );
     }
 }
@@ -685,15 +716,13 @@ pub fn draw_gani_frame(
         if let Some(sh) = sheet {
             if sp.x >= 0 && sp.y >= 0 {
                 fb.blit_sprite(
-                    sh.px,
-                    sh.w,
-                    sh.bpp,
-                    sp.x,
-                    sp.y,
-                    sp.w,
-                    sp.h,
-                    dx + pl.x,
-                    dy + pl.y,
+                    crate::render::Sheet {
+                        px: sh.px,
+                        w: sh.w,
+                        bpp: sh.bpp,
+                    },
+                    (sp.x, sp.y, sp.w, sp.h),
+                    (dx + pl.x, dy + pl.y),
                 );
             }
         }

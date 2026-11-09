@@ -56,7 +56,15 @@ pub fn draw_sprite(
     if x < 0 || y < 0 || x + w > sheet.w as i32 || y + h > rows as i32 {
         return false;
     }
-    fb.blit_sprite(sheet.px, sheet.w, sheet.bpp, x, y, w, h, sx, sy);
+    fb.blit_sprite(
+        crate::render::Sheet {
+            px: sheet.px,
+            w: sheet.w,
+            bpp: sheet.bpp,
+        },
+        (x, y, w, h),
+        (sx, sy),
+    );
     true
 }
 
@@ -259,7 +267,8 @@ mod tests {
 
     /// A 128 x 402 RGBA sheet, fully transparent except the given
     /// rectangles, which are filled with one colour each.
-    fn sheet(fills: &[((i32, i32, i32, i32), [u8; 3])]) -> (u32, Vec<u8>) {
+    type Fill = ((i32, i32, i32, i32), [u8; 3]);
+    fn sheet(fills: &[Fill]) -> (u32, Vec<u8>) {
         let (w, h) = (128usize, 402usize);
         let mut px = vec![0u8; w * h * 4];
         for &((x, y, rw, rh), c) in fills {
@@ -437,8 +446,10 @@ mod tests {
     fn a_grounded_bomb_is_drawn_where_it_landed_from_the_loaded_sprite_table() {
         // sprite 65 has no built-in rect: the sprite table of an arrays.dat gives it one
         let (w, px) = sheet(&[((2, 100, 8, 8), [7, 7, 200])]);
-        let mut tables = crate::assets::ObjectTables::default();
-        tables.sprites = vec![0; 66];
+        let mut tables = crate::assets::ObjectTables {
+            sprites: vec![0; 66],
+            ..Default::default()
+        };
         tables.sprites[65] = (1 << 24) | (50 << 12) | (4 << 6) | 4;
         let mut s = session(false);
         s.object_tables = Some(tables);
@@ -490,8 +501,10 @@ mod tests {
     #[test]
     fn a_bomb_and_its_pieces_come_from_the_bomb_sheets() {
         // sprite 65 and piece 278 at the same rect; the power-3 pair 347 too
-        let mut tables = crate::assets::ObjectTables::default();
-        tables.sprites = vec![0; 349];
+        let mut tables = crate::assets::ObjectTables {
+            sprites: vec![0; 349],
+            ..Default::default()
+        };
         for id in [65, 278, 347] {
             tables.sprites[id] = (4 << 6) | 4; // (0, 0, 8, 8)
         }

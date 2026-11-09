@@ -294,7 +294,15 @@ pub fn draw(
         let (x0, y0) = (sx.max(0), sy.max(0));
         let (x1, y1) = ((sx + vw).min(p.w as i32), (sy + vh).min(p.h as i32));
         if x1 > x0 && y1 > y0 {
-            fb.blit_sprite(&p.px, p.w, 4, x0, y0, x1 - x0, y1 - y0, x0 - sx, y0 - sy);
+            fb.blit_sprite(
+                crate::render::Sheet {
+                    px: &p.px,
+                    w: p.w,
+                    bpp: 4,
+                },
+                (x0, y0, x1 - x0, y1 - y0),
+                (x0 - sx, y0 - sy),
+            );
         }
     }
     for m in markers {
