@@ -20,12 +20,20 @@ pub fn default_backend() -> (Box<dyn SoundOut>, String) {
     {
         match RodioSound::open() {
             Ok(b) => return (Box::new(b), "audio device opened".to_string()),
-            Err(e) => return (Box::new(NullSound), format!("no audio device ({e}); sound is silent")),
+            Err(e) => {
+                return (
+                    Box::new(NullSound),
+                    format!("no audio device ({e}); sound is silent"),
+                )
+            }
         }
     }
     #[cfg(not(feature = "audio-rodio"))]
     {
-        (Box::new(NullSound), "built without the audio-rodio feature; sound is silent".to_string())
+        (
+            Box::new(NullSound),
+            "built without the audio-rodio feature; sound is silent".to_string(),
+        )
     }
 }
 

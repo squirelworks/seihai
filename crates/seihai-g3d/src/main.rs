@@ -73,7 +73,9 @@ fn parse() -> Result<Args, String> {
             "--say" => a.say = Some(val(&f)?),
             "--walk" => a.walk = val(&f)?.parse().map_err(|_| "--walk needs a number")?,
             "--turn" => a.turn = val(&f)?.parse().map_err(|_| "--turn needs a number")?,
-            "--seconds" => a.seconds = Some(val(&f)?.parse().map_err(|_| "--seconds needs a number")?),
+            "--seconds" => {
+                a.seconds = Some(val(&f)?.parse().map_err(|_| "--seconds needs a number")?)
+            }
             "--level-info" => a.level_info = Some(val(&f)?),
             "--screenshot" => a.screenshot = Some(val(&f)?),
             "--no-udp" => a.no_udp = true,
@@ -98,9 +100,17 @@ fn main() -> ExitCode {
         }
     };
     if let Some(f) = &a.level_info {
-        return match std::fs::read(f).map_err(|e| e.to_string()).and_then(|b| XFile::parse(&b).map_err(|e| e.to_string())) {
+        return match std::fs::read(f)
+            .map_err(|e| e.to_string())
+            .and_then(|b| XFile::parse(&b).map_err(|e| e.to_string()))
+        {
             Ok(x) => {
-                println!("{f}: {} meshes, {} vertices, {} faces", x.meshes.len(), x.vertex_count(), x.face_count());
+                println!(
+                    "{f}: {} meshes, {} vertices, {} faces",
+                    x.meshes.len(),
+                    x.vertex_count(),
+                    x.face_count()
+                );
                 println!("textures: {}", x.textures().join(", "));
                 ExitCode::SUCCESS
             }
@@ -110,11 +120,19 @@ fn main() -> ExitCode {
             }
         };
     }
-    let password = a.password_env.as_deref().and_then(|v| std::env::var(v).ok());
+    let password = a
+        .password_env
+        .as_deref()
+        .and_then(|v| std::env::var(v).ok());
     let (addr, account, password, nick) = if let Some(o) = a.online.as_deref() {
         let account = a.account.clone().unwrap_or_else(|| "guest".into());
         let nick = a.nick.clone().unwrap_or_else(|| account.clone());
-        (session::with_default_port(o), account, password.unwrap_or_default(), nick)
+        (
+            session::with_default_port(o),
+            account,
+            password.unwrap_or_default(),
+            nick,
+        )
     } else if a.no_window || a.screenshot.is_some() {
         eprintln!("seihai-g3d: needs --online host[:port] (or --level-info FILE)");
         return ExitCode::from(2);
@@ -138,21 +156,40 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let Ok(addr) = form.addr() else { return ExitCode::from(2) };
+        let Ok(addr) = form.addr() else {
+            return ExitCode::from(2);
+        };
         let nick = form.nick_or_account();
         (addr, form.account.trim().to_string(), form.password, nick)
     };
-    let mut me = Player { nick, ..Player::default() };
+    let mut me = Player {
+        nick,
+        ..Player::default()
+    };
     let assets = a.assets.as_ref().map(PathBuf::from);
     // The look and UDP options from the install's graal3dconfig.txt. Its
     // server address is never used: the server is --online or the one
     // typed in the start window. Without the file, the shipped values.
     let cfg_path = assets.as_ref().map(|d| d.join(CONFIG_FILE));
-    let cfg = cfg_path.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| Config::parse(&t)).unwrap_or_default();
+    let cfg = cfg_path
+        .as_ref()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|t| Config::parse(&t))
+        .unwrap_or_default();
     cfg.apply_look(&mut me);
     let udp = Udp::from_options(a.no_udp || cfg.no_udp, cfg.fixed_port, cfg.fixed_udp_port);
-    let dir = a.levels.clone().map(Into::into).unwrap_or_else(|| session::default_level_dir(assets.as_deref()));
-    let s = match Session::connect(&addr, &Login { account, password }, me, udp, Some(dir.clone())) {
+    let dir = a
+        .levels
+        .clone()
+        .map(Into::into)
+        .unwrap_or_else(|| session::default_level_dir(assets.as_deref()));
+    let s = match Session::connect(
+        &addr,
+        &Login { account, password },
+        me,
+        udp,
+        Some(dir.clone()),
+    ) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("seihai-g3d: {addr}: {e}");
@@ -204,7 +241,9 @@ struct Game {
 
 impl Game {
     fn new(s: Session, assets: Assets) -> Game {
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.subsec_nanos());
         Game {
             s,
             assets,
@@ -237,7 +276,9 @@ impl Game {
                         }
                     }
                 }
-                Event::OwnProps { .. } if self.cam.is_none() => self.cam = Some(FollowCam::behind(&self.s.me)),
+                Event::OwnProps { .. } if self.cam.is_none() => {
+                    self.cam = Some(FollowCam::behind(&self.s.me))
+                }
                 Event::Chat { nick, text, .. } => self.chat.push(nick, text),
                 Event::DiscMessage(_) => self.failed = true,
                 _ => {}
@@ -261,7 +302,10 @@ impl Game {
     fn report_missing(&mut self) {
         let missing = self.assets.take_missing();
         if !missing.is_empty() {
-            eprintln!("seihai-g3d: not in the asset folders (drawn without them): {}", missing.join(", "));
+            eprintln!(
+                "seihai-g3d: not in the asset folders (drawn without them): {}",
+                missing.join(", ")
+            );
         }
     }
 
@@ -296,7 +340,10 @@ fn headless(a: &Args, g: &mut Game) -> ExitCode {
     let (mut said, mut walked) = (false, 0);
     loop {
         let fwd = g.level.is_some() && walked < a.walk;
-        let ev = match g.tick(Input { forward: fwd, ..Input::default() }) {
+        let ev = match g.tick(Input {
+            forward: fwd,
+            ..Input::default()
+        }) {
             Ok(ev) => ev,
             Err(e) => {
                 eprintln!("seihai-g3d: {e}");
@@ -320,7 +367,9 @@ fn headless(a: &Args, g: &mut Game) -> ExitCode {
                 break;
             }
         }
-        if a.seconds.is_some_and(|n| start.elapsed().as_secs_f64() >= n) {
+        if a.seconds
+            .is_some_and(|n| start.elapsed().as_secs_f64() >= n)
+        {
             break;
         }
         std::thread::sleep(TICK);
@@ -337,7 +386,11 @@ fn screenshot(a: &Args, g: &mut Game, out: &str) -> ExitCode {
     let mut after = 0u32;
     while start.elapsed().as_secs() < 20 {
         let ready = g.level.is_some() && g.cam.is_some();
-        let inp = Input { forward: ready && after < a.walk, right: ready && after >= a.walk && after < a.walk + a.turn, ..Input::default() };
+        let inp = Input {
+            forward: ready && after < a.walk,
+            right: ready && after >= a.walk && after < a.walk + a.turn,
+            ..Input::default()
+        };
         match g.tick(inp) {
             Ok(ev) => ev.iter().for_each(|e| log(&g.s, e)),
             Err(e) => {
@@ -359,7 +412,10 @@ fn screenshot(a: &Args, g: &mut Game, out: &str) -> ExitCode {
                 return match std::fs::write(out, seihai_g3d::bmp::encode(f.w, f.h, &f.px)) {
                     Ok(()) => {
                         let m = &g.s.me;
-                        println!("screenshot {out}: player at ({}, {}, {}) facing {}", m.x, m.y, m.z, m.angle);
+                        println!(
+                            "screenshot {out}: player at ({}, {}, {}) facing {}",
+                            m.x, m.y, m.z, m.angle
+                        );
                         ExitCode::SUCCESS
                     }
                     Err(e) => {
@@ -390,7 +446,15 @@ impl minifb::InputCallback for TypedChars {
 
 fn windowed(g: &mut Game, mut cfg: Config, cfg_path: Option<PathBuf>) -> ExitCode {
     use minifb::{Key, KeyRepeat, Window, WindowOptions};
-    let mut w = match Window::new("Seihai G3D", WIDTH, HEIGHT, WindowOptions { resize: true, ..WindowOptions::default() }) {
+    let mut w = match Window::new(
+        "Seihai G3D",
+        WIDTH,
+        HEIGHT,
+        WindowOptions {
+            resize: true,
+            ..WindowOptions::default()
+        },
+    ) {
         Ok(w) => w,
         Err(e) => {
             eprintln!("seihai-g3d: could not open the window: {e} (use --no-window to only log)");
@@ -404,7 +468,9 @@ fn windowed(g: &mut Game, mut cfg: Config, cfg_path: Option<PathBuf>) -> ExitCod
     let mut next = Instant::now();
     while w.is_open() {
         let chars: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
-        if w.is_key_pressed(Key::Enter, KeyRepeat::No) || w.is_key_pressed(Key::NumPadEnter, KeyRepeat::No) {
+        if w.is_key_pressed(Key::Enter, KeyRepeat::No)
+            || w.is_key_pressed(Key::NumPadEnter, KeyRepeat::No)
+        {
             match typing.take() {
                 Some(t) => g.say(&t),
                 None => typing = Some(String::new()),
@@ -504,9 +570,19 @@ fn log(s: &Session, e: &Event) {
         Event::Accepted => println!("accepted"),
         Event::OwnProps { id, props } => println!("own props: player {id}, {} props", props.len()),
         Event::Level { name, file: None } => println!("level {name}: already have it"),
-        Event::Level { name, file: Some(f) } => {
-            let saved = f.path.as_ref().map(|p| format!(", saved to {}", p.display())).unwrap_or_default();
-            println!("level {name}: {} bytes, {} vertices, {} faces{saved}", f.bytes, f.vertices, f.faces);
+        Event::Level {
+            name,
+            file: Some(f),
+        } => {
+            let saved = f
+                .path
+                .as_ref()
+                .map(|p| format!(", saved to {}", p.display()))
+                .unwrap_or_default();
+            println!(
+                "level {name}: {} bytes, {} vertices, {} faces{saved}",
+                f.bytes, f.vertices, f.faces
+            );
             if !f.textures.is_empty() {
                 println!("level {name}: textures {}", f.textures.join(", "));
             }
@@ -519,11 +595,23 @@ fn log(s: &Session, e: &Event) {
         Event::PlayerProps { id, props } => {
             let p = &s.others.get(id);
             let ids: Vec<String> = props.iter().map(|p| p.id().to_string()).collect();
-            println!("player {id} ({}): props {}", p.map(|p| p.nick.as_str()).unwrap_or(""), ids.join(","));
+            println!(
+                "player {id} ({}): props {}",
+                p.map(|p| p.nick.as_str()).unwrap_or(""),
+                ids.join(",")
+            );
         }
         Event::PlayerLeft { id } => println!("player {id} left"),
-        Event::Chat { id, nick, text, udp } => {
-            println!("chat {nick}: {text} (player {id}, {})", if *udp { "udp" } else { "tcp" })
+        Event::Chat {
+            id,
+            nick,
+            text,
+            udp,
+        } => {
+            println!(
+                "chat {nick}: {text} (player {id}, {})",
+                if *udp { "udp" } else { "tcp" }
+            )
         }
         Event::UdpPosition { id } => {
             if let Some(p) = s.others.get(id) {

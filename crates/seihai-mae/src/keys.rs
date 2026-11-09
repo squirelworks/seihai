@@ -102,7 +102,10 @@ pub struct KeyMap {
 impl Default for KeyMap {
     fn default() -> Self {
         Self {
-            keys: Action::ALL.iter().map(|&a| (a, a.defaults().to_vec())).collect(),
+            keys: Action::ALL
+                .iter()
+                .map(|&a| (a, a.defaults().to_vec()))
+                .collect(),
         }
     }
 }
@@ -121,14 +124,25 @@ impl KeyMap {
         let mut slots: Vec<(Action, [Option<Key>; 3])> = Vec::new();
         for (name, value) in keysets {
             if let Some((action, slot)) = name.rsplit_once("_key") {
-                let (Some(action), Ok(slot @ 0..=2)) = (action_named(action), slot.parse::<usize>()) else { continue };
-                let i = slots.iter().position(|(a, _)| *a == action).unwrap_or_else(|| {
-                    slots.push((action, [None; 3]));
-                    slots.len() - 1
-                });
+                let (Some(action), Ok(slot @ 0..=2)) =
+                    (action_named(action), slot.parse::<usize>())
+                else {
+                    continue;
+                };
+                let i = slots
+                    .iter()
+                    .position(|(a, _)| *a == action)
+                    .unwrap_or_else(|| {
+                        slots.push((action, [None; 3]));
+                        slots.len() - 1
+                    });
                 slots[i].1[slot] = parse_key(value.trim());
             } else if let Some(action) = action_named(name) {
-                let keys: Vec<Key> = value.split(',').filter_map(|k| parse_key(k.trim())).take(3).collect();
+                let keys: Vec<Key> = value
+                    .split(',')
+                    .filter_map(|k| parse_key(k.trim()))
+                    .take(3)
+                    .collect();
                 if !keys.is_empty() {
                     map.set(action, keys);
                 }
@@ -156,7 +170,10 @@ impl KeyMap {
 
     /// The letter shown on an item button for this action.
     pub fn label(&self, action: Action) -> char {
-        self.keys(action).first().map(|k| key_char(*k)).unwrap_or(' ')
+        self.keys(action)
+            .first()
+            .map(|k| key_char(*k))
+            .unwrap_or(' ')
     }
 
     pub fn down(&self, window: &minifb::Window, action: Action) -> bool {
@@ -167,12 +184,18 @@ impl KeyMap {
     /// i, in the order 2.05's `newfeatures2001.txt` gives ("0..3:
     /// movement, 4..6 A/S/D, 7 map, 8 tab, 9 Q, 10 P").
     pub fn keydown_bits(&self, window: &minifb::Window) -> u16 {
-        KEYDOWN_ORDER.iter().enumerate().filter(|(_, a)| self.down(window, **a)).fold(0, |b, (i, _)| b | 1 << i)
+        KEYDOWN_ORDER
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| self.down(window, **a))
+            .fold(0, |b, (i, _)| b | 1 << i)
     }
 
     /// Any of the four direction actions is held.
     pub fn any_direction_down(&self, window: &minifb::Window) -> bool {
-        [Action::Up, Action::Left, Action::Down, Action::Right].into_iter().any(|a| self.down(window, a))
+        [Action::Up, Action::Left, Action::Down, Action::Right]
+            .into_iter()
+            .any(|a| self.down(window, a))
     }
 
     pub fn pressed(&self, window: &minifb::Window, action: Action) -> bool {
@@ -188,17 +211,56 @@ impl KeyMap {
 pub fn parse_key(name: &str) -> Option<Key> {
     let n = name.to_ascii_lowercase().replace(' ', "");
     let letters = [
-        Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H, Key::I, Key::J, Key::K,
-        Key::L, Key::M, Key::N, Key::O, Key::P, Key::Q, Key::R, Key::S, Key::T, Key::U, Key::V,
-        Key::W, Key::X, Key::Y, Key::Z,
+        Key::A,
+        Key::B,
+        Key::C,
+        Key::D,
+        Key::E,
+        Key::F,
+        Key::G,
+        Key::H,
+        Key::I,
+        Key::J,
+        Key::K,
+        Key::L,
+        Key::M,
+        Key::N,
+        Key::O,
+        Key::P,
+        Key::Q,
+        Key::R,
+        Key::S,
+        Key::T,
+        Key::U,
+        Key::V,
+        Key::W,
+        Key::X,
+        Key::Y,
+        Key::Z,
     ];
     let digits = [
-        Key::Key0, Key::Key1, Key::Key2, Key::Key3, Key::Key4, Key::Key5, Key::Key6, Key::Key7,
-        Key::Key8, Key::Key9,
+        Key::Key0,
+        Key::Key1,
+        Key::Key2,
+        Key::Key3,
+        Key::Key4,
+        Key::Key5,
+        Key::Key6,
+        Key::Key7,
+        Key::Key8,
+        Key::Key9,
     ];
     let pad = [
-        Key::NumPad0, Key::NumPad1, Key::NumPad2, Key::NumPad3, Key::NumPad4, Key::NumPad5,
-        Key::NumPad6, Key::NumPad7, Key::NumPad8, Key::NumPad9,
+        Key::NumPad0,
+        Key::NumPad1,
+        Key::NumPad2,
+        Key::NumPad3,
+        Key::NumPad4,
+        Key::NumPad5,
+        Key::NumPad6,
+        Key::NumPad7,
+        Key::NumPad8,
+        Key::NumPad9,
     ];
     let b = n.as_bytes();
     if b.len() == 1 && b[0].is_ascii_lowercase() {
@@ -207,11 +269,21 @@ pub fn parse_key(name: &str) -> Option<Key> {
     if b.len() == 1 && b[0].is_ascii_digit() {
         return Some(digits[(b[0] - b'0') as usize]);
     }
-    let pad_digit = ["numpad", "num", "n"].iter().find_map(|p| n.strip_prefix(p).and_then(|d| d.parse::<usize>().ok()));
+    let pad_digit = ["numpad", "num", "n"]
+        .iter()
+        .find_map(|p| n.strip_prefix(p).and_then(|d| d.parse::<usize>().ok()));
     if let Some(d) = pad_digit {
         return pad.get(d).copied();
     }
-    let f_keys = [Key::F9, Key::F10, Key::F11, Key::F12, Key::F13, Key::F14, Key::F15];
+    let f_keys = [
+        Key::F9,
+        Key::F10,
+        Key::F11,
+        Key::F12,
+        Key::F13,
+        Key::F14,
+        Key::F15,
+    ];
     if let Some(f) = n.strip_prefix('f').and_then(|d| d.parse::<usize>().ok()) {
         return f.checked_sub(9).and_then(|i| f_keys.get(i)).copied();
     }
@@ -278,8 +350,16 @@ mod tests {
         ];
         let m = KeyMap::for_version(true, &sets);
         assert_eq!(m.keys(Action::Attack), &[Key::W, Key::NumPad8]);
-        assert_eq!(m.keys(Action::Map), &[] as &[Key], "an empty slot line unbinds it");
-        assert_eq!(m.keys(Action::Act), &[Key::A], "untouched actions keep the readme key");
+        assert_eq!(
+            m.keys(Action::Map),
+            &[] as &[Key],
+            "an empty slot line unbinds it"
+        );
+        assert_eq!(
+            m.keys(Action::Act),
+            &[Key::A],
+            "untouched actions keep the readme key"
+        );
     }
 
     #[test]

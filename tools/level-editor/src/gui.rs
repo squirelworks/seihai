@@ -11,12 +11,18 @@
 //! own; `EditorApp` draws it. `EditorApp::ui` takes a bare `egui::Context`, so
 //! the tests also drive the real window code with synthetic mouse input.
 
-use crate::{Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, Version, SCRIPT_PANE_LINES, LAYERS, SIZE, TILE_LIMIT};
+use crate::{
+    Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, Version, LAYERS,
+    SCRIPT_PANE_LINES, SIZE, TILE_LIMIT,
+};
 use eframe::egui;
-use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
+use egui::{
+    Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions,
+    Vec2,
+};
+use seihai::render::{Framebuffer, TILE_PX};
 use seihai_core::assets::{read_png_rgb, tile_id, ObjectSet, Stamp};
 use seihai_core::gmap::Gmap;
-use seihai::render::{Framebuffer, TILE_PX};
 use std::path::{Path, PathBuf};
 
 /// Columns of 16 px tiles on a `pics1.png` sheet (2048 px).
@@ -33,7 +39,8 @@ pub fn sheet_cell(id: u16) -> (u32, u32) {
 
 /// The tile id at sheet cell (column, row); the inverse of `sheet_cell`.
 pub fn sheet_tile(col: u32, row: u32) -> Option<u16> {
-    (col < SHEET_COLS && row < SHEET_ROWS).then(|| ((col % 16) + row * 16 + (col / 16) * 512) as u16)
+    (col < SHEET_COLS && row < SHEET_ROWS)
+        .then(|| ((col % 16) + row * 16 + (col / 16) * 512) as u16)
 }
 
 /// The board cells on the straight line from `a` to `b` (both included), so
@@ -163,15 +170,29 @@ impl Editor {
 
     /// Open a `.gmap` (read with the client's parser). The open level stays.
     pub fn open_gmap(&mut self, path: &Path) -> Result<(), EditError> {
-        let text = std::fs::read_to_string(path).map_err(|e| EditError::Io(format!("cannot read {}: {e}", path.display())))?;
-        let map = Gmap::parse(&text).ok_or_else(|| EditError::NotText(format!("{} is not a GRMAP001 gmap with at least one cell", path.display())))?;
-        self.gmap = Some(GmapView { path: path.to_path_buf(), map });
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| EditError::Io(format!("cannot read {}: {e}", path.display())))?;
+        let map = Gmap::parse(&text).ok_or_else(|| {
+            EditError::NotText(format!(
+                "{} is not a GRMAP001 gmap with at least one cell",
+                path.display()
+            ))
+        })?;
+        self.gmap = Some(GmapView {
+            path: path.to_path_buf(),
+            map,
+        });
         Ok(())
     }
 
     /// Load a `GOBJSET01` object set (read with the client's parser).
     pub fn load_stamps(&mut self, path: &Path) -> Result<usize, EditError> {
-        let set = ObjectSet::load(path).map_err(|e| EditError::NotText(format!("cannot read the object set {}: {e}", path.display())))?;
+        let set = ObjectSet::load(path).map_err(|e| {
+            EditError::NotText(format!(
+                "cannot read the object set {}: {e}",
+                path.display()
+            ))
+        })?;
         let n = set.stamps.len();
         self.stamp = (n > 0).then_some(0);
         self.stamps = Some((path.to_path_buf(), set));
@@ -202,7 +223,9 @@ impl Editor {
     /// Empty board cell (x, y) of layer 1.
     pub fn erase_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
         if self.layer != 1 {
-            return Err(EditError::Bounds("only layer 1 has empty cells; switch to layer 1 to erase".into()));
+            return Err(EditError::Bounds(
+                "only layer 1 has empty cells; switch to layer 1 to erase".into(),
+            ));
         }
         let doc = self.doc.as_mut().ok_or_else(no_level)?;
         let n = doc.paint_layer(1, x, y, 1, 1, None)?;
@@ -212,7 +235,10 @@ impl Editor {
     /// Drop the picked stamp with its top-left corner at (x, y) on the active
     /// layer. Cells off the board are left out. Returns the tiles changed.
     pub fn place_stamp(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
-        let stamp = self.current_stamp().cloned().ok_or_else(|| EditError::Io("no stamp is picked; load an object set first".into()))?;
+        let stamp = self
+            .current_stamp()
+            .cloned()
+            .ok_or_else(|| EditError::Io("no stamp is picked; load an object set first".into()))?;
         let layer = self.layer;
         let doc = self.doc.as_mut().ok_or_else(no_level)?;
         let mut n = 0;
@@ -253,11 +279,17 @@ impl Editor {
 
     /// The topmost object whose marker covers the point (in tiles).
     pub fn object_at(&self, x: f32, y: f32) -> Option<Object> {
-        self.objects().into_iter().rev().find(|o| x >= o.x && y >= o.y && x < o.x + o.w && y < o.y + o.h)
+        self.objects()
+            .into_iter()
+            .rev()
+            .find(|o| x >= o.x && y >= o.y && x < o.x + o.w && y < o.y + o.h)
     }
 
     pub fn edit_object(&mut self, id: usize, edit: ObjectEdit) -> Result<(), EditError> {
-        self.doc.as_mut().ok_or_else(no_level)?.edit_object(id, edit)?;
+        self.doc
+            .as_mut()
+            .ok_or_else(no_level)?
+            .edit_object(id, edit)?;
         self.unsaved = true;
         Ok(())
     }
@@ -269,7 +301,11 @@ impl Editor {
 
     /// Add a link, sign, chest or NPC at (x, y) and select it.
     pub fn add_object(&mut self, kind: ObjectKind, x: i32, y: i32) -> Result<usize, EditError> {
-        let id = self.doc.as_mut().ok_or_else(no_level)?.add_object(kind, x, y)?;
+        let id = self
+            .doc
+            .as_mut()
+            .ok_or_else(no_level)?
+            .add_object(kind, x, y)?;
         self.unsaved = true;
         self.selected = Some(id);
         Ok(id)
@@ -308,13 +344,15 @@ pub struct Sheet {
 impl Sheet {
     /// Read a PNG sheet (`pics1.png` layout, 2048 x 512).
     pub fn from_png(data: &[u8]) -> Result<Sheet, String> {
-        let (width, height, rgb) = read_png_rgb(data).map_err(|e| format!("cannot read the tile sheet: {e}"))?;
+        let (width, height, rgb) =
+            read_png_rgb(data).map_err(|e| format!("cannot read the tile sheet: {e}"))?;
         Ok(Sheet { width, height, rgb })
     }
 
     /// The `pics1.png` of the built-in default asset set.
     pub fn builtin() -> Sheet {
-        let data = seihai_core::assets::builtin::bytes("pics1.png").expect("pics1.png is in the built-in set");
+        let data = seihai_core::assets::builtin::bytes("pics1.png")
+            .expect("pics1.png is in the built-in set");
         Sheet::from_png(data).expect("the built-in pics1.png decodes")
     }
 }
@@ -335,7 +373,14 @@ pub fn board_image(doc: &Document, sheet: &Sheet, show: [bool; LAYERS]) -> Frame
         for y in 0..SIZE {
             for x in 0..SIZE {
                 if let Some(t) = doc.layer_tile(layer, x, y) {
-                    fb.blit_tile(&sheet.rgb, sheet.width, sheet.height, t, (x as u32 * TILE_PX) as i32, (y as u32 * TILE_PX) as i32);
+                    fb.blit_tile(
+                        &sheet.rgb,
+                        sheet.width,
+                        sheet.height,
+                        t,
+                        (x as u32 * TILE_PX) as i32,
+                        (y as u32 * TILE_PX) as i32,
+                    );
                 }
             }
         }
@@ -468,7 +513,9 @@ impl EditorApp {
     }
 
     fn is_gmap(p: &Path) -> bool {
-        p.extension().map(|e| e.eq_ignore_ascii_case("gmap")).unwrap_or(false)
+        p.extension()
+            .map(|e| e.eq_ignore_ascii_case("gmap"))
+            .unwrap_or(false)
     }
 
     /// Open a level (asking first about unsaved changes) or a gmap.
@@ -477,7 +524,10 @@ impl EditorApp {
             match self.editor.open_gmap(&p) {
                 Ok(()) => {
                     self.map_view = true;
-                    self.status = format!("Opened the gmap {}; click a cell to open its level", p.display());
+                    self.status = format!(
+                        "Opened the gmap {}; click a cell to open its level",
+                        p.display()
+                    );
                 }
                 Err(e) => self.status = e.to_string(),
             }
@@ -534,14 +584,19 @@ impl EditorApp {
                 self.closing = true;
             }
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) && self.editor.doc().is_some() {
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S))
+            && self.editor.doc().is_some()
+        {
             self.do_save(None);
         }
 
         let title = format!(
             "{}{} - Seihai level editor ({})",
             if self.editor.has_unsaved() { "*" } else { "" },
-            self.editor.path().map(|p| p.display().to_string()).unwrap_or_else(|| "no level".into()),
+            self.editor
+                .path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "no level".into()),
             self.editor.version.name()
         );
         if title != self.title {
@@ -567,7 +622,12 @@ impl EditorApp {
         match self.editor.script_head(id) {
             Ok(head) => {
                 self.editor.selected = Some(id);
-                self.script = Some(ScriptPane { id, text: head.lines.join("\n"), shown: head.lines.len(), total: head.total });
+                self.script = Some(ScriptPane {
+                    id,
+                    text: head.lines.join("\n"),
+                    shown: head.lines.len(),
+                    total: head.total,
+                });
             }
             Err(e) => self.status = e.to_string(),
         }
@@ -576,9 +636,21 @@ impl EditorApp {
     /// Put the pane's text into the level in place of the lines it showed.
     /// Returns true when the level took it.
     pub fn apply_script(&mut self) -> bool {
-        let Some(pane) = self.script.clone() else { return false };
-        let lines: Vec<String> = if pane.text.is_empty() { Vec::new() } else { pane.text.split('\n').map(|l| l.trim_end_matches('\r').to_string()).collect() };
-        match self.editor.edit_object(pane.id, ObjectEdit::ScriptHead(lines)) {
+        let Some(pane) = self.script.clone() else {
+            return false;
+        };
+        let lines: Vec<String> = if pane.text.is_empty() {
+            Vec::new()
+        } else {
+            pane.text
+                .split('\n')
+                .map(|l| l.trim_end_matches('\r').to_string())
+                .collect()
+        };
+        match self
+            .editor
+            .edit_object(pane.id, ObjectEdit::ScriptHead(lines))
+        {
             Ok(()) => {
                 self.status = format!("Changed the script of NPC {}", pane.id);
                 self.script = None;
@@ -592,11 +664,17 @@ impl EditorApp {
     }
 
     fn script_window(&mut self, ctx: &egui::Context) {
-        let Some(pane) = self.script.as_mut() else { return };
+        let Some(pane) = self.script.as_mut() else {
+            return;
+        };
         let mut open = true;
         let mut cancel = false;
         let mut action = None;
-        let count = if pane.text.is_empty() { 0 } else { pane.text.split('\n').count() };
+        let count = if pane.text.is_empty() {
+            0
+        } else {
+            pane.text.split('\n').count()
+        };
         egui::Window::new(format!("NPC {} script", pane.id))
             .open(&mut open)
             .collapsible(false)
@@ -604,19 +682,43 @@ impl EditorApp {
             .show(ctx, |ui| {
                 let rest = pane.total - pane.shown;
                 ui.label(if rest > 0 {
-                    format!("Lines 1 to {} of {}. The {rest} lines after them are kept as they are.", pane.shown, pane.total)
+                    format!(
+                        "Lines 1 to {} of {}. The {rest} lines after them are kept as they are.",
+                        pane.shown, pane.total
+                    )
                 } else {
-                    format!("The whole script ({} lines). The pane edits up to {SCRIPT_PANE_LINES}.", pane.total)
+                    format!(
+                        "The whole script ({} lines). The pane edits up to {SCRIPT_PANE_LINES}.",
+                        pane.total
+                    )
                 });
-                ui.add(egui::TextEdit::multiline(&mut pane.text).code_editor().desired_rows(SCRIPT_PANE_LINES).desired_width(f32::INFINITY));
+                ui.add(
+                    egui::TextEdit::multiline(&mut pane.text)
+                        .code_editor()
+                        .desired_rows(SCRIPT_PANE_LINES)
+                        .desired_width(f32::INFINITY),
+                );
                 if count > SCRIPT_PANE_LINES {
-                    ui.colored_label(Color32::LIGHT_RED, format!("{count} lines: the pane saves {SCRIPT_PANE_LINES} at most."));
+                    ui.colored_label(
+                        Color32::LIGHT_RED,
+                        format!("{count} lines: the pane saves {SCRIPT_PANE_LINES} at most."),
+                    );
                 }
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(count <= SCRIPT_PANE_LINES, egui::Button::new("Apply")).on_hover_text("Into the level; save the level to write it").clicked() {
+                    if ui
+                        .add_enabled(count <= SCRIPT_PANE_LINES, egui::Button::new("Apply"))
+                        .on_hover_text("Into the level; save the level to write it")
+                        .clicked()
+                    {
                         action = Some(false);
                     }
-                    if ui.add_enabled(count <= SCRIPT_PANE_LINES, egui::Button::new("Apply and save level")).clicked() {
+                    if ui
+                        .add_enabled(
+                            count <= SCRIPT_PANE_LINES,
+                            egui::Button::new("Apply and save level"),
+                        )
+                        .clicked()
+                    {
                         action = Some(true);
                     }
                     if ui.button("Cancel").clicked() {
@@ -706,13 +808,19 @@ impl EditorApp {
                 let t = self.editor.tile;
                 ui.label(format!("Tile {t} (0x{t:03X})"));
                 let mut id = t as u32;
-                if ui.add(egui::DragValue::new(&mut id).range(0..=TILE_LIMIT as u32 - 1)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut id).range(0..=TILE_LIMIT as u32 - 1))
+                    .changed()
+                {
                     let _ = self.editor.select(id);
                 }
                 ui.separator();
                 if let (Some((x, y)), Some(doc)) = (self.hover, self.editor.doc()) {
                     let l0 = doc.layer_tile(0, x, y).unwrap_or(0);
-                    let l1 = doc.layer_tile(1, x, y).map(|t| t.to_string()).unwrap_or_else(|| "empty".into());
+                    let l1 = doc
+                        .layer_tile(1, x, y)
+                        .map(|t| t.to_string())
+                        .unwrap_or_else(|| "empty".into());
                     ui.label(format!("x {x}, y {y}: layer 0 tile {l0}, layer 1 {l1}"));
                     ui.separator();
                 }
@@ -728,7 +836,8 @@ impl EditorApp {
     fn palette(&mut self, ctx: &egui::Context) {
         let sheet = &self.sheet;
         let tex = self.sheet_tex.get_or_insert_with(|| {
-            let img = ColorImage::from_rgb([sheet.width as usize, sheet.height as usize], &sheet.rgb);
+            let img =
+                ColorImage::from_rgb([sheet.width as usize, sheet.height as usize], &sheet.rgb);
             ctx.load_texture("tile-sheet", img, TextureOptions::NEAREST)
         });
         let tex_id = tex.id();
@@ -765,19 +874,27 @@ impl EditorApp {
         if !matches!(self.editor.tool, Tool::Stamp | Tool::Objects) {
             return;
         }
-        egui::SidePanel::right("side").default_width(280.0).show(ctx, |ui| {
-            egui::ScrollArea::vertical().id_salt("side-scroll").show(ui, |ui| match self.editor.tool {
-                Tool::Stamp => self.stamp_panel(ui),
-                _ => self.object_panel(ui),
+        egui::SidePanel::right("side")
+            .default_width(280.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("side-scroll")
+                    .show(ui, |ui| match self.editor.tool {
+                        Tool::Stamp => self.stamp_panel(ui),
+                        _ => self.object_panel(ui),
+                    });
             });
-        });
     }
 
     fn stamp_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Stamps");
         ui.label("Object set (GOBJSET01)");
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.stamps_path).desired_width(180.0).hint_text("objects.txt"));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.stamps_path)
+                    .desired_width(180.0)
+                    .hint_text("objects.txt"),
+            );
             if ui.button("Load").clicked() && !self.stamps_path.trim().is_empty() {
                 match self.editor.load_stamps(Path::new(self.stamps_path.trim())) {
                     Ok(n) => self.status = format!("Loaded {n} stamps"),
@@ -789,13 +906,23 @@ impl EditorApp {
             ui.label("No object set loaded.");
             return;
         };
-        let names: Vec<String> = set.stamps.iter().map(|s| format!("{} ({} x {})", s.name, s.width, s.height)).collect();
+        let names: Vec<String> = set
+            .stamps
+            .iter()
+            .map(|s| format!("{} ({} x {})", s.name, s.width, s.height))
+            .collect();
         for (i, name) in names.into_iter().enumerate() {
-            if ui.selectable_label(self.editor.stamp == Some(i), name).clicked() {
+            if ui
+                .selectable_label(self.editor.stamp == Some(i), name)
+                .clicked()
+            {
                 self.editor.stamp = Some(i);
             }
         }
-        ui.label(format!("Click the board to drop the stamp on layer {}.", self.editor.layer));
+        ui.label(format!(
+            "Click the board to drop the stamp on layer {}.",
+            self.editor.layer
+        ));
     }
 
     fn object_panel(&mut self, ui: &mut egui::Ui) {
@@ -823,7 +950,10 @@ impl EditorApp {
                 k => format!("{} {} at {}, {} {}", k.name(), o.id, o.x, o.y, o.name),
             };
             let text = egui::RichText::new(label).color(kind_color(o.kind));
-            if ui.selectable_label(self.editor.selected == Some(o.id), text).clicked() {
+            if ui
+                .selectable_label(self.editor.selected == Some(o.id), text)
+                .clicked()
+            {
                 self.editor.selected = Some(o.id);
             }
         }
@@ -832,7 +962,9 @@ impl EditorApp {
             ui.label("Click a marker or a row to select it; drag a marker to move it.");
             return;
         };
-        if self.fields.id != Some(o.id) || self.drag.is_none() && (self.fields.x != o.x || self.fields.y != o.y) {
+        if self.fields.id != Some(o.id)
+            || self.drag.is_none() && (self.fields.x != o.x || self.fields.y != o.y)
+        {
             self.fields = ObjectFields {
                 id: Some(o.id),
                 dest: o.name.clone(),
@@ -881,24 +1013,40 @@ impl EditorApp {
                 });
                 ui.horizontal(|ui| {
                     ui.label("Arrive at");
-                    ui.add(egui::TextEdit::singleline(&mut self.fields.arrival_x).desired_width(80.0));
-                    ui.add(egui::TextEdit::singleline(&mut self.fields.arrival_y).desired_width(80.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.fields.arrival_x).desired_width(80.0),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.fields.arrival_y).desired_width(80.0),
+                    );
                 });
                 if ui.button("Apply destination and arrival").clicked() {
                     edits.push(ObjectEdit::LinkDest(self.fields.dest.clone()));
-                    edits.push(ObjectEdit::LinkArrival(self.fields.arrival_x.clone(), self.fields.arrival_y.clone()));
+                    edits.push(ObjectEdit::LinkArrival(
+                        self.fields.arrival_x.clone(),
+                        self.fields.arrival_y.clone(),
+                    ));
                 }
             }
             ObjectKind::Npc | ObjectKind::Sign => {
                 if o.kind == ObjectKind::Npc {
                     ui.label(format!("Image: {}", o.name));
                 }
-                ui.label(if o.kind == ObjectKind::Npc { "First script line" } else { "First text line" });
+                ui.label(if o.kind == ObjectKind::Npc {
+                    "First script line"
+                } else {
+                    "First text line"
+                });
                 ui.text_edit_singleline(&mut self.fields.first_line);
                 if ui.button("Apply line").clicked() {
                     edits.push(ObjectEdit::FirstLine(self.fields.first_line.clone()));
                 }
-                if o.kind == ObjectKind::Npc && ui.button("Edit script (20 lines)").on_hover_text("Or double-click the marker").clicked() {
+                if o.kind == ObjectKind::Npc
+                    && ui
+                        .button("Edit script (20 lines)")
+                        .on_hover_text("Or double-click the marker")
+                        .clicked()
+                {
                     self.open_script(o.id);
                 }
             }
@@ -923,38 +1071,65 @@ impl EditorApp {
     }
 
     fn gmap_grid(&mut self, ctx: &egui::Context) {
-        let Some(view) = self.editor.gmap.clone() else { return };
+        let Some(view) = self.editor.gmap.clone() else {
+            return;
+        };
         let current = self.editor.path().map(Path::to_path_buf);
         let mut open = None;
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(format!("{} ({} x {} levels). Click a cell to open its level.", view.path.display(), view.map.width, view.map.height));
+            ui.label(format!(
+                "{} ({} x {} levels). Click a cell to open its level.",
+                view.path.display(),
+                view.map.width,
+                view.map.height
+            ));
             self.gmap_cells.clear();
-            egui::ScrollArea::both().id_salt("gmap-scroll").show(ui, |ui| {
-                egui::Grid::new("gmap-grid").spacing([2.0, 2.0]).show(ui, |ui| {
-                    for y in 0..view.map.height {
-                        for x in 0..view.map.width {
-                            let name = view.map.level_at(x as i32, y as i32).unwrap_or("").to_string();
-                            let file = view.level_path(x, y);
-                            let exists = file.as_ref().map(|f| f.is_file()).unwrap_or(false);
-                            let is_open = file.is_some() && file == current;
-                            let mut text = egui::RichText::new(if name.is_empty() { "(hole)".into() } else { name.clone() });
-                            if !exists {
-                                text = text.color(Color32::GRAY);
+            egui::ScrollArea::both()
+                .id_salt("gmap-scroll")
+                .show(ui, |ui| {
+                    egui::Grid::new("gmap-grid")
+                        .spacing([2.0, 2.0])
+                        .show(ui, |ui| {
+                            for y in 0..view.map.height {
+                                for x in 0..view.map.width {
+                                    let name = view
+                                        .map
+                                        .level_at(x as i32, y as i32)
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let file = view.level_path(x, y);
+                                    let exists =
+                                        file.as_ref().map(|f| f.is_file()).unwrap_or(false);
+                                    let is_open = file.is_some() && file == current;
+                                    let mut text = egui::RichText::new(if name.is_empty() {
+                                        "(hole)".into()
+                                    } else {
+                                        name.clone()
+                                    });
+                                    if !exists {
+                                        text = text.color(Color32::GRAY);
+                                    }
+                                    if is_open {
+                                        text = text.strong().color(Color32::YELLOW);
+                                    }
+                                    let resp = ui.add_enabled(
+                                        exists,
+                                        egui::Button::new(text).min_size(Vec2::new(120.0, 36.0)),
+                                    );
+                                    let resp = if exists {
+                                        resp
+                                    } else {
+                                        resp.on_disabled_hover_text("no such file next to the gmap")
+                                    };
+                                    self.gmap_cells.push(((x, y), resp.rect));
+                                    if resp.clicked() {
+                                        open = file;
+                                    }
+                                }
+                                ui.end_row();
                             }
-                            if is_open {
-                                text = text.strong().color(Color32::YELLOW);
-                            }
-                            let resp = ui.add_enabled(exists, egui::Button::new(text).min_size(Vec2::new(120.0, 36.0)));
-                            let resp = if exists { resp } else { resp.on_disabled_hover_text("no such file next to the gmap") };
-                            self.gmap_cells.push(((x, y), resp.rect));
-                            if resp.clicked() {
-                                open = file;
-                            }
-                        }
-                        ui.end_row();
-                    }
+                        });
                 });
-            });
         });
         if let Some(p) = open {
             self.open_path = p.display().to_string();
@@ -1133,14 +1308,20 @@ impl EditorApp {
     }
 
     fn prompt(&mut self, ctx: &egui::Context) {
-        let Some(pending) = self.pending.clone() else { return };
+        let Some(pending) = self.pending.clone() else {
+            return;
+        };
         let mut choice = None;
         egui::Window::new("Unsaved changes")
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
-                let name = self.editor.path().map(|p| p.display().to_string()).unwrap_or_default();
+                let name = self
+                    .editor
+                    .path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
                 ui.label(format!("{name} has changes that are not saved."));
                 ui.horizontal(|ui| {
                     if ui.button("Save").clicked() {
@@ -1191,5 +1372,10 @@ pub fn run(version: Version, sheet: Sheet, file: Option<&Path>) -> Result<(), St
         viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 900.0]),
         ..Default::default()
     };
-    eframe::run_native("Seihai level editor", options, Box::new(move |_cc| Ok(Box::new(app)))).map_err(|e| e.to_string())
+    eframe::run_native(
+        "Seihai level editor",
+        options,
+        Box::new(move |_cc| Ok(Box::new(app))),
+    )
+    .map_err(|e| e.to_string())
 }

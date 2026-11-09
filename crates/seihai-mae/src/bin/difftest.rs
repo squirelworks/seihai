@@ -26,7 +26,10 @@ fn usage() -> ! {
 }
 
 fn opt(args: &[String], name: &str) -> Option<String> {
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
 }
 
 fn main() {
@@ -39,9 +42,15 @@ fn main() {
 }
 
 fn cmd_trace(args: &[String]) {
-    let Some(pcap) = args.first().filter(|a| !a.starts_with("--")) else { usage() };
-    let Some(ver) = opt(args, "--version") else { usage() };
-    let Some(out) = opt(args, "--out") else { usage() };
+    let Some(pcap) = args.first().filter(|a| !a.starts_with("--")) else {
+        usage()
+    };
+    let Some(ver) = opt(args, "--version") else {
+        usage()
+    };
+    let Some(out) = opt(args, "--out") else {
+        usage()
+    };
     let Some(version) = ClientVersion::from_label(&ver) else {
         eprintln!("unknown version {ver}");
         exit(2)
@@ -62,7 +71,11 @@ fn cmd_trace(args: &[String]) {
         eprintln!("cannot write {out}: {e}");
         exit(1)
     }
-    let c2s = trace.events.iter().filter(|e| e.dir == seihai::difftest::trace::Dir::C2S).count();
+    let c2s = trace
+        .events
+        .iter()
+        .filter(|e| e.dir == seihai::difftest::trace::Dir::C2S)
+        .count();
     println!(
         "trace {out}: {} connection(s), {} messages ({} C>S, {} S>C), {} bad frame(s)",
         trace.meta("connections").unwrap_or("0"),
@@ -85,8 +98,12 @@ fn read_trace(path: &str) -> Trace {
 }
 
 fn cmd_diff(args: &[String]) {
-    let (Some(a), Some(b)) = (args.first(), args.get(1)) else { usage() };
-    let Some(out) = opt(args, "--out") else { usage() };
+    let (Some(a), Some(b)) = (args.first(), args.get(1)) else {
+        usage()
+    };
+    let Some(out) = opt(args, "--out") else {
+        usage()
+    };
     let mut o = DiffOptions::default();
     if let Some(j) = opt(args, "--jitter-ms").and_then(|s| s.parse().ok()) {
         o.jitter_ms = j;

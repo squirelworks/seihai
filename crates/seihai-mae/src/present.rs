@@ -36,9 +36,18 @@ impl Presenter {
     /// from the last frame sent, when either size changed, or when the last
     /// one was sent [`Self::REFRESH`] or more ago. A `true` records the
     /// frame as sent.
-    pub fn should_send(&mut self, pixels: &[u8], width: usize, height: usize, window: (usize, usize), now: Instant) -> bool {
+    pub fn should_send(
+        &mut self,
+        pixels: &[u8],
+        width: usize,
+        height: usize,
+        window: (usize, usize),
+        now: Instant,
+    ) -> bool {
         let size = (width, height, window.0, window.1);
-        let stale = self.last_at.map_or(true, |t| now.saturating_duration_since(t) >= Self::REFRESH);
+        let stale = self
+            .last_at
+            .map_or(true, |t| now.saturating_duration_since(t) >= Self::REFRESH);
         if !stale && size == self.last_size && self.last == pixels {
             self.skipped += 1;
             return false;
@@ -55,7 +64,11 @@ impl Presenter {
 /// Packs RGB bytes into minifb's `0RGB` words, reusing `out`.
 pub fn rgb_to_0rgb(pixels: &[u8], out: &mut Vec<u32>) {
     out.clear();
-    out.extend(pixels.chunks_exact(3).map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2])));
+    out.extend(
+        pixels
+            .chunks_exact(3)
+            .map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2])),
+    );
 }
 
 /// Scales RGB `src` (`sw` × `sh`) to `dst` (`dw` × `dh`, `0RGB` words)
@@ -69,7 +82,9 @@ pub fn scale_rgb_into(src: &[u8], sw: usize, sh: usize, dst: &mut [u32], dw: usi
     }
     let step_x = ((sw as f32 / dw as f32) * 1024.0) as usize;
     let step_y = ((sh as f32 / dh as f32) * 1024.0) as usize;
-    let xs: Vec<usize> = (0..dw).map(|j| ((j * step_x) >> 10).min(sw - 1) * 3).collect();
+    let xs: Vec<usize> = (0..dw)
+        .map(|j| ((j * step_x) >> 10).min(sw - 1) * 3)
+        .collect();
     let mut prev: Option<usize> = None;
     for i in 0..dh {
         let sy = ((i * step_y) >> 10).min(sh - 1);
@@ -81,7 +96,8 @@ pub fn scale_rgb_into(src: &[u8], sw: usize, sh: usize, dst: &mut [u32], dw: usi
         }
         let line = &src[sy * sw * 3..(sy + 1) * sw * 3];
         for (d, &x) in row.iter_mut().zip(&xs) {
-            *d = (u32::from(line[x]) << 16) | (u32::from(line[x + 1]) << 8) | u32::from(line[x + 2]);
+            *d =
+                (u32::from(line[x]) << 16) | (u32::from(line[x + 1]) << 8) | u32::from(line[x + 2]);
         }
         prev = Some(sy);
     }
@@ -92,7 +108,10 @@ pub fn scale_rgb_into(src: &[u8], sw: usize, sh: usize, dst: &mut [u32], dw: usi
 /// socket. Only for a minifb window on X11: on Wayland minifb already hands
 /// frames over in `wl_shm` buffers. softbuffer falls back to a plain
 /// `PutImage` by itself when the server has no MIT-SHM.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 pub struct ShmWindow {
     surface: softbuffer::Surface<Handles, Handles>,
     // Kept alive for the surface.
@@ -101,30 +120,46 @@ pub struct ShmWindow {
 
 /// The raw X11 handles of minifb's window. The window has to outlive the
 /// [`ShmWindow`] made from them: drop that first.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 #[derive(Clone, Copy)]
 pub struct Handles {
     window: raw_window_handle::RawWindowHandle,
     display: raw_window_handle::RawDisplayHandle,
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 impl raw_window_handle::HasWindowHandle for Handles {
-    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
         // SAFETY: `ShmWindow::new` documents that the window outlives it.
         Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(self.window) })
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 impl raw_window_handle::HasDisplayHandle for Handles {
-    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
         // SAFETY: as above.
         Ok(unsafe { raw_window_handle::DisplayHandle::borrow_raw(self.display) })
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+))]
 impl ShmWindow {
     /// The shared-memory path for `window`, if it is an X11 window and
     /// `SEIHAI_NO_SHM` is not set. `window` must outlive the result.
@@ -133,20 +168,42 @@ impl ShmWindow {
         if std::env::var_os("SEIHAI_NO_SHM").is_some() {
             return None;
         }
-        let handles = Handles { window: window.window_handle().ok()?.as_raw(), display: window.display_handle().ok()?.as_raw() };
-        if !matches!(handles.window, RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)) {
+        let handles = Handles {
+            window: window.window_handle().ok()?.as_raw(),
+            display: window.display_handle().ok()?.as_raw(),
+        };
+        if !matches!(
+            handles.window,
+            RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_)
+        ) {
             return None;
         }
-        let context = softbuffer::Context::new(handles).map_err(|e| eprintln!("shared-memory window: {e}; using minifb's")).ok()?;
-        let surface = softbuffer::Surface::new(&context, handles).map_err(|e| eprintln!("shared-memory window: {e}; using minifb's")).ok()?;
-        Some(Self { surface, _context: context })
+        let context = softbuffer::Context::new(handles)
+            .map_err(|e| eprintln!("shared-memory window: {e}; using minifb's"))
+            .ok()?;
+        let surface = softbuffer::Surface::new(&context, handles)
+            .map_err(|e| eprintln!("shared-memory window: {e}; using minifb's"))
+            .ok()?;
+        Some(Self {
+            surface,
+            _context: context,
+        })
     }
 
     /// Scales the RGB frame (`width` × `height`) to the window's `size` and
     /// shows it.
-    pub fn present(&mut self, pixels: &[u8], width: usize, height: usize, size: (usize, usize)) -> Result<(), softbuffer::SoftBufferError> {
+    pub fn present(
+        &mut self,
+        pixels: &[u8],
+        width: usize,
+        height: usize,
+        size: (usize, usize),
+    ) -> Result<(), softbuffer::SoftBufferError> {
         use std::num::NonZeroU32;
-        let (Some(w), Some(h)) = (NonZeroU32::new(size.0 as u32), NonZeroU32::new(size.1 as u32)) else {
+        let (Some(w), Some(h)) = (
+            NonZeroU32::new(size.0 as u32),
+            NonZeroU32::new(size.1 as u32),
+        ) else {
             return Ok(());
         };
         self.surface.resize(w, h)?;

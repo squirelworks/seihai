@@ -4,15 +4,15 @@
 // their old names so `seihai::protocol`, `crate::offline` and the rest
 // still resolve.
 pub use seihai_core::{
-    arrows, assets, baddies, bombs, chatlists, combat, dev, difftest, filecache, gmap, items, life, looks, net, npcart, offline, pose,
-    protocol, scripting, servercache, throwing, viewer,
+    arrows, assets, baddies, bombs, chatlists, combat, dev, difftest, filecache, gmap, items, life,
+    looks, net, npcart, offline, pose, protocol, scripting, servercache, throwing, viewer,
 };
 
 pub mod ato;
 pub mod gui;
-pub mod keys;
 pub mod help;
 pub mod inventory;
+pub mod keys;
 pub mod mapscreen;
 pub mod present;
 pub mod render;

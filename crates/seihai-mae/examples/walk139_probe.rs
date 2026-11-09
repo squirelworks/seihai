@@ -29,7 +29,9 @@ fn pump(rx: &Rx, st: &mut SessionState, ms: u64) {
 
 fn main() {
     let tag = std::env::args().nth(1).expect("account prefix");
-    let addr = std::env::args().nth(2).unwrap_or_else(|| "127.0.0.1:14803".into());
+    let addr = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:14803".into());
     let v = ClientVersion::V139;
     let mut b = Connection::connect(&addr).unwrap();
     b.login_versioned(v, 0x42, &format!("{tag}b"), "x").unwrap();

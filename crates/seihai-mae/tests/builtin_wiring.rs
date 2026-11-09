@@ -17,13 +17,20 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use seihai::assets::{builtin, check_folder, read_png_rgb, AssetResolver, AssetRoot, Layer, Status, TileTypesFile};
+use seihai::assets::{
+    builtin, check_folder, read_png_rgb, AssetResolver, AssetRoot, Layer, Status, TileTypesFile,
+};
 use seihai::filecache::{DownloadStore, FileRequest, FileSession, Stored, FIRST_STEP_REQUESTS};
 use seihai::offline::{OfflineSession, FOOT_DX, FOOT_DY};
 use seihai::protocol::ClientVersion;
-use seihai::render::{render_view, Framebuffer, TILE_PX, CHEST_CLOSED_TILES, CHEST_OPEN_TILES};
+use seihai::render::{render_view, Framebuffer, CHEST_CLOSED_TILES, CHEST_OPEN_TILES, TILE_PX};
 
-const PROFILES: [ClientVersion; 4] = [ClientVersion::V205, ClientVersion::V217, ClientVersion::V222, ClientVersion::V231];
+const PROFILES: [ClientVersion; 4] = [
+    ClientVersion::V205,
+    ClientVersion::V217,
+    ClientVersion::V222,
+    ClientVersion::V231,
+];
 
 fn tmp(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("seihai-wiring-{tag}-{}", std::process::id()));
@@ -47,7 +54,10 @@ fn builtin_dir(tag: &str) -> (PathBuf, PathBuf) {
 }
 
 fn snapshot(dir: &Path) -> Vec<(String, Vec<u8>)> {
-    builtin::FILES.iter().map(|(n, _)| ((*n).to_string(), fs::read(dir.join(n)).unwrap())).collect()
+    builtin::FILES
+        .iter()
+        .map(|(n, _)| ((*n).to_string(), fs::read(dir.join(n)).unwrap()))
+        .collect()
 }
 
 // ---- the set loads without a data folder ------------------------------------
@@ -58,23 +68,54 @@ fn the_default_set_loads_with_a_missing_or_empty_assets_folder() {
     let empty = tmp("empty-assets");
     let missing = base.join("no-such-folder");
     for v in PROFILES {
-        for user in [Some(AssetRoot::new(&empty)), Some(AssetRoot::new(&missing)), None] {
-            let r = AssetResolver::empty(v.profile()).with_assets(user).with_builtin(Some(bdir.clone()));
+        for user in [
+            Some(AssetRoot::new(&empty)),
+            Some(AssetRoot::new(&missing)),
+            None,
+        ] {
+            let r = AssetResolver::empty(v.profile())
+                .with_assets(user)
+                .with_builtin(Some(bdir.clone()));
             for g in ["idle", "walk", "swim"] {
-                let p = r.gani(g).unwrap_or_else(|| panic!("{}: {g}.gani", v.label()));
+                let p = r
+                    .gani(g)
+                    .unwrap_or_else(|| panic!("{}: {g}.gani", v.label()));
                 assert_eq!(r.layer_of(&p), Some(Layer::Builtin));
             }
-            assert!(r.sound("steps2").is_some() && r.sound("steps").is_some() && r.sound("water").is_some());
+            assert!(
+                r.sound("steps2").is_some()
+                    && r.sound("steps").is_some()
+                    && r.sound("water").is_some()
+            );
             assert!(r.level("new1.nw").is_some() && r.level("new2.nw").is_some());
-            assert!(r.image_in("bodies", "body.png").is_some() && r.image_in("heads", "head0.png").is_some());
-            assert!(r.image("pics1.png").is_some() && r.image("sprites.png").is_some() && r.image("state.png").is_some());
+            assert!(
+                r.image_in("bodies", "body.png").is_some()
+                    && r.image_in("heads", "head0.png").is_some()
+            );
+            assert!(
+                r.image("pics1.png").is_some()
+                    && r.image("sprites.png").is_some()
+                    && r.image("state.png").is_some()
+            );
             assert!(r.tile_types().is_some() && r.tiledef("tiledefsOffline.txt").is_some());
         }
         // `--check-assets` on the set: nothing required is missing or bad.
         let rep = check_folder(&AssetRoot::new(&bdir), v.profile());
         for f in &rep.findings {
-            assert!(!matches!(f.status, Status::BadFile(_)), "{}: {} -> {:?}", v.label(), f.need.name, f.status);
-            assert!(!(f.need.required && !f.is_ok()), "{}: required {} -> {:?}", v.label(), f.need.name, f.status);
+            assert!(
+                !matches!(f.status, Status::BadFile(_)),
+                "{}: {} -> {:?}",
+                v.label(),
+                f.need.name,
+                f.status
+            );
+            assert!(
+                !(f.need.required && !f.is_ok()),
+                "{}: required {} -> {:?}",
+                v.label(),
+                f.need.name,
+                f.status
+            );
         }
     }
     let _ = fs::remove_dir_all(&base);
@@ -86,7 +127,9 @@ fn a_partial_assets_folder_falls_back_file_by_file() {
     let (base, bdir) = builtin_dir("partial");
     let user = tmp("partial-assets");
     let mine = touch(&user, "gani/walk.gani", b"x");
-    let r = AssetResolver::empty(ClientVersion::V222.profile()).with_assets(Some(AssetRoot::new(&user))).with_builtin(Some(bdir));
+    let r = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_assets(Some(AssetRoot::new(&user)))
+        .with_builtin(Some(bdir));
     // The user's file where there is one, ours for the rest.
     assert_eq!(r.gani("walk.gani"), Some(mine.clone()));
     assert_eq!(r.layer_of(&mine), Some(Layer::Assets));
@@ -101,10 +144,15 @@ fn the_built_in_tile_table_also_serves_a_users_own_sheet() {
     let (base, bdir) = builtin_dir("table");
     let user = tmp("table-assets");
     touch(&user, "pics1.png", b"a Graal sheet");
-    let r = AssetResolver::empty(ClientVersion::V222.profile()).with_assets(Some(AssetRoot::new(&user))).with_builtin(Some(bdir.clone()));
+    let r = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_assets(Some(AssetRoot::new(&user)))
+        .with_builtin(Some(bdir.clone()));
     // Our table uses the standard Graal tile layout, so it fits the user's sheet.
     let (p, kind) = r.tile_types().unwrap();
-    assert_eq!((r.layer_of(&p), kind), (Some(Layer::Builtin), TileTypesFile::Text));
+    assert_eq!(
+        (r.layer_of(&p), kind),
+        (Some(Layer::Builtin), TileTypesFile::Text)
+    );
     // The user's own arrays.dat still comes first.
     let mine = touch(&user, "arrays.dat", b"x");
     assert_eq!(r.tile_types(), Some((mine, TileTypesFile::ArraysDat)));
@@ -160,14 +208,20 @@ fn built_in_levels_are_offline_only() {
             .with_builtin(Some(bdir.clone()))
             .with_builtin_levels(offline)
     };
-    assert!(mk(true).level("new1.nw").is_some(), "offline: the starter level opens");
+    assert!(
+        mk(true).level("new1.nw").is_some(),
+        "offline: the starter level opens"
+    );
     // Online a server's `new1.nw` must come from the server, not from ours.
     assert!(mk(false).level("new1.nw").is_none());
     let sent = touch(&cache, "levels/new1.nw", b"server's level");
     assert_eq!(mk(false).level("new1.nw"), Some(sent.clone()));
     assert_eq!(mk(false).level_path("new1.nw"), sent);
     // Where a download of an unknown level would go: the cache, not ours.
-    assert_eq!(mk(false).level_path("other.nw"), cache.join("levels/other.nw"));
+    assert_eq!(
+        mk(false).level_path("other.nw"),
+        cache.join("levels/other.nw")
+    );
     // Tiles and art stay available online.
     assert!(mk(false).image("pics1.png").is_some());
     let _ = fs::remove_dir_all(&base);
@@ -198,7 +252,9 @@ fn a_download_goes_to_the_cache_and_never_into_the_built_in_set_or_the_users_fol
         ("new1.nw", "levels/new1.nw"),
         ("walk.gani", "levels/ganis/walk.gani"),
     ] {
-        let got = store.store(name, b"from the server", Some(1_700_000_000)).unwrap();
+        let got = store
+            .store(name, b"from the server", Some(1_700_000_000))
+            .unwrap();
         assert_eq!(got, Stored::Disk(cache.join(rel)), "{name}");
     }
     assert!(cache.join("server.txt").exists());
@@ -206,11 +262,18 @@ fn a_download_goes_to_the_cache_and_never_into_the_built_in_set_or_the_users_fol
     assert_eq!(snapshot(&bdir), before);
     assert_eq!(fs::read(&mine).unwrap(), b"mine");
     // And the cache's copy is the one the resolver now finds.
-    for p in [r.image("pics1.png"), r.gani("walk.gani"), r.sound("steps"), r.level("new1.nw")] {
+    for p in [
+        r.image("pics1.png"),
+        r.gani("walk.gani"),
+        r.sound("steps"),
+        r.level("new1.nw"),
+    ] {
         assert_eq!(r.layer_of(&p.unwrap()), Some(Layer::Cache));
     }
     // A second download of the same name replaces the cache's copy in place.
-    let again = store.store("steps.wav", b"newer", Some(1_700_000_100)).unwrap();
+    let again = store
+        .store("steps.wav", b"newer", Some(1_700_000_100))
+        .unwrap();
     assert_eq!(again, Stored::Disk(cache.join("sounds/steps.wav")));
     assert_eq!(fs::read(cache.join("sounds/steps.wav")).unwrap(), b"newer");
     let _ = fs::remove_dir_all(&base);
@@ -224,13 +287,21 @@ fn with_no_cache_a_download_cannot_land_in_the_built_in_set() {
     let before = snapshot(&bdir);
     let r = AssetResolver::empty(ClientVersion::V222.profile()).with_builtin(Some(bdir.clone()));
     let mut store = DownloadStore::new(r, true);
-    for name in ["pics1.png", "steps.wav", "new1.nw", "levels/new1.nw", "gani/walk.gani"] {
+    for name in [
+        "pics1.png",
+        "steps.wav",
+        "new1.nw",
+        "levels/new1.nw",
+        "gani/walk.gani",
+    ] {
         let e = store.store(name, b"x", None).unwrap_err();
         assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{name}");
     }
     assert_eq!(snapshot(&bdir), before);
     // Even with a cache that (wrongly) is the built-in folder itself.
-    let r = AssetResolver::empty(ClientVersion::V222.profile()).with_cache(Some(bdir.clone())).with_builtin(Some(bdir.clone()));
+    let r = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_cache(Some(bdir.clone()))
+        .with_builtin(Some(bdir.clone()));
     let mut store = DownloadStore::new(r, true);
     let e = store.store("pics1.png", b"x", None).unwrap_err();
     assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
@@ -242,10 +313,18 @@ fn with_no_cache_a_download_cannot_land_in_the_built_in_set() {
 fn save_downloads_off_keeps_files_in_memory_and_writes_no_cache_files() {
     let (base, bdir) = builtin_dir("nosave");
     let cache = tmp("nosave-cache");
-    let r = AssetResolver::empty(ClientVersion::V222.profile()).with_cache(Some(cache.clone())).with_builtin(Some(bdir));
+    let r = AssetResolver::empty(ClientVersion::V222.profile())
+        .with_cache(Some(cache.clone()))
+        .with_builtin(Some(bdir));
     let mut store = DownloadStore::new(r, false);
-    assert_eq!(store.store("steps.wav", b"abc", None).unwrap(), Stored::Memory);
-    assert_eq!(store.store("sword1.png", b"abc", None).unwrap(), Stored::Memory);
+    assert_eq!(
+        store.store("steps.wav", b"abc", None).unwrap(),
+        Stored::Memory
+    );
+    assert_eq!(
+        store.store("sword1.png", b"abc", None).unwrap(),
+        Stored::Memory
+    );
     assert_eq!(fs::read_dir(&cache).unwrap().count(), 0, "nothing written");
     assert_eq!(store.read("steps.wav").unwrap(), b"abc");
     let _ = fs::remove_dir_all(&base);
@@ -258,7 +337,9 @@ fn sent(msgs: Vec<Vec<u8>>) -> Vec<String> {
     msgs.iter()
         .map(|m| {
             let id = m[0] - 0x20;
-            let name = String::from_utf8_lossy(&m[if id == 34 { 6 } else { 1 }..]).trim_end().to_string();
+            let name = String::from_utf8_lossy(&m[if id == 34 { 6 } else { 1 }..])
+                .trim_end()
+                .to_string();
             format!("{id}:{name}")
         })
         .collect()
@@ -290,7 +371,12 @@ fn a_built_in_only_file_is_asked_for_as_missing_with_no_mod_time() {
     let _ = fs::remove_dir_all(&cache);
 }
 
-fn step_session(v: ClientVersion, user: Option<&Path>, cache: Option<&Path>, bdir: Option<&Path>) -> FileSession {
+fn step_session(
+    v: ClientVersion,
+    user: Option<&Path>,
+    cache: Option<&Path>,
+    bdir: Option<&Path>,
+) -> FileSession {
     let r = AssetResolver::empty(v.profile())
         .with_assets(user.map(AssetRoot::new))
         .with_cache(cache.map(Path::to_path_buf))
@@ -300,7 +386,13 @@ fn step_session(v: ClientVersion, user: Option<&Path>, cache: Option<&Path>, bdi
 
 #[test]
 fn the_first_step_requests_follow_the_real_client_only_when_no_copy_exists() {
-    assert_eq!(FIRST_STEP_REQUESTS, &[(1, &["steps.wav", "walk.gani"][..]), (2, &["steps2.wav"][..])]);
+    assert_eq!(
+        FIRST_STEP_REQUESTS,
+        &[
+            (1, &["steps.wav", "walk.gani"][..]),
+            (2, &["steps2.wav"][..])
+        ]
+    );
     let (base, bdir) = builtin_dir("steps");
     let empty = tmp("steps-empty");
 
@@ -331,7 +423,8 @@ fn the_first_step_requests_follow_the_real_client_only_when_no_copy_exists() {
 
     // A file received this session counts too (kept in memory with saving off).
     let mut s = FileSession::new(
-        AssetResolver::empty(ClientVersion::V222.profile()).with_assets(Some(AssetRoot::new(tmp("steps-mem")))),
+        AssetResolver::empty(ClientVersion::V222.profile())
+            .with_assets(Some(AssetRoot::new(tmp("steps-mem")))),
         false,
     );
     s.store.store("steps.wav", b"abc", None).unwrap();
@@ -362,7 +455,10 @@ fn a_missing_gani_or_sound_is_asked_for_only_when_no_copy_exists() {
 
     // A clean client: an NPC's GANI and a script's sound, once each while pending.
     let mut s = step_session(ClientVersion::V231, Some(&empty), None, None);
-    assert_eq!(sent(s.need_missing("bomy_idle.gani")), ["23:bomy_idle.gani"]);
+    assert_eq!(
+        sent(s.need_missing("bomy_idle.gani")),
+        ["23:bomy_idle.gani"]
+    );
     assert!(s.need_missing("BOMY_IDLE.GANI").is_empty());
     assert_eq!(sent(s.need_missing("thunder.wav")), ["23:thunder.wav"]);
 
@@ -373,12 +469,24 @@ fn a_missing_gani_or_sound_is_asked_for_only_when_no_copy_exists() {
 
     // Gated by the profile: no GANI from a build without GANIs, nothing
     // from a build that does not send WANTFILE.
-    for v in [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222] {
+    for v in [
+        ClientVersion::V139,
+        ClientVersion::V205,
+        ClientVersion::V222,
+    ] {
         let p = v.profile();
         let mut s = step_session(v, Some(&empty), None, None);
         let wants = p.protocol.pli.contains(23);
-        assert_eq!(!s.need_missing("bomy_idle.gani").is_empty(), wants && p.ui.ganis, "{v:?} gani");
-        assert_eq!(!s.need_missing("thunder.wav").is_empty(), wants, "{v:?} sound");
+        assert_eq!(
+            !s.need_missing("bomy_idle.gani").is_empty(),
+            wants && p.ui.ganis,
+            "{v:?} gani"
+        );
+        assert_eq!(
+            !s.need_missing("thunder.wav").is_empty(),
+            wants,
+            "{v:?} sound"
+        );
     }
     let _ = fs::remove_dir_all(&base);
     let _ = fs::remove_dir_all(&empty);
@@ -387,7 +495,8 @@ fn a_missing_gani_or_sound_is_asked_for_only_when_no_copy_exists() {
 // ---- the offline starter level -------------------------------------------------
 
 fn offline_session(bdir: &Path) -> (OfflineSession, AssetResolver) {
-    let r = AssetResolver::empty(ClientVersion::V222.profile()).with_builtin(Some(bdir.to_path_buf()));
+    let r =
+        AssetResolver::empty(ClientVersion::V222.profile()).with_builtin(Some(bdir.to_path_buf()));
     let mut s = OfflineSession::default();
     s.load_level(r.level_path("new1.nw")).unwrap();
     let (tp, kind) = r.tile_types().unwrap();
@@ -411,7 +520,12 @@ fn the_starter_level_loads_the_player_walks_and_swims() {
     for _ in 0..6 {
         s.try_move(0.5, 0.0);
     }
-    assert!(s.player_x > x0 + 1.0, "walked east: {} -> {}", x0, s.player_x);
+    assert!(
+        s.player_x > x0 + 1.0,
+        "walked east: {} -> {}",
+        x0,
+        s.player_x
+    );
     // The walk and swim animations (ours) drive the sound cues.
     for (name, swim) in [("walk.gani", false), ("swim.gani", true)] {
         let g = seihai::assets::Gani::load(r.gani(name).unwrap()).unwrap();
@@ -427,7 +541,10 @@ fn the_starter_level_loads_the_player_walks_and_swims() {
         s.try_move(if i % 2 == 0 { 0.5 } else { -0.5 }, 0.0);
     }
     let cues: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
-    assert!(!cues.is_empty() && cues.iter().all(|c| c == "steps2.wav"), "{cues:?}");
+    assert!(
+        !cues.is_empty() && cues.iter().all(|c| c == "steps2.wav"),
+        "{cues:?}"
+    );
     // Swim: put the foot on the pond.
     let types = s.tiletypes.clone().unwrap();
     let water = (0..64)
@@ -442,7 +559,10 @@ fn the_starter_level_loads_the_player_walks_and_swims() {
         s.try_move(if i % 2 == 0 { 0.25 } else { -0.25 }, 0.0);
     }
     let cues: Vec<String> = s.take_sound_events().into_iter().map(|e| e.file).collect();
-    assert!(!cues.is_empty() && cues.iter().all(|c| c == "water.wav"), "{cues:?}");
+    assert!(
+        !cues.is_empty() && cues.iter().all(|c| c == "water.wav"),
+        "{cues:?}"
+    );
     let _ = fs::remove_dir_all(&base);
 }
 
@@ -479,7 +599,10 @@ fn chests_are_drawn_from_their_records_and_signs_from_the_board() {
     let (vw, vh) = (40u32, 30u32);
     let t = TILE_PX as i32;
     let cam = |s: &OfflineSession| {
-        (((s.player_x + 1.5) * 16.0 - (vw as f32 * 16.0) / 2.0) as i32, ((s.player_y + 1.5) * 16.0 - (vh as f32 * 16.0) / 2.0) as i32)
+        (
+            ((s.player_x + 1.5) * 16.0 - (vw as f32 * 16.0) / 2.0) as i32,
+            ((s.player_y + 1.5) * 16.0 - (vh as f32 * 16.0) / 2.0) as i32,
+        )
     };
     // The sign is the board's tiles and nothing on top.
     let sign = l.signs[0].clone();
@@ -487,8 +610,15 @@ fn chests_are_drawn_from_their_records_and_signs_from_the_board() {
     s.player_y = sign.y as f32 - 2.0;
     let (cx, cy) = cam(&s);
     let fb = render_view(&s, &sheet, sw, sh, vw, vh);
-    let ids = [l.tile_id_at(sign.x, sign.y).unwrap(), l.tile_id_at(sign.x + 1, sign.y).unwrap()];
-    assert_eq!(region(&fb, sign.x * t - cx, sign.y * t - cy, 2 * t, t), tiles_image(&sheet, sw, sh, &ids, 2), "sign");
+    let ids = [
+        l.tile_id_at(sign.x, sign.y).unwrap(),
+        l.tile_id_at(sign.x + 1, sign.y).unwrap(),
+    ];
+    assert_eq!(
+        region(&fb, sign.x * t - cx, sign.y * t - cy, 2 * t, t),
+        tiles_image(&sheet, sw, sh, &ids, 2),
+        "sign"
+    );
     // The chest is drawn from its record with the sheet's chest ids, which
     // on our sheet carry our chest art: closed, then open once opened.
     let chest = l.chests[0].clone();
@@ -512,18 +642,47 @@ fn chests_are_drawn_from_their_records_and_signs_from_the_board() {
 /// the store wrote, for each save layout.
 #[test]
 fn a_downloaded_image_is_found_where_it_was_saved() {
-    for v in [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222, ClientVersion::V231] {
+    for v in [
+        ClientVersion::V139,
+        ClientVersion::V205,
+        ClientVersion::V222,
+        ClientVersion::V231,
+    ] {
         let cache = tmp(&format!("agree-{}", v.label()));
         let r = AssetResolver::empty(v.profile()).with_cache(Some(cache.clone()));
         let mut store = DownloadStore::new(r.clone(), true);
         for name in [
-            "Block.PNG", "door.gif", "hat3.png", "bomy1.png", "b_fire.png", "emoticon_a.png", "minimap.png", "worldmap.gif",
-            "head927.png", "body13.png", "sword2.png", "shield3.png", "letters.mng", "npcs/sign.png",
+            "Block.PNG",
+            "door.gif",
+            "hat3.png",
+            "bomy1.png",
+            "b_fire.png",
+            "emoticon_a.png",
+            "minimap.png",
+            "worldmap.gif",
+            "head927.png",
+            "body13.png",
+            "sword2.png",
+            "shield3.png",
+            "letters.mng",
+            "npcs/sign.png",
         ] {
-            let Stored::Disk(at) = store.store(name, b"x", Some(1_700_000_000)).unwrap() else { panic!("{name}: not on disk") };
+            let Stored::Disk(at) = store.store(name, b"x", Some(1_700_000_000)).unwrap() else {
+                panic!("{name}: not on disk")
+            };
             assert_eq!(r.image(name).as_ref(), Some(&at), "{} {name}", v.label());
-            assert_eq!(r.image(&name.to_ascii_lowercase()).as_ref(), Some(&at), "{} {name} in lower case", v.label());
-            assert_eq!(store.local_path(name).as_ref(), Some(&at), "{} {name}: the store's own lookup", v.label());
+            assert_eq!(
+                r.image(&name.to_ascii_lowercase()).as_ref(),
+                Some(&at),
+                "{} {name} in lower case",
+                v.label()
+            );
+            assert_eq!(
+                store.local_path(name).as_ref(),
+                Some(&at),
+                "{} {name}: the store's own lookup",
+                v.label()
+            );
         }
         let _ = fs::remove_dir_all(&cache);
     }
@@ -549,25 +708,48 @@ fn the_seihai_folder_cache_is_searched_first_and_takes_the_downloads() {
     let new = touch(&game, "levels/heads/head927.png", b"new");
     assert_eq!(r.image("head927.png"), Some(new.clone()));
     assert_eq!(r.layer_of(&new), Some(Layer::Cache));
-    assert_eq!(r.download_root().map(|d| d.root.clone()), Some(game.clone()));
+    assert_eq!(
+        r.download_root().map(|d| d.root.clone()),
+        Some(game.clone())
+    );
 
     let mut store = DownloadStore::new(r.clone(), true);
     store.set_cache_meta(Some("host=h\nport=1\n".into()));
-    let got = store.store("body13.png", b"server", Some(1_700_000_000)).unwrap();
+    let got = store
+        .store("body13.png", b"server", Some(1_700_000_000))
+        .unwrap();
     assert_eq!(got, Stored::Disk(game.join("levels/bodies/body13.png")));
-    assert!(!cache.join("levels/bodies/body13.png").exists(), "no copy in the settings' cache by default");
+    assert!(
+        !cache.join("levels/bodies/body13.png").exists(),
+        "no copy in the settings' cache by default"
+    );
     assert!(game.join("server.txt").exists() && !cache.join("server.txt").exists());
-    assert_eq!(r.image("body13.png"), Some(game.join("levels/bodies/body13.png")));
-    assert_eq!(store.local_path("BODY13.PNG"), Some(game.join("levels/bodies/body13.png")));
+    assert_eq!(
+        r.image("body13.png"),
+        Some(game.join("levels/bodies/body13.png"))
+    );
+    assert_eq!(
+        store.local_path("BODY13.PNG"),
+        Some(game.join("levels/bodies/body13.png"))
+    );
     // A replaced file in the settings' cache only lands in the Seihai folder.
     let got = store.store("head927.png", b"newer", None).unwrap();
     assert_eq!(got, Stored::Disk(new.clone()));
-    assert_eq!(fs::read(cache.join("levels/heads/head927.png")).unwrap(), b"old");
+    assert_eq!(
+        fs::read(cache.join("levels/heads/head927.png")).unwrap(),
+        b"old"
+    );
     // A cache folder the user named keeps a copy.
     store.set_settings_copy(true);
     store.store("body14.png", b"server", None).unwrap();
-    assert_eq!(fs::read(cache.join("levels/bodies/body14.png")).unwrap(), b"server");
-    assert_eq!(fs::read(game.join("levels/bodies/body14.png")).unwrap(), b"server");
+    assert_eq!(
+        fs::read(cache.join("levels/bodies/body14.png")).unwrap(),
+        b"server"
+    );
+    assert_eq!(
+        fs::read(game.join("levels/bodies/body14.png")).unwrap(),
+        b"server"
+    );
 
     // The Seihai folder's cache cannot be made (a file is in the way).
     let blocked = tmp("game-cache-blocked").join("file");

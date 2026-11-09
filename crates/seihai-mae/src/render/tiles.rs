@@ -54,7 +54,16 @@ impl Framebuffer {
     /// art no ground of its own (the tutorial sheet does; Graal sheets have
     /// no such colour, so they draw as before).
     #[allow(clippy::too_many_arguments)]
-    pub fn blit_tile_keyed(&mut self, sheet: &[u8], sheet_w: u32, sheet_h: u32, tile: u16, dx: i32, dy: i32, key: Option<[u8; 3]>) {
+    pub fn blit_tile_keyed(
+        &mut self,
+        sheet: &[u8],
+        sheet_w: u32,
+        sheet_h: u32,
+        tile: u16,
+        dx: i32,
+        dy: i32,
+        key: Option<[u8; 3]>,
+    ) {
         let t = tile as u32;
         let col = t % 16 + (t / 512) * 16;
         let row = (t / 16) % SHEET_ROWS;
@@ -70,9 +79,8 @@ impl Framebuffer {
                 if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
                     continue;
                 }
-                let sidx = ((sy as i32 + ty) as usize * sheet_w as usize
-                    + (sx as i32 + tx) as usize)
-                    * 3;
+                let sidx =
+                    ((sy as i32 + ty) as usize * sheet_w as usize + (sx as i32 + tx) as usize) * 3;
                 let didx = (py as usize * self.width as usize + px as usize) * 3;
                 if sidx + 2 < sheet.len() && didx + 2 < self.pixels.len() {
                     if key.is_some_and(|k| sheet[sidx..sidx + 3] == k) {
@@ -176,13 +184,7 @@ impl Framebuffer {
     ///
     /// `sheet` is a 96×16 RGBA image: full, half, empty heart, rupee, bomb, arrow.
     /// `health` and `max_health` are in half-hearts.
-    pub fn draw_hearts(
-        &mut self,
-        sheet: &[u8],
-        sheet_w: u32,
-        health: i32,
-        max_health: i32,
-    ) {
+    pub fn draw_hearts(&mut self, sheet: &[u8], sheet_w: u32, health: i32, max_health: i32) {
         let hearts = (max_health.max(1) + 1) / 2;
         let filled = health.max(0);
         for i in 0..hearts {
@@ -304,7 +306,15 @@ pub fn render_view(
     view_tiles_w: u32,
     view_tiles_h: u32,
 ) -> Framebuffer {
-    render_view_tiles(session, sheet, sheet_w, sheet_h, view_tiles_w, view_tiles_h, true)
+    render_view_tiles(
+        session,
+        sheet,
+        sheet_w,
+        sheet_h,
+        view_tiles_w,
+        view_tiles_h,
+        true,
+    )
 }
 
 /// [`render_view`], with the board's tiles left out when `tiles` is false:
@@ -359,14 +369,34 @@ pub fn render_view_tiles(
     // Chests are drawn from their records, over the board; signs have no
     // art of their own on the board. An NPC whose image is not there yet
     // draws nothing, as in the 2.05 client (see npc-images.md).
-    draw_chests(&mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y);
+    draw_chests(
+        &mut fb, session, level, sheet, sheet_w, sheet_h, cam_x, cam_y,
+    );
     // A big map's neighbours show their chests too (closed or open as their
     // records say), so nothing appears on them at the crossing.
     if board && session.gmap.is_none() {
-        for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+        for (dx, dy) in [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ] {
             if let Some(n) = session.big_map_neighbour(dx, dy) {
                 let off = 64 * t;
-                draw_level_chests(&mut fb, n, &HashSet::new(), sheet, sheet_w, sheet_h, cam_x - dx * off, cam_y - dy * off);
+                draw_level_chests(
+                    &mut fb,
+                    n,
+                    &HashSet::new(),
+                    sheet,
+                    sheet_w,
+                    sheet_h,
+                    cam_x - dx * off,
+                    cam_y - dy * off,
+                );
             }
         }
     }
@@ -378,14 +408,41 @@ pub fn render_view_tiles(
 /// tiles at the record's tile position. The client skips a chest whose x or y
 /// is outside 0 to 62.
 #[allow(clippy::too_many_arguments)]
-fn draw_chests(fb: &mut Framebuffer, session: &OfflineSession, level: &crate::assets::Level, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32) {
-    draw_level_chests(fb, level, &session.opened_chests, sheet, sw, sh, cam_x, cam_y);
+fn draw_chests(
+    fb: &mut Framebuffer,
+    session: &OfflineSession,
+    level: &crate::assets::Level,
+    sheet: &[u8],
+    sw: u32,
+    sh: u32,
+    cam_x: i32,
+    cam_y: i32,
+) {
+    draw_level_chests(
+        fb,
+        level,
+        &session.opened_chests,
+        sheet,
+        sw,
+        sh,
+        cam_x,
+        cam_y,
+    );
 }
 
 /// [`draw_chests`] for any level: `opened_now` holds the chests opened
 /// since it was entered.
 #[allow(clippy::too_many_arguments)]
-fn draw_level_chests(fb: &mut Framebuffer, level: &crate::assets::Level, opened_now: &HashSet<(i32, i32)>, sheet: &[u8], sw: u32, sh: u32, cam_x: i32, cam_y: i32) {
+fn draw_level_chests(
+    fb: &mut Framebuffer,
+    level: &crate::assets::Level,
+    opened_now: &HashSet<(i32, i32)>,
+    sheet: &[u8],
+    sw: u32,
+    sh: u32,
+    cam_x: i32,
+    cam_y: i32,
+) {
     let t = TILE_PX as i32;
     for c in &level.chests {
         if !(0..=62).contains(&c.x) || !(0..=62).contains(&c.y) {
@@ -394,7 +451,15 @@ fn draw_level_chests(fb: &mut Framebuffer, level: &crate::assets::Level, opened_
         let opened = c.opened || opened_now.contains(&(c.x, c.y));
         for (i, id) in chest_art(opened).into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
-            fb.blit_tile_keyed(sheet, sw, sh, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y, Some(CHEST_KEY));
+            fb.blit_tile_keyed(
+                sheet,
+                sw,
+                sh,
+                id,
+                (c.x + dx) * t - cam_x,
+                (c.y + dy) * t - cam_y,
+                Some(CHEST_KEY),
+            );
         }
     }
 }
@@ -407,7 +472,9 @@ pub fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: 
     // The view's centre: a script's `setfocus` point, else the middle of
     // the player's 48-pixel box, where it is drawn (see `view_glide`).
     let (gx, gy) = session.view_glide();
-    let (cx, cy) = session.view_focus.unwrap_or((session.player_x + gx + 1.5, session.player_y + gy + 1.5));
+    let (cx, cy) = session
+        .view_focus
+        .unwrap_or((session.player_x + gx + 1.5, session.player_y + gy + 1.5));
     (
         (cx * t - (view_tiles_w as f32 * t) / 2.0) as i32,
         (cy * t - (view_tiles_h as f32 * t) / 2.0) as i32,
@@ -416,7 +483,11 @@ pub fn camera_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: 
 
 /// Pixel position of the player's 48×48 box (top-left) in a view made
 /// by [`render_view`] with the same size.
-pub fn player_box_origin(session: &OfflineSession, view_tiles_w: u32, view_tiles_h: u32) -> (i32, i32) {
+pub fn player_box_origin(
+    session: &OfflineSession,
+    view_tiles_w: u32,
+    view_tiles_h: u32,
+) -> (i32, i32) {
     let (cam_x, cam_y) = camera_origin(session, view_tiles_w, view_tiles_h);
     // Over a big-map edge link the player is drawn gliding from the old place.
     let (gx, gy) = session.view_glide();
@@ -499,13 +570,53 @@ pub fn draw_player_sprites(
     let d = d as i32;
     if in_water {
         // Swimming: only the head, lowered to the water line.
-        fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1 + 14);
+        fb.blit_sprite(
+            head,
+            head_w,
+            head_bpp,
+            0,
+            d * 32,
+            32,
+            32,
+            dx + h.0,
+            dy + h.1 + 14,
+        );
     } else {
         if let Some((spr, spr_w, spr_bpp)) = sprites {
-            fb.blit_sprite(spr, spr_w, spr_bpp, 0, 0, 24, 12, dx + shadow.0, dy + shadow.1);
+            fb.blit_sprite(
+                spr,
+                spr_w,
+                spr_bpp,
+                0,
+                0,
+                24,
+                12,
+                dx + shadow.0,
+                dy + shadow.1,
+            );
         }
-        fb.blit_sprite(body, body_w, body_bpp, d * 32, 0, 32, 32, dx + b.0, dy + b.1);
-        fb.blit_sprite(head, head_w, head_bpp, 0, d * 32, 32, 32, dx + h.0, dy + h.1);
+        fb.blit_sprite(
+            body,
+            body_w,
+            body_bpp,
+            d * 32,
+            0,
+            32,
+            32,
+            dx + b.0,
+            dy + b.1,
+        );
+        fb.blit_sprite(
+            head,
+            head_w,
+            head_bpp,
+            0,
+            d * 32,
+            32,
+            32,
+            dx + h.0,
+            dy + h.1,
+        );
     }
 }
 
@@ -535,11 +646,29 @@ pub struct PoseSheets<'a> {
 /// later ones are on top. A placement whose sprite is not defined, or whose
 /// sheet is not loaded, is skipped. A GANI with a single direction row uses
 /// it for every direction.
-pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8, sheets: &PoseSheets, dx: i32, dy: i32) {
-    let Some(step) = gani.frame(frame) else { return };
-    let Some(row) = step.rows.get(usize::from(dir % 4)).or_else(|| step.rows.first()) else { return };
+pub fn draw_gani_frame(
+    fb: &mut Framebuffer,
+    gani: &Gani,
+    frame: usize,
+    dir: u8,
+    sheets: &PoseSheets,
+    dx: i32,
+    dy: i32,
+) {
+    let Some(step) = gani.frame(frame) else {
+        return;
+    };
+    let Some(row) = step
+        .rows
+        .get(usize::from(dir % 4))
+        .or_else(|| step.rows.first())
+    else {
+        return;
+    };
     for pl in row {
-        let Some(sp) = gani.sprites.iter().find(|s| s.id == pl.sprite_id) else { continue };
+        let Some(sp) = gani.sprites.iter().find(|s| s.id == pl.sprite_id) else {
+            continue;
+        };
         let sheet = match sp.sheet.to_ascii_uppercase().as_str() {
             "BODY" => sheets.body,
             "HEAD" => sheets.head,
@@ -555,7 +684,17 @@ pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8,
         };
         if let Some(sh) = sheet {
             if sp.x >= 0 && sp.y >= 0 {
-                fb.blit_sprite(sh.px, sh.w, sh.bpp, sp.x, sp.y, sp.w, sp.h, dx + pl.x, dy + pl.y);
+                fb.blit_sprite(
+                    sh.px,
+                    sh.w,
+                    sh.bpp,
+                    sp.x,
+                    sp.y,
+                    sp.w,
+                    sp.h,
+                    dx + pl.x,
+                    dy + pl.y,
+                );
             }
         }
     }
@@ -565,9 +704,17 @@ pub fn draw_gani_frame(fb: &mut Framebuffer, gani: &Gani, frame: usize, dir: u8,
 /// with an effect: `(x, y, w, px)`, where `(x, y)` is the picture's top-left
 /// against the GANI's origin. Transparent where nothing was drawn. `None`
 /// when the step draws nothing.
-pub fn compose_gani_frame(gani: &Gani, frame: usize, dir: u8, sheets: &PoseSheets) -> Option<(i32, i32, u32, Vec<u8>)> {
+pub fn compose_gani_frame(
+    gani: &Gani,
+    frame: usize,
+    dir: u8,
+    sheets: &PoseSheets,
+) -> Option<(i32, i32, u32, Vec<u8>)> {
     let step = gani.frame(frame)?;
-    let row = step.rows.get(usize::from(dir % 4)).or_else(|| step.rows.first())?;
+    let row = step
+        .rows
+        .get(usize::from(dir % 4))
+        .or_else(|| step.rows.first())?;
     let placed: Vec<_> = row
         .iter()
         .filter_map(|pl| {
@@ -592,8 +739,11 @@ pub fn compose_gani_frame(gani: &Gani, frame: usize, dir: u8, sheets: &PoseSheet
     for (pl, sp, sheet) in placed {
         for ty in 0..sp.h {
             for tx in 0..sp.w {
-                let si = ((sp.y + ty) as usize * sheet.w as usize + (sp.x + tx) as usize) * sheet.bpp;
-                let Some(src) = sheet.px.get(si..si + sheet.bpp) else { continue };
+                let si =
+                    ((sp.y + ty) as usize * sheet.w as usize + (sp.x + tx) as usize) * sheet.bpp;
+                let Some(src) = sheet.px.get(si..si + sheet.bpp) else {
+                    continue;
+                };
                 let rgba = match sheet.bpp {
                     4 if src[3] == 0 => continue,
                     4 => [src[0], src[1], src[2], src[3]],
@@ -701,7 +851,13 @@ mod tests {
     }
 
     fn chest(x: i32, y: i32, opened: bool) -> crate::assets::Chest {
-        crate::assets::Chest { x, y, item: String::new(), sign_index: -1, opened }
+        crate::assets::Chest {
+            x,
+            y,
+            item: String::new(),
+            sign_index: -1,
+            opened,
+        }
     }
 
     /// The tile ids drawn in the 2x2 tiles at level tile (x, y), for a view
@@ -711,7 +867,8 @@ mod tests {
         let fb = render_view(s, &sheet, 2048, 512, 20, 20);
         let (cx, cy) = camera_origin(s, 20, 20);
         let (px, py) = (x * 16 - cx, y * 16 - cy);
-        let at = |dx: i32, dy: i32| id_at(&fb, (px + dx * 16 + 8) as u32, (py + dy * 16 + 8) as u32);
+        let at =
+            |dx: i32, dy: i32| id_at(&fb, (px + dx * 16 + 8) as u32, (py + dy * 16 + 8) as u32);
         [at(0, 0), at(1, 0), at(0, 1), at(1, 1)]
     }
 
@@ -721,8 +878,16 @@ mod tests {
     #[test]
     fn a_chest_record_is_drawn_closed_or_open() {
         let mut s = chest_session(vec![chest(12, 12, false), chest(16, 12, true)]);
-        assert_eq!(drawn_at(&s, 12, 12), [1784, 1785, 1800, 1801], "a closed chest");
-        assert_eq!(drawn_at(&s, 16, 12), [829, 830, 845, 846], "the server said it is already opened");
+        assert_eq!(
+            drawn_at(&s, 12, 12),
+            [1784, 1785, 1800, 1801],
+            "a closed chest"
+        );
+        assert_eq!(
+            drawn_at(&s, 16, 12),
+            [829, 830, 845, 846],
+            "the server said it is already opened"
+        );
         // Opening the closed one in play swaps it.
         s.opened_chests.insert((12, 12));
         assert_eq!(drawn_at(&s, 12, 12), [829, 830, 845, 846]);
@@ -738,7 +903,11 @@ mod tests {
         s.life.tick(0, true);
         assert!(s.life.is_dead());
         assert_eq!(drawn_at(&s, 14, 12), [0, 0, 0, 0], "no board");
-        assert_eq!(drawn_at(&s, 12, 12), [1784, 1785, 1800, 1801], "the chest is still drawn");
+        assert_eq!(
+            drawn_at(&s, 12, 12),
+            [1784, 1785, 1800, 1801],
+            "the chest is still drawn"
+        );
     }
 
     /// The client draws a chest only for x and y from 0 to 62.
@@ -748,7 +917,10 @@ mod tests {
         let s = chest_session(vec![chest(63, 12, false), chest(-1, 12, false)]);
         let sheet = id_sheet();
         let fb = render_view(&s, &sheet, 2048, 512, 70, 20);
-        assert!(fb.pixels.chunks(3).all(|p| !(p[0] == 0x18 && p[1] == 7)), "no closed-chest tile anywhere");
+        assert!(
+            fb.pixels.chunks(3).all(|p| !(p[0] == 0x18 && p[1] == 7)),
+            "no closed-chest tile anywhere"
+        );
     }
 
     /// On a gmap the view shows the neighbour's tiles past the edge: tile
@@ -757,7 +929,9 @@ mod tests {
     fn neighbour_levels_are_drawn_past_the_edge() {
         use crate::assets::Level;
         let lv = |mark: u16| {
-            let tiles: Vec<u16> = (0..64 * 64).map(|i| if i == 30 * 64 { mark } else { 1 }).collect();
+            let tiles: Vec<u16> = (0..64 * 64)
+                .map(|i| if i == 30 * 64 { mark } else { 1 })
+                .collect();
             Level::from_board(&tiles)
         };
         let grid = "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n";
@@ -773,7 +947,11 @@ mod tests {
         let px = |tx: i32, ty: i32| ((tx * 16 - cam_x + 8) as u32, (ty * 16 - cam_y + 8) as u32);
         let (ex, ey) = px(64, 30);
         assert_eq!(red_at(&fb, ex, ey), 0, "no gmap: nothing past the edge");
-        s.enter_gmap("g.gmap".into(), crate::gmap::Gmap::parse(grid).unwrap(), (0, 0));
+        s.enter_gmap(
+            "g.gmap".into(),
+            crate::gmap::Gmap::parse(grid).unwrap(),
+            (0, 0),
+        );
         s.gmap.as_mut().unwrap().levels.insert((1, 0), lv(21));
         let fb = render_view(&s, &sheet, 2048, 512, 40, 30);
         assert_eq!(red_at(&fb, ex, ey), 21, "the east level's tile (0, 30)");
@@ -798,10 +976,16 @@ mod tests {
         }
         let names = ["w.nw", "mid.nw", "e.nw"];
         if col > 0 {
-            t.push_str(&format!("LINK {} 0 0 1 64 61 playery\n", names[col as usize - 1]));
+            t.push_str(&format!(
+                "LINK {} 0 0 1 64 61 playery\n",
+                names[col as usize - 1]
+            ));
         }
         if col < 2 {
-            t.push_str(&format!("LINK {} 63 0 1 64 0 playery\n", names[col as usize + 1]));
+            t.push_str(&format!(
+                "LINK {} 63 0 1 64 0 playery\n",
+                names[col as usize + 1]
+            ));
         }
         t
     }
@@ -832,7 +1016,11 @@ mod tests {
         let fb = render_view(&s, &sheet, 2048, 512, vw, vh);
         let (cx, cy) = camera_origin(&s, vw, vh);
         let east_tile = id_at(&fb, (64 * 16 - cx + 8) as u32, (20 * 16 - cy + 8) as u32);
-        assert_eq!(east_tile, (128 % 128 + 128 * 20) as u16, "world column 128 (e.nw column 0) past the edge");
+        assert_eq!(
+            east_tile,
+            (128 % 128 + 128 * 20) as u16,
+            "world column 128 (e.nw column 0) past the edge"
+        );
         // Step to the link.
         let mut fired = false;
         for _ in 0..40 {
@@ -850,10 +1038,20 @@ mod tests {
         s.load_level(dir.join(&dest)).unwrap();
         s.arrive(nx, ny);
         assert!(s.sync_big_map(Some("e.nw"), &mut load), "the view moved on");
-        assert!(s.view_glide().0 < 0.0, "the link jumps ahead, the glide starts behind");
+        assert!(
+            s.view_glide().0 < 0.0,
+            "the link jumps ahead, the glide starts behind"
+        );
         let after = render_view(&s, &sheet, 2048, 512, vw, vh);
-        assert_eq!(player_box_origin(&s, vw, vh), player_before, "the player is drawn where it was");
-        assert!(before.pixels == after.pixels, "the same frame across the edge link");
+        assert_eq!(
+            player_box_origin(&s, vw, vh),
+            player_before,
+            "the player is drawn where it was"
+        );
+        assert!(
+            before.pixels == after.pixels,
+            "the same frame across the edge link"
+        );
         // The level left is drawn west of the new one.
         assert!(s.big_map_neighbour(-1, 0).is_some());
         // The glide runs out over SEAM_GLIDE_MS.

@@ -10,7 +10,9 @@
 //! sheet maths and the chest tiles are copied from `seihai-mae` rather than
 //! shared, so the two lines stay apart until the drawing moves to core.
 
-use seihai_core::assets::{builtin, read_png_rgb, tile_id, AssetResolver, Level, TileTypes, TileTypesFile};
+use seihai_core::assets::{
+    builtin, read_png_rgb, tile_id, AssetResolver, Level, TileTypes, TileTypesFile,
+};
 use seihai_core::offline::OfflineSession;
 
 /// Width of a tile in pixels.
@@ -39,7 +41,9 @@ impl Sheet {
     pub fn load(resolver: Option<&AssetResolver>) -> Result<Sheet, String> {
         let data = match resolver.and_then(|r| r.image("pics1.png")) {
             Some(p) => std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?,
-            None => builtin::bytes("pics1.png").ok_or("no built-in pics1.png")?.to_vec(),
+            None => builtin::bytes("pics1.png")
+                .ok_or("no built-in pics1.png")?
+                .to_vec(),
         };
         let (w, h, rgb) = read_png_rgb(&data).map_err(|e| format!("pics1.png: {e}"))?;
         Ok(Sheet { w, h, rgb })
@@ -65,13 +69,20 @@ pub struct Frame {
 
 impl Frame {
     fn new(w: u32, h: u32) -> Frame {
-        Frame { w, h, rgb: vec![0; (w * h * 3) as usize] }
+        Frame {
+            w,
+            h,
+            rgb: vec![0; (w * h * 3) as usize],
+        }
     }
 
     /// Copy tile `tile` of the sheet to `(dx, dy)`, clipped.
     fn blit_tile(&mut self, s: &Sheet, tile: u16, dx: i32, dy: i32) {
         let t = tile as u32;
-        let (sx, sy) = ((t % 16 + (t / 512) * 16) * TILE_PX, ((t / 16) % SHEET_ROWS) * TILE_PX);
+        let (sx, sy) = (
+            (t % 16 + (t / 512) * 16) * TILE_PX,
+            ((t / 16) % SHEET_ROWS) * TILE_PX,
+        );
         if sx + TILE_PX > s.w || sy + TILE_PX > s.h {
             return;
         }
@@ -85,7 +96,8 @@ impl Frame {
                 if px < 0 || px >= self.w as i32 {
                     continue;
                 }
-                let si = ((sy as usize + ty as usize) * s.w as usize + sx as usize + tx as usize) * 3;
+                let si =
+                    ((sy as usize + ty as usize) * s.w as usize + sx as usize + tx as usize) * 3;
                 let di = (py as usize * self.w as usize + px as usize) * 3;
                 self.rgb[di..di + 3].copy_from_slice(&s.rgb[si..si + 3]);
             }
@@ -114,7 +126,10 @@ impl Frame {
 /// player's 48x48 box (player x/y + 1.5 tiles).
 pub fn camera_origin(s: &OfflineSession, view_w: u32, view_h: u32) -> (i32, i32) {
     let t = TILE_PX as f32;
-    (((s.player_x + 1.5) * t - view_w as f32 * t / 2.0) as i32, ((s.player_y + 1.5) * t - view_h as f32 * t / 2.0) as i32)
+    (
+        ((s.player_x + 1.5) * t - view_w as f32 * t / 2.0) as i32,
+        ((s.player_y + 1.5) * t - view_h as f32 * t / 2.0) as i32,
+    )
 }
 
 /// The tile at `(x, y)`: layer 0, else any board run that covers it.
@@ -133,7 +148,9 @@ fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
 /// Off the level is black.
 pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Frame {
     let mut f = Frame::new(view_w * TILE_PX, view_h * TILE_PX);
-    let Some(level) = &s.current_level else { return f };
+    let Some(level) = &s.current_level else {
+        return f;
+    };
     let (cam_x, cam_y) = camera_origin(s, view_w, view_h);
     let t = TILE_PX as i32;
     let (ox, oy) = (cam_x.div_euclid(t), cam_y.div_euclid(t));
@@ -157,7 +174,11 @@ pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Fram
             continue;
         }
         let opened = c.opened || s.opened_chests.contains(&(c.x, c.y));
-        let art = if opened { CHEST_OPEN_TILES } else { CHEST_CLOSED_TILES };
+        let art = if opened {
+            CHEST_OPEN_TILES
+        } else {
+            CHEST_CLOSED_TILES
+        };
         for (i, id) in art.into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
             f.blit_tile(sheet, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
@@ -165,12 +186,27 @@ pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Fram
     }
     // Links over the tiles and chests, under the player.
     for l in &level.links {
-        f.stroke_rect(l.x * t - cam_x, l.y * t - cam_y, l.width * t, l.height * t, LINK_OUTLINE);
+        f.stroke_rect(
+            l.x * t - cam_x,
+            l.y * t - cam_y,
+            l.width * t,
+            l.height * t,
+            LINK_OUTLINE,
+        );
     }
     // The player's box starts at its tile position; the marker sits where
     // the body would be.
-    let (bx, by) = ((s.player_x * t as f32) as i32 - cam_x, (s.player_y * t as f32) as i32 - cam_y);
-    f.fill_rect(bx + 16, by + 24, 16, 16, if s.in_water { MARKER_WATER } else { MARKER });
+    let (bx, by) = (
+        (s.player_x * t as f32) as i32 - cam_x,
+        (s.player_y * t as f32) as i32 - cam_y,
+    );
+    f.fill_rect(
+        bx + 16,
+        by + 24,
+        16,
+        16,
+        if s.in_water { MARKER_WATER } else { MARKER },
+    );
     f
 }
 
@@ -205,9 +241,15 @@ mod tests {
         let f = draw(&session(600), &sheet, 40, 30);
         let (cam_x, cam_y) = camera_origin(&session(600), 40, 30);
         // A screen pixel at a tile corner is that sheet tile's corner pixel.
-        let (sx, sy) = ((16 - cam_x.rem_euclid(16)) as u32, (16 - cam_y.rem_euclid(16)) as u32);
+        let (sx, sy) = (
+            (16 - cam_x.rem_euclid(16)) as u32,
+            (16 - cam_y.rem_euclid(16)) as u32,
+        );
         let si = ((5 * 16 * sheet.w + 24 * 16) * 3) as usize;
-        assert_eq!(px(&f, sx, sy), [sheet.rgb[si], sheet.rgb[si + 1], sheet.rgb[si + 2]]);
+        assert_eq!(
+            px(&f, sx, sy),
+            [sheet.rgb[si], sheet.rgb[si + 1], sheet.rgb[si + 2]]
+        );
     }
 
     #[test]

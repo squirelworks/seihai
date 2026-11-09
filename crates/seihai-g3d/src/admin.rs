@@ -94,7 +94,15 @@ pub fn get_account(id: u32) -> Vec<u8> {
 // name, password, saved props, flags); only the 54 reply was seen live.
 
 fn escape(text: &str) -> Vec<u8> {
-    text.bytes().map(|b| if b == b'\n' { crate::codec::LINE_BREAK } else { b }).collect()
+    text.bytes()
+        .map(|b| {
+            if b == b'\n' {
+                crate::codec::LINE_BREAK
+            } else {
+                b
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

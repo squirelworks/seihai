@@ -23,11 +23,15 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 fn u16le(b: &[u8], o: usize) -> Result<u16, Error> {
-    b.get(o..o + 2).map(|s| u16::from_le_bytes([s[0], s[1]])).ok_or(Error("short header"))
+    b.get(o..o + 2)
+        .map(|s| u16::from_le_bytes([s[0], s[1]]))
+        .ok_or(Error("short header"))
 }
 
 fn u32le(b: &[u8], o: usize) -> Result<u32, Error> {
-    b.get(o..o + 4).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]])).ok_or(Error("short header"))
+    b.get(o..o + 4)
+        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
+        .ok_or(Error("short header"))
 }
 
 /// The largest texture side accepted.
@@ -56,7 +60,9 @@ pub fn decode(b: &[u8]) -> Result<Image, Error> {
         (24, 0) => {
             let stride = (w * 3 + 3) & !3;
             for r in 0..h {
-                let line = pix.get(r * stride..r * stride + w * 3).ok_or(Error("short pixel data"))?;
+                let line = pix
+                    .get(r * stride..r * stride + w * 3)
+                    .ok_or(Error("short pixel data"))?;
                 for x in 0..w {
                     let p = &line[x * 3..x * 3 + 3];
                     px[row(r) * w + x] = (p[2] as u32) << 16 | (p[1] as u32) << 8 | p[0] as u32;
@@ -68,14 +74,18 @@ pub fn decode(b: &[u8]) -> Result<Image, Error> {
             let pal_at = 14 + hdr;
             let mut pal = [0u32; 256];
             for (i, slot) in pal.iter_mut().enumerate().take(n) {
-                let p = b.get(pal_at + i * 4..pal_at + i * 4 + 3).ok_or(Error("short palette"))?;
+                let p = b
+                    .get(pal_at + i * 4..pal_at + i * 4 + 3)
+                    .ok_or(Error("short palette"))?;
                 *slot = (p[2] as u32) << 16 | (p[1] as u32) << 8 | p[0] as u32;
             }
             let idx = if comp == 0 {
                 let stride = (w + 3) & !3;
                 let mut v = vec![0u8; w * h];
                 for r in 0..h {
-                    let line = pix.get(r * stride..r * stride + w).ok_or(Error("short pixel data"))?;
+                    let line = pix
+                        .get(r * stride..r * stride + w)
+                        .ok_or(Error("short pixel data"))?;
                     v[r * w..r * w + w].copy_from_slice(line);
                 }
                 v
@@ -193,6 +203,9 @@ mod tests {
         b.extend_from_slice(&[0, 0, 0, 0, 255, 255, 255, 0]);
         b.extend_from_slice(&[2, 0, 2, 1, 0, 0, 0, 4, 1, 0, 1, 0, 0, 1]);
         let img = decode(&b).unwrap();
-        assert_eq!(img.px, vec![0xffffff, 0, 0xffffff, 0, 0, 0, 0xffffff, 0xffffff]);
+        assert_eq!(
+            img.px,
+            vec![0xffffff, 0, 0xffffff, 0, 0, 0, 0xffffff, 0xffffff]
+        );
     }
 }

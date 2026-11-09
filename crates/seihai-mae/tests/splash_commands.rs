@@ -9,7 +9,8 @@ use seihai::scripting::engine::host::SessionScripts;
 
 fn session(script: &str) -> (OfflineSession, SessionScripts) {
     let mut s = OfflineSession::new();
-    s.current_level = Some(Level::parse(&format!("GLEVNW01\nNPC - 2 2\n{script}\nNPCEND\n")).unwrap());
+    s.current_level =
+        Some(Level::parse(&format!("GLEVNW01\nNPC - 2 2\n{script}\nNPCEND\n")).unwrap());
     s.player_x = 30.0;
     s.player_y = 30.0;
     let mut sc = SessionScripts::new(ClientVersion::V222);
@@ -34,7 +35,8 @@ fn freezeplayer_and_hideplayer_last_their_time() {
 /// A script that calls `hideplayer` on each timeout keeps the player hidden.
 #[test]
 fn hideplayer_on_a_timeout_keeps_the_player_hidden() {
-    let (mut s, mut sc) = session("if (playerenters || timeout) { hideplayer 0.1; timeout = 0.05; }");
+    let (mut s, mut sc) =
+        session("if (playerenters || timeout) { hideplayer 0.1; timeout = 0.05; }");
     for _ in 0..20 {
         sc.tick(&mut s, 50);
         assert!(s.script_hide_ms > 0);
@@ -56,8 +58,14 @@ fn showstats_sets_the_hud_bits() {
 fn the_debug_dump_holds_every_npc_script() {
     let level = Level::parse("GLEVNW01\nNPC - 2 2\nif (created) {\n  message a;\n}\nNPCEND\nNPC fallpal.png 28 30\n// second\nNPCEND\n").unwrap();
     let dump = level.npc_scripts_dump();
-    assert!(dump.contains("//// npc 0: - at 2,2 (3 lines)\nif (created) {\n  message a;\n}\n"), "{dump}");
-    assert!(dump.contains("//// npc 1: fallpal.png at 28,30 (1 lines)\n// second\n"), "{dump}");
+    assert!(
+        dump.contains("//// npc 0: - at 2,2 (3 lines)\nif (created) {\n  message a;\n}\n"),
+        "{dump}"
+    );
+    assert!(
+        dump.contains("//// npc 1: fallpal.png at 28,30 (1 lines)\n// second\n"),
+        "{dump}"
+    );
 }
 
 /// 2gta's title, cut down: the player goes off the board (y 65), the view
@@ -73,7 +81,8 @@ if (timeout) {
 
 fn title(version: ClientVersion) -> (OfflineSession, SessionScripts) {
     let mut s = OfflineSession::new();
-    s.current_level = Some(Level::parse(&format!("GLEVNW01\nNPC - 32 30\n{TITLE}\nNPCEND\n")).unwrap());
+    s.current_level =
+        Some(Level::parse(&format!("GLEVNW01\nNPC - 32 30\n{TITLE}\nNPCEND\n")).unwrap());
     s.player_x = 30.0;
     s.player_y = 30.0;
     let mut sc = SessionScripts::new(version);
@@ -142,13 +151,19 @@ fn an_npc_is_touched_across_its_whole_picture() {
         let mut sc = SessionScripts::new(ClientVersion::V222);
         sc.load_level(&mut s, "onlinestartlocal.nw");
         if sized {
-            sc.size_npcs(&s, |name| (name == "tulepathcheck.png").then_some((128, 48)));
+            sc.size_npcs(&s, |name| {
+                (name == "tulepathcheck.png").then_some((128, 48))
+            });
         }
         s.player_y = 0.0;
         sc.touch(&mut s);
         s.pending_link.clone()
     };
-    assert_eq!(walk_up(false), None, "2 by 2 at 29,0 does not reach the feet at 33,2.75");
+    assert_eq!(
+        walk_up(false),
+        None,
+        "2 by 2 at 29,0 does not reach the feet at 33,2.75"
+    );
     let (dest, x, y) = walk_up(true).expect("touched");
     assert_eq!((dest.as_str(), x, y), ("chimptulevillage7.nw", 31.0, 61.0));
 }

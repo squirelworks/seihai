@@ -61,7 +61,10 @@ impl Wire {
             if v.is_empty() {
                 "none".into()
             } else {
-                v.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+                v.iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             }
         }
         format!(
@@ -115,8 +118,15 @@ mod tests {
         }
         assert!(!w.plo_added.contains(&44) && !w.plo_removed.contains(&189));
         for id in [21, 36, 50, 81, 93, 96, 97, 98, 152, 154, 155, 156, 157, 158] {
-            assert!(w.pli_added.contains(&id) || BASE.profile().protocol.pli.contains(id), "PLI {id}");
+            assert!(
+                w.pli_added.contains(&id) || BASE.profile().protocol.pli.contains(id),
+                "PLI {id}"
+            );
         }
-        assert!(w.pli_removed.contains(&39) && w.pli_removed.contains(&44) && !w.pli_removed.contains(&46));
+        assert!(
+            w.pli_removed.contains(&39)
+                && w.pli_removed.contains(&44)
+                && !w.pli_removed.contains(&46)
+        );
     }
 }

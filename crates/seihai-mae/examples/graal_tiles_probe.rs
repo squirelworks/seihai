@@ -21,22 +21,31 @@ fn main() {
         if sx + 16 > w || sy + 16 > h {
             return true;
         }
-        (0..16).all(|y| (0..16).all(|x| {
-            let i = (((sy + y) * w + sx + x) * 3) as usize;
-            px[i..i + 3] == [0, 0, 0]
-        }))
+        (0..16).all(|y| {
+            (0..16).all(|x| {
+                let i = (((sy + y) * w + sx + x) * 3) as usize;
+                px[i..i + 3] == [0, 0, 0]
+            })
+        })
     };
     let mut uses: BTreeMap<u16, (usize, String)> = BTreeMap::new();
     // Levels with board places that hold no tile at all, and how many places.
     let mut holes = (0usize, 0usize);
     let mut by_magic: BTreeMap<String, (usize, u16)> = BTreeMap::new();
     for path in levels {
-        let Ok(data) = std::fs::read(path) else { continue };
-        let Ok((level, layout)) = Level::parse_binary_with_layout(&data) else { continue };
+        let Ok(data) = std::fs::read(path) else {
+            continue;
+        };
+        let Ok((level, layout)) = Level::parse_binary_with_layout(&data) else {
+            continue;
+        };
         let e = by_magic.entry(layout.magic.clone()).or_default();
         e.0 += 1;
         e.1 = e.1.max(layout.max_tile);
-        let missing = (0..64).flat_map(|y| (0..64).map(move |x| (x, y))).filter(|&(x, y)| level.tile_at(x, y).is_none()).count();
+        let missing = (0..64)
+            .flat_map(|y| (0..64).map(move |x| (x, y)))
+            .filter(|&(x, y)| level.tile_at(x, y).is_none())
+            .count();
         if missing > 0 {
             holes.0 += 1;
             holes.1 += missing;
@@ -55,7 +64,10 @@ fn main() {
     for (m, (n, max)) in &by_magic {
         println!("{m}: {n} levels, highest tile id {max}");
     }
-    println!("levels with places that hold no tile: {}, places: {}", holes.0, holes.1);
+    println!(
+        "levels with places that hold no tile: {}, places: {}",
+        holes.0, holes.1
+    );
     for (id, (n, first)) in &uses {
         println!("{id}\t{n}\t{first}");
     }

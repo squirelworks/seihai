@@ -20,7 +20,11 @@ fn dot(a: V3, b: V3) -> f32 {
 }
 
 fn cross(a: V3, b: V3) -> V3 {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn norm(a: V3) -> V3 {
@@ -42,7 +46,12 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(w: usize, h: usize) -> Frame {
-        Frame { w, h, px: vec![0; w * h], depth: vec![0.0; w * h] }
+        Frame {
+            w,
+            h,
+            px: vec![0; w * h],
+            depth: vec![0.0; w * h],
+        }
     }
 
     pub fn clear(&mut self, colour: u32) {
@@ -75,7 +84,13 @@ impl Camera {
         let right = norm(cross([0.0, 1.0, 0.0], fwd));
         let up = cross(fwd, right);
         let focal = (w as f32 / 2.0) / (fov_deg.to_radians() / 2.0).tan();
-        Camera { pos, right, up, fwd, focal }
+        Camera {
+            pos,
+            right,
+            up,
+            fwd,
+            focal,
+        }
     }
 
     fn view_of(&self, p: V3) -> V3 {
@@ -87,7 +102,11 @@ impl Camera {
 /// A 3×4 transform: rotation (rows) and translation (last column).
 pub type Mat = [[f32; 4]; 3];
 
-pub const IDENTITY: Mat = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
+pub const IDENTITY: Mat = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+];
 
 pub fn transform(m: &Mat, v: V3) -> V3 {
     let r = |k: usize| m[k][0] * v[0] + m[k][1] * v[1] + m[k][2] * v[2] + m[k][3];
@@ -99,7 +118,10 @@ pub fn compose(a: &Mat, b: &Mat) -> Mat {
     let mut out = [[0.0; 4]; 3];
     for i in 0..3 {
         for j in 0..4 {
-            out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j] + if j == 3 { a[i][3] } else { 0.0 };
+            out[i][j] = a[i][0] * b[0][j]
+                + a[i][1] * b[1][j]
+                + a[i][2] * b[2][j]
+                + if j == 3 { a[i][3] } else { 0.0 };
         }
     }
     out
@@ -108,7 +130,11 @@ pub fn compose(a: &Mat, b: &Mat) -> Mat {
 /// A turn about y by `deg` (+z towards +x), then a move to `at`.
 pub fn yaw_at(deg: f32, at: V3) -> Mat {
     let (s, c) = deg.to_radians().sin_cos();
-    [[c, 0.0, s, at[0]], [0.0, 1.0, 0.0, at[1]], [-s, 0.0, c, at[2]]]
+    [
+        [c, 0.0, s, at[0]],
+        [0.0, 1.0, 0.0, at[1]],
+        [-s, 0.0, c, at[2]],
+    ]
 }
 
 /// Where and how to draw one mesh.
@@ -120,7 +146,10 @@ pub struct Placement {
 
 impl Placement {
     pub fn world() -> Placement {
-        Placement { m: IDENTITY, tint: None }
+        Placement {
+            m: IDENTITY,
+            tint: None,
+        }
     }
 
     fn apply(&self, v: V3) -> V3 {
@@ -136,8 +165,15 @@ struct Vert {
 
 fn lerp(a: Vert, b: Vert, t: f32) -> Vert {
     Vert {
-        v: [a.v[0] + (b.v[0] - a.v[0]) * t, a.v[1] + (b.v[1] - a.v[1]) * t, a.v[2] + (b.v[2] - a.v[2]) * t],
-        uv: [a.uv[0] + (b.uv[0] - a.uv[0]) * t, a.uv[1] + (b.uv[1] - a.uv[1]) * t],
+        v: [
+            a.v[0] + (b.v[0] - a.v[0]) * t,
+            a.v[1] + (b.v[1] - a.v[1]) * t,
+            a.v[2] + (b.v[2] - a.v[2]) * t,
+        ],
+        uv: [
+            a.uv[0] + (b.uv[0] - a.uv[0]) * t,
+            a.uv[1] + (b.uv[1] - a.uv[1]) * t,
+        ],
     }
 }
 
@@ -174,10 +210,19 @@ const LIGHT: V3 = [0.36, 0.86, -0.36];
 /// Draw `mesh` into `f`. `textures` maps a material's texture file name
 /// (lower case) to its image; missing textures draw in the material
 /// colour.
-pub fn draw_mesh(f: &mut Frame, cam: &Camera, mesh: &Mesh, place: &Placement, textures: &HashMap<String, Image>) {
+pub fn draw_mesh(
+    f: &mut Frame,
+    cam: &Camera,
+    mesh: &Mesh,
+    place: &Placement,
+    textures: &HashMap<String, Image>,
+) {
     let (cx, cy) = (f.w as f32 / 2.0, f.h as f32 / 2.0);
     for (tri, mat) in mesh.triangles() {
-        let world: Vec<V3> = tri.iter().map(|&i| place.apply(mesh.vertices[i as usize])).collect();
+        let world: Vec<V3> = tri
+            .iter()
+            .map(|&i| place.apply(mesh.vertices[i as usize]))
+            .collect();
         // Direct3D faces are clockwise from the front; draw both sides,
         // lit by the face normal facing the camera.
         let mut n = norm(cross(sub(world[1], world[0]), sub(world[2], world[0])));
@@ -190,11 +235,16 @@ pub fn draw_mesh(f: &mut Frame, cam: &Camera, mesh: &Mesh, place: &Placement, te
             .and_then(|m| m.texture.as_ref())
             .and_then(|t| textures.get(&t.to_ascii_lowercase()))
             .filter(|_| place.tint.is_none());
-        let base = place.tint.unwrap_or_else(|| m.map(|m| rgb(m.colour)).unwrap_or(0xc0c0c0));
+        let base = place
+            .tint
+            .unwrap_or_else(|| m.map(|m| rgb(m.colour)).unwrap_or(0xc0c0c0));
         let poly: Vec<Vert> = tri
             .iter()
             .zip(&world)
-            .map(|(&i, &w)| Vert { v: cam.view_of(w), uv: mesh.uvs.get(i as usize).copied().unwrap_or([0.0, 0.0]) })
+            .map(|(&i, &w)| Vert {
+                v: cam.view_of(w),
+                uv: mesh.uvs.get(i as usize).copied().unwrap_or([0.0, 0.0]),
+            })
             .collect();
         let poly = clip_near(&poly);
         if poly.len() < 3 {
@@ -205,7 +255,13 @@ pub fn draw_mesh(f: &mut Frame, cam: &Camera, mesh: &Mesh, place: &Placement, te
             .iter()
             .map(|p| {
                 let iz = 1.0 / p.v[2];
-                [cx + p.v[0] * cam.focal * iz, cy - p.v[1] * cam.focal * iz, iz, p.uv[0] * iz, p.uv[1] * iz]
+                [
+                    cx + p.v[0] * cam.focal * iz,
+                    cy - p.v[1] * cam.focal * iz,
+                    iz,
+                    p.uv[0] * iz,
+                    p.uv[1] * iz,
+                ]
             })
             .collect();
         for k2 in 1..s.len() - 1 {
@@ -215,14 +271,35 @@ pub fn draw_mesh(f: &mut Frame, cam: &Camera, mesh: &Mesh, place: &Placement, te
 }
 
 fn raster(f: &mut Frame, t: [[f32; 5]; 3], tex: Option<&Image>, base: u32, light: f32) {
-    let area = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]);
+    let area =
+        (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]);
     if area.abs() < 1e-6 {
         return;
     }
-    let min_x = t.iter().map(|p| p[0]).fold(f32::MAX, f32::min).floor().max(0.0) as usize;
-    let max_x = t.iter().map(|p| p[0]).fold(f32::MIN, f32::max).ceil().min(f.w as f32 - 1.0);
-    let min_y = t.iter().map(|p| p[1]).fold(f32::MAX, f32::min).floor().max(0.0) as usize;
-    let max_y = t.iter().map(|p| p[1]).fold(f32::MIN, f32::max).ceil().min(f.h as f32 - 1.0);
+    let min_x = t
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::MAX, f32::min)
+        .floor()
+        .max(0.0) as usize;
+    let max_x = t
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::MIN, f32::max)
+        .ceil()
+        .min(f.w as f32 - 1.0);
+    let min_y = t
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::MAX, f32::min)
+        .floor()
+        .max(0.0) as usize;
+    let max_y = t
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::MIN, f32::max)
+        .ceil()
+        .min(f.h as f32 - 1.0);
     if max_x < 0.0 || max_y < 0.0 {
         return;
     }
@@ -264,7 +341,12 @@ mod tests {
 
     fn quad() -> Mesh {
         Mesh {
-            vertices: vec![[-50.0, 0.0, -50.0], [50.0, 0.0, -50.0], [50.0, 0.0, 50.0], [-50.0, 0.0, 50.0]],
+            vertices: vec![
+                [-50.0, 0.0, -50.0],
+                [50.0, 0.0, -50.0],
+                [50.0, 0.0, 50.0],
+                [-50.0, 0.0, 50.0],
+            ],
             faces: vec![vec![0, 1, 2, 3]],
             ..Mesh::default()
         }
@@ -286,15 +368,30 @@ mod tests {
         let mut f = Frame::new(32, 32);
         f.clear(0);
         let cam = Camera::look_at([0.0, 200.0, 0.0], [0.0, 0.0, 0.01], 60.0, 32);
-        let far = Placement { m: IDENTITY, tint: Some(0x0000ff) };
-        let near = Placement { m: yaw_at(0.0, [0.0, 50.0, 0.0]), tint: Some(0xff0000) };
+        let far = Placement {
+            m: IDENTITY,
+            tint: Some(0x0000ff),
+        };
+        let near = Placement {
+            m: yaw_at(0.0, [0.0, 50.0, 0.0]),
+            tint: Some(0xff0000),
+        };
         draw_mesh(&mut f, &cam, &quad(), &near, &HashMap::new());
         draw_mesh(&mut f, &cam, &quad(), &far, &HashMap::new());
         let c = f.px[16 * 32 + 16];
         assert!(c >> 16 > 0 && c & 0xff == 0, "{c:06x}");
         // A camera inside the quad's plane sees nothing and doesn't panic.
-        let v = transform(&compose(&yaw_at(90.0, [1.0, 0.0, 0.0]), &yaw_at(0.0, [0.0, 2.0, 0.0])), [0.0, 0.0, 1.0]);
-        assert!((v[0] - 2.0).abs() < 1e-5 && (v[1] - 2.0).abs() < 1e-5 && v[2].abs() < 1e-5, "{v:?}");
+        let v = transform(
+            &compose(
+                &yaw_at(90.0, [1.0, 0.0, 0.0]),
+                &yaw_at(0.0, [0.0, 2.0, 0.0]),
+            ),
+            [0.0, 0.0, 1.0],
+        );
+        assert!(
+            (v[0] - 2.0).abs() < 1e-5 && (v[1] - 2.0).abs() < 1e-5 && v[2].abs() < 1e-5,
+            "{v:?}"
+        );
         let cam = Camera::look_at([0.0, 0.0, -200.0], [0.0, 0.0, 0.0], 60.0, 32);
         draw_mesh(&mut f, &cam, &quad(), &near, &HashMap::new());
     }

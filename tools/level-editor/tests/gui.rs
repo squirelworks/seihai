@@ -4,12 +4,17 @@
 
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
-use level_editor::gui::{board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, SHEET_COLS, SHEET_ROWS};
+use level_editor::gui::{
+    board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, SHEET_COLS,
+    SHEET_ROWS,
+};
 use level_editor::{Document, EditError, Version, TILE_LIMIT};
 use std::path::{Path, PathBuf};
 
 fn starter(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/default/levels").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/default/levels")
+        .join(name)
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -46,7 +51,12 @@ fn sheet_mapping_covers_every_text_id_once() {
 
 #[test]
 fn line_cells_has_no_gaps() {
-    for (a, b) in [((0, 0), (5, 2)), ((10, 3), (2, 9)), ((4, 4), (4, 4)), ((63, 0), (0, 63))] {
+    for (a, b) in [
+        ((0, 0), (5, 2)),
+        ((10, 3), (2, 9)),
+        ((4, 4), (4, 4)),
+        ((63, 0), (0, 63)),
+    ] {
         let cells = line_cells(a, b);
         assert_eq!(cells.first(), Some(&a));
         assert_eq!(cells.last(), Some(&b));
@@ -63,7 +73,10 @@ fn editor_paint_pick_and_save() {
     let original = std::fs::read(&path).unwrap();
     let mut ed = Editor::new(Version::V222);
     assert_eq!(ed.version, Version::V222);
-    assert!(matches!(ed.paint_at(0, 0), Err(EditError::Io(_))), "no level open");
+    assert!(
+        matches!(ed.paint_at(0, 0), Err(EditError::Io(_))),
+        "no level open"
+    );
     ed.open(&path).unwrap();
     assert!(!ed.has_unsaved());
 
@@ -71,7 +84,11 @@ fn editor_paint_pick_and_save() {
     let new = if old == 0x200 { 0x201 } else { 0x200 };
     ed.select(new as u32).unwrap();
     assert_eq!(ed.paint_at(5, 6).unwrap(), 1);
-    assert_eq!(ed.paint_at(5, 6).unwrap(), 0, "the same tile again changes nothing");
+    assert_eq!(
+        ed.paint_at(5, 6).unwrap(),
+        0,
+        "the same tile again changes nothing"
+    );
     assert!(ed.has_unsaved());
     assert!(matches!(ed.paint_at(64, 0), Err(EditError::Bounds(_))));
     assert!(matches!(ed.select(4096), Err(EditError::TileRange(4096))));
@@ -91,7 +108,11 @@ fn editor_paint_pick_and_save() {
     let back = scratch("state-back.nw");
     ed.save_as(&back).unwrap();
     assert_eq!(std::fs::read(&back).unwrap(), original);
-    assert_eq!(ed.path(), Some(back.as_path()), "Save as becomes the Save target");
+    assert_eq!(
+        ed.path(),
+        Some(back.as_path()),
+        "Save as becomes the Save target"
+    );
 }
 
 #[test]
@@ -128,7 +149,11 @@ struct Harness {
 
 impl Harness {
     fn new(file: Option<&Path>) -> Harness {
-        let mut h = Harness { ctx: egui::Context::default(), app: EditorApp::new(Version::V222, Sheet::builtin(), file), events: Vec::new() };
+        let mut h = Harness {
+            ctx: egui::Context::default(),
+            app: EditorApp::new(Version::V222, Sheet::builtin(), file),
+            events: Vec::new(),
+        };
         h.frame();
         h.frame();
         h
@@ -146,7 +171,12 @@ impl Harness {
 
     fn press(&mut self, pos: Pos2, button: PointerButton) {
         self.events.push(Event::PointerMoved(pos));
-        self.events.push(Event::PointerButton { pos, button, pressed: true, modifiers: Modifiers::NONE });
+        self.events.push(Event::PointerButton {
+            pos,
+            button,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        });
         self.frame();
     }
 
@@ -156,7 +186,12 @@ impl Harness {
     }
 
     fn release(&mut self, pos: Pos2, button: PointerButton) {
-        self.events.push(Event::PointerButton { pos, button, pressed: false, modifiers: Modifiers::NONE });
+        self.events.push(Event::PointerButton {
+            pos,
+            button,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        });
         self.frame();
     }
 
@@ -183,7 +218,11 @@ impl Harness {
 fn window_palette_click_then_board_click_paints_and_ctrl_s_saves() {
     let path = copy_of("new1.nw", "window.nw");
     let mut h = Harness::new(Some(&path));
-    assert_eq!(h.app.editor.version, Version::V222, "the selector defaults to 2.22");
+    assert_eq!(
+        h.app.editor.version,
+        Version::V222,
+        "the selector defaults to 2.22"
+    );
     let doc = h.app.editor.doc().unwrap();
     let old = doc.tile(3, 4).unwrap();
     // a tile in the palette's visible top-left area that differs from the board's
@@ -195,10 +234,20 @@ fn window_palette_click_then_board_click_paints_and_ctrl_s_saves() {
 
     let b = h.board_at(3, 4);
     h.click(b, PointerButton::Primary);
-    assert_eq!(h.app.editor.doc().unwrap().tile(3, 4), Some(want), "board click paints");
+    assert_eq!(
+        h.app.editor.doc().unwrap().tile(3, 4),
+        Some(want),
+        "board click paints"
+    );
     assert!(h.app.editor.has_unsaved());
 
-    h.events.push(Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND });
+    h.events.push(Event::Key {
+        key: egui::Key::S,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::COMMAND,
+    });
     h.frame();
     assert!(!h.app.editor.has_unsaved(), "Ctrl+S saved");
     assert_eq!(Document::open(&path).unwrap().tile(3, 4), Some(want));
@@ -222,7 +271,10 @@ fn window_drag_paints_a_stroke_and_right_click_picks() {
     let other = doc.tile(30, 30).unwrap();
     let r = h.board_at(30, 30);
     h.click(r, PointerButton::Secondary);
-    assert_eq!(h.app.editor.tile, other, "right click picks the tile under the mouse");
+    assert_eq!(
+        h.app.editor.tile, other,
+        "right click picks the tile under the mouse"
+    );
 }
 
 #[test]
@@ -239,14 +291,23 @@ fn window_close_with_unsaved_changes_asks_first() {
         screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1100.0, 860.0))),
         viewports: {
             let mut v = egui::ViewportIdMap::default();
-            v.insert(egui::ViewportId::ROOT, egui::ViewportInfo { events: vec![egui::ViewportEvent::Close], ..Default::default() });
+            v.insert(
+                egui::ViewportId::ROOT,
+                egui::ViewportInfo {
+                    events: vec![egui::ViewportEvent::Close],
+                    ..Default::default()
+                },
+            );
             v
         },
         ..Default::default()
     };
     let app = &mut h.app;
     let _ = h.ctx.run(input, |ctx| app.ui(ctx));
-    assert!(!h.app.closing, "unsaved changes hold the close for the prompt");
+    assert!(
+        !h.app.closing,
+        "unsaved changes hold the close for the prompt"
+    );
 }
 
 #[test]

@@ -52,7 +52,11 @@ impl Default for Config {
 
 fn colour(v: &str) -> Option<u32> {
     let v = v.trim();
-    let hex = v.strip_prefix("0x").or_else(|| v.strip_prefix("0X")).or_else(|| v.strip_prefix('$')).unwrap_or(v);
+    let hex = v
+        .strip_prefix("0x")
+        .or_else(|| v.strip_prefix("0X"))
+        .or_else(|| v.strip_prefix('$'))
+        .unwrap_or(v);
     u32::from_str_radix(hex, 16).ok().filter(|c| *c <= 0xFFFFFF)
 }
 
@@ -65,7 +69,9 @@ impl Config {
     pub fn parse(text: &str) -> Config {
         let mut c = Config::default();
         for line in text.lines() {
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             let (k, v) = (k.trim(), v.trim());
             match k.to_ascii_lowercase().as_str() {
                 "serveraddr" => c.server_addr = Some(v.to_string()).filter(|s| !s.is_empty()),
@@ -107,7 +113,10 @@ impl Config {
     pub fn to_text_over(&self, existing: &str) -> String {
         let mut out = self.to_text();
         for line in existing.lines() {
-            if line.split_once('=').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("password")) {
+            if line
+                .split_once('=')
+                .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("password"))
+            {
                 out += line;
                 out.push('\n');
             }
@@ -128,8 +137,14 @@ impl Config {
         if let Some(p) = self.server_port {
             out += &format!("serverport={p}\n");
         }
-        out += &format!("fixedport={}\nfixedudpport={}\nnoudp={}\n", self.fixed_port, self.fixed_udp_port, self.no_udp);
-        out += &format!("bodyx={}\nheadx={}\nbodytex={}\n", self.body_model, self.head_model, self.body_texture);
+        out += &format!(
+            "fixedport={}\nfixedudpport={}\nnoudp={}\n",
+            self.fixed_port, self.fixed_udp_port, self.no_udp
+        );
+        out += &format!(
+            "bodyx={}\nheadx={}\nbodytex={}\n",
+            self.body_model, self.head_model, self.body_texture
+        );
         out += &format!(
             "armcolor=0x{:06X}\nshoecolor=0x{:06X}\nhandcolor=0x{:06X}\n",
             self.arm_colour, self.shoe_colour, self.hand_colour
@@ -154,17 +169,25 @@ mod tests {
     fn reads_the_shipped_file() {
         let c = Config::parse(SHIPPED);
         assert_eq!(c.server_port, Some(14901));
-        assert_eq!((c.arm_colour, c.shoe_colour, c.hand_colour), (0xFF0000, 0x800000, 0xFDCC47));
+        assert_eq!(
+            (c.arm_colour, c.shoe_colour, c.hand_colour),
+            (0xFF0000, 0x800000, 0xFDCC47)
+        );
         assert!(!c.no_udp && !c.fixed_port);
         assert_eq!(c.to_text(), SHIPPED);
     }
 
     #[test]
     fn look_and_bad_values() {
-        let c = Config::parse("armcolor=0x00FF00\nshoecolor=nonsense\nbodytex=body1.bmp\npassword=secret\nfoo=bar\n");
+        let c = Config::parse(
+            "armcolor=0x00FF00\nshoecolor=nonsense\nbodytex=body1.bmp\npassword=secret\nfoo=bar\n",
+        );
         let mut p = Player::default();
         c.apply_look(&mut p);
-        assert_eq!((p.arm_colour, p.shoe_colour, p.body_texture.as_str()), (0x00FF00, 0x800000, "body1.bmp"));
+        assert_eq!(
+            (p.arm_colour, p.shoe_colour, p.body_texture.as_str()),
+            (0x00FF00, 0x800000, "body1.bmp")
+        );
         assert!(!c.to_text().contains("secret"));
         assert!(c.to_text().ends_with("foo=bar\n"));
     }
@@ -177,7 +200,10 @@ mod tests {
         let out = c.to_text_over(existing);
         assert!(out.contains("noudp=true\n"));
         assert!(out.ends_with("password=kept\nPassword = also\n"));
-        assert_eq!(Config::default().to_text_over(""), Config::default().to_text());
+        assert_eq!(
+            Config::default().to_text_over(""),
+            Config::default().to_text()
+        );
         let crlf = c.to_text_over("noudp=false\r\npassword=kept\r\n");
         assert!(crlf.contains("noudp=true\r\n"));
         assert!(crlf.ends_with("password=kept\r\n") && !crlf.replace("\r\n", "").contains('\n'));

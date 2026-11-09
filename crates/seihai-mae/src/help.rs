@@ -25,7 +25,12 @@ pub struct KeyHelp {
 }
 
 const fn k(label: &'static str, keys: &'static [&'static str], does: &'static str) -> KeyHelp {
-    KeyHelp { label, keys, does, dev_only: false }
+    KeyHelp {
+        label,
+        keys,
+        does,
+        dev_only: false,
+    }
 }
 
 /// Every bound key, in the order they are shown.
@@ -90,11 +95,34 @@ pub fn draw_help(fb: &mut Framebuffer) {
     for (i, (key, does)) in lines.iter().enumerate() {
         let ly = y + 6 + (i as i32 + 2) * line_h;
         let dev = key.starts_with("F9");
-        fb.draw_text(x + 8, ly, key, if dev { [0xFF, 0x90, 0x90] } else { [0x90, 0xE0, 0xFF] });
-        fb.draw_text(x + 8 + key_w, ly, does, if dev { [0xFF, 0xB0, 0xB0] } else { [0xFF, 0xFF, 0xFF] });
+        fb.draw_text(
+            x + 8,
+            ly,
+            key,
+            if dev {
+                [0xFF, 0x90, 0x90]
+            } else {
+                [0x90, 0xE0, 0xFF]
+            },
+        );
+        fb.draw_text(
+            x + 8 + key_w,
+            ly,
+            does,
+            if dev {
+                [0xFF, 0xB0, 0xB0]
+            } else {
+                [0xFF, 0xFF, 0xFF]
+            },
+        );
     }
     let hint = "F1 or ? to close";
-    fb.draw_text(x + w - 8 - text_width(hint), y + h - 4 - CELL_H, hint, [0xA0, 0xA0, 0xA0]);
+    fb.draw_text(
+        x + w - 8 - text_width(hint),
+        y + h - 4 - CELL_H,
+        hint,
+        [0xA0, 0xA0, 0xA0],
+    );
 }
 
 /// Draw the one-line hint at the top of the screen.
@@ -128,13 +156,22 @@ mod tests {
         let mut rest = src;
         while let Some(i) = rest.find("minifb::Key::") {
             rest = &rest[i + "minifb::Key::".len()..];
-            let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect();
             out.insert(name);
         }
         let map = crate::keys::KeyMap::default();
         let uses_direction = src.contains("any_direction_down");
         for a in crate::keys::Action::ALL {
-            let direction = matches!(a, crate::keys::Action::Up | crate::keys::Action::Left | crate::keys::Action::Down | crate::keys::Action::Right);
+            let direction = matches!(
+                a,
+                crate::keys::Action::Up
+                    | crate::keys::Action::Left
+                    | crate::keys::Action::Down
+                    | crate::keys::Action::Right
+            );
             if src.contains(&format!("Action::{a:?}")) || (direction && uses_direction) {
                 out.extend(map.keys(a).iter().map(|k| format!("{k:?}")));
             }
@@ -145,12 +182,20 @@ mod tests {
     #[test]
     fn help_lists_exactly_the_keys_main_reads() {
         let in_main = keys_in_main();
-        let in_table: BTreeSet<String> =
-            BINDINGS.iter().flat_map(|b| b.keys.iter().map(|s| s.to_string())).collect();
+        let in_table: BTreeSet<String> = BINDINGS
+            .iter()
+            .flat_map(|b| b.keys.iter().map(|s| s.to_string()))
+            .collect();
         let unlisted: Vec<_> = in_main.difference(&in_table).collect();
         let unhandled: Vec<_> = in_table.difference(&in_main).collect();
-        assert!(unlisted.is_empty(), "keys main.rs reads but the help omits: {unlisted:?}");
-        assert!(unhandled.is_empty(), "keys the help lists but main.rs never reads: {unhandled:?}");
+        assert!(
+            unlisted.is_empty(),
+            "keys main.rs reads but the help omits: {unlisted:?}"
+        );
+        assert!(
+            unhandled.is_empty(),
+            "keys the help lists but main.rs never reads: {unhandled:?}"
+        );
     }
 
     #[test]
@@ -163,7 +208,10 @@ mod tests {
     fn dev_key_is_marked_developer_only() {
         let f9 = BINDINGS.iter().find(|b| b.keys.contains(&"F9")).unwrap();
         assert!(f9.dev_only);
-        assert_eq!(help_lines().iter().any(|(l, _)| *l == "F9"), DevMode::AVAILABLE);
+        assert_eq!(
+            help_lines().iter().any(|(l, _)| *l == "F9"),
+            DevMode::AVAILABLE
+        );
     }
 
     #[test]
@@ -171,7 +219,11 @@ mod tests {
         let mut fb = Framebuffer::new(640, 480);
         draw_help(&mut fb);
         draw_hint(&mut fb);
-        let longest = help_lines().iter().map(|(k, d)| text_width(k) + 12 + text_width(d)).max().unwrap();
+        let longest = help_lines()
+            .iter()
+            .map(|(k, d)| text_width(k) + 12 + text_width(d))
+            .max()
+            .unwrap();
         assert!(longest + 24 <= 640, "help line too wide: {longest}");
         assert!(help_lines().len() as i32 * (CELL_H + 3) < 440);
     }

@@ -57,24 +57,52 @@ fn load_139(r: &AssetResolver, name: &str) -> Option<Gani> {
 fn the_built_in_poses_come_from_the_users_stock_files_fitted_to_139() {
     let d = tmp("assets");
     let cache = tmp("cache");
-    write(&d, "levels/ganis/walk.gani", &gani_text(8, 0, Some("steps2.wav"), "LOOP\n"));
-    write(&d, "levels/ganis/push.gani", &gani_text(5, 3, None, "LOOP\n"));
-    write(&d, "levels/ganis/hurt.gani", &gani_text(1, 30, Some("lift.wav"), "SETBACKTO idle\n"));
-    write(&d, "levels/ganis/sword.gani", &gani_text(5, 0, Some("sword.wav"), "SETBACKTO idle\n"));
+    write(
+        &d,
+        "levels/ganis/walk.gani",
+        &gani_text(8, 0, Some("steps2.wav"), "LOOP\n"),
+    );
+    write(
+        &d,
+        "levels/ganis/push.gani",
+        &gani_text(5, 3, None, "LOOP\n"),
+    );
+    write(
+        &d,
+        "levels/ganis/hurt.gani",
+        &gani_text(1, 30, Some("lift.wav"), "SETBACKTO idle\n"),
+    );
+    write(
+        &d,
+        "levels/ganis/sword.gani",
+        &gani_text(5, 0, Some("sword.wav"), "SETBACKTO idle\n"),
+    );
     write(&d, "levels/ganis/lift.gani", &gani_text(1, 5, None, ""));
     // What a server would send is not read: 1.39 downloads no GANIs.
     write(&cache, "levels/ganis/idle.gani", &gani_text(1, 0, None, ""));
-    let r = AssetResolver::new(AssetRoot::new(&d), ClientVersion::V139.profile()).with_cache(Some(cache.clone()));
+    let r = AssetResolver::new(AssetRoot::new(&d), ClientVersion::V139.profile())
+        .with_cache(Some(cache.clone()));
 
     let walk = load_139(&r, "walk.gani").expect("walk is built in");
     assert_eq!(walk.frame_count(), 8);
-    assert_eq!(walk.frames[0].sounds[0].file, "steps.wav", "1.39 names steps.wav, not steps2.wav");
+    assert_eq!(
+        walk.frames[0].sounds[0].file, "steps.wav",
+        "1.39 names steps.wav, not steps2.wav"
+    );
 
     let push = load_139(&r, "push.gani").unwrap();
-    assert_eq!(push.total_ticks(), 5 * 2, "about 2 ticks a push frame in 1.39, not 4");
+    assert_eq!(
+        push.total_ticks(),
+        5 * 2,
+        "about 2 ticks a push frame in 1.39, not 4"
+    );
 
     let hurt = load_139(&r, "hurt.gani").unwrap();
-    assert_eq!(hurt.total_ticks(), seihai::pose::HURT_POSE_139_TICKS, "the 1.39 hurt pose is about 10 ticks");
+    assert_eq!(
+        hurt.total_ticks(),
+        seihai::pose::HURT_POSE_139_TICKS,
+        "the 1.39 hurt pose is about 10 ticks"
+    );
     assert!(hurt.frames[0].sounds.is_empty(), "1.39 has no lift.wav");
 
     let sword = load_139(&r, "sword.gani").unwrap();
@@ -82,7 +110,10 @@ fn the_built_in_poses_come_from_the_users_stock_files_fitted_to_139() {
     assert_eq!(sword.frames[0].sounds[0].file, "sword.wav");
 
     assert!(r.pose_gani("lift.gani").is_none(), "1.39 has no lift pose");
-    assert!(r.pose_gani("idle.gani").is_none(), "the server's copy is not used");
+    assert!(
+        r.pose_gani("idle.gani").is_none(),
+        "the server's copy is not used"
+    );
     let _ = fs::remove_dir_all(&d);
     let _ = fs::remove_dir_all(&cache);
 }
@@ -93,9 +124,21 @@ fn the_built_in_poses_come_from_the_users_stock_files_fitted_to_139() {
 fn seihais_default_set_stands_in_when_the_folder_has_none() {
     let empty = tmp("empty");
     let builtin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/default");
-    let r = AssetResolver::new(AssetRoot::new(&empty), ClientVersion::V139.profile()).with_builtin(Some(builtin));
-    for name in ["idle.gani", "walk.gani", "swim.gani", "sword.gani", "hurt.gani", "carry.gani", "carrystill.gani"] {
-        assert!(load_139(&r, name).is_some_and(|g| g.frame_count() > 0), "{name}");
+    let r = AssetResolver::new(AssetRoot::new(&empty), ClientVersion::V139.profile())
+        .with_builtin(Some(builtin));
+    for name in [
+        "idle.gani",
+        "walk.gani",
+        "swim.gani",
+        "sword.gani",
+        "hurt.gani",
+        "carry.gani",
+        "carrystill.gani",
+    ] {
+        assert!(
+            load_139(&r, name).is_some_and(|g| g.frame_count() > 0),
+            "{name}"
+        );
     }
     let _ = fs::remove_dir_all(&empty);
 }
@@ -120,7 +163,13 @@ fn a_walking_139_player_sends_its_walk_frame_as_the_sprite() {
     let want: Vec<u8> = WALK_S.iter().map(|w| 2 + 4 * w).collect();
     assert_eq!(seen, want);
     // The lab capture of a real 1.39 walking down: 18 (S 4), 10 (S 2), then 22, 14, 6.
-    assert!(seen.contains(&18) && seen.contains(&10) && seen.contains(&22) && seen.contains(&14) && seen.contains(&6));
+    assert!(
+        seen.contains(&18)
+            && seen.contains(&10)
+            && seen.contains(&22)
+            && seen.contains(&14)
+            && seen.contains(&6)
+    );
     // A GANI build sends the name `walk`, not the frame.
     assert_eq!(s.sprite_value_for(true), 2);
     // Swimming sends no walk frame.

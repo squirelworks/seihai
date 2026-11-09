@@ -6,9 +6,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use seihai_core::config::config_path;
 /// The settings directory. Kept here so `settings::config_dir` still works.
 pub use seihai_core::config::config_dir;
+use seihai_core::config::config_path;
 
 #[derive(Debug, Clone, Default)]
 pub struct Settings {
@@ -178,9 +178,17 @@ impl Settings {
     /// version the GUI saved; the saved one applies only when the flag was
     /// not given; with neither, the default (2.05). `cli` is `Some` only when
     /// `--version` was given, even if it names the default.
-    pub fn version_with(&self, cli: Option<crate::protocol::ClientVersion>) -> crate::protocol::ClientVersion {
+    pub fn version_with(
+        &self,
+        cli: Option<crate::protocol::ClientVersion>,
+    ) -> crate::protocol::ClientVersion {
         use crate::protocol::ClientVersion;
-        cli.or_else(|| self.version.as_deref().and_then(ClientVersion::from_label_or_offline)).unwrap_or(ClientVersion::V205)
+        cli.or_else(|| {
+            self.version
+                .as_deref()
+                .and_then(ClientVersion::from_label_or_offline)
+        })
+        .unwrap_or(ClientVersion::V205)
     }
 
     /// Whether sound effects are on. The command line wins over the
@@ -220,7 +228,8 @@ impl Settings {
     pub fn set_assets_for(&mut self, label: &str, path: &str) {
         self.version_assets.retain(|(l, _)| l != label);
         if !path.trim().is_empty() {
-            self.version_assets.push((label.to_string(), PathBuf::from(path.trim())));
+            self.version_assets
+                .push((label.to_string(), PathBuf::from(path.trim())));
         }
     }
 }
@@ -240,20 +249,35 @@ mod tests {
         use crate::protocol::ClientVersion;
         let saved = Settings::parse("version=2.22\n");
         // `--version 2.05` (the default value, but given) is not replaced.
-        assert_eq!(saved.version_with(Some(ClientVersion::V205)), ClientVersion::V205);
-        assert_eq!(saved.version_with(Some(ClientVersion::V217)), ClientVersion::V217);
+        assert_eq!(
+            saved.version_with(Some(ClientVersion::V205)),
+            ClientVersion::V205
+        );
+        assert_eq!(
+            saved.version_with(Some(ClientVersion::V217)),
+            ClientVersion::V217
+        );
         // No flag: the saved version applies.
         assert_eq!(saved.version_with(None), ClientVersion::V222);
         // Neither: the default.
         assert_eq!(Settings::parse("").version_with(None), ClientVersion::V205);
         // An unreadable saved label is no saved version.
-        assert_eq!(Settings::parse("version=nope\n").version_with(None), ClientVersion::V205);
+        assert_eq!(
+            Settings::parse("version=nope\n").version_with(None),
+            ClientVersion::V205
+        );
     }
 
     #[test]
     fn keysets_are_read_and_kept() {
         let s = Settings::parse("keyset_action=E,space\nkeyset_attack=W\n");
-        assert_eq!(s.keysets, vec![("action".into(), "E,space".into()), ("attack".into(), "W".into())]);
+        assert_eq!(
+            s.keysets,
+            vec![
+                ("action".into(), "E,space".into()),
+                ("attack".into(), "W".into())
+            ]
+        );
         assert_eq!(Settings::parse(&s.to_text()).keysets, s.keysets);
     }
 
@@ -315,7 +339,9 @@ mod tests {
         assert_eq!(back.follow_serverwarp, Some(false));
         assert_eq!(back.account.as_deref(), Some("a"));
         // An unset option stays unset, so the file stays as it was.
-        assert!(!Settings::parse("account=a\n").to_text().contains("follow_serverwarp"));
+        assert!(!Settings::parse("account=a\n")
+            .to_text()
+            .contains("follow_serverwarp"));
     }
 
     #[test]
@@ -333,9 +359,14 @@ mod tests {
     #[test]
     fn cache_dir_round_trips_and_is_unset_by_default() {
         assert_eq!(Settings::parse("account=a\n").cache_dir, None);
-        assert!(!Settings::parse("account=a\n").to_text().contains("cache_dir"));
+        assert!(!Settings::parse("account=a\n")
+            .to_text()
+            .contains("cache_dir"));
         let s = Settings::parse("cache_dir=/data/seihai-cache\n");
-        assert_eq!(s.cache_dir.as_deref(), Some(Path::new("/data/seihai-cache")));
+        assert_eq!(
+            s.cache_dir.as_deref(),
+            Some(Path::new("/data/seihai-cache"))
+        );
         assert_eq!(Settings::parse(&s.to_text()).cache_dir, s.cache_dir);
     }
 
@@ -354,7 +385,10 @@ mod tests {
             assert!(!s.sound_with(None), "{v}");
         }
         for v in ["1", "true", "yes", "on"] {
-            assert!(Settings::parse(&format!("sound = {v}\n")).sound_with(None), "{v}");
+            assert!(
+                Settings::parse(&format!("sound = {v}\n")).sound_with(None),
+                "{v}"
+            );
         }
         // An unreadable value leaves the default.
         let s = Settings::parse("sound=loud\n");
@@ -367,8 +401,14 @@ mod tests {
         let off = Settings::parse("sound=0\n");
         let on = Settings::parse("sound=1\n");
         let none = Settings::parse("");
-        assert!(!off.sound_with(Some(false)) && !on.sound_with(Some(false)) && !none.sound_with(Some(false)));
-        assert!(off.sound_with(Some(true)) && on.sound_with(Some(true)) && none.sound_with(Some(true)));
+        assert!(
+            !off.sound_with(Some(false))
+                && !on.sound_with(Some(false))
+                && !none.sound_with(Some(false))
+        );
+        assert!(
+            off.sound_with(Some(true)) && on.sound_with(Some(true)) && none.sound_with(Some(true))
+        );
         assert!(!off.sound_with(None));
         assert!(on.sound_with(None) && none.sound_with(None));
     }

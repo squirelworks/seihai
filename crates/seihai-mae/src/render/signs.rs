@@ -13,8 +13,10 @@ pub const ALPHABET: &str =
 
 /// Half the advance of glyphs 0 to 95, in pixels (the client doubles it).
 const HALF_ADVANCE: [u8; 96] = [
-    6, 6, 6, 6, 6, 6, 6, 6, 3, 6, 6, 6, 7, 6, 6, 6, 6, 6, 6, 7, 6, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, //
-    6, 6, 3, 5, 6, 3, 7, 6, 6, 6, 6, 5, 6, 6, 6, 7, 7, 7, 7, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 3, 7, //
+    6, 6, 6, 6, 6, 6, 6, 6, 3, 6, 6, 6, 7, 6, 6, 6, 6, 6, 6, 7, 6, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6,
+    6, //
+    6, 6, 3, 5, 6, 3, 7, 6, 6, 6, 6, 5, 6, 6, 6, 7, 7, 7, 7, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 3,
+    7, //
     6, 4, 4, 6, 6, 6, 6, 6, 6, 6, 8, 8, 5, 7, 7, 7, 7, 4, 3, 7, 8, 7, 8, 8, 8, 4, 6, 8, 8, 8, 8, 6,
 ];
 
@@ -53,7 +55,9 @@ fn glyph(fb: &mut Framebuffer, sheet: &Sheet, g: u8, x: i32, y: i32) {
 }
 
 fn advance(g: u8) -> i32 {
-    HALF_ADVANCE.get(usize::from(g)).map_or(16, |&w| i32::from(w) * 2)
+    HALF_ADVANCE
+        .get(usize::from(g))
+        .map_or(16, |&w| i32::from(w) * 2)
 }
 
 /// The sheet's pixel at `(x, y)`, or None when it is transparent (the
@@ -61,7 +65,11 @@ fn advance(g: u8) -> i32 {
 fn sheet_colour(sheet: &Sheet, x: u32, y: u32) -> Option<[u8; 3]> {
     let i = (y as usize * sheet.w as usize + x as usize) * sheet.bpp;
     let p = sheet.px.get(i..i + sheet.bpp)?;
-    let transparent = if sheet.bpp == 4 { p[3] == 0 } else { p == [255, 0, 255] };
+    let transparent = if sheet.bpp == 4 {
+        p[3] == 0
+    } else {
+        p == [255, 0, 255]
+    };
     (!transparent).then(|| [p[0], p[1], p[2]])
 }
 
@@ -131,14 +139,22 @@ pub fn panel_origin(view_w: i32, player_row: f32) -> (i32, i32) {
         1024 => (22.0, 192, 448),
         _ => (14.0, 128, 256),
     };
-    ((view_w - PANEL_COLS * 16) / 2, if player_row > limit { high } else { low })
+    (
+        (view_w - PANEL_COLS * 16) / 2,
+        if player_row > limit { high } else { low },
+    )
 }
 
 /// Draw the sign panel with the page of `text` that starts at line `first`.
 pub fn draw_sign(fb: &mut Framebuffer, sheet: &Sheet, text: &str, first: usize, player_row: f32) {
     let (x, y) = panel_origin(fb.width as i32, player_row);
     draw_frame(fb, sheet, x, y, PANEL_ROWS, PANEL_COLS);
-    for (i, line) in text.split('\n').skip(first).take(LINES_PER_PAGE).enumerate() {
+    for (i, line) in text
+        .split('\n')
+        .skip(first)
+        .take(LINES_PER_PAGE)
+        .enumerate()
+    {
         draw_line(fb, sheet, line, x + 16, y + 16 + i as i32 * 32);
     }
 }
@@ -146,7 +162,10 @@ pub fn draw_sign(fb: &mut Framebuffer, sheet: &Sheet, text: &str, first: usize, 
 /// The width in pixels of `line` as [`draw_line`] draws it (letters only;
 /// `#` codes are not counted).
 pub fn line_width(line: &str) -> i32 {
-    line.chars().filter_map(|c| ALPHABET.find(c).filter(|_| c.is_ascii())).map(|g| advance(g as u8)).sum()
+    line.chars()
+        .filter_map(|c| ALPHABET.find(c).filter(|_| c.is_ascii()))
+        .map(|g| advance(g as u8))
+        .sum()
 }
 
 /// The death scroll: a one-line sign panel, 7 by 5 cells, reading "End".
@@ -167,7 +186,13 @@ pub fn end_scroll_origin(player_box: (i32, i32)) -> (i32, i32) {
 pub fn draw_end_scroll(fb: &mut Framebuffer, sheet: &Sheet, player_box: (i32, i32)) {
     let (x, y) = end_scroll_origin(player_box);
     draw_frame(fb, sheet, x, y, END_ROWS, END_COLS);
-    draw_line(fb, sheet, END_TEXT, x + (END_COLS * 16 - line_width(END_TEXT)) / 2, y + 16);
+    draw_line(
+        fb,
+        sheet,
+        END_TEXT,
+        x + (END_COLS * 16 - line_width(END_TEXT)) / 2,
+        y + 16,
+    );
 }
 
 /// The page after the one starting at `first`, or None when the sign ends
@@ -241,9 +266,20 @@ impl SignKeys {
     /// One frame. `reading`: a sign is open. `active`: its keys go to it
     /// (not to the chat bar or the quit prompt). Returns what the sign does,
     /// and whether the game keys are kept from the player this frame.
-    pub fn frame(&mut self, reading: bool, active: bool, down: impl Fn(Action) -> bool) -> (Option<SignKey>, bool) {
-        let key = if reading && active { sign_key(&down, self.held) } else { None };
-        let any = Action::ALL.iter().any(|&a| a != Action::SwitchToChat && down(a));
+    pub fn frame(
+        &mut self,
+        reading: bool,
+        active: bool,
+        down: impl Fn(Action) -> bool,
+    ) -> (Option<SignKey>, bool) {
+        let key = if reading && active {
+            sign_key(&down, self.held)
+        } else {
+            None
+        };
+        let any = Action::ALL
+            .iter()
+            .any(|&a| a != Action::SwitchToChat && down(a));
         if reading {
             self.after = true;
         } else if !any {
@@ -263,12 +299,25 @@ mod tests {
         let only = |k: Action| move |a: Action| a == k;
         assert_eq!(sign_key(only(Action::Map), false), Some(SignKey::Close));
         assert_eq!(sign_key(only(Action::Up), false), Some(SignKey::Back));
-        for k in [Action::Left, Action::Down, Action::Right, Action::Item, Action::Attack, Action::Act, Action::ItemList, Action::Pause] {
+        for k in [
+            Action::Left,
+            Action::Down,
+            Action::Right,
+            Action::Item,
+            Action::Attack,
+            Action::Act,
+            Action::ItemList,
+            Action::Pause,
+        ] {
             assert_eq!(sign_key(only(k), false), Some(SignKey::Next), "{k:?}");
         }
         assert_eq!(sign_key(only(Action::SwitchToChat), false), None);
         assert_eq!(sign_key(|_| false, false), None);
-        assert_eq!(sign_key(only(Action::Attack), true), None, "a key was still down");
+        assert_eq!(
+            sign_key(only(Action::Attack), true),
+            None,
+            "a key was still down"
+        );
     }
 
     /// A key is down a frame before minifb calls it pressed; the caller
@@ -278,24 +327,51 @@ mod tests {
         let only = |k: Action| move |a: Action| a == k;
         let none = |_: Action| false;
         let mut k = SignKeys::default();
-        assert_eq!(k.frame(true, true, only(Action::Act)), (Some(SignKey::Next), true));
-        assert_eq!(k.frame(true, true, only(Action::Act)), (None, true), "pressed a frame late");
+        assert_eq!(
+            k.frame(true, true, only(Action::Act)),
+            (Some(SignKey::Next), true)
+        );
+        assert_eq!(
+            k.frame(true, true, only(Action::Act)),
+            (None, true),
+            "pressed a frame late"
+        );
         assert_eq!(k.frame(true, true, none), (None, true));
-        assert_eq!(k.frame(true, true, only(Action::Attack)), (Some(SignKey::Next), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Attack)),
+            (Some(SignKey::Next), true)
+        );
         assert_eq!(k.frame(true, true, none), (None, true));
-        assert_eq!(k.frame(true, true, only(Action::Item)), (Some(SignKey::Next), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Item)),
+            (Some(SignKey::Next), true)
+        );
         assert_eq!(k.frame(true, true, none), (None, true));
-        assert_eq!(k.frame(true, true, only(Action::Map)), (Some(SignKey::Close), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Map)),
+            (Some(SignKey::Close), true)
+        );
     }
 
     #[test]
     fn the_arrow_that_walked_in_waits_for_release() {
         let only = |k: Action| move |a: Action| a == k;
         let mut k = SignKeys::default();
-        assert_eq!(k.frame(false, true, only(Action::Up)), (None, false), "walking");
-        assert_eq!(k.frame(true, true, only(Action::Up)), (None, true), "the sign opened");
+        assert_eq!(
+            k.frame(false, true, only(Action::Up)),
+            (None, false),
+            "walking"
+        );
+        assert_eq!(
+            k.frame(true, true, only(Action::Up)),
+            (None, true),
+            "the sign opened"
+        );
         assert_eq!(k.frame(true, true, |_| false), (None, true));
-        assert_eq!(k.frame(true, true, only(Action::Up)), (Some(SignKey::Back), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Up)),
+            (Some(SignKey::Back), true)
+        );
     }
 
     #[test]
@@ -303,12 +379,23 @@ mod tests {
         let only = |k: Action| move |a: Action| a == k;
         let mut k = SignKeys::default();
         k.frame(true, true, |_| false);
-        assert_eq!(k.frame(true, true, only(Action::Attack)), (Some(SignKey::Next), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Attack)),
+            (Some(SignKey::Next), true)
+        );
         // The caller ended reading on that S; it is still down or pressed.
-        assert_eq!(k.frame(false, true, only(Action::Attack)), (None, true), "no swing");
+        assert_eq!(
+            k.frame(false, true, only(Action::Attack)),
+            (None, true),
+            "no swing"
+        );
         assert_eq!(k.frame(false, true, only(Action::Attack)), (None, true));
         assert_eq!(k.frame(false, true, |_| false), (None, false));
-        assert_eq!(k.frame(false, true, only(Action::Attack)), (None, false), "S swings again");
+        assert_eq!(
+            k.frame(false, true, only(Action::Attack)),
+            (None, false),
+            "S swings again"
+        );
     }
 
     #[test]
@@ -317,7 +404,10 @@ mod tests {
         let mut k = SignKeys::default();
         assert_eq!(k.frame(true, false, only(Action::Act)), (None, true));
         assert_eq!(k.frame(true, true, |_| false), (None, true));
-        assert_eq!(k.frame(true, true, only(Action::Act)), (Some(SignKey::Next), true));
+        assert_eq!(
+            k.frame(true, true, only(Action::Act)),
+            (Some(SignKey::Next), true)
+        );
     }
 
     /// A 256×224 RGBA sheet where every glyph is opaque in its own colour.
@@ -343,7 +433,11 @@ mod tests {
         assert_eq!(line_width("End"), 12 + 12 + 12);
         assert_eq!(end_scroll_origin((100, 50)), (100 + 24 - 56, 98));
         let px = sheet();
-        let sh = Sheet { px: &px, w: 256, bpp: 4 };
+        let sh = Sheet {
+            px: &px,
+            w: 256,
+            bpp: 4,
+        };
         let mut fb = Framebuffer::new(320, 240);
         draw_end_scroll(&mut fb, &sh, (100, 50));
         // The top-left frame corner (glyph 96) at the origin, and the E
@@ -366,7 +460,11 @@ mod tests {
     #[test]
     fn text_advances_by_the_glyph_widths_and_buttons_draw_their_pictures() {
         let px = sheet();
-        let sh = Sheet { px: &px, w: 256, bpp: 4 };
+        let sh = Sheet {
+            px: &px,
+            w: 256,
+            bpp: 4,
+        };
         let mut fb = Framebuffer::new(200, 40);
         draw_line(&mut fb, &sh, "Ii#A", 0, 0);
         assert_eq!(at(&fb, 0, 0)[0], 8, "I is glyph 8");
@@ -385,7 +483,11 @@ mod tests {
             let i = (223 * 256 + x) * 4;
             px[i..i + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
         }
-        let sh = Sheet { px: &px, w: 256, bpp: 4 };
+        let sh = Sheet {
+            px: &px,
+            w: 256,
+            bpp: 4,
+        };
         let mut fb = Framebuffer::new(640, 480);
         draw_sign(&mut fb, &sh, "", 0, 5.0);
         let (x, y) = (128, 256);
@@ -396,7 +498,11 @@ mod tests {
         assert_eq!(at(&fb, x, y + 7 * 16)[0], 98, "bottom-left corner");
         assert_eq!(at(&fb, x + 17, y + 25), [10, 20, 30], "outer fill");
         assert_eq!(at(&fb, x + 30, y + 30), [40, 50, 60], "inner fill");
-        assert_eq!(at(&fb, x + 23 * 16 - 1, y + 25), [10, 20, 30], "fill ends at the right side");
+        assert_eq!(
+            at(&fb, x + 23 * 16 - 1, y + 25),
+            [10, 20, 30],
+            "fill ends at the right side"
+        );
         assert_eq!(at(&fb, x + 23 * 16, y + 40)[0], 103, "right edge");
     }
 

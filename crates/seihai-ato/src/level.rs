@@ -98,12 +98,24 @@ impl LevelStore {
     /// Bring the store up to date with what has been read. `local` gives
     /// the local copy of a level file at the server's mod time, if any.
     /// True when a level was stored by this call.
-    pub fn update(&mut self, st: &mut SessionState, local: impl Fn(&str, Option<u32>) -> Option<Level>) -> bool {
+    pub fn update(
+        &mut self,
+        st: &mut SessionState,
+        local: impl Fn(&str, Option<u32>) -> Option<Level>,
+    ) -> bool {
         let mut stored = false;
         if let Some(name) = st.current_level_name() {
-            if self.loaded.as_deref().is_none_or(|l| !l.eq_ignore_ascii_case(&name)) {
+            if self
+                .loaded
+                .as_deref()
+                .is_none_or(|l| !l.eq_ignore_ascii_case(&name))
+            {
                 // The server sends the file name, e.g. "onlinestartlocal.nw".
-                let file = if name.ends_with(".nw") { name.clone() } else { format!("{name}.nw") };
+                let file = if name.ends_with(".nw") {
+                    name.clone()
+                } else {
+                    format!("{name}.nw")
+                };
                 self.from_board = false;
                 self.level = local(&file, st.server_mod_time(&file));
                 stored = self.level.is_some();
@@ -165,7 +177,11 @@ impl LevelStore {
             .collect();
         Some(Arrival {
             name,
-            source: if self.from_board { Source::Board } else { Source::LocalCopy },
+            source: if self.from_board {
+                Source::Board
+            } else {
+                Source::LocalCopy
+            },
             start: st.player_x.zip(st.player_y),
             server_npcs,
             file_npcs: level.npcs.len(),
@@ -233,7 +249,8 @@ mod tests {
         let mut st = state();
         st.level_name = Some("start".into());
         let mut s = LevelStore::default();
-        assert!(s.update(&mut st, |n, _| (n == "start.nw").then(|| Level::from_board(&[0; 4096]))));
+        assert!(s.update(&mut st, |n, _| (n == "start.nw")
+            .then(|| Level::from_board(&[0; 4096]))));
         let a = s.arrival(&st).unwrap();
         assert_eq!(a.source, Source::LocalCopy);
         assert_eq!(a.start, None);

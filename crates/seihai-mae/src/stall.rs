@@ -43,40 +43,50 @@ impl StallWatch {
     /// Start the watch thread. Each report goes to `report` as one line.
     /// The thread ends when the last `StallWatch` is dropped.
     pub fn spawn(limit: Duration, mut report: impl FnMut(&str) + Send + 'static) -> Self {
-        let shared = Arc::new(Shared { start: Instant::now(), last_ms: AtomicU64::new(0), part: Mutex::new("start"), paused: AtomicBool::new(false) });
-        let weak = Arc::downgrade(&shared);
-        let _ = std::thread::Builder::new().name("seihai-stall-watch".into()).spawn(move || {
-            // The mark the current report is about, if one was made.
-            let mut reported: Option<u64> = None;
-            loop {
-                std::thread::sleep(CHECK_EVERY.min(limit));
-                let Some(s) = weak.upgrade() else { return };
-                // Read the pause flag before the last mark. `resume` marks
-                // first and then clears the flag, so a cleared flag means
-                // the resume mark is already visible here. Read the other
-                // way round, a resume landing between the two reads paired
-                // the old mark with "not paused" and reported the modal
-                // window's time as a stall.
-                let paused = s.paused.load(Ordering::Acquire);
-                let last = s.last_ms.load(Ordering::Acquire);
-                let now = s.start.elapsed().as_millis() as u64;
-                if let Some(r) = reported.filter(|&r| r != last) {
-                    report(&format!("main loop: moved on after {:.1} s", (last.saturating_sub(r)) as f64 / 1000.0));
-                    reported = None;
-                }
-                if paused {
-                    continue;
-                }
-                if reported.is_none() && now.saturating_sub(last) >= limit.as_millis() as u64 {
-                    let part = *s.part.lock().unwrap_or_else(|e| e.into_inner());
-                    report(&format!(
-                        "main loop: stuck for {:.1} s after \"{part}\"",
-                        now.saturating_sub(last) as f64 / 1000.0
-                    ));
-                    reported = Some(last);
-                }
-            }
+        let shared = Arc::new(Shared {
+            start: Instant::now(),
+            last_ms: AtomicU64::new(0),
+            part: Mutex::new("start"),
+            paused: AtomicBool::new(false),
         });
+        let weak = Arc::downgrade(&shared);
+        let _ = std::thread::Builder::new()
+            .name("seihai-stall-watch".into())
+            .spawn(move || {
+                // The mark the current report is about, if one was made.
+                let mut reported: Option<u64> = None;
+                loop {
+                    std::thread::sleep(CHECK_EVERY.min(limit));
+                    let Some(s) = weak.upgrade() else { return };
+                    // Read the pause flag before the last mark. `resume` marks
+                    // first and then clears the flag, so a cleared flag means
+                    // the resume mark is already visible here. Read the other
+                    // way round, a resume landing between the two reads paired
+                    // the old mark with "not paused" and reported the modal
+                    // window's time as a stall.
+                    let paused = s.paused.load(Ordering::Acquire);
+                    let last = s.last_ms.load(Ordering::Acquire);
+                    let now = s.start.elapsed().as_millis() as u64;
+                    if let Some(r) = reported.filter(|&r| r != last) {
+                        report(&format!(
+                            "main loop: moved on after {:.1} s",
+                            (last.saturating_sub(r)) as f64 / 1000.0
+                        ));
+                        reported = None;
+                    }
+                    if paused {
+                        continue;
+                    }
+                    if reported.is_none() && now.saturating_sub(last) >= limit.as_millis() as u64 {
+                        let part = *s.part.lock().unwrap_or_else(|e| e.into_inner());
+                        report(&format!(
+                            "main loop: stuck for {:.1} s after \"{part}\"",
+                            now.saturating_sub(last) as f64 / 1000.0
+                        ));
+                        reported = Some(last);
+                    }
+                }
+            });
         Self { shared }
     }
 

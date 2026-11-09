@@ -19,7 +19,10 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 /// The view, in tiles: 640 x 480 pixels, the 3.x window size.
-pub const VIEW_TILES: (u32, u32) = (CANVAS.0 as u32 / render::TILE_PX, CANVAS.1 as u32 / render::TILE_PX);
+pub const VIEW_TILES: (u32, u32) = (
+    CANVAS.0 as u32 / render::TILE_PX,
+    CANVAS.1 as u32 / render::TILE_PX,
+);
 
 /// Where a level with no start position puts the player.
 const NO_START: (f32, f32) = (30.0, 30.0);
@@ -78,7 +81,10 @@ impl Game {
     /// The player's position in tiles, for the view, once a level is in.
     pub fn position(&self) -> Option<String> {
         self.session.current_level.as_ref()?;
-        Some(format!("{:.1}, {:.1}", self.session.player_x, self.session.player_y))
+        Some(format!(
+            "{:.1}, {:.1}",
+            self.session.player_x, self.session.player_y
+        ))
     }
 
     /// One walk step for the arrows held, at the session's pace. `(dx, dy)`
@@ -90,7 +96,9 @@ impl Game {
             }
             return;
         }
-        if self.session.current_level.is_none() || now.duration_since(self.last_step) < self.session.step_interval() {
+        if self.session.current_level.is_none()
+            || now.duration_since(self.last_step) < self.session.step_interval()
+        {
             return;
         }
         self.last_step = now;
@@ -112,27 +120,58 @@ impl Game {
             let image = egui::ColorImage::from_rgb([f.w as usize, f.h as usize], &f.rgb);
             match &mut self.texture {
                 Some(t) => t.set(image, egui::TextureOptions::NEAREST),
-                None => self.texture = Some(ctx.load_texture("level", image, egui::TextureOptions::NEAREST)),
+                None => {
+                    self.texture =
+                        Some(ctx.load_texture("level", image, egui::TextureOptions::NEAREST))
+                }
             }
             self.dirty = false;
         }
-        egui::CentralPanel::default().frame(egui::Frame::none().fill(egui::Color32::BLACK)).show(ctx, |ui| {
-            let origin = ui.max_rect().min;
-            if let Some(t) = &self.texture {
-                let rect = egui::Rect::from_min_size(origin, egui::vec2(CANVAS.0, CANVAS.1));
-                ui.painter().image(t.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
-            }
-            let bar = egui::Rect::from_min_size(origin, egui::vec2(CANVAS.0, 18.0));
-            ui.painter().rect_filled(bar, 0.0, egui::Color32::from_black_alpha(160));
-            ui.put(bar, egui::Label::new(egui::RichText::new(&self.status).color(egui::Color32::WHITE).size(12.0)));
-            if let Some(pos) = self.position() {
-                let at = egui::Rect::from_min_size(origin + egui::vec2(0.0, 18.0), egui::vec2(CANVAS.0 - 6.0, 16.0));
-                ui.painter().text(at.right_top(), egui::Align2::RIGHT_TOP, pos, egui::FontId::monospace(12.0), egui::Color32::WHITE);
-            }
-        });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(egui::Color32::BLACK))
+            .show(ctx, |ui| {
+                let origin = ui.max_rect().min;
+                if let Some(t) = &self.texture {
+                    let rect = egui::Rect::from_min_size(origin, egui::vec2(CANVAS.0, CANVAS.1));
+                    ui.painter().image(
+                        t.id(),
+                        rect,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                }
+                let bar = egui::Rect::from_min_size(origin, egui::vec2(CANVAS.0, 18.0));
+                ui.painter()
+                    .rect_filled(bar, 0.0, egui::Color32::from_black_alpha(160));
+                ui.put(
+                    bar,
+                    egui::Label::new(
+                        egui::RichText::new(&self.status)
+                            .color(egui::Color32::WHITE)
+                            .size(12.0),
+                    ),
+                );
+                if let Some(pos) = self.position() {
+                    let at = egui::Rect::from_min_size(
+                        origin + egui::vec2(0.0, 18.0),
+                        egui::vec2(CANVAS.0 - 6.0, 16.0),
+                    );
+                    ui.painter().text(
+                        at.right_top(),
+                        egui::Align2::RIGHT_TOP,
+                        pos,
+                        egui::FontId::monospace(12.0),
+                        egui::Color32::WHITE,
+                    );
+                }
+            });
         // Walking needs frames while a key is held; otherwise poll the
         // network now and then.
-        ctx.request_repaint_after(Duration::from_millis(if dx != 0 || dy != 0 { 16 } else { 100 }));
+        ctx.request_repaint_after(Duration::from_millis(if dx != 0 || dy != 0 {
+            16
+        } else {
+            100
+        }));
     }
 }
 
@@ -147,7 +186,12 @@ pub struct AtoApp {
 
 impl AtoApp {
     pub fn new(start: StartWindow, assets: Option<PathBuf>) -> AtoApp {
-        AtoApp { start, game: None, assets, skip_start: false }
+        AtoApp {
+            start,
+            game: None,
+            assets,
+            skip_start: false,
+        }
     }
 
     /// As [`AtoApp::new`], but log in at once with the form as given when it
@@ -155,13 +199,21 @@ impl AtoApp {
     /// Start had been pressed. For lab runs that cannot press Start.
     pub fn new_skipping_start(start: StartWindow, assets: Option<PathBuf>) -> AtoApp {
         let skip_start = skips_start(&start);
-        AtoApp { start, game: None, assets, skip_start }
+        AtoApp {
+            start,
+            game: None,
+            assets,
+            skip_start,
+        }
     }
 
     /// Start the network thread for `login` and switch to the game view.
     fn begin(&mut self, addr: String, login: Login, ctx: &egui::Context) {
         let version = self.start.version;
-        let resolver = self.assets.clone().map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
+        let resolver = self
+            .assets
+            .clone()
+            .map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
         let (tx, rx) = mpsc::channel();
         let assets = self.assets.clone();
         let repaint = ctx.clone();
@@ -172,7 +224,15 @@ impl AtoApp {
                 let _ = shown_tx.send(Event::Level(Box::new(l.clone()), a.clone()));
                 shown_ctx.request_repaint();
             };
-            let why = match online::run(&addr, version, &login, assets, false, &mut std::io::stdout(), &mut shown) {
+            let why = match online::run(
+                &addr,
+                version,
+                &login,
+                assets,
+                false,
+                &mut std::io::stdout(),
+                &mut shown,
+            ) {
                 Ok(()) => "The server closed the connection.".to_string(),
                 Err(e) => format!("Could not log in: {e}"),
             };
@@ -216,14 +276,21 @@ pub fn skips_start(start: &StartWindow) -> bool {
 
 /// Open the window and block until it is closed. With a server and an
 /// account given, the start window is skipped (see [`skips_start`]).
-pub fn run(version: ClientVersion, start: StartWindow, assets: Option<PathBuf>) -> Result<(), String> {
+pub fn run(
+    version: ClientVersion,
+    start: StartWindow,
+    assets: Option<PathBuf>,
+) -> Result<(), String> {
     let title = format!("Graal {} (Seihai Ato)", version.label());
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([CANVAS.0, CANVAS.1]).with_resizable(false),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([CANVAS.0, CANVAS.1])
+            .with_resizable(false),
         ..Default::default()
     };
     let app = AtoApp::new_skipping_start(start, assets);
-    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app)))).map_err(|e| e.to_string())
+    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -236,18 +303,33 @@ mod tests {
     }
 
     fn arrival(start: Option<(f32, f32)>) -> Arrival {
-        Arrival { name: "lab3x.nw".into(), source: crate::level::Source::Board, start, server_npcs: 0, file_npcs: 0, scripts: Vec::new() }
+        Arrival {
+            name: "lab3x.nw".into(),
+            source: crate::level::Source::Board,
+            start,
+            server_npcs: 0,
+            file_npcs: 0,
+            scripts: Vec::new(),
+        }
     }
 
     #[test]
     fn a_level_puts_the_player_at_the_start() {
         let (mut g, tx) = game();
-        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), arrival(Some((12.5, 40.0))))).unwrap();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((12.5, 40.0))),
+        ))
+        .unwrap();
         g.poll();
         assert_eq!((g.session.player_x, g.session.player_y), (12.5, 40.0));
         assert!(g.status.starts_with("level lab3x.nw"));
         assert_eq!(g.position().as_deref(), Some("12.5, 40.0"));
-        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), arrival(None))).unwrap();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(None),
+        ))
+        .unwrap();
         g.poll();
         assert_eq!((g.session.player_x, g.session.player_y), NO_START);
     }
@@ -256,7 +338,11 @@ mod tests {
     fn the_arrows_walk_at_the_session_pace() {
         let (mut g, tx) = game();
         // Tile 0 is open floor in the built-in tile types.
-        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), arrival(Some((30.0, 30.0))))).unwrap();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
         g.poll();
         let t0 = g.last_step + Duration::from_secs(1);
         g.walk(1, 0, t0);
@@ -284,7 +370,8 @@ mod tests {
     #[test]
     fn the_start_window_is_skipped_only_with_a_server_and_an_account() {
         let w = |online: Option<&str>, account: &str| {
-            let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), account.into(), "p".into());
+            let mut w =
+                StartWindow::new(ClientVersion::V3153, "n".into(), account.into(), "p".into());
             w.online = online.map(String::from);
             w
         };

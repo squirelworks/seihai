@@ -92,20 +92,74 @@ const FOOT_L_ROT: [[f32; 5]; 6] = [
 ];
 
 pub const PARTS: [Part; 8] = [
-    Part { mesh: "head.x", parent: None, tint: Tint::None, pos: &[[0.0, 0.0, 34.0, 3.5], [1.0, 0.0, 33.0, 0.5], [40.0, 0.0, 33.0, 0.5]], rot: &[] },
+    Part {
+        mesh: "head.x",
+        parent: None,
+        tint: Tint::None,
+        pos: &[
+            [0.0, 0.0, 34.0, 3.5],
+            [1.0, 0.0, 33.0, 0.5],
+            [40.0, 0.0, 33.0, 0.5],
+        ],
+        rot: &[],
+    },
     Part {
         mesh: "body.x",
         parent: None,
         tint: Tint::None,
-        pos: &[[0.0, 0.0, 4.0, 4.0], [1.0, 0.0, 4.0, 6.0], [40.0, 0.0, 4.0, 6.0]],
-        rot: &[[0.0, 1.0, 0.0, 0.0, 0.0], [1.0, 0.9, 0.1, 0.0, 0.0], [40.0, 0.9, 0.1, 0.0, 0.0]],
+        pos: &[
+            [0.0, 0.0, 4.0, 4.0],
+            [1.0, 0.0, 4.0, 6.0],
+            [40.0, 0.0, 4.0, 6.0],
+        ],
+        rot: &[
+            [0.0, 1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.9, 0.1, 0.0, 0.0],
+            [40.0, 0.9, 0.1, 0.0, 0.0],
+        ],
     },
-    Part { mesh: "armright.x", parent: None, tint: Tint::Arm, pos: &ARM_R_POS, rot: &ARM_R_ROT },
-    Part { mesh: "armleft.x", parent: None, tint: Tint::Arm, pos: &ARM_L_POS, rot: &ARM_L_ROT },
-    Part { mesh: "handright.x", parent: Some(2), tint: Tint::Hand, pos: &[], rot: &[] },
-    Part { mesh: "handleft.x", parent: Some(3), tint: Tint::Hand, pos: &[], rot: &[] },
-    Part { mesh: "footright.x", parent: None, tint: Tint::Shoe, pos: &[[0.0, -6.0, 9.0, 0.0]], rot: &FOOT_R_ROT },
-    Part { mesh: "footleft.x", parent: None, tint: Tint::Shoe, pos: &[[0.0, 6.0, 9.0, 0.0]], rot: &FOOT_L_ROT },
+    Part {
+        mesh: "armright.x",
+        parent: None,
+        tint: Tint::Arm,
+        pos: &ARM_R_POS,
+        rot: &ARM_R_ROT,
+    },
+    Part {
+        mesh: "armleft.x",
+        parent: None,
+        tint: Tint::Arm,
+        pos: &ARM_L_POS,
+        rot: &ARM_L_ROT,
+    },
+    Part {
+        mesh: "handright.x",
+        parent: Some(2),
+        tint: Tint::Hand,
+        pos: &[],
+        rot: &[],
+    },
+    Part {
+        mesh: "handleft.x",
+        parent: Some(3),
+        tint: Tint::Hand,
+        pos: &[],
+        rot: &[],
+    },
+    Part {
+        mesh: "footright.x",
+        parent: None,
+        tint: Tint::Shoe,
+        pos: &[[0.0, -6.0, 9.0, 0.0]],
+        rot: &FOOT_R_ROT,
+    },
+    Part {
+        mesh: "footleft.x",
+        parent: None,
+        tint: Tint::Shoe,
+        pos: &[[0.0, 6.0, 9.0, 0.0]],
+        rot: &FOOT_L_ROT,
+    },
 ];
 
 /// The keys around `t` and how far between them, clamped at the ends.
@@ -117,7 +171,15 @@ fn between<const N: usize>(keys: &[[f32; N]], t: f32) -> Option<(&[f32; N], &[f3
     for w in keys.windows(2) {
         if t <= w[1][0] {
             let span = w[1][0] - w[0][0];
-            return Some((&w[0], &w[1], if span > 0.0 { (t - w[0][0]) / span } else { 0.0 }));
+            return Some((
+                &w[0],
+                &w[1],
+                if span > 0.0 {
+                    (t - w[0][0]) / span
+                } else {
+                    0.0
+                },
+            ));
         }
     }
     let last = keys.last()?;
@@ -157,11 +219,27 @@ fn slerp(a: [f32; 4], mut b: [f32; 4], t: f32) -> [f32; 4] {
 fn rot_matrix(q: [f32; 4]) -> [[f32; 3]; 3] {
     let [w, x, y, z] = q;
     let m = [
-        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - w * z), 2.0 * (x * z + w * y)],
-        [2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - w * x)],
-        [2.0 * (x * z - w * y), 2.0 * (y * z + w * x), 1.0 - 2.0 * (x * x + y * y)],
+        [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y - w * z),
+            2.0 * (x * z + w * y),
+        ],
+        [
+            2.0 * (x * y + w * z),
+            1.0 - 2.0 * (x * x + z * z),
+            2.0 * (y * z - w * x),
+        ],
+        [
+            2.0 * (x * z - w * y),
+            2.0 * (y * z + w * x),
+            1.0 - 2.0 * (x * x + y * y),
+        ],
     ];
-    [[m[0][0], m[1][0], m[2][0]], [m[0][1], m[1][1], m[2][1]], [m[0][2], m[1][2], m[2][2]]]
+    [
+        [m[0][0], m[1][0], m[2][0]],
+        [m[0][1], m[1][1], m[2][1]],
+        [m[0][2], m[1][2], m[2][2]],
+    ]
 }
 
 /// Each part's extent in its own frame, `[min, max]`, measured from the
@@ -182,14 +260,33 @@ pub const BOXES: [[V3; 2]; 8] = [
 /// A box mesh for part `i` (see [`BOXES`]), one white material.
 pub fn part_box(i: usize) -> Mesh {
     let [lo, hi] = BOXES[i];
-    let vertices = (0..8).map(|k| [if k & 1 == 0 { lo[0] } else { hi[0] }, if k & 2 == 0 { lo[1] } else { hi[1] }, if k & 4 == 0 { lo[2] } else { hi[2] }]).collect();
-    let faces = vec![vec![0, 2, 3, 1], vec![4, 5, 7, 6], vec![0, 1, 5, 4], vec![2, 6, 7, 3], vec![0, 4, 6, 2], vec![1, 3, 7, 5]];
+    let vertices = (0..8)
+        .map(|k| {
+            [
+                if k & 1 == 0 { lo[0] } else { hi[0] },
+                if k & 2 == 0 { lo[1] } else { hi[1] },
+                if k & 4 == 0 { lo[2] } else { hi[2] },
+            ]
+        })
+        .collect();
+    let faces = vec![
+        vec![0, 2, 3, 1],
+        vec![4, 5, 7, 6],
+        vec![0, 1, 5, 4],
+        vec![2, 6, 7, 3],
+        vec![0, 4, 6, 2],
+        vec![1, 3, 7, 5],
+    ];
     Mesh {
         name: None,
         vertices,
         face_materials: vec![0; faces.len()],
         faces,
-        materials: vec![Material { name: None, colour: [1.0; 4], texture: None }],
+        materials: vec![Material {
+            name: None,
+            colour: [1.0; 4],
+            texture: None,
+        }],
         uvs: Vec::new(),
     }
 }
@@ -263,10 +360,16 @@ mod tests {
         assert!(top[2] < 6.0, "{top:?}");
         // Halfway between keys 1 and 11 the arm is between them.
         let a = transform(&local(&PARTS[2], 6.0), [0.0; 3]);
-        assert!((a[0] - -6.2).abs() < 1e-4 && (a[2] - -2.55).abs() < 1e-4, "{a:?}");
+        assert!(
+            (a[0] - -6.2).abs() < 1e-4 && (a[2] - -2.55).abs() < 1e-4,
+            "{a:?}"
+        );
         // The feet swing opposite ways.
         let r = transform(&pose(&IDENTITY, 1.0)[6], [0.0, -8.0, 0.0]);
         let l = transform(&pose(&IDENTITY, 1.0)[7], [0.0, -8.0, 0.0]);
-        assert!((r[2] + l[2]).abs() < 1e-3 && r[2].abs() > 1.0, "{r:?} {l:?}");
+        assert!(
+            (r[2] + l[2]).abs() < 1e-3 && r[2].abs() > 1.0,
+            "{r:?} {l:?}"
+        );
     }
 }

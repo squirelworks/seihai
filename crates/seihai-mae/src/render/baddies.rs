@@ -27,7 +27,14 @@ fn blit(fb: &mut Framebuffer, sheet: Sheet<'_>, r: (i32, i32, i32, i32), sx: i32
 
 /// Draw the session's baddies from the camera `(cam_x, cam_y)`. `frame`
 /// counts drawing frames (the hurt blink).
-pub fn draw_baddies(fb: &mut Framebuffer, session: &OfflineSession, art: &BaddyArt, cam_x: i32, cam_y: i32, frame: u64) {
+pub fn draw_baddies(
+    fb: &mut Framebuffer,
+    session: &OfflineSession,
+    art: &BaddyArt,
+    cam_x: i32,
+    cam_y: i32,
+    frame: u64,
+) {
     if session.baddies.is_empty() {
         return;
     }
@@ -35,25 +42,42 @@ pub fn draw_baddies(fb: &mut Framebuffer, session: &OfflineSession, art: &BaddyA
     let draw = DrawTables::from_tables(tables);
     let ext = &session.baddy_image_ext;
     let bow_name = format!("{}{}", b::BOW_IMAGE, ext);
-    let sheet_of = |name: &str| art.images.get(name).map(|i| Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 });
+    let sheet_of = |name: &str| {
+        art.images.get(name).map(|i| Sheet {
+            px: i.1.as_slice(),
+            w: i.0,
+            bpp: 4,
+        })
+    };
     for bd in &session.baddies {
         let own = sheet_of(&bd.image_name(ext));
         let bow = sheet_of(&bow_name);
-        let (bx, by) = ((bd.x * TILE_PX as f64).round() as i32 - cam_x, (bd.y * TILE_PX as f64).round() as i32 - cam_y);
+        let (bx, by) = (
+            (bd.x * TILE_PX as f64).round() as i32 - cam_x,
+            (bd.y * TILE_PX as f64).round() as i32 - cam_y,
+        );
         for p in bd.pieces(&draw, frame) {
             let sheet = match p.sheet {
                 PieceSheet::Baddy => own,
                 PieceSheet::Bow => bow,
                 PieceSheet::Sprites => art.sprites,
             };
-            let (Some(sheet), Some(r)) = (sheet, rect(tables, p.sprite)) else { continue };
+            let (Some(sheet), Some(r)) = (sheet, rect(tables, p.sprite)) else {
+                continue;
+            };
             blit(fb, sheet, r, bx + p.dx, by + p.dy);
         }
     }
 }
 
 /// The verse each baddy says, centred over `(x + 1, y - 2)`.
-pub fn draw_baddy_verses(fb: &mut Framebuffer, session: &OfflineSession, font: Option<&super::chattext::ChatFont>, cam_x: i32, cam_y: i32) {
+pub fn draw_baddy_verses(
+    fb: &mut Framebuffer,
+    session: &OfflineSession,
+    font: Option<&super::chattext::ChatFont>,
+    cam_x: i32,
+    cam_y: i32,
+) {
     let tile = TILE_PX as f64;
     for bd in &session.baddies {
         if let Some(text) = bd.shown_text() {

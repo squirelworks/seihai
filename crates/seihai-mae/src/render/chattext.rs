@@ -42,7 +42,11 @@ pub const CHAT_RGB: [u8; 3] = [0xFF, 0xFF, 0xFF];
 
 /// Shadow colour for text of colour `rgb` (the client's rule).
 pub fn shadow_of(rgb: [u8; 3]) -> [u8; 3] {
-    let v = if rgb[0] > 0xE0 || rgb[1] > 0xE0 { 0 } else { 0xFF };
+    let v = if rgb[0] > 0xE0 || rgb[1] > 0xE0 {
+        0
+    } else {
+        0xFF
+    };
     [v, v, rgb[2]]
 }
 
@@ -88,7 +92,12 @@ fn system_font_dirs() -> Vec<PathBuf> {
         v.push(h.join(".local/share/fonts"));
         v.push(h.join("Library/Fonts"));
     }
-    for d in ["/usr/share/fonts", "/usr/local/share/fonts", "/Library/Fonts", "/System/Library/Fonts"] {
+    for d in [
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        "/Library/Fonts",
+        "/System/Library/Fonts",
+    ] {
         v.push(PathBuf::from(d));
     }
     v
@@ -134,7 +143,13 @@ impl ChatFont {
     pub fn load(path: &Path, bold_file: bool, style: ChatText) -> Option<Self> {
         let data = std::fs::read(path).ok()?;
         let font = FontVec::try_from_vec(data).ok()?;
-        Some(Self { font, synth_bold: !bold_file, height: style.height, path: path.to_path_buf(), cache: RefCell::new(HashMap::new()) })
+        Some(Self {
+            font,
+            synth_bold: !bold_file,
+            height: style.height,
+            path: path.to_path_buf(),
+            cache: RefCell::new(HashMap::new()),
+        })
     }
 
     /// The build's font from the first of `dirs` that has it (the game
@@ -142,7 +157,10 @@ impl ChatFont {
     pub fn find(style: ChatText, dirs: &[PathBuf]) -> Option<Self> {
         let sys = system_font_dirs();
         for &(name, bold) in candidates(style.face) {
-            let hit = dirs.iter().find_map(|d| find_file(d, name, 0)).or_else(|| sys.iter().find_map(|d| find_file(d, name, 3)));
+            let hit = dirs
+                .iter()
+                .find_map(|d| find_file(d, name, 0))
+                .or_else(|| sys.iter().find_map(|d| find_file(d, name, 3)));
             if let Some(f) = hit.and_then(|p| Self::load(&p, bold, style)) {
                 return Some(f);
             }
@@ -209,7 +227,9 @@ impl ChatFont {
         if cache.len() > 256 {
             cache.clear();
         }
-        let line = cache.entry(text.to_string()).or_insert_with(|| self.render(text));
+        let line = cache
+            .entry(text.to_string())
+            .or_insert_with(|| self.render(text));
         let h = self.line_height();
         for ly in 0..h {
             for lx in 0..line.w {
@@ -235,7 +255,11 @@ pub fn text_image_text(name: &str) -> Option<String> {
     let text = rest.rsplit('@').next().unwrap_or(rest);
     let font = rest.split('@').next().unwrap_or("");
     if font.eq_ignore_ascii_case("wingdings") {
-        return Some(text.chars().map(|c| if c == 'è' { '→' } else { c }).collect());
+        return Some(
+            text.chars()
+                .map(|c| if c == 'è' { '→' } else { c })
+                .collect(),
+        );
     }
     Some(text.to_string())
 }
@@ -320,7 +344,14 @@ pub fn line_left(cx: i32, w: i32, view_w: i32) -> i32 {
 /// Draw `text` centred on `cx` with the top of its last line at `top`, in
 /// `rgb` over its shadow: the client's one routine for text over sprites
 /// (chat, nicknames). Lines that do not fit the view wrap upward.
-fn draw_label(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, rgb: [u8; 3], cx: i32, top: i32) {
+fn draw_label(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    text: &str,
+    rgb: [u8; 3],
+    cx: i32,
+    top: i32,
+) {
     let view_w = fb.width as i32;
     let shadow = shadow_of(rgb);
     match font {
@@ -355,7 +386,14 @@ fn draw_label(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, rgb: [u
 /// Draw `text` over the player whose 48×48 box has its top-left at
 /// (`dx`, `dy`). `carrying` lifts it one more tile. `font` is `None` when no
 /// TrueType font was found: the built-in bitmap font is used.
-pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, dx: i32, dy: i32, carrying: bool) {
+pub fn draw_chat_text(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    text: &str,
+    dx: i32,
+    dy: i32,
+    carrying: bool,
+) {
     if text.is_empty() {
         return;
     }
@@ -366,7 +404,13 @@ pub fn draw_chat_text(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str,
 
 /// Draw an NPC's `message` centred on `cx` with the top of its last line at
 /// `top`, in the chat colour and style.
-pub fn draw_npc_message(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, cx: i32, top: i32) {
+pub fn draw_npc_message(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    text: &str,
+    cx: i32,
+    top: i32,
+) {
     if !text.is_empty() {
         draw_label(fb, font, text, CHAT_RGB, cx, top);
     }
@@ -408,12 +452,26 @@ pub fn ap_colour(ap: u8) -> [u8; 3] {
 
 /// Draw a nickname under the player box at (`dx`, `dy`): the top of its
 /// cell 2.5 tiles below the box's top, in the AP colour.
-pub fn draw_nick_text(fb: &mut Framebuffer, font: Option<&ChatFont>, nick: &str, ap: u8, dx: i32, dy: i32) {
+pub fn draw_nick_text(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    nick: &str,
+    ap: u8,
+    dx: i32,
+    dy: i32,
+) {
     if nick.is_empty() {
         return;
     }
     let tile = super::TILE_PX as i32;
-    draw_label(fb, font, nick, ap_colour(ap), dx + tile * 3 / 2, dy + tile * 5 / 2);
+    draw_label(
+        fb,
+        font,
+        nick,
+        ap_colour(ap),
+        dx + tile * 3 / 2,
+        dy + tile * 5 / 2,
+    );
 }
 
 #[cfg(test)]
@@ -421,7 +479,10 @@ mod tests {
     #[test]
     fn text_image_names_give_their_text() {
         assert_eq!(super::text_image_text("@b@Start").as_deref(), Some("Start"));
-        assert_eq!(super::text_image_text("@Arial@b@Start game").as_deref(), Some("Start game"));
+        assert_eq!(
+            super::text_image_text("@Arial@b@Start game").as_deref(),
+            Some("Start game")
+        );
         assert_eq!(super::text_image_text("@@@").as_deref(), Some(""));
         assert_eq!(super::text_image_text("@Wingdings@è").as_deref(), Some("→"));
         assert_eq!(super::text_image_text("graalsplash1.png"), None);
@@ -472,10 +533,15 @@ mod tests {
     fn nickname_sits_under_the_box() {
         let mut fb = Framebuffer::new(320, 240);
         draw_nick_text(&mut fb, None, "bob", 100, 100, 60);
-        let gold: Vec<(usize, usize)> =
-            (0..240).flat_map(|y| (0..320).map(move |x| (x, y))).filter(|&(x, y)| fb.pixels[(y * 320 + x) * 3..][..3] == [224, 196, 0]).collect();
+        let gold: Vec<(usize, usize)> = (0..240)
+            .flat_map(|y| (0..320).map(move |x| (x, y)))
+            .filter(|&(x, y)| fb.pixels[(y * 320 + x) * 3..][..3] == [224, 196, 0])
+            .collect();
         assert!(!gold.is_empty());
-        assert!(gold.iter().all(|p| p.1 >= 100 && p.1 < 124), "within the cell 40 px below the box top");
+        assert!(
+            gold.iter().all(|p| p.1 >= 100 && p.1 < 124),
+            "within the cell 40 px below the box top"
+        );
     }
 
     #[test]
@@ -527,14 +593,20 @@ mod tests {
         assert!(!white.is_empty() && blue > 0);
         // Centred on x = 100 + 24, sitting on the baseline near the top of
         // the box.
-        let (minx, maxx) = (white.iter().map(|p| p.0).min().unwrap(), white.iter().map(|p| p.0).max().unwrap());
+        let (minx, maxx) = (
+            white.iter().map(|p| p.0).min().unwrap(),
+            white.iter().map(|p| p.0).max().unwrap(),
+        );
         assert!((minx + maxx) / 2 >= 120 && (minx + maxx) / 2 <= 128);
         let maxy = white.iter().map(|p| p.1).max().unwrap();
         assert!((112..=122).contains(&maxy), "maxy {maxy}");
         // Carrying lifts it one tile.
         let mut fb2 = Framebuffer::new(320, 240);
         draw_chat_text(&mut fb2, None, "hi", 100, 120, true);
-        let low = (0..240).rev().find(|&y| (0..320).any(|x| fb2.pixels[(y * 320 + x) * 3..][..3] == [255, 255, 255])).unwrap();
+        let low = (0..240)
+            .rev()
+            .find(|&y| (0..320).any(|x| fb2.pixels[(y * 320 + x) * 3..][..3] == [255, 255, 255]))
+            .unwrap();
         assert_eq!(low as i32, maxy - 16);
     }
 
@@ -542,7 +614,10 @@ mod tests {
     /// white over blue.
     #[test]
     fn truetype_text_when_a_font_is_found() {
-        let style = ChatText { face: ChatFace::Helvetica, height: 24 };
+        let style = ChatText {
+            face: ChatFace::Helvetica,
+            height: 24,
+        };
         let Some(f) = ChatFont::find(style, &[]) else {
             eprintln!("no Arial-like font on this machine; skipped");
             return;
@@ -550,8 +625,10 @@ mod tests {
         assert!(f.width("hello") > 30);
         let mut fb = Framebuffer::new(320, 240);
         draw_chat_text(&mut fb, Some(&f), "hello", 100, 120, false);
-        let white: Vec<(usize, usize)> =
-            (0..240).flat_map(|y| (0..320).map(move |x| (x, y))).filter(|&(x, y)| fb.pixels[(y * 320 + x) * 3..][..3] == [255, 255, 255]).collect();
+        let white: Vec<(usize, usize)> = (0..240)
+            .flat_map(|y| (0..320).map(move |x| (x, y)))
+            .filter(|&(x, y)| fb.pixels[(y * 320 + x) * 3..][..3] == [255, 255, 255])
+            .collect();
         assert!(!white.is_empty());
         let top = white.iter().map(|p| p.1).min().unwrap();
         let bottom = white.iter().map(|p| p.1).max().unwrap();

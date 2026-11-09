@@ -57,8 +57,21 @@ fn main() -> ExitCode {
         eprintln!("seihai-ato: --no-window needs --online host:port");
         return ExitCode::from(2);
     };
-    let login = online::Login { account, password, nick, language: "English".into() };
-    match online::run(&addr, version, &login, a.assets.map(Into::into), a.first_level, &mut std::io::stdout(), &mut |_, _| {}) {
+    let login = online::Login {
+        account,
+        password,
+        nick,
+        language: "English".into(),
+    };
+    match online::run(
+        &addr,
+        version,
+        &login,
+        a.assets.map(Into::into),
+        a.first_level,
+        &mut std::io::stdout(),
+        &mut |_, _| {},
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("seihai-ato: {e}");

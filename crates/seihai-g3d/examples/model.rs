@@ -16,7 +16,10 @@ fn main() {
         f.clear(0x404060);
         let (s, c) = view.to_radians().sin_cos();
         let cam = Camera::look_at([s * 110.0, 30.0, c * 110.0], [0.0, 25.0, 0.0], 40.0, w);
-        let p = Player { anim: *anim, ..Player::default() };
+        let p = Player {
+            anim: *anim,
+            ..Player::default()
+        };
         draw_player(&mut f, &cam, &mut assets, &p, 0.0);
         for y in 0..h {
             out[y * w * n + k * w..y * w * n + k * w + w].copy_from_slice(&f.px[y * w..y * w + w]);
