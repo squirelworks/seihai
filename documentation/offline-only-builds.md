@@ -28,8 +28,8 @@ Nothing here sends a byte. The rows hold no token, packet or prop data.
 |---|---|---|---|---|---|
 | Zelda Online 1 | zeldaonline1 | 1998-05 | no networking | Z3-V1.02/1.03 | 1.21 |
 | Zelda Online 2 | zeldaonline2 | 1998-07 | GServ relay, room `Z<base>1.6`, port 14801 | Z3-V1.03 | 1.21 |
-| 1st Graal | 1stgraal-1 | 1998-09-06 | relay, rooms `Z<base>` + `Zelda2` | Z3-V1.03/1.04 | 1.21 |
-| 2nd Graal | 2ndgraal | 1998-09-16 | relay, rooms `Z<base>` + `Zelda2` | + GR-V1.00–1.01 | 1.21 |
+| 1st Graal | 1stgraal-1 | 1998-09-06 | relay, rooms `Z<base>2` + `Zelda2` | Z3-V1.03/1.04 | 1.21 |
+| 2nd Graal | 2ndgraal | 1998-09-16 | relay, `Zelda2`; per-level `Z<base>` remains provisional | + GR-V1.00–1.01 | 1.21 |
 | 3rd Graal | 3rdgraal | 1998-09-30 | relay, rooms `G<level>` + `Graal` | GR-V1.00–1.01 | 1.21 |
 | 4th Graal | 4thgraal | 1998-10-05 | relay, rooms `G<level>` + `Graal` | GR-V1.00–1.01 | 1.21 |
 | 4th Graal alpha | 4thgraalalpha | 1998-10-12 | relay, rooms `G2<level>` + `Graal2` | GR-V1.00–1.01 | 1.21 |
@@ -51,6 +51,24 @@ Nothing here sends a byte. The rows hold no token, packet or prop data.
 | Java Graal | javagraal | 2000-07 | relay, room `G2<level>`, port 14802 | GR-V1.00–1.03 | 1.21 |
 | NewWorld beta 1 | graalnwb1 | 2001-08-06 | token `G2N15041`, in no row | as 2.05 | 2.05 |
 | NewWorld beta 2 | graalnwb2 | 2001-10-03 | token `G2N15041`, in no row | as 2.05 | 2.05 |
+
+### Early room evidence and limits
+
+The 1st Graal per-level template `Z<base>2` follows the published static
+branch in Graal_analysis
+[`early-clients.md`](https://github.com/squirelworks/Graal_analysis/blob/8b13b01/client-internals/early-clients.md#1st-graal).
+The fixed room is `Zelda2`. The published
+[`relay-room-bridge.md`](https://github.com/squirelworks/Graal_analysis/blob/8b13b01/client-internals/relay-room-bridge.md#rooms-each-build-joins)
+reports a live `Zhouse12` join, but explicitly notes that this one observation
+cannot distinguish the base `house12` from `house1` followed by `2`.
+The suffix comes from the static branch, not from that live line alone.
+
+The bridge note describes 2nd Graal as "as 1st" on a static basis; the exact
+per-level construction and branch selection for that build are not given.
+Its existing `Z<base>` template is retained as provisional, not evidence of
+compatibility or incompatibility with 1st Graal. The fixed `Zelda2` room,
+Seihai's offline-only restriction and the borrowed `plays_as` rules are
+separate facts. No native client or relay was run for this correction.
 
 Dates, archives and level formats are from
 `graal-decompile/archive-survey/build-catalogue.md` and Graal_analysis
