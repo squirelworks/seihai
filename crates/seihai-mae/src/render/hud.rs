@@ -196,7 +196,7 @@ pub fn draw_hud(
     if on(stats::RUPEES) {
         // Up to seven digits, no leading zeros, centred on x 280.
         let text = v.rupees.clamp(0, 9_999_999).to_string();
-        let x = COUNT_X - (text.len() as i32 * DIGIT_ADVANCE >> 1);
+        let x = COUNT_X - ((text.len() as i32 * DIGIT_ADVANCE) >> 1);
         draw_number(fb, s, digits, &text, x);
     }
     if on(stats::BOMBS) {

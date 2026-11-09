@@ -47,7 +47,7 @@ impl Presenter {
         let size = (width, height, window.0, window.1);
         let stale = self
             .last_at
-            .map_or(true, |t| now.saturating_duration_since(t) >= Self::REFRESH);
+            .is_none_or(|t| now.saturating_duration_since(t) >= Self::REFRESH);
         if !stale && size == self.last_size && self.last == pixels {
             self.skipped += 1;
             return false;
@@ -66,7 +66,9 @@ pub fn rgb_to_0rgb(pixels: &[u8], out: &mut Vec<u32>) {
     out.clear();
     out.extend(
         pixels
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2])),
     );
 }

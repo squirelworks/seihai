@@ -260,6 +260,12 @@ impl Launcher {
     }
 }
 
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl eframe::App for Launcher {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {

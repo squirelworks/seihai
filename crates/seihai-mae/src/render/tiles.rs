@@ -149,10 +149,10 @@ impl Framebuffer {
 
     /// Draw a simple HUD: health bar and rupee bar.
     pub fn draw_hud(&mut self, health: i32, rupees: i32) {
-        let hp = health.max(0).min(100) as i32;
+        let hp = health.max(0).min(100);
         self.fill_rect(4, 4, 100, 8, [0x40, 0x00, 0x00]);
         self.fill_rect(4, 4, hp, 8, [0xC0, 0x20, 0x20]);
-        let ru = rupees.max(0).min(100) as i32;
+        let ru = rupees.max(0).min(100);
         self.fill_rect(110, 4, 50, 8, [0x00, 0x40, 0x00]);
         self.fill_rect(110, 4, ru / 2, 8, [0x20, 0xC0, 0x20]);
     }
@@ -190,7 +190,7 @@ impl Framebuffer {
         for i in 0..hearts {
             let sx = if filled >= (i + 1) * 2 {
                 0
-            } else if filled >= i * 2 + 1 {
+            } else if filled > i * 2 {
                 16
             } else {
                 32
@@ -1018,7 +1018,7 @@ mod tests {
         let east_tile = id_at(&fb, (64 * 16 - cx + 8) as u32, (20 * 16 - cy + 8) as u32);
         assert_eq!(
             east_tile,
-            (128 % 128 + 128 * 20) as u16,
+            (128 * 20) as u16,
             "world column 128 (e.nw column 0) past the edge"
         );
         // Step to the link.

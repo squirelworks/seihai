@@ -58,7 +58,7 @@ fn main() {
 
     let mut sent = Vec::new();
     let mut seen = Vec::new();
-    let mut look = |sb: &mut SessionState, seen: &mut Vec<u8>| {
+    let look = |sb: &mut SessionState, seen: &mut Vec<u8>| {
         pump(&rb, sb, 60);
         if let Some(sp) = sb.others.first().and_then(|o| o.sprite) {
             if seen.last() != Some(&sp) {

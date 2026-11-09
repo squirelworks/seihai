@@ -47,7 +47,9 @@ impl Voices {
                 .flat_map(|s| [(*s as f32 * l) as i16, (*s as f32 * r) as i16])
                 .collect()
         } else {
-            src.chunks_exact(2)
+            src.as_chunks::<2>()
+                .0
+                .iter()
                 .flat_map(|f| [(f[0] as f32 * l) as i16, (f[1] as f32 * r) as i16])
                 .collect()
         };

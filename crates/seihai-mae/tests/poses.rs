@@ -306,7 +306,7 @@ fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
 #[test]
 fn an_attr_sprite_draws_from_its_attribute_sheet() {
     let g = Gani::parse("SPRITE 1 ATTR1 0 0 2 2 hat\nANI\n1 3 4\nANIEND\n").unwrap();
-    let px = vec![200u8, 10, 20, 255].repeat(4);
+    let px = [200u8, 10, 20, 255].repeat(4);
     let mut fb = Framebuffer::new(64, 64);
     draw_gani_frame(&mut fb, &g, 0, 2, &PoseSheets::default(), 8, 8);
     assert_eq!(fb.pixels, blank(), "no hat sheet, nothing drawn");

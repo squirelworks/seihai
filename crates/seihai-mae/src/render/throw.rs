@@ -275,7 +275,7 @@ mod tests {
 
     fn fb() -> Framebuffer {
         let mut f = Framebuffer::new(640, 640);
-        for p in f.pixels.chunks_exact_mut(3) {
+        for p in f.pixels.as_chunks_mut::<3>().0 {
             p.copy_from_slice(&BG);
         }
         f
@@ -325,7 +325,13 @@ mod tests {
         );
         assert_eq!(at(&f, 168, 298), BG, "the sprite's corner is not painted");
         assert_eq!(at(&f, 168 + 31, 298 + 31), BG);
-        let painted = f.pixels.chunks_exact(3).filter(|p| **p != BG).count();
+        let painted = f
+            .pixels
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter(|p| **p != BG)
+            .count();
         assert_eq!(painted, 64, "exactly the object's 8x8 opaque pixels");
     }
 
@@ -345,7 +351,7 @@ mod tests {
             0,
             0,
         );
-        assert!(f.pixels.chunks_exact(3).all(|p| *p == BG));
+        assert!(f.pixels.as_chunks::<3>().0.iter().all(|p| *p == BG));
     }
 
     #[test]
@@ -396,7 +402,7 @@ mod tests {
             0,
         );
         assert!(
-            f.pixels.chunks_exact(3).all(|p| *p == BG),
+            f.pixels.as_chunks::<3>().0.iter().all(|p| *p == BG),
             "frame -1 draws nothing"
         );
         s.leaps[0].frame = 0;
@@ -473,12 +479,12 @@ mod tests {
             0,
             0,
         );
-        assert!(g.pixels.chunks_exact(3).all(|p| *p == BG));
+        assert!(g.pixels.as_chunks::<3>().0.iter().all(|p| *p == BG));
         // without the table nothing is known about it: nothing is drawn
         s.object_tables = None;
         let mut g = fb();
         draw_throw_layer(&mut g, &s, Sheet { px: &px, w, bpp: 4 }, one, 0, 0);
-        assert!(g.pixels.chunks_exact(3).all(|p| *p == BG));
+        assert!(g.pixels.as_chunks::<3>().0.iter().all(|p| *p == BG));
     }
 
     #[test]

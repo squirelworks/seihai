@@ -154,7 +154,7 @@ pub fn shade_screen(fb: &mut Framebuffer, [r, g, b, a]: [f32; 4]) {
         return;
     }
     let col = [r, g, b].map(|c| c.clamp(0.0, 1.0) * 255.0);
-    for px in fb.pixels.chunks_exact_mut(3) {
+    for px in fb.pixels.as_chunks_mut::<3>().0 {
         for (k, v) in px.iter_mut().enumerate() {
             *v = (*v as f32 * (1.0 - a) + col[k] * a).round() as u8;
         }

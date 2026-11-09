@@ -224,7 +224,7 @@ pub fn write_ppm(session: &OfflineSession, path: &str) -> Result<(), String> {
         }
     }
 
-    let mut out = format!("P6\n64 64\n255\n").into_bytes();
+    let mut out = "P6\n64 64\n255\n".to_string().into_bytes();
     out.extend_from_slice(&pixels);
     std::fs::write(path, out).map_err(|e| e.to_string())
 }
