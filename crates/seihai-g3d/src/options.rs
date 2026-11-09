@@ -62,7 +62,9 @@ fn file_name(what: &str, v: &str) -> Result<String, String> {
         return Err(format!("Enter the {what}."));
     }
     if v.contains(['/', '\\', ':']) || v == "." || v == ".." {
-        return Err(format!("The {what} is a file name in the Graal3D folder, without a folder."));
+        return Err(format!(
+            "The {what} is a file name in the Graal3D folder, without a folder."
+        ));
     }
     Ok(v.to_string())
 }
@@ -154,29 +156,39 @@ impl eframe::App for App<'_> {
                     ui.checkbox(&mut f.fixed_port, "Use a fixed UDP port");
                     ui.horizontal(|ui| {
                         ui.label("UDP port");
-                        ui.add_enabled(f.fixed_port, egui::TextEdit::singleline(&mut f.fixed_udp_port).desired_width(80.0));
+                        ui.add_enabled(
+                            f.fixed_port,
+                            egui::TextEdit::singleline(&mut f.fixed_udp_port).desired_width(80.0),
+                        );
                     });
                     ui.checkbox(&mut f.no_udp, "Don't use UDP");
                     ui.add_space(4.0);
                     ui.small("Takes effect at the next connect.");
                 }
                 Page::Look => {
-                    egui::Grid::new("look").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                        for (label, value) in [
-                            ("Body model", &mut f.body_model),
-                            ("Head model", &mut f.head_model),
-                            ("Body texture", &mut f.body_texture),
-                        ] {
-                            ui.label(label);
-                            ui.add(egui::TextEdit::singleline(value).desired_width(160.0));
-                            ui.end_row();
-                        }
-                        for (label, value) in [("Arm colour", &mut f.arm), ("Shoe colour", &mut f.shoe), ("Hand colour", &mut f.hand)] {
-                            ui.label(label);
-                            ui.color_edit_button_srgb(value);
-                            ui.end_row();
-                        }
-                    });
+                    egui::Grid::new("look")
+                        .num_columns(2)
+                        .spacing([12.0, 6.0])
+                        .show(ui, |ui| {
+                            for (label, value) in [
+                                ("Body model", &mut f.body_model),
+                                ("Head model", &mut f.head_model),
+                                ("Body texture", &mut f.body_texture),
+                            ] {
+                                ui.label(label);
+                                ui.add(egui::TextEdit::singleline(value).desired_width(160.0));
+                                ui.end_row();
+                            }
+                            for (label, value) in [
+                                ("Arm colour", &mut f.arm),
+                                ("Shoe colour", &mut f.shoe),
+                                ("Hand colour", &mut f.hand),
+                            ] {
+                                ui.label(label);
+                                ui.color_edit_button_srgb(value);
+                                ui.end_row();
+                            }
+                        });
                 }
             }
             ui.add_space(8.0);
@@ -199,7 +211,11 @@ impl eframe::App for App<'_> {
 /// Show one window until OK (the edited config) or Cancel / close
 /// (`None`). `keepalive` runs once a tick meanwhile; when it returns false
 /// (the session closed) the window closes as if cancelled.
-pub fn run(page: Page, cfg: &Config, keepalive: &mut dyn FnMut() -> bool) -> Result<Option<Config>, String> {
+pub fn run(
+    page: Page,
+    cfg: &Config,
+    keepalive: &mut dyn FnMut() -> bool,
+) -> Result<Option<Config>, String> {
     let mut out = None;
     let app = App {
         page,
@@ -215,10 +231,17 @@ pub fn run(page: Page, cfg: &Config, keepalive: &mut dyn FnMut() -> bool) -> Res
         Page::Look => [320.0, 260.0],
     };
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size(size).with_resizable(false),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size(size)
+            .with_resizable(false),
         ..Default::default()
     };
-    eframe::run_native(page.title(), options, Box::new(move |_cc| Ok(Box::new(app)))).map_err(|e| e.to_string())?;
+    eframe::run_native(
+        page.title(),
+        options,
+        Box::new(move |_cc| Ok(Box::new(app))),
+    )
+    .map_err(|e| e.to_string())?;
     Ok(out)
 }
 
@@ -246,7 +269,10 @@ mod tests {
         // The look fields are not this page's: a bad one does not matter.
         f.body_model = String::new();
         let out = f.apply(Page::Hardware, &c).unwrap();
-        assert_eq!((out.fixed_port, out.fixed_udp_port, out.no_udp), (true, 15000, true));
+        assert_eq!(
+            (out.fixed_port, out.fixed_udp_port, out.no_udp),
+            (true, 15000, true)
+        );
         assert_eq!(out.body_model, "body.x");
         for bad in ["0", "70000", "x", ""] {
             f.fixed_udp_port = bad.into();
@@ -262,7 +288,10 @@ mod tests {
         f.arm = [0x00, 0x80, 0x00];
         f.fixed_udp_port = "x".into();
         let out = f.apply(Page::Look, &c).unwrap();
-        assert_eq!((out.body_texture.as_str(), out.arm_colour), ("body1.bmp", 0x008000));
+        assert_eq!(
+            (out.body_texture.as_str(), out.arm_colour),
+            ("body1.bmp", 0x008000)
+        );
         assert_eq!(out.fixed_udp_port, 14898);
         for bad in ["", "../body.x", "dir/body.x", "c:body.x", "..", "a\\b.x"] {
             f.body_model = bad.into();

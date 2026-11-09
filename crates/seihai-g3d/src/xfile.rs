@@ -301,7 +301,9 @@ impl Mesh {
                     let k = it.next().unwrap_or(0.0) as usize;
                     let v: Vec<f64> = it.take(k * 2).collect();
                     mesh.uvs = v
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|p| [p[0] as f32, p[1] as f32])
                         .collect();
                 }

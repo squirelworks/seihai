@@ -7,7 +7,9 @@
 
 use seihai::assets::{read_png_rgb, read_png_rgba, AssetRoot};
 use seihai::offline::OfflineSession;
-use seihai::render::{draw_baddies, draw_player_marker, player_box_origin, render_view, BaddyArt, Framebuffer, Sheet};
+use seihai::render::{
+    draw_baddies, draw_player_marker, player_box_origin, render_view, BaddyArt, Framebuffer, Sheet,
+};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -29,9 +31,15 @@ fn main() {
     let ticks: u32 = args.get(5).and_then(|s| s.parse().ok()).unwrap_or(200);
 
     let (sw, sh, sheet) = read_png_rgb(&std::fs::read(root.pics1()).unwrap()).unwrap();
-    let sprites = root.find_image("", "sprites.png").and_then(|p| load_rgba(&p));
+    let sprites = root
+        .find_image("", "sprites.png")
+        .and_then(|p| load_rgba(&p));
     let mut images: HashMap<String, (u32, Vec<u8>)> = HashMap::new();
-    for (dir, name) in seihai::baddies::IMAGES.iter().map(|i| ("baddies", format!("{i}.png"))).chain([("weapons", format!("{}.png", seihai::baddies::BOW_IMAGE))]) {
+    for (dir, name) in seihai::baddies::IMAGES
+        .iter()
+        .map(|i| ("baddies", format!("{i}.png")))
+        .chain([("weapons", format!("{}.png", seihai::baddies::BOW_IMAGE))])
+    {
         if let Some(img) = root.find_image(dir, &name).and_then(|p| load_rgba(&p)) {
             images.insert(name, img);
         }
@@ -56,7 +64,14 @@ fn main() {
         let mut fb: Framebuffer = render_view(session, &sheet, sw, sh, VIEW_W, VIEW_H);
         let cam_x = ((session.player_x + 1.5) * 16.0 - (VIEW_W as f32 * 16.0) / 2.0) as i32;
         let cam_y = ((session.player_y + 1.5) * 16.0 - (VIEW_H as f32 * 16.0) / 2.0) as i32;
-        let art = BaddyArt { sprites: sprites.as_ref().map(|(w, p)| Sheet { px: p.as_slice(), w: *w, bpp: 4 }), images: &images };
+        let art = BaddyArt {
+            sprites: sprites.as_ref().map(|(w, p)| Sheet {
+                px: p.as_slice(),
+                w: *w,
+                bpp: 4,
+            }),
+            images: &images,
+        };
         draw_baddies(&mut fb, session, &art, cam_x, cam_y, u64::from(n));
         let (dx, dy) = player_box_origin(session, VIEW_W, VIEW_H);
         draw_player_marker(&mut fb, false, dx, dy);
@@ -68,10 +83,28 @@ fn main() {
     for n in 0..=ticks {
         // With `swing`: face the nearest baddy within two tiles and swing.
         if swing && session.combat.swing_elapsed_ms().is_none() {
-            let (cx, cy) = (f64::from(session.player_x) + 1.5, f64::from(session.player_y) + 2.0);
-            let near = session.baddies.iter().filter(|b| !b.removed).map(|b| (b.x + 1.0 - cx, b.y + 1.0 - cy)).find(|(dx, dy)| dx.abs() < 2.5 && dy.abs() < 2.5);
+            let (cx, cy) = (
+                f64::from(session.player_x) + 1.5,
+                f64::from(session.player_y) + 2.0,
+            );
+            let near = session
+                .baddies
+                .iter()
+                .filter(|b| !b.removed)
+                .map(|b| (b.x + 1.0 - cx, b.y + 1.0 - cy))
+                .find(|(dx, dy)| dx.abs() < 2.5 && dy.abs() < 2.5);
             if let Some((dx, dy)) = near {
-                session.player_dir = if dx.abs() > dy.abs() { if dx < 0.0 { 1 } else { 3 } } else if dy < 0.0 { 0 } else { 2 };
+                session.player_dir = if dx.abs() > dy.abs() {
+                    if dx < 0.0 {
+                        1
+                    } else {
+                        3
+                    }
+                } else if dy < 0.0 {
+                    0
+                } else {
+                    2
+                };
                 session.start_swing();
             }
         }
@@ -79,9 +112,21 @@ fn main() {
         session.tick_baddies(50, &[]);
         if n % 10 == 0 {
             snap(&session, n);
-            let list: Vec<String> =
-                session.baddies.iter().map(|b| format!("#{} k{} m{} ({:.2},{:.2}) p{}", b.id, b.kind, b.mode, b.x, b.y, b.power)).collect();
-            println!("{n:3}: health {} {}", session.player_health, list.join("  "));
+            let list: Vec<String> = session
+                .baddies
+                .iter()
+                .map(|b| {
+                    format!(
+                        "#{} k{} m{} ({:.2},{:.2}) p{}",
+                        b.id, b.kind, b.mode, b.x, b.y, b.power
+                    )
+                })
+                .collect();
+            println!(
+                "{n:3}: health {} {}",
+                session.player_health,
+                list.join("  ")
+            );
         }
     }
 }

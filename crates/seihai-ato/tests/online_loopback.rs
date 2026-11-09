@@ -4,7 +4,10 @@
 //! login, reads it with the core readers and logs the level once.
 
 use seihai_ato::online::{self, Login};
-use seihai_core::protocol::{write_frame, write_zlib_frame, zlib_compress, zlib_decompress, ClientVersion, EncryptionGen, Gen5, Gen5Comp};
+use seihai_core::protocol::{
+    write_frame, write_zlib_frame, zlib_compress, zlib_decompress, ClientVersion, EncryptionGen,
+    Gen5, Gen5Comp,
+};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::Duration;
@@ -49,7 +52,10 @@ fn serve(version: ClientVersion, listener: TcpListener) {
     let mut cipher = (version.encryption() == EncryptionGen::Gen5).then(|| Gen5::new(key));
     let mut send = |body: Vec<u8>| {
         let frame = match cipher.as_mut() {
-            Some(g) => write_frame(Gen5Comp::Zlib, &g.encode(zlib_compress(&body).unwrap(), Gen5Comp::Zlib)),
+            Some(g) => write_frame(
+                Gen5Comp::Zlib,
+                &g.encode(zlib_compress(&body).unwrap(), Gen5Comp::Zlib),
+            ),
             None => write_zlib_frame(&body).unwrap(),
         };
         s.write_all(&frame).unwrap();
@@ -66,7 +72,14 @@ fn serve(version: ClientVersion, listener: TcpListener) {
     let mut code = vec![gc(131), gc(0), gc(0), gc(1)];
     code.extend_from_slice(SCRIPT);
     let n = code.len();
-    npc.extend(msg(100, &[gc((n >> 14) as u8 & 0x7F), gc((n >> 7) as u8 & 0x7F), gc(n as u8 & 0x7F)]));
+    npc.extend(msg(
+        100,
+        &[
+            gc((n >> 14) as u8 & 0x7F),
+            gc((n >> 7) as u8 & 0x7F),
+            gc(n as u8 & 0x7F),
+        ],
+    ));
     npc.extend(code);
     send(npc);
     // Keep the socket open until the client hangs up.
@@ -78,10 +91,18 @@ fn run(version: ClientVersion) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
     let server = std::thread::spawn(move || serve(version, listener));
-    let login = Login { account: "lab".into(), password: "pw".into(), nick: "lab".into(), language: "English".into() };
+    let login = Login {
+        account: "lab".into(),
+        password: "pw".into(),
+        nick: "lab".into(),
+        language: "English".into(),
+    };
     let mut out = Vec::new();
     let mut levels = Vec::new();
-    online::run(&addr, version, &login, None, true, &mut out, &mut |l, a| levels.push((l.clone(), a.clone()))).unwrap();
+    online::run(&addr, version, &login, None, true, &mut out, &mut |l, a| {
+        levels.push((l.clone(), a.clone()))
+    })
+    .unwrap();
     // The level handed to the view is the one logged, built from the board.
     assert_eq!(levels.len(), 1);
     assert_eq!(levels[0].0.tile_id_at(10, 10), Some(0x1FF));

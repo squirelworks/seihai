@@ -38,7 +38,10 @@ fn images() -> HashMap<String, (u32, Vec<u8>)> {
     let mut m = HashMap::new();
     m.insert("red.png".to_string(), solid(RED));
     m.insert("blue.png".to_string(), solid(BLUE));
-    m.insert("halves.png".to_string(), image(8, 8, |x, _| if x < 4 { RED } else { GREEN }));
+    m.insert(
+        "halves.png".to_string(),
+        image(8, 8, |x, _| if x < 4 { RED } else { GREEN }),
+    );
     m
 }
 
@@ -65,9 +68,21 @@ fn draw(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>) -> Framebuff
     draw_with(s, imgs, PoseSheets::default())
 }
 
-fn draw_with(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, sheets: PoseSheets) -> Framebuffer {
+fn draw_with(
+    s: &OfflineSession,
+    imgs: &HashMap<String, (u32, Vec<u8>)>,
+    sheets: PoseSheets,
+) -> Framebuffer {
     let mut fb = Framebuffer::new(320, 320);
-    draw_both(&mut fb, s, &NpcArt { images: imgs, sheets, gani_attrs: true });
+    draw_both(
+        &mut fb,
+        s,
+        &NpcArt {
+            images: imgs,
+            sheets,
+            gani_attrs: true,
+        },
+    );
     fb
 }
 
@@ -89,7 +104,8 @@ const BLACK: [u8; 3] = [0, 0, 0];
 #[test]
 fn a_scripted_setimg_changes_what_is_drawn() {
     let imgs = images();
-    let (mut s, mut sc) = session("NPC red.png 10 10\nif (playertouchsme) { setimg blue.png; }\nNPCEND\n");
+    let (mut s, mut sc) =
+        session("NPC red.png 10 10\nif (playertouchsme) { setimg blue.png; }\nNPCEND\n");
     // the NPC's own image, at 10 * 16 pixels
     let fb = draw(&s, &imgs);
     assert_eq!(at(&fb, 161, 161), RED);
@@ -105,7 +121,8 @@ fn a_scripted_setimg_changes_what_is_drawn() {
 fn a_picture_that_is_not_loaded_draws_nothing_and_does_not_fail() {
     let mut imgs = images();
     imgs.remove("blue.png");
-    let (mut s, mut sc) = session("NPC red.png 10 10\nif (playertouchsme) { setimg blue.png; }\nNPCEND\n");
+    let (mut s, mut sc) =
+        session("NPC red.png 10 10\nif (playertouchsme) { setimg blue.png; }\nNPCEND\n");
     touch_npc(&mut s, &mut sc, 10.0, 10.0);
     assert_eq!(at(&draw(&s, &imgs), 161, 161), BLACK);
     // when the file arrives it shows
@@ -122,11 +139,22 @@ fn setimgpart_draws_a_part_and_setimg_goes_back_to_the_whole_image() {
     let whole = draw(&s, &imgs);
     assert_eq!((at(&whole, 161, 161), at(&whole, 167, 161)), (RED, GREEN));
     touch_npc(&mut s, &mut sc, 10.0, 10.0);
-    assert_eq!(s.current_level.as_ref().unwrap().npcs[0].image_part, Some((4, 0, 4, 8)));
+    assert_eq!(
+        s.current_level.as_ref().unwrap().npcs[0].image_part,
+        Some((4, 0, 4, 8))
+    );
     let part = draw(&s, &imgs);
-    assert_eq!(at(&part, 161, 161), GREEN, "the green half now starts at the NPC's corner");
+    assert_eq!(
+        at(&part, 161, 161),
+        GREEN,
+        "the green half now starts at the NPC's corner"
+    );
     assert_eq!(at(&part, 165, 161), BLACK, "and is 4 pixels wide");
-    assert_eq!(at(&part, 161, 168), BLACK, "the part is 8 pixels tall: row 8 is outside");
+    assert_eq!(
+        at(&part, 161, 168),
+        BLACK,
+        "the part is 8 pixels tall: row 8 is outside"
+    );
     // setimg resets the part
     for _ in 0..40 {
         sc.tick(&mut s, 50);
@@ -144,7 +172,11 @@ fn hide_and_show_toggle_the_drawn_npc() {
     assert_eq!(at(&draw(&s, &imgs), 161, 161), RED);
     touch_npc(&mut s, &mut sc, 10.0, 10.0);
     assert!(!s.current_level.as_ref().unwrap().npcs[0].visible);
-    assert_eq!(at(&draw(&s, &imgs), 161, 161), BLACK, "hidden: nothing drawn");
+    assert_eq!(
+        at(&draw(&s, &imgs), 161, 161),
+        BLACK,
+        "hidden: nothing drawn"
+    );
     for _ in 0..20 {
         sc.tick(&mut s, 50);
     }
@@ -163,10 +195,25 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     assert_eq!(at(&draw(&s, &imgs), 321 - 1, 12 * 16 + 1), BLACK);
     touch_npc(&mut s, &mut sc, 2.0, 2.0);
     let level = s.current_level.as_ref().unwrap();
-    assert_eq!(level.npcs[0].images.iter().map(|i| (i.index, i.file.as_str())).collect::<Vec<_>>(), [(3, "blue.png"), (4, "red.png")]);
+    assert_eq!(
+        level.npcs[0]
+            .images
+            .iter()
+            .map(|i| (i.index, i.file.as_str()))
+            .collect::<Vec<_>>(),
+        [(3, "blue.png"), (4, "red.png")]
+    );
     assert!(sc.images_changed);
     let mut fb = Framebuffer::new(500, 300);
-    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
+    draw_both(
+        &mut fb,
+        &s,
+        &NpcArt {
+            images: &imgs,
+            sheets: PoseSheets::default(),
+            gani_attrs: true,
+        },
+    );
     let px = |x: u32, y: u32| {
         let i = ((y * fb.width + x) * 3) as usize;
         [fb.pixels[i], fb.pixels[i + 1], fb.pixels[i + 2]]
@@ -180,7 +227,15 @@ fn showimg_puts_an_image_up_and_hideimg_takes_it_down() {
     let level = s.current_level.as_ref().unwrap();
     assert_eq!(level.npcs[0].images.len(), 1);
     let mut fb = Framebuffer::new(500, 300);
-    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
+    draw_both(
+        &mut fb,
+        &s,
+        &NpcArt {
+            images: &imgs,
+            sheets: PoseSheets::default(),
+            gani_attrs: true,
+        },
+    );
     let i = ((12 * 16 + 1) * fb.width + 20 * 16 + 1) as usize * 3;
     assert_eq!(&fb.pixels[i..i + 3], &BLACK);
 }
@@ -206,7 +261,8 @@ fn showimg_with_an_index_in_use_replaces_it_and_the_same_file_only_moves() {
 #[test]
 fn a_hidden_npc_keeps_its_shown_images() {
     let imgs = images();
-    let (mut s, mut sc) = session("NPC red.png 2 2\nif (playertouchsme) { showimg 1,blue.png,8,8; hide; }\nNPCEND\n");
+    let (mut s, mut sc) =
+        session("NPC red.png 2 2\nif (playertouchsme) { showimg 1,blue.png,8,8; hide; }\nNPCEND\n");
     touch_npc(&mut s, &mut sc, 2.0, 2.0);
     let fb = draw(&s, &imgs);
     assert_eq!(at(&fb, 2 * 16 + 1, 2 * 16 + 1), BLACK, "the NPC is hidden");
@@ -223,22 +279,45 @@ fn a_hidden_npc_keeps_its_shown_images() {
 fn a_weapon_showimg_is_drawn_over_the_player_and_hideimg_takes_it_down() {
     use seihai::scripting::engine::host::WeaponScript;
     let imgs = images();
-    let (mut s, mut sc) = session("NPC red.png 2 2
+    let (mut s, mut sc) = session(
+        "NPC red.png 2 2
 NPCEND
-");
+",
+    );
     let script = "if (weaponfired) { if (this.up) { hideimg 7; this.up = 0; } else { showimg 7,blue.png,12,6; changeimgpart 7,0,0,2,2; this.up = 1; } }";
-    sc.sync_weapons(&mut s, &[WeaponScript { name: "Lamp", image: "", script }]);
+    sc.sync_weapons(
+        &mut s,
+        &[WeaponScript {
+            name: "Lamp",
+            image: "",
+            script,
+        }],
+    );
     sc.world.weapon_fired("Lamp");
     sc.apply(&mut s);
     assert!(sc.images_changed, "the host is told to load the picture");
-    assert!(s.current_level.as_ref().unwrap().npcs[0].images.is_empty(), "not the NPC's image");
+    assert!(
+        s.current_level.as_ref().unwrap().npcs[0].images.is_empty(),
+        "not the NPC's image"
+    );
     assert_eq!(s.player_images.len(), 1);
     assert_eq!(s.player_images[0].height, 1, "one over the player");
     // drawn with the NPCs over the players, in its part only
     let fb = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
     assert_eq!(at(&fb, 12 * 16, 6 * 16), BLUE);
-    assert_eq!(at(&fb, 12 * 16 + 2, 6 * 16), BLACK, "the part is 2 pixels wide");
-    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 12 * 16, 6 * 16), BLACK);
+    assert_eq!(
+        at(&fb, 12 * 16 + 2, 6 * 16),
+        BLACK,
+        "the part is 2 pixels wide"
+    );
+    assert_eq!(
+        at(
+            &draw_pass(&s, &imgs, NpcPass::BelowPlayers),
+            12 * 16,
+            6 * 16
+        ),
+        BLACK
+    );
     sc.world.weapon_fired("Lamp");
     sc.apply(&mut s);
     assert!(s.player_images.is_empty());
@@ -249,7 +328,14 @@ NPCEND
 fn a_weapon_image_belongs_to_the_level_it_was_put_up_on() {
     use seihai::scripting::engine::host::WeaponScript;
     let (mut s, mut sc) = session("");
-    sc.sync_weapons(&mut s, &[WeaponScript { name: "Lamp", image: "", script: "if (weaponfired) { showimg 1,blue.png,3,3; }" }]);
+    sc.sync_weapons(
+        &mut s,
+        &[WeaponScript {
+            name: "Lamp",
+            image: "",
+            script: "if (weaponfired) { showimg 1,blue.png,3,3; }",
+        }],
+    );
     sc.world.weapon_fired("Lamp");
     sc.apply(&mut s);
     assert_eq!(s.player_images.len(), 1);
@@ -263,9 +349,13 @@ fn a_weapon_image_belongs_to_the_level_it_was_put_up_on() {
 /// One NPC block (`NPC ...` to `NPCEND`) of a script pack in
 /// `tests/fixtures/npc-scripts`, by the name on its `// =====` line.
 fn fixture_npc(pack: &str, name: &str) -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../seihai-core/tests/fixtures/npc-scripts").join(pack);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../seihai-core/tests/fixtures/npc-scripts")
+        .join(pack);
     let text = String::from_utf8_lossy(&std::fs::read(path).expect("read the pack")).into_owned();
-    let start = text.find(&format!("// ===== {name} =====")).expect("the NPC is in the pack");
+    let start = text
+        .find(&format!("// ===== {name} ====="))
+        .expect("the NPC is in the pack");
     let body = &text[start..];
     let npc = body.find("\nNPC ").expect("an NPC line") + 1;
     let end = body[npc..].find("\nNPCEND").expect("NPCEND") + npc;
@@ -278,9 +368,16 @@ fn fixture_npc(pack: &str, name: &str) -> String {
 /// seconds and takes the key down with `hideimg 300`.
 #[test]
 fn a_real_chest_script_opens_shows_its_key_and_hides_it() {
-    let npc = fixture_npc("02_phoenix.npc.txt", "02_phoenix/PhoenixNPC_Phoenix_boomerang_quest/quest_boom2__001__31_10.npc.txt");
+    let npc = fixture_npc(
+        "02_phoenix.npc.txt",
+        "02_phoenix/PhoenixNPC_Phoenix_boomerang_quest/quest_boom2__001__31_10.npc.txt",
+    );
     assert!(npc.starts_with("NPC personalchest.png 31 10\n"));
-    assert!(npc.contains("setimg personalchest2.png;") && npc.contains("showimg 300,") && npc.contains("hideimg 300;"));
+    assert!(
+        npc.contains("setimg personalchest2.png;")
+            && npc.contains("showimg 300,")
+            && npc.contains("hideimg 300;")
+    );
     let mut imgs = HashMap::new();
     imgs.insert("personalchest.png".to_string(), solid(RED));
     imgs.insert("personalchest2.png".to_string(), solid(BLUE));
@@ -288,22 +385,42 @@ fn a_real_chest_script_opens_shows_its_key_and_hides_it() {
     let (mut s, mut sc) = session(&npc);
     let draw = |s: &OfflineSession| {
         let mut fb = Framebuffer::new(640, 320);
-        draw_both(&mut fb, s, &NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true });
+        draw_both(
+            &mut fb,
+            s,
+            &NpcArt {
+                images: &imgs,
+                sheets: PoseSheets::default(),
+                gani_attrs: true,
+            },
+        );
         fb
     };
     let (chest, key) = ((31 * 16 + 1, 10 * 16 + 1), (31 * 16 + 8 + 1, 9 * 16 + 1));
     let fb = draw(&s);
-    assert_eq!((at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)), (RED, BLACK), "closed, no key");
+    assert_eq!(
+        (at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)),
+        (RED, BLACK),
+        "closed, no key"
+    );
     touch_npc(&mut s, &mut sc, 31.0, 10.0);
     assert!(sc.images_changed);
     let fb = draw(&s);
     assert_eq!(at(&fb, chest.0, chest.1), BLUE, "setimg: the chest is open");
-    assert_eq!(at(&fb, key.0, key.1), GREEN, "showimg 300: the key is up at x+0.5, y-1");
+    assert_eq!(
+        at(&fb, key.0, key.1),
+        GREEN,
+        "showimg 300: the key is up at x+0.5, y-1"
+    );
     for _ in 0..62 {
         sc.tick(&mut s, 50);
     }
     let fb = draw(&s);
-    assert_eq!((at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)), (BLUE, BLACK), "hideimg 300 after the sleep");
+    assert_eq!(
+        (at(&fb, chest.0, chest.1), at(&fb, key.0, key.1)),
+        (BLUE, BLACK),
+        "hideimg 300 after the sleep"
+    );
     assert!(s.current_level.as_ref().unwrap().npcs[0].images.is_empty());
 }
 
@@ -320,7 +437,14 @@ fn a_real_hammer_weapon_swings_its_image_up_and_takes_it_down() {
     imgs.insert("wham2.gif".to_string(), solid(RED));
     imgs.insert("wham3.gif".to_string(), solid(BLUE));
     let (mut s, mut sc) = session("");
-    sc.sync_weapons(&mut s, &[WeaponScript { name: "Hammer", image: "", script: HAMMER }]);
+    sc.sync_weapons(
+        &mut s,
+        &[WeaponScript {
+            name: "Hammer",
+            image: "",
+            script: HAMMER,
+        }],
+    );
     s.player_x = 10.0;
     s.player_y = 10.0;
     s.player_dir = 2;
@@ -337,7 +461,11 @@ fn a_real_hammer_weapon_swings_its_image_up_and_takes_it_down() {
     assert!(sc.images_changed);
     assert_eq!(s.player_images.len(), 1);
     assert_eq!(s.player_images[0].file, "wham2.gif");
-    assert_eq!(at(&draw(&s, &imgs), down.0, down.1), RED, "drawn over the player at its place");
+    assert_eq!(
+        at(&draw(&s, &imgs), down.0, down.1),
+        RED,
+        "drawn over the player at its place"
+    );
     for _ in 0..8 {
         sc.tick(&mut s, 50);
     }
@@ -352,7 +480,11 @@ fn a_real_hammer_weapon_swings_its_image_up_and_takes_it_down() {
     assert_eq!(s.player_images[0].file, "wham3.gif");
     let fb = draw(&s, &imgs);
     assert_eq!(at(&fb, 11 * 16 + 8 + 1, 9 * 16 + 13), BLUE);
-    assert_eq!(at(&fb, down.0, down.1), BLACK, "one image, moved: index 1 is reused");
+    assert_eq!(
+        at(&fb, down.0, down.1),
+        BLACK,
+        "one image, moved: index 1 is reused"
+    );
 }
 
 /// The rat of `prtrain.graal` (NPC library `npc-0719`; the scrape's
@@ -366,7 +498,9 @@ fn a_real_setgif_level_npc_changes_its_picture_and_back() {
     let mut imgs = HashMap::new();
     imgs.insert("ratb.gif".to_string(), solid(RED));
     imgs.insert("ratf.gif".to_string(), solid(BLUE));
-    let (mut s, mut sc) = session(&format!("NPC ratb.gif 15 10\n{RAT}\nNPCEND\nSIGN 1 1\nzero\nSIGNEND\nSIGN 2 2\nSqueak!\nSIGNEND\n"));
+    let (mut s, mut sc) = session(&format!(
+        "NPC ratb.gif 15 10\n{RAT}\nNPCEND\nSIGN 1 1\nzero\nSIGNEND\nSIGN 2 2\nSqueak!\nSIGNEND\n"
+    ));
     let px = (15 * 16 + 1, 10 * 16 + 1);
     assert_eq!(at(&draw(&s, &imgs), px.0, px.1), RED);
     touch_npc(&mut s, &mut sc, 15.0, 10.0);
@@ -378,13 +512,21 @@ fn a_real_setgif_level_npc_changes_its_picture_and_back() {
     assert_eq!(at(&draw(&s, &imgs), px.0, px.1), BLUE);
     s.reading = None;
     sc.tick(&mut s, 50);
-    assert_eq!(at(&draw(&s, &imgs), px.0, px.1), RED, "setgif ratb.gif when the sign closes");
+    assert_eq!(
+        at(&draw(&s, &imgs), px.0, px.1),
+        RED,
+        "setgif ratb.gif when the sign closes"
+    );
 }
 
 // ---- animations: setcharani idle <-> walk -----------------------------------
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("assets").join("default")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("assets")
+        .join("default")
 }
 
 struct Art {
@@ -398,19 +540,37 @@ fn art() -> Art {
         let (w, _, px) = read_png_rgba(&std::fs::read(root().join(rel)).unwrap()).unwrap();
         (w, px)
     };
-    Art { body: load("bodies/body.png"), head: load("heads/head0.png"), sprites: load("sprites.png") }
+    Art {
+        body: load("bodies/body.png"),
+        head: load("heads/head0.png"),
+        sprites: load("sprites.png"),
+    }
 }
 
 fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
-        Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
+        Some(Sheet {
+            px: i.1.as_slice(),
+            w: i.0,
+            bpp: 4,
+        })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: None, shield: None, attrs: Default::default() }
+    PoseSheets {
+        body: sh(&a.body),
+        head: sh(&a.head),
+        sprites: sh(&a.sprites),
+        sword: None,
+        shield: None,
+        attrs: Default::default(),
+    }
 }
 
 fn with_default_ganis(s: &mut OfflineSession) {
     for n in ["idle", "walk"] {
-        s.set_npc_gani(n, Gani::load(root().join("gani").join(format!("{n}.gani"))).unwrap());
+        s.set_npc_gani(
+            n,
+            Gani::load(root().join("gani").join(format!("{n}.gani"))).unwrap(),
+        );
     }
 }
 
@@ -430,7 +590,11 @@ fn setcharani_switches_an_npc_between_idle_and_walk_and_steps_it() {
     // showcharacter + setcharani idle: drawn as the idle figure
     assert_eq!(npc(&s), (Some("idle".to_string()), 0));
     let idle = draw_with(&s, &imgs, sheets(&a));
-    assert_ne!(idle.pixels, draw(&s, &imgs).pixels, "something is drawn where the bare NPC draws nothing");
+    assert_ne!(
+        idle.pixels,
+        draw(&s, &imgs).pixels,
+        "something is drawn where the bare NPC draws nothing"
+    );
     // a tick on idle (1 step, no loop) changes nothing
     assert!(!s.tick_npc_anis(1000));
     assert_eq!(draw_with(&s, &imgs, sheets(&a)).pixels, idle.pixels);
@@ -463,9 +627,14 @@ fn setcharani_switches_an_npc_between_idle_and_walk_and_steps_it() {
 fn an_animation_that_is_not_loaded_falls_back_to_the_image() {
     let a = art();
     let imgs = images();
-    let (mut s, mut sc) = session("NPC red.png 10 10\nif (playertouchsme) { setcharani walk,; }\nNPCEND\n");
+    let (mut s, mut sc) =
+        session("NPC red.png 10 10\nif (playertouchsme) { setcharani walk,; }\nNPCEND\n");
     touch_npc(&mut s, &mut sc, 10.0, 10.0);
-    assert_eq!(s.wanted_npc_anis(), ["walk"], "the host is told which file to load");
+    assert_eq!(
+        s.wanted_npc_anis(),
+        ["walk"],
+        "the host is told which file to load"
+    );
     assert_eq!(at(&draw_with(&s, &imgs, sheets(&a)), 161, 161), RED);
     with_default_ganis(&mut s);
     assert!(s.wanted_npc_anis().is_empty());
@@ -494,9 +663,13 @@ fn a_gani_that_does_not_loop_plays_once_then_follows_setbackto() {
     let mut s = OfflineSession::new();
     s.current_level = Some(Level::parse("GLEVNW01\nNPC - 5 5\nNPCEND\n").unwrap());
     // two steps, no LOOP, back to idle; idle is one step
-    let two = "SETBACKTO idle\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\n\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n";
+    let two =
+        "SETBACKTO idle\nANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\n\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n";
     s.set_npc_gani("hit", Gani::parse(two).unwrap());
-    s.set_npc_gani("idle", Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap());
+    s.set_npc_gani(
+        "idle",
+        Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap(),
+    );
     s.current_level.as_mut().unwrap().npcs[0].ani = Some("hit".into());
     assert!(s.tick_npc_anis(100));
     assert_eq!(s.current_level.as_ref().unwrap().npcs[0].ani_frame, 1);
@@ -505,7 +678,11 @@ fn a_gani_that_does_not_loop_plays_once_then_follows_setbackto() {
     assert_eq!((n.ani.as_deref(), n.ani_frame), (Some("idle"), 0));
     assert!(!s.tick_npc_anis(5000), "idle is one step, nothing changes");
     // with no SETBACKTO the last step stays
-    s.set_npc_gani("hit", Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\n\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n").unwrap());
+    s.set_npc_gani(
+        "hit",
+        Gani::parse("ANI\n1 0 0\n1 0 0\n1 0 0\n1 0 0\n\n1 0 0\n1 0 0\n1 0 0\n1 0 0\nANIEND\n")
+            .unwrap(),
+    );
     s.current_level.as_mut().unwrap().npcs[0].ani = Some("hit".into());
     s.tick_npc_anis(100);
     s.tick_npc_anis(100);
@@ -525,7 +702,8 @@ fn a_gani_prop_with_parameters_names_the_file_before_the_comma() {
     assert_eq!(ani_file("idle"), "idle");
     assert_eq!(ani_file(""), "");
     let mut s = OfflineSession::new();
-    s.current_level = Some(Level::parse("GLEVNW01\nNPC - 5 5\nNPCEND\nNPC - 9 5\nNPCEND\n").unwrap());
+    s.current_level =
+        Some(Level::parse("GLEVNW01\nNPC - 5 5\nNPCEND\nNPC - 9 5\nNPCEND\n").unwrap());
     s.current_level.as_mut().unwrap().npcs[0].ani = Some("zlttp_gralats,3".into());
     s.current_level.as_mut().unwrap().npcs[1].ani = Some("zlttp_gralats,1".into());
     assert_eq!(s.wanted_npc_anis(), vec!["zlttp_gralats".to_string()]);
@@ -536,7 +714,10 @@ fn a_gani_prop_with_parameters_names_the_file_before_the_comma() {
     assert!(s.tick_npc_anis(100));
     let n = &s.current_level.as_ref().unwrap().npcs[0];
     // The prop keeps its parameter (the server sync compares it as sent).
-    assert_eq!((n.ani.as_deref(), n.ani_frame), (Some("zlttp_gralats,3"), 1));
+    assert_eq!(
+        (n.ani.as_deref(), n.ani_frame),
+        (Some("zlttp_gralats,3"), 1)
+    );
 }
 
 #[test]
@@ -563,15 +744,38 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
         eprintln!("SEIHAI_SCRIPT_CORPUS not set; skipped");
         return;
     };
-    let text = String::from_utf8_lossy(&std::fs::read(&path).expect("read the script file")).into_owned();
-    let uses = |t: &str| ["setimg", "setgif", "showimg", "hideimg", "setcharani", "setani", "showcharacter", "changeimgpart"].iter().any(|c| t.contains(c));
-    let scripts: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty() && uses(l) && !l.contains("NPCEND")).collect();
-    assert!(!scripts.is_empty(), "no script in the file uses the image commands");
+    let text =
+        String::from_utf8_lossy(&std::fs::read(&path).expect("read the script file")).into_owned();
+    let uses = |t: &str| {
+        [
+            "setimg",
+            "setgif",
+            "showimg",
+            "hideimg",
+            "setcharani",
+            "setani",
+            "showcharacter",
+            "changeimgpart",
+        ]
+        .iter()
+        .any(|c| t.contains(c))
+    };
+    let scripts: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && uses(l) && !l.contains("NPCEND"))
+        .collect();
+    assert!(
+        !scripts.is_empty(),
+        "no script in the file uses the image commands"
+    );
     let mut counts = [0usize; 6]; // ran, image changed, showimg up at the end, ani at the end, hidden at the end, part set
     for era in [ClientVersion::V205, ClientVersion::V222] {
         for src in &scripts {
             let mut s = OfflineSession::new();
-            s.current_level = Some(Level::parse(&format!("GLEVNW01\nNPC pic.png 10 10\n{src}\nNPCEND\n")).unwrap());
+            s.current_level = Some(
+                Level::parse(&format!("GLEVNW01\nNPC pic.png 10 10\n{src}\nNPCEND\n")).unwrap(),
+            );
             s.player_x = 40.0;
             s.player_y = 40.0;
             let mut sc = SessionScripts::new(era);
@@ -591,10 +795,16 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
             let mut idx: Vec<i64> = n.images.iter().map(|i| i.index).collect();
             let sorted = idx.windows(2).all(|w| w[0] < w[1]);
             idx.dedup();
-            assert!(sorted && idx.len() == n.images.len(), "image indexes are unique and sorted");
+            assert!(
+                sorted && idx.len() == n.images.len(),
+                "image indexes are unique and sorted"
+            );
             assert!(n.images.iter().all(|i| i.x.is_finite() && i.y.is_finite()));
             if let Some((x, y, w, h)) = n.image_part {
-                assert!(x >= 0 && y >= 0 && w >= 0 && h >= 0 && w <= 220 && h <= 220, "part inside the clamps");
+                assert!(
+                    x >= 0 && y >= 0 && w >= 0 && h >= 0 && w <= 220 && h <= 220,
+                    "part inside the clamps"
+                );
             }
             // drawing never panics, whatever the images are
             let imgs = images();
@@ -620,7 +830,11 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
     // The scripts that put images up on a weapon event, run as weapons:
     // fired, then three seconds of ticks, watching the player's images.
     use seihai::scripting::engine::host::WeaponScript;
-    let weapons: Vec<&str> = scripts.iter().copied().filter(|s| s.contains("weaponfired") && s.contains("showimg")).collect();
+    let weapons: Vec<&str> = scripts
+        .iter()
+        .copied()
+        .filter(|s| s.contains("weaponfired") && s.contains("showimg"))
+        .collect();
     let mut wcounts = [0usize; 3]; // ran, an image was up, all down at the end
     for era in [ClientVersion::V205, ClientVersion::V222] {
         for src in &weapons {
@@ -630,7 +844,14 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
             s.player_y = 30.0;
             let mut sc = SessionScripts::new(era);
             sc.load_level(&mut s, "a.nw");
-            sc.sync_weapons(&mut s, &[WeaponScript { name: "W", image: "", script: src }]);
+            sc.sync_weapons(
+                &mut s,
+                &[WeaponScript {
+                    name: "W",
+                    image: "",
+                    script: src,
+                }],
+            );
             sc.sync_player(&s);
             sc.world.weapon_fired("W");
             sc.apply(&mut s);
@@ -641,7 +862,10 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
                 let mut idx: Vec<i64> = s.player_images.iter().map(|i| i.index).collect();
                 let sorted = idx.windows(2).all(|w| w[0] < w[1]);
                 idx.dedup();
-                assert!(sorted && idx.len() == s.player_images.len(), "weapon image indexes are unique and sorted");
+                assert!(
+                    sorted && idx.len() == s.player_images.len(),
+                    "weapon image indexes are unique and sorted"
+                );
             }
             let _ = draw(&s, &images());
             wcounts[0] += 1;
@@ -654,9 +878,24 @@ fn real_npc_scripts_that_change_images_run_cleanly() {
 }
 
 /// One pass of the level's NPCs on a fresh picture.
-fn draw_pass(s: &OfflineSession, imgs: &HashMap<String, (u32, Vec<u8>)>, pass: NpcPass) -> Framebuffer {
+fn draw_pass(
+    s: &OfflineSession,
+    imgs: &HashMap<String, (u32, Vec<u8>)>,
+    pass: NpcPass,
+) -> Framebuffer {
     let mut fb = Framebuffer::new(320, 320);
-    draw_npcs(&mut fb, s, &NpcArt { images: imgs, sheets: PoseSheets::default(), gani_attrs: true }, 0, 0, pass);
+    draw_npcs(
+        &mut fb,
+        s,
+        &NpcArt {
+            images: imgs,
+            sheets: PoseSheets::default(),
+            gani_attrs: true,
+        },
+        0,
+        0,
+        pass,
+    );
     fb
 }
 
@@ -673,13 +912,28 @@ fn drawoverplayer_npcs_and_showimg_images_draw_after_the_players() {
     let above = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
     let p = |x: u32| x * 16 + 1;
     // drawoverplayer: only after the players.
-    assert_eq!((at(&below, p(2), p(2)), at(&above, p(2), p(2))), (BLACK, RED));
+    assert_eq!(
+        (at(&below, p(2), p(2)), at(&above, p(2), p(2))),
+        (BLACK, RED)
+    );
     // drawunderplayer and the default height: before the players.
-    assert_eq!((at(&below, p(5), p(2)), at(&above, p(5), p(2))), (BLUE, BLACK));
-    assert_eq!((at(&below, p(8), p(2)), at(&above, p(8), p(2))), (BLUE, BLACK));
+    assert_eq!(
+        (at(&below, p(5), p(2)), at(&above, p(5), p(2))),
+        (BLUE, BLACK)
+    );
+    assert_eq!(
+        (at(&below, p(8), p(2)), at(&above, p(8), p(2))),
+        (BLUE, BLACK)
+    );
     // drawaslight and showimg images: after the players.
-    assert_eq!((at(&below, p(11), p(2)), at(&above, p(11), p(2))), (BLACK, RED));
-    assert_eq!((at(&below, p(14), p(2)), at(&above, p(14), p(2))), (BLACK, BLUE));
+    assert_eq!(
+        (at(&below, p(11), p(2)), at(&above, p(11), p(2))),
+        (BLACK, RED)
+    );
+    assert_eq!(
+        (at(&below, p(14), p(2)), at(&above, p(14), p(2))),
+        (BLACK, BLUE)
+    );
 }
 
 #[test]
@@ -687,16 +941,37 @@ fn drawunderplayer_npcs_draw_before_the_default_ones() {
     let imgs = images();
     // The same place: the default NPC (red) covers the one under the player.
     let (s, _sc) = session("NPC red.png 2 2\nNPCEND\nNPC blue.png 2 2\nif (playerenters) { drawunderplayer; }\nNPCEND\n");
-    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), RED);
+    assert_eq!(
+        at(
+            &draw_pass(&s, &imgs, NpcPass::BelowPlayers),
+            2 * 16 + 1,
+            2 * 16 + 1
+        ),
+        RED
+    );
 }
 
 #[test]
 fn blockagain_puts_an_npc_back_with_the_players() {
     let imgs = images();
     let (mut s, mut sc) = session("NPC red.png 2 2\nif (playerenters) { drawoverplayer; }\nif (playersays(back)) { blockagain; }\nNPCEND\n");
-    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), BLACK);
+    assert_eq!(
+        at(
+            &draw_pass(&s, &imgs, NpcPass::BelowPlayers),
+            2 * 16 + 1,
+            2 * 16 + 1
+        ),
+        BLACK
+    );
     sc.chat(&mut s, "back");
-    assert_eq!(at(&draw_pass(&s, &imgs, NpcPass::BelowPlayers), 2 * 16 + 1, 2 * 16 + 1), RED);
+    assert_eq!(
+        at(
+            &draw_pass(&s, &imgs, NpcPass::BelowPlayers),
+            2 * 16 + 1,
+            2 * 16 + 1
+        ),
+        RED
+    );
 }
 
 #[test]
@@ -727,7 +1002,11 @@ fn changeimgcolors_and_changeimgzoom_change_one_showimg_image() {
         "NPC - 2 2\nif (playerenters) { showimg 1,blue.png,10,2; showimg 2,blue.png,14,2; changeimgcolors 1,1,1,0,1; changeimgzoom 2,0.5; }\nNPCEND\n",
     );
     let fb = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
-    assert_eq!(at(&fb, 10 * 16 + 1, 2 * 16 + 1), [30, 30, 0], "blue taken out");
+    assert_eq!(
+        at(&fb, 10 * 16 + 1, 2 * 16 + 1),
+        [30, 30, 0],
+        "blue taken out"
+    );
     // 4x4 at half size is 2x2 from (14*16 + 1, 33).
     assert_eq!(at(&fb, 14 * 16 + 1, 2 * 16 + 1), BLUE);
     assert_eq!(at(&fb, 14 * 16, 2 * 16), BLACK);
@@ -742,7 +1021,11 @@ fn seteffect_shades_the_map_under_the_lights() {
     );
     assert_eq!(s.screen_effect, [0.0, 0.0, 1.0, 0.5]);
     let mut fb = Framebuffer::new(320, 320);
-    let art = NpcArt { images: &imgs, sheets: PoseSheets::default(), gani_attrs: true };
+    let art = NpcArt {
+        images: &imgs,
+        sheets: PoseSheets::default(),
+        gani_attrs: true,
+    };
     draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::BelowPlayers);
     draw_npcs(&mut fb, &s, &art, 0, 0, NpcPass::AbovePlayers);
     // The default NPC is under the shading: red halfway to blue.
@@ -757,7 +1040,11 @@ fn seteffect_shades_the_map_under_the_lights() {
 fn a_character_npc_takes_its_colour_and_zoom_effect() {
     let a = art();
     let imgs = HashMap::new();
-    let script = |fx: &str| format!("NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {fx} }}\nNPCEND\n");
+    let script = |fx: &str| {
+        format!(
+            "NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {fx} }}\nNPCEND\n"
+        )
+    };
     let pic = |fx: &str| {
         let (mut s, _sc) = session(&script(fx));
         with_default_ganis(&mut s);
@@ -792,11 +1079,24 @@ fn character_picture(props: &str, gani_attrs: bool) -> Framebuffer {
     imgs.insert("ghead.png".to_string(), image(32, 128, |_, _| GREEN));
     imgs.insert("bluehat.png".to_string(), image(192, 144, |_, _| BLUE));
     let colors = [2, 10, 18, 5, 18];
-    imgs.insert(seihai::looks::colored_body_key("body.png", &colors), image(128, 32, |_, _| RED));
-    let (mut s, _sc) = session(&format!("NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {props} }}\nNPCEND\n"));
+    imgs.insert(
+        seihai::looks::colored_body_key("body.png", &colors),
+        image(128, 32, |_, _| RED),
+    );
+    let (mut s, _sc) = session(&format!(
+        "NPC - 10 10\nif (playerenters) {{ showcharacter; setcharani idle,; {props} }}\nNPCEND\n"
+    ));
     with_default_ganis(&mut s);
     let mut fb = Framebuffer::new(320, 320);
-    draw_both(&mut fb, &s, &NpcArt { images: &imgs, sheets: sheets(&a), gani_attrs });
+    draw_both(
+        &mut fb,
+        &s,
+        &NpcArt {
+            images: &imgs,
+            sheets: sheets(&a),
+            gani_attrs,
+        },
+    );
     fb
 }
 
@@ -818,7 +1118,8 @@ fn a_character_npc_draws_its_own_head_body_colours_and_hat() {
 fn a_character_npc_without_setcharprop_keeps_the_default_pictures() {
     let a = art();
     let with = character_picture("", true);
-    let (mut s, _sc) = session("NPC - 10 10\nif (playerenters) { showcharacter; setcharani idle,; }\nNPCEND\n");
+    let (mut s, _sc) =
+        session("NPC - 10 10\nif (playerenters) { showcharacter; setcharani idle,; }\nNPCEND\n");
     with_default_ganis(&mut s);
     let plain = draw_with(&s, &HashMap::new(), sheets(&a));
     assert_eq!(with.pixels, plain.pixels);
@@ -835,7 +1136,13 @@ fn changeimgvis_moves_an_image_between_the_heights() {
          changeimgvis 1,0; changeimgvis 2,1; changeimgvis 3,2; changeimgvis 4,3; changeimgvis 5,4; changeimgvis 6,9; }\n\
          if (playersays(again)) { changeimgcolors 5,1,1,1,0.5; showimg 5,blue.png,100,40; }\nNPCEND\n",
     );
-    let heights = |s: &OfflineSession| s.current_level.as_ref().unwrap().npcs[0].images.iter().map(|i| i.height).collect::<Vec<_>>();
+    let heights = |s: &OfflineSession| {
+        s.current_level.as_ref().unwrap().npcs[0]
+            .images
+            .iter()
+            .map(|i| i.height)
+            .collect::<Vec<_>>()
+    };
     // Under, level with and over the NPC (height 0); light; screen; and a
     // value past 4 leaves the default (one over the NPC).
     assert_eq!(heights(&s), vec![-1, 0, 1, 9, 10, 1]);
@@ -843,8 +1150,18 @@ fn changeimgvis_moves_an_image_between_the_heights() {
     let above = draw_pass(&s, &imgs, NpcPass::AbovePlayers);
     let screen = draw_pass(&s, &imgs, NpcPass::Screen);
     let p = |x: u32| x * 16 + 1;
-    for (x, b, a) in [(4, RED, BLACK), (6, RED, BLACK), (8, BLACK, RED), (10, BLACK, RED), (12, BLACK, RED)] {
-        assert_eq!((at(&below, p(x), p(2)), at(&above, p(x), p(2))), (b, a), "image at x {x}");
+    for (x, b, a) in [
+        (4, RED, BLACK),
+        (6, RED, BLACK),
+        (8, BLACK, RED),
+        (10, BLACK, RED),
+        (12, BLACK, RED),
+    ] {
+        assert_eq!(
+            (at(&below, p(x), p(2)), at(&above, p(x), p(2))),
+            (b, a),
+            "image at x {x}"
+        );
     }
     // The screen layer: at screen pixels, and only in its own pass.
     assert_eq!(at(&screen, 101, 41), BLUE);
@@ -853,7 +1170,12 @@ fn changeimgvis_moves_an_image_between_the_heights() {
     // showimg on an index in use puts it back one over the NPC; its colour stays.
     sc.chat(&mut s, "again");
     assert_eq!(heights(&s)[4], 1);
-    assert_eq!(s.current_level.as_ref().unwrap().npcs[0].images[4].effect.color, [1.0, 1.0, 1.0, 0.5]);
+    assert_eq!(
+        s.current_level.as_ref().unwrap().npcs[0].images[4]
+            .effect
+            .color,
+        [1.0, 1.0, 1.0, 0.5]
+    );
 }
 
 #[test]
@@ -881,7 +1203,11 @@ fn lamp_mng(w: u32, h: u32, colours: &[[u8; 3]], delays: &[u32]) -> Vec<u8> {
         mhdr.extend_from_slice(&v.to_be_bytes());
     }
     chunk(&mut out, b"MHDR", &mhdr);
-    chunk(&mut out, b"TERM", &[3, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
+    chunk(
+        &mut out,
+        b"TERM",
+        &[3, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF],
+    );
     for (c, d) in colours.iter().zip(delays) {
         let mut fram = vec![2, 0, 2, 0, 0, 0];
         fram.extend_from_slice(&d.to_be_bytes());

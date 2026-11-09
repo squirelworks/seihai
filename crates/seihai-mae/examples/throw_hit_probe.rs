@@ -10,7 +10,9 @@
 //! The lab listserver accepts any account and password. The default address
 //! is the lab GServer.
 
-use seihai::net::{carry_sprite_message, position_message_sprite, throw_carried_message, Connection};
+use seihai::net::{
+    carry_sprite_message, position_message_sprite, throw_carried_message, Connection,
+};
 use seihai::offline::OfflineSession;
 use seihai::protocol::{ClientVersion, SessionState, COMBAT_205, DEATH_205};
 use std::sync::mpsc::Receiver;
@@ -37,25 +39,47 @@ fn victim(half: i32) -> OfflineSession {
 }
 fn main() {
     let tag = std::env::args().nth(1).expect("account prefix");
-    let addr = std::env::args().nth(2).unwrap_or_else(|| "127.0.0.1:14802".into());
-    let vs = [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222];
+    let addr = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:14802".into());
+    let vs = [
+        ClientVersion::V139,
+        ClientVersion::V205,
+        ClientVersion::V222,
+    ];
     for &va in &vs {
         for &vb in &vs {
-            let n = |p: &str| format!("{tag}{p}{}{}", va.label().replace('.', ""), vb.label().replace('.', ""));
+            let n = |p: &str| {
+                format!(
+                    "{tag}{p}{}{}",
+                    va.label().replace('.', ""),
+                    vb.label().replace('.', "")
+                )
+            };
             let mut b = Connection::connect(&addr).unwrap();
             b.login_versioned(vb, 0x42, &n("b"), "x").unwrap();
             let rb = b.spawn_reader().unwrap();
             let mut sb = SessionState::for_version(vb);
             pump(&rb, &mut sb, 1000);
-            b.send_messages(&[position_message_sprite(36.0, 31.0, 2)]).unwrap();
+            b.send_messages(&[position_message_sprite(36.0, 31.0, 2)])
+                .unwrap();
             let mut a = Connection::connect(&addr).unwrap();
             a.login_versioned(va, 0x42, &n("a"), "x").unwrap();
             let ra = a.spawn_reader().unwrap();
             let mut sa = SessionState::for_version(va);
             pump(&ra, &mut sa, 1000);
-            a.send_messages(&[carry_sprite_message(Some(261)), position_message_sprite(33.5, 31.0, 3 + 4 * 18)]).unwrap();
+            a.send_messages(&[
+                carry_sprite_message(Some(261)),
+                position_message_sprite(33.5, 31.0, 3 + 4 * 18),
+            ])
+            .unwrap();
             pump(&rb, &mut sb, 1000);
-            a.send_messages(&[throw_carried_message(), carry_sprite_message(None), position_message_sprite(33.5, 31.0, 3)]).unwrap();
+            a.send_messages(&[
+                throw_carried_message(),
+                carry_sprite_message(None),
+                position_message_sprite(33.5, 31.0, 3),
+            ])
+            .unwrap();
             pump(&rb, &mut sb, 1000);
             let throws = std::mem::take(&mut sb.throws);
             let mut full = victim(6);
@@ -75,7 +99,10 @@ fn main() {
                 "A {} -> B {}: throws seen {:?}; B hearts 6 -> {} (hurt {}); at 1 -> {} {:?}",
                 va.label(),
                 vb.label(),
-                throws.iter().map(|o| (o.carry, o.x, o.y, o.dir)).collect::<Vec<_>>(),
+                throws
+                    .iter()
+                    .map(|o| (o.carry, o.x, o.y, o.dir))
+                    .collect::<Vec<_>>(),
                 full.hearts_half(),
                 full.combat.is_hurt(),
                 last.hearts_half(),

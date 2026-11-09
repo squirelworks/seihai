@@ -26,7 +26,11 @@ fn level(eol: &str) -> String {
 }
 
 fn script_lines(after: &str, npc: usize) -> Vec<String> {
-    Level::parse(after).unwrap().npcs[npc].script.lines().map(str::to_string).collect()
+    Level::parse(after).unwrap().npcs[npc]
+        .script
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 #[test]
@@ -39,8 +43,14 @@ fn the_pane_reads_the_first_20_lines_and_the_total() {
     assert_eq!(head.total, 25);
     let empty = doc.script_head(2).unwrap();
     assert_eq!((empty.lines.len(), empty.total), (0, 0));
-    assert!(matches!(doc.script_head(0), Err(EditError::Bounds(_))), "a link has no script");
-    assert!(matches!(doc.script_head(3), Err(EditError::Bounds(_))), "a sign has no script");
+    assert!(
+        matches!(doc.script_head(0), Err(EditError::Bounds(_))),
+        "a link has no script"
+    );
+    assert!(
+        matches!(doc.script_head(3), Err(EditError::Bounds(_))),
+        "a sign has no script"
+    );
 }
 
 #[test]
@@ -48,13 +58,35 @@ fn saving_the_pane_replaces_the_shown_lines_and_keeps_the_rest() {
     let original = level("\n");
     let mut doc = Document::parse(original.as_bytes()).unwrap();
     // 20 shown lines become 3: lines 21 to 25 stay, right after them
-    doc.edit_object(1, ObjectEdit::ScriptHead(vec!["if (created) {".into(), "  setshape 1,32,32;".into(), "}".into()])).unwrap();
+    doc.edit_object(
+        1,
+        ObjectEdit::ScriptHead(vec![
+            "if (created) {".into(),
+            "  setshape 1,32,32;".into(),
+            "}".into(),
+        ]),
+    )
+    .unwrap();
     let after = String::from_utf8(doc.to_bytes()).unwrap();
-    let mut want = vec!["if (created) {".to_string(), "  setshape 1,32,32;".into(), "}".into()];
+    let mut want = vec![
+        "if (created) {".to_string(),
+        "  setshape 1,32,32;".into(),
+        "}".into(),
+    ];
     want.extend((21..=25).map(|i| format!("// line {i}")));
     assert_eq!(script_lines(&after, 0), want);
     // nothing outside the script changed
-    let strip = |t: &str| t.lines().filter(|l| !l.starts_with("// line") && !l.contains("setshape") && *l != "if (created) {" && *l != "}").map(str::to_string).collect::<Vec<_>>();
+    let strip = |t: &str| {
+        t.lines()
+            .filter(|l| {
+                !l.starts_with("// line")
+                    && !l.contains("setshape")
+                    && *l != "if (created) {"
+                    && *l != "}"
+            })
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
     assert_eq!(strip(&after), strip(&original));
     let npc = &Level::parse(&after).unwrap().npcs[0];
     assert_eq!((npc.x, npc.y, npc.image.as_str()), (12.5, 30.0, "tree.png"));
@@ -63,10 +95,15 @@ fn saving_the_pane_replaces_the_shown_lines_and_keeps_the_rest() {
 #[test]
 fn an_empty_script_gets_lines_before_npcend_and_can_be_emptied_again() {
     let mut doc = Document::parse(level("\n").as_bytes()).unwrap();
-    doc.edit_object(2, ObjectEdit::ScriptHead(vec!["// a".into(), "// b".into()])).unwrap();
+    doc.edit_object(
+        2,
+        ObjectEdit::ScriptHead(vec!["// a".into(), "// b".into()]),
+    )
+    .unwrap();
     let after = String::from_utf8(doc.to_bytes()).unwrap();
     assert!(after.contains("NPC - 40 40\n// a\n// b\nNPCEND\n"));
-    doc.edit_object(2, ObjectEdit::ScriptHead(Vec::new())).unwrap();
+    doc.edit_object(2, ObjectEdit::ScriptHead(Vec::new()))
+        .unwrap();
     let after = String::from_utf8(doc.to_bytes()).unwrap();
     assert!(after.contains("NPC - 40 40\nNPCEND\n"));
     assert_eq!(after, level("\n"), "back to the file as it was");
@@ -77,11 +114,30 @@ fn the_pane_refuses_more_than_20_lines_breaks_and_npcend() {
     let original = level("\n");
     let mut doc = Document::parse(original.as_bytes()).unwrap();
     let too_many: Vec<String> = (0..21).map(|i| format!("// {i}")).collect();
-    assert!(matches!(doc.edit_object(1, ObjectEdit::ScriptHead(too_many)), Err(EditError::Bounds(_))));
-    assert!(matches!(doc.edit_object(1, ObjectEdit::ScriptHead(vec!["a\nb".into()])), Err(EditError::Bounds(_))));
-    assert!(matches!(doc.edit_object(1, ObjectEdit::ScriptHead(vec![" NPCEND".into()])), Err(EditError::Bounds(_))));
-    assert!(matches!(doc.edit_object(3, ObjectEdit::ScriptHead(vec!["x".into()])), Err(EditError::Bounds(_))), "signs keep the one-line edit");
-    assert_eq!(String::from_utf8(doc.to_bytes()).unwrap(), original, "nothing was changed");
+    assert!(matches!(
+        doc.edit_object(1, ObjectEdit::ScriptHead(too_many)),
+        Err(EditError::Bounds(_))
+    ));
+    assert!(matches!(
+        doc.edit_object(1, ObjectEdit::ScriptHead(vec!["a\nb".into()])),
+        Err(EditError::Bounds(_))
+    ));
+    assert!(matches!(
+        doc.edit_object(1, ObjectEdit::ScriptHead(vec![" NPCEND".into()])),
+        Err(EditError::Bounds(_))
+    ));
+    assert!(
+        matches!(
+            doc.edit_object(3, ObjectEdit::ScriptHead(vec!["x".into()])),
+            Err(EditError::Bounds(_))
+        ),
+        "signs keep the one-line edit"
+    );
+    assert_eq!(
+        String::from_utf8(doc.to_bytes()).unwrap(),
+        original,
+        "nothing was changed"
+    );
 }
 
 #[test]
@@ -105,7 +161,8 @@ fn a_crlf_file_keeps_crlf_on_script_lines() {
 // ---- the window, driven headless ----
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("seihai-level-editor-script-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("seihai-level-editor-script-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir.join(name)
 }
@@ -132,9 +189,19 @@ impl Harness {
 
     fn click(&mut self, pos: Pos2) {
         self.events.push(Event::PointerMoved(pos));
-        self.events.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+        self.events.push(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        });
         self.frame();
-        self.events.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+        self.events.push(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        });
         self.frame();
     }
 }
@@ -143,7 +210,12 @@ impl Harness {
 fn window_double_click_on_an_npc_opens_the_pane_and_apply_saves() {
     let path = scratch("pane.nw");
     std::fs::write(&path, level("\n")).unwrap();
-    let mut h = Harness { ctx: egui::Context::default(), app: EditorApp::new(Version::V222, Sheet::builtin(), Some(&path)), events: Vec::new(), time: 0.0 };
+    let mut h = Harness {
+        ctx: egui::Context::default(),
+        app: EditorApp::new(Version::V222, Sheet::builtin(), Some(&path)),
+        events: Vec::new(),
+        time: 0.0,
+    };
     h.frame();
     h.app.editor.tool = Tool::Objects;
     h.frame();
@@ -156,7 +228,10 @@ fn window_double_click_on_an_npc_opens_the_pane_and_apply_saves() {
     h.frame();
     let pane = h.app.script.clone().expect("a double-click opens the pane");
     assert_eq!((pane.id, pane.shown, pane.total), (1, 20, 25));
-    assert!(!h.app.editor.has_unsaved(), "the double-click did not move it");
+    assert!(
+        !h.app.editor.has_unsaved(),
+        "the double-click did not move it"
+    );
 
     // a double-click on the link does not open a pane
     h.app.script = None;

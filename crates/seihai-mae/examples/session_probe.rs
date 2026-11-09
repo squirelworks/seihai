@@ -23,7 +23,10 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let addr = args.first().expect("host:port");
     let secs: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5);
-    let version = args.get(2).map(|s| parse_version(s)).unwrap_or(ClientVersion::V205);
+    let version = args
+        .get(2)
+        .map(|s| parse_version(s))
+        .unwrap_or(ClientVersion::V205);
     let account = std::env::var("SEIHAI_ACCOUNT").expect("SEIHAI_ACCOUNT");
     let password = std::env::var("SEIHAI_PASSWORD").expect("SEIHAI_PASSWORD");
 
@@ -65,7 +68,14 @@ fn main() {
     println!("message ids {ids:?}");
     println!("PLO_PLAYERPROPS prop ids {prop_ids:?}");
     println!("level_name {:?}", state.level_name);
-    println!("server board {}", if state.board.is_some() { "received" } else { "none" });
+    println!(
+        "server board {}",
+        if state.board.is_some() {
+            "received"
+        } else {
+            "none"
+        }
+    );
     println!(
         "board_lines {} links {} signs {} chests {} npcs {} baddies {} items {}",
         state.board_lines.len(),

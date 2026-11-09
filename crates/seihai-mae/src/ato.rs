@@ -91,14 +91,25 @@ impl Handoff {
     /// The arguments. Empty fields are left out, so the client's own
     /// defaults apply.
     pub fn args(&self) -> Vec<String> {
-        let mut out = vec!["--version".to_string(), self.target.version_arg().to_string()];
+        let mut out = vec![
+            "--version".to_string(),
+            self.target.version_arg().to_string(),
+        ];
         if !self.account.is_empty() {
             out.extend(["--account".to_string(), self.account.clone()]);
         }
         if !self.password.is_empty() {
-            out.extend(["--password-env".to_string(), self.target.password_env().to_string()]);
+            out.extend([
+                "--password-env".to_string(),
+                self.target.password_env().to_string(),
+            ]);
         }
-        if let Some(dir) = self.assets.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        if let Some(dir) = self
+            .assets
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
             out.extend(["--assets".to_string(), dir.to_string()]);
         }
         out
@@ -120,7 +131,10 @@ impl Handoff {
         let name = self.target.binary();
         let bin = find_binary(name);
         let err = run(self.command());
-        format!("cannot start {}: {err}. Build it with `cargo build --release -p {name}`.", bin.display())
+        format!(
+            "cannot start {}: {err}. Build it with `cargo build --release -p {name}`.",
+            bin.display()
+        )
     }
 }
 
@@ -159,7 +173,12 @@ mod tests {
         assert!(runs_in_ato(ClientVersion::V304));
         assert!(runs_in_ato(ClientVersion::V3153));
         for v in ClientVersion::all_versions() {
-            assert_eq!(runs_in_ato(*v), v.label().starts_with("3."), "{}", v.label());
+            assert_eq!(
+                runs_in_ato(*v),
+                v.label().starts_with("3."),
+                "{}",
+                v.label()
+            );
         }
     }
 
@@ -172,28 +191,74 @@ mod tests {
             assets: Some(" dir ".into()),
         };
         let args = h.args();
-        assert_eq!(args, ["--version", "3.153", "--account", "guest", "--password-env", PASSWORD_ENV, "--assets", "dir"]);
+        assert_eq!(
+            args,
+            [
+                "--version",
+                "3.153",
+                "--account",
+                "guest",
+                "--password-env",
+                PASSWORD_ENV,
+                "--assets",
+                "dir"
+            ]
+        );
         // The password is in the environment, not on the command line.
         assert!(!args.iter().any(|a| a.contains("secret")));
         let cmd = h.command();
-        assert!(cmd.get_envs().any(|(k, v)| k == PASSWORD_ENV && v == Some("secret".as_ref())));
+        assert!(cmd
+            .get_envs()
+            .any(|(k, v)| k == PASSWORD_ENV && v == Some("secret".as_ref())));
         // No server: Ato shows its start window.
         assert!(!args.iter().any(|a| a == "--online"));
     }
 
     #[test]
     fn empty_fields_are_left_out() {
-        let h = Handoff { target: Target::Ato(ClientVersion::V304), account: String::new(), password: String::new(), assets: Some(" ".into()) };
+        let h = Handoff {
+            target: Target::Ato(ClientVersion::V304),
+            account: String::new(),
+            password: String::new(),
+            assets: Some(" ".into()),
+        };
         assert_eq!(h.args(), ["--version", "3.04"]);
         assert_eq!(h.command().get_envs().count(), 0);
     }
 
     #[test]
     fn graal3d_starts_g3d_with_its_own_password_variable() {
-        let h = Handoff { target: Target::Graal3D, account: "lab".into(), password: "secret".into(), assets: Some("g3d".into()) };
-        assert_eq!(h.args(), ["--version", "graal3d", "--account", "lab", "--password-env", G3D_PASSWORD_ENV, "--assets", "g3d"]);
-        assert!(h.command().get_program().to_string_lossy().contains(G3D_BINARY));
-        assert!(h.command().get_envs().any(|(k, v)| k == G3D_PASSWORD_ENV && v == Some("secret".as_ref())));
-        assert!(!h.args().iter().any(|a| a == "--online" || a.contains("secret")));
+        let h = Handoff {
+            target: Target::Graal3D,
+            account: "lab".into(),
+            password: "secret".into(),
+            assets: Some("g3d".into()),
+        };
+        assert_eq!(
+            h.args(),
+            [
+                "--version",
+                "graal3d",
+                "--account",
+                "lab",
+                "--password-env",
+                G3D_PASSWORD_ENV,
+                "--assets",
+                "g3d"
+            ]
+        );
+        assert!(h
+            .command()
+            .get_program()
+            .to_string_lossy()
+            .contains(G3D_BINARY));
+        assert!(h
+            .command()
+            .get_envs()
+            .any(|(k, v)| k == G3D_PASSWORD_ENV && v == Some("secret".as_ref())));
+        assert!(!h
+            .args()
+            .iter()
+            .any(|a| a == "--online" || a.contains("secret")));
     }
 }

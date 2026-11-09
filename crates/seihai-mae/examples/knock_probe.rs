@@ -39,34 +39,63 @@ fn pump(rx: &Rx, st: &mut SessionState, ms: u64) -> Vec<Vec<u8>> {
 }
 fn main() {
     let tag = std::env::args().nth(1).expect("account prefix");
-    let addr = std::env::args().nth(2).unwrap_or_else(|| "127.0.0.1:14802".into());
+    let addr = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:14802".into());
     let vs = [ClientVersion::V205, ClientVersion::V222];
     for &va in &vs {
         for &vb in &vs {
-            let n = |p: &str| format!("{tag}{p}{}{}", va.label().replace('.', ""), vb.label().replace('.', ""));
+            let n = |p: &str| {
+                format!(
+                    "{tag}{p}{}{}",
+                    va.label().replace('.', ""),
+                    vb.label().replace('.', "")
+                )
+            };
             let mut b = Connection::connect(&addr).unwrap();
             b.login_versioned(vb, 0x42, &n("b"), "x").unwrap();
             let rb = b.spawn_reader().unwrap();
             let mut sb = SessionState::for_version(vb);
             pump(&rb, &mut sb, 1000);
-            b.send_messages(&[position_message_sprite(30.0, 30.0, 2)]).unwrap();
+            b.send_messages(&[position_message_sprite(30.0, 30.0, 2)])
+                .unwrap();
             let mut a = Connection::connect(&addr).unwrap();
             a.login_versioned(va, 0x42, &n("a"), "x").unwrap();
             let ra = a.spawn_reader().unwrap();
             let mut sa = SessionState::for_version(va);
-            a.send_messages(&[position_message_sprite(27.0, 30.0, 3)]).unwrap();
+            a.send_messages(&[position_message_sprite(27.0, 30.0, 3)])
+                .unwrap();
             pump(&ra, &mut sa, 1000);
             pump(&rb, &mut sb, 500);
-            let Some(v) = sa.others.iter().find(|o| o.nick.as_deref().is_some_and(|s| s.contains(&n("b"))) || o.account.as_deref() == Some(n("b").as_str())).or(sa.others.last()) else {
+            let Some(v) = sa
+                .others
+                .iter()
+                .find(|o| {
+                    o.nick.as_deref().is_some_and(|s| s.contains(&n("b")))
+                        || o.account.as_deref() == Some(n("b").as_str())
+                })
+                .or(sa.others.last())
+            else {
                 println!("A {} -> B {}: A does not see B", va.label(), vb.label());
                 continue;
             };
             // B stands at (30, 30); A's view of B's position can lag.
-            let t = Target { id: v.id, x: 30.0, y: 30.0, status: v.status, sprite: v.sprite };
+            let t = Target {
+                id: v.id,
+                x: 30.0,
+                y: 30.0,
+                status: v.status,
+                sprite: v.sprite,
+            };
             let m = match hurtplayer_message(va, (27.0, 30.0), &t, (1.0, 0.0), 1) {
                 Ok(m) => m,
                 Err(e) => {
-                    println!("A {} -> B {}: not sent ({e:?}); A sees B at {:?}", va.label(), vb.label(), (t.x, t.y));
+                    println!(
+                        "A {} -> B {}: not sent ({e:?}); A sees B at {:?}",
+                        va.label(),
+                        vb.label(),
+                        (t.x, t.y)
+                    );
                     continue;
                 }
             };

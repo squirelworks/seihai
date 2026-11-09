@@ -42,7 +42,13 @@ pub struct Assets {
 impl Assets {
     /// Look for files in these folders, first match wins.
     pub fn new(dirs: Vec<PathBuf>) -> Assets {
-        Assets { dirs, textures: HashMap::new(), meshes: HashMap::new(), missing: HashSet::new(), unreported: Vec::new() }
+        Assets {
+            dirs,
+            textures: HashMap::new(),
+            meshes: HashMap::new(),
+            missing: HashSet::new(),
+            unreported: Vec::new(),
+        }
     }
 
     fn note_missing(&mut self, name: &str) {
@@ -59,7 +65,9 @@ impl Assets {
 
     fn read(&self, name: &str) -> Option<Vec<u8>> {
         let file = safe_file_name(name);
-        self.dirs.iter().find_map(|d| std::fs::read(d.join(&file)).ok())
+        self.dirs
+            .iter()
+            .find_map(|d| std::fs::read(d.join(&file)).ok())
     }
 
     fn mesh(&mut self, name: &str) -> Option<&XFile> {
@@ -113,14 +121,19 @@ pub struct ChatLog {
 
 impl ChatLog {
     pub fn push(&mut self, nick: &str, text: &str) {
-        self.lines.push(ChatLine { text: format!("{nick}: {text}"), ticks: CHAT_TICKS });
+        self.lines.push(ChatLine {
+            text: format!("{nick}: {text}"),
+            ticks: CHAT_TICKS,
+        });
         if self.lines.len() > 20 {
             self.lines.remove(0);
         }
     }
 
     pub fn tick(&mut self) {
-        self.lines.iter_mut().for_each(|l| l.ticks = l.ticks.saturating_sub(1));
+        self.lines
+            .iter_mut()
+            .for_each(|l| l.ticks = l.ticks.saturating_sub(1));
         self.lines.retain(|l| l.ticks > 0);
     }
 }
@@ -148,8 +161,21 @@ pub fn draw_player(f: &mut Frame, cam: &Camera, a: &mut Assets, p: &Player, lift
         let Some(x) = a.mesh(file).cloned() else {
             // No mesh: a box the part's size, in its tint colour (or the
             // skin colour for the head, white for the body).
-            let colour = tint.unwrap_or(if i == model::HEAD { p.hand_colour } else { 0xFFFFFF });
-            draw_mesh(f, cam, &model::part_box(i), &Placement { m: pose[i], tint: Some(colour) }, &a.textures);
+            let colour = tint.unwrap_or(if i == model::HEAD {
+                p.hand_colour
+            } else {
+                0xFFFFFF
+            });
+            draw_mesh(
+                f,
+                cam,
+                &model::part_box(i),
+                &Placement {
+                    m: pose[i],
+                    tint: Some(colour),
+                },
+                &a.textures,
+            );
             continue;
         };
         for mut m in x.meshes {

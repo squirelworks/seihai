@@ -21,13 +21,28 @@ pub fn lines(version: ClientVersion, level: &Level, name: &str, st: &SessionStat
     }
     let mut out = vec![board_line(level)];
     for l in &level.links {
-        out.push(format!("  link to {} at ({}, {}) {}x{}", l.dest, l.x, l.y, l.width, l.height));
+        out.push(format!(
+            "  link to {} at ({}, {}) {}x{}",
+            l.dest, l.x, l.y, l.width, l.height
+        ));
     }
     for c in &level.chests {
-        out.push(format!("  chest at ({}, {}): {}, sign {}{}", c.x, c.y, c.item, c.sign_index, if c.opened { ", opened" } else { "" }));
+        out.push(format!(
+            "  chest at ({}, {}): {}, sign {}{}",
+            c.x,
+            c.y,
+            c.item,
+            c.sign_index,
+            if c.opened { ", opened" } else { "" }
+        ));
     }
     for s in &level.signs {
-        out.push(format!("  sign at ({}, {}): {} bytes", s.x, s.y, s.text.len()));
+        out.push(format!(
+            "  sign at ({}, {}): {} bytes",
+            s.x,
+            s.y,
+            s.text.len()
+        ));
     }
     let props = parse_player_props_in(&st.player_props, st.bow_prop10, st.own_prop_ids.as_ref());
     out.push(format!("player props: {}", props.len()));
@@ -41,7 +56,11 @@ pub fn lines(version: ClientVersion, level: &Level, name: &str, st: &SessionStat
 
 /// The board in one line: its tile count and the distinct tiles in it.
 fn board_line(level: &Level) -> String {
-    let tiles: Vec<u16> = level.boards.iter().flat_map(|r| r.tiles.iter().map(|&t| tile_id(t))).collect();
+    let tiles: Vec<u16> = level
+        .boards
+        .iter()
+        .flat_map(|r| r.tiles.iter().map(|&t| tile_id(t)))
+        .collect();
     let distinct: BTreeSet<u16> = tiles.iter().copied().collect();
     let shown: Vec<String> = distinct.iter().take(8).map(u16::to_string).collect();
     let more = if distinct.len() > 8 { ", ..." } else { "" };
@@ -114,5 +133,12 @@ fn npc_line(id: u32, p: &NpcProps) -> String {
     if let Some(v) = &p.script {
         f.push(format!("GS1 script {} bytes", v.len()));
     }
-    format!("npc {id} props: {}", if f.is_empty() { "none".into() } else { f.join(", ") })
+    format!(
+        "npc {id} props: {}",
+        if f.is_empty() {
+            "none".into()
+        } else {
+            f.join(", ")
+        }
+    )
 }

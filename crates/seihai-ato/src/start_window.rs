@@ -80,7 +80,17 @@ const TEXTS_304: Texts = Texts {
 /// 3.04 ships two; 3.153 nine (`languages3D/`), one of them spelled
 /// `languagePortguese.cs`, so the box reads "Portguese".
 const LANGUAGES_304: &[&str] = &["Deutsch", "English"];
-const LANGUAGES_3153: &[&str] = &["Deutsch", "English", "Espanol", "Francais", "Italiano", "Nederlands", "Norsk", "Portguese", "Svenska"];
+const LANGUAGES_3153: &[&str] = &[
+    "Deutsch",
+    "English",
+    "Espanol",
+    "Francais",
+    "Italiano",
+    "Nederlands",
+    "Norsk",
+    "Portguese",
+    "Svenska",
+];
 
 /// One build's start window.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -94,9 +104,20 @@ pub struct Layout {
 
 pub fn layout(v: ClientVersion) -> Layout {
     match v {
-        ClientVersion::V304 => Layout { texts: TEXTS_304, languages: LANGUAGES_304, start_clears_password: false },
+        ClientVersion::V304 => Layout {
+            texts: TEXTS_304,
+            languages: LANGUAGES_304,
+            start_clears_password: false,
+        },
         // 3.153 changes only the Tutorial button's text.
-        _ => Layout { texts: Texts { tutorial: "Offline Test", ..TEXTS_304 }, languages: LANGUAGES_3153, start_clears_password: true },
+        _ => Layout {
+            texts: Texts {
+                tutorial: "Offline Test",
+                ..TEXTS_304
+            },
+            languages: LANGUAGES_3153,
+            start_clears_password: true,
+        },
     }
 }
 
@@ -152,14 +173,18 @@ impl StartWindow {
                 true
             }
             None => {
-                self.status = "Start: the 3.x server list is not in Ato yet; give --online host:port.".into();
+                self.status =
+                    "Start: the 3.x server list is not in Ato yet; give --online host:port.".into();
                 false
             }
         }
     }
 
     pub fn press_tutorial(&mut self) {
-        self.status = format!("{}: 3.x offline mode is not in Ato yet.", self.layout.texts.tutorial);
+        self.status = format!(
+            "{}: 3.x offline mode is not in Ato yet.",
+            self.layout.texts.tutorial
+        );
     }
 
     pub fn press_options(&mut self) {
@@ -184,56 +209,94 @@ impl StartWindow {
     /// over (see [`Self::press_start`]).
     pub fn show(&mut self, ctx: &egui::Context) -> bool {
         let mut started = false;
-        egui::CentralPanel::default().frame(egui::Frame::none().fill(egui::Color32::BLACK)).show(ctx, |ui| {
-            let canvas = ui.max_rect().min;
-            let origin = canvas + egui::vec2(PANEL.0, PANEL.1);
-            // Stand-in for the panel bitmap (`graalscreen` / `graalscreen3d`).
-            ui.painter().rect_filled(place(canvas, PANEL), 0.0, rgb(BUTTON_FILL));
-            let t = self.layout.texts;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(egui::Color32::BLACK))
+            .show(ctx, |ui| {
+                let canvas = ui.max_rect().min;
+                let origin = canvas + egui::vec2(PANEL.0, PANEL.1);
+                // Stand-in for the panel bitmap (`graalscreen` / `graalscreen3d`).
+                ui.painter()
+                    .rect_filled(place(canvas, PANEL), 0.0, rgb(BUTTON_FILL));
+                let t = self.layout.texts;
 
-            ui.put(place(origin, WELCOME), egui::Label::new(egui::RichText::new(t.welcome).color(rgb(LABEL_FONT)).size(16.0)));
-            // Torque draws a label from the left of its box and lets it run
-            // past the box's width.
-            for (r, text) in [(NICK_LABEL, t.nickname), (LANGUAGE_LABEL, t.language), (ACCOUNT_LABEL, t.account), (PASS_LABEL, t.password)] {
-                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(place(origin, r)), |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(text).color(rgb(LABEL_FONT))).extend());
-                });
-            }
-            ui.put(place(origin, NICK_EDIT), egui::TextEdit::singleline(&mut self.nick));
-            ui.put(place(origin, ACCOUNT_EDIT), egui::TextEdit::singleline(&mut self.account));
-            ui.put(place(origin, PASS_EDIT), egui::TextEdit::singleline(&mut self.password).password(true));
-            let languages = self.layout.languages;
-            let language = &mut self.language;
-            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(place(origin, LANGUAGE_BOX)), |ui| {
-                egui::ComboBox::from_id_salt("language").width(LANGUAGE_BOX.2).selected_text(language.as_str()).show_ui(ui, |ui| {
-                    for l in languages {
-                        ui.selectable_value(language, (*l).to_string(), *l);
-                    }
-                });
+                ui.put(
+                    place(origin, WELCOME),
+                    egui::Label::new(
+                        egui::RichText::new(t.welcome)
+                            .color(rgb(LABEL_FONT))
+                            .size(16.0),
+                    ),
+                );
+                // Torque draws a label from the left of its box and lets it run
+                // past the box's width.
+                for (r, text) in [
+                    (NICK_LABEL, t.nickname),
+                    (LANGUAGE_LABEL, t.language),
+                    (ACCOUNT_LABEL, t.account),
+                    (PASS_LABEL, t.password),
+                ] {
+                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(place(origin, r)), |ui| {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(text).color(rgb(LABEL_FONT)))
+                                .extend(),
+                        );
+                    });
+                }
+                ui.put(
+                    place(origin, NICK_EDIT),
+                    egui::TextEdit::singleline(&mut self.nick),
+                );
+                ui.put(
+                    place(origin, ACCOUNT_EDIT),
+                    egui::TextEdit::singleline(&mut self.account),
+                );
+                ui.put(
+                    place(origin, PASS_EDIT),
+                    egui::TextEdit::singleline(&mut self.password).password(true),
+                );
+                let languages = self.layout.languages;
+                let language = &mut self.language;
+                ui.allocate_new_ui(
+                    egui::UiBuilder::new().max_rect(place(origin, LANGUAGE_BOX)),
+                    |ui| {
+                        egui::ComboBox::from_id_salt("language")
+                            .width(LANGUAGE_BOX.2)
+                            .selected_text(language.as_str())
+                            .show_ui(ui, |ui| {
+                                for l in languages {
+                                    ui.selectable_value(language, (*l).to_string(), *l);
+                                }
+                            });
+                    },
+                );
+
+                let button = |ui: &mut egui::Ui, r: Rect4, text: &str| {
+                    let b = egui::Button::new(egui::RichText::new(text).color(rgb(BUTTON_FONT)))
+                        .fill(rgb(BUTTON_FILL))
+                        .stroke(egui::Stroke::new(1.0_f32, rgb(BUTTON_FONT_HL)));
+                    ui.put(place(origin, r), b).clicked()
+                };
+                if button(ui, TUTORIAL_BUTTON, t.tutorial) {
+                    self.press_tutorial();
+                }
+                if button(ui, OPTIONS_BUTTON, t.options) {
+                    self.press_options();
+                }
+                if button(ui, GET_ACCOUNT_BUTTON, t.get_account) {
+                    self.press_get_account();
+                }
+                if button(ui, START_BUTTON, t.start) && self.press_start() {
+                    started = true;
+                }
+
+                if !self.status.is_empty() {
+                    let r = (90.0, 390.0, 460.0, 18.0);
+                    ui.put(
+                        place(origin, r),
+                        egui::Label::new(egui::RichText::new(&self.status).color(rgb(LABEL_FONT))),
+                    );
+                }
             });
-
-            let button = |ui: &mut egui::Ui, r: Rect4, text: &str| {
-                let b = egui::Button::new(egui::RichText::new(text).color(rgb(BUTTON_FONT))).fill(rgb(BUTTON_FILL)).stroke(egui::Stroke::new(1.0_f32, rgb(BUTTON_FONT_HL)));
-                ui.put(place(origin, r), b).clicked()
-            };
-            if button(ui, TUTORIAL_BUTTON, t.tutorial) {
-                self.press_tutorial();
-            }
-            if button(ui, OPTIONS_BUTTON, t.options) {
-                self.press_options();
-            }
-            if button(ui, GET_ACCOUNT_BUTTON, t.get_account) {
-                self.press_get_account();
-            }
-            if button(ui, START_BUTTON, t.start) && self.press_start() {
-                started = true;
-            }
-
-            if !self.status.is_empty() {
-                let r = (90.0, 390.0, 460.0, 18.0);
-                ui.put(place(origin, r), egui::Label::new(egui::RichText::new(&self.status).color(rgb(LABEL_FONT))));
-            }
-        });
         started
     }
 }
@@ -245,8 +308,19 @@ mod tests {
     #[test]
     fn controls_fit_in_the_panel() {
         for r in [
-            WELCOME, NICK_LABEL, NICK_EDIT, LANGUAGE_LABEL, LANGUAGE_BOX, ACCOUNT_LABEL, ACCOUNT_EDIT, PASS_LABEL, PASS_EDIT, TUTORIAL_BUTTON, OPTIONS_BUTTON,
-            GET_ACCOUNT_BUTTON, START_BUTTON,
+            WELCOME,
+            NICK_LABEL,
+            NICK_EDIT,
+            LANGUAGE_LABEL,
+            LANGUAGE_BOX,
+            ACCOUNT_LABEL,
+            ACCOUNT_EDIT,
+            PASS_LABEL,
+            PASS_EDIT,
+            TUTORIAL_BUTTON,
+            OPTIONS_BUTTON,
+            GET_ACCOUNT_BUTTON,
+            START_BUTTON,
         ] {
             assert!(r.0 + r.2 <= PANEL.2 && r.1 + r.3 <= PANEL.3, "{r:?}");
         }
@@ -259,7 +333,13 @@ mod tests {
         let b = layout(ClientVersion::V3153);
         assert_eq!(a.texts.tutorial, "Tutorial");
         assert_eq!(b.texts.tutorial, "Offline Test");
-        assert_eq!(Texts { tutorial: a.texts.tutorial, ..b.texts }, a.texts);
+        assert_eq!(
+            Texts {
+                tutorial: a.texts.tutorial,
+                ..b.texts
+            },
+            a.texts
+        );
         assert_eq!(a.languages.len(), 2);
         assert_eq!(b.languages.len(), 9);
         assert!(b.languages.windows(2).all(|w| w[0] < w[1]), "sorted");
@@ -285,7 +365,14 @@ mod tests {
         assert!(w.press_start());
         let login = w.started.lock().unwrap().take().unwrap();
         // Taken before 3.153 clears the field.
-        assert_eq!((login.account.as_str(), login.password.as_str(), login.nick.as_str()), ("a", "p", "n"));
+        assert_eq!(
+            (
+                login.account.as_str(),
+                login.password.as_str(),
+                login.nick.as_str()
+            ),
+            ("a", "p", "n")
+        );
         assert_eq!(w.password, "");
     }
 }

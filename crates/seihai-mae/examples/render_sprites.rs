@@ -68,16 +68,20 @@ fn main() {
         match (&body, &head) {
             (Some((bw, b)), Some((hw, h))) => draw_player_sprites(
                 &mut fb,
-                b,
-                *bw,
-                4,
-                h,
-                *hw,
-                4,
-                sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)),
+                seihai::render::Sheet {
+                    px: b,
+                    w: *bw,
+                    bpp: 4,
+                },
+                seihai::render::Sheet {
+                    px: h,
+                    w: *hw,
+                    bpp: 4,
+                },
+                (sprites.as_ref().map(|(w, p)| (p.as_slice(), *w, 4)))
+                    .map(|(px, w, bpp)| seihai::render::Sheet { px, w, bpp }),
                 session.player_dir,
-                dx,
-                dy,
+                (dx, dy),
                 session.in_water,
             ),
             _ => draw_player_marker(&mut fb, session.in_water, dx, dy),

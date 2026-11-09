@@ -139,14 +139,25 @@ pub struct Image<'a> {
 impl Image<'_> {
     fn size(&self) -> (i32, i32) {
         let w = self.w as i32;
-        (w, if w > 0 { (self.px.len() / 4 / self.w as usize) as i32 } else { 0 })
+        (
+            w,
+            if w > 0 {
+                (self.px.len() / 4 / self.w as usize) as i32
+            } else {
+                0
+            },
+        )
     }
 }
 
 /// The size an entry's image takes in its cell: the image's own size, or
 /// the 32 x 32 placeholder when it has none (or it is not here yet).
 fn image_size(images: &[Option<Image>], i: usize) -> (i32, i32) {
-    images.get(i).copied().flatten().map_or((ICON, ICON), |im| im.size())
+    images
+        .get(i)
+        .copied()
+        .flatten()
+        .map_or((ICON, ICON), |im| im.size())
 }
 
 /// Pack the entries into cells inside a content area `width` pixels wide:
@@ -212,7 +223,11 @@ pub fn chest_weapons(flags: &std::collections::HashMap<String, bool>) -> Vec<Str
 /// selects; they are left out here. A name sent twice is listed once.
 pub fn entries(default_ids: &[u8], named: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let names = default_ids.iter().filter_map(|&i| default_weapon_name(i)).map(str::to_string).chain(named.iter().cloned());
+    let names = default_ids
+        .iter()
+        .filter_map(|&i| default_weapon_name(i))
+        .map(str::to_string)
+        .chain(named.iter().cloned());
     for n in names {
         if !n.is_empty() && !n.starts_with('-') && !out.contains(&n) {
             out.push(n);
@@ -237,7 +252,13 @@ pub struct Counts {
 
 impl Counts {
     pub fn line(&self) -> String {
-        let h = |v: i32| if v % 2 == 0 { format!("{}", v / 2) } else { format!("{}.5", v / 2) };
+        let h = |v: i32| {
+            if v % 2 == 0 {
+                format!("{}", v / 2)
+            } else {
+                format!("{}.5", v / 2)
+            }
+        };
         format!(
             "Rupees {}  Bombs {}  Arrows {}  Hearts {}/{}  Sword {}  Shield {}  Glove {}",
             self.rupees,
@@ -268,11 +289,22 @@ pub fn content_rect(fb_w: i32, fb_h: i32) -> (i32, i32, i32, i32) {
 
 /// Draw the open list. `images` goes with `labels` by index; an entry with
 /// no image (or one not here yet) gets an outlined 32 x 32 placeholder.
-pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], images: &[Option<Image>], counts: &Counts) {
+pub fn draw(
+    fb: &mut Framebuffer,
+    list: &ItemList,
+    labels: &[String],
+    images: &[Option<Image>],
+    counts: &Counts,
+) {
     let (fw, fh) = (fb.width as i32, fb.height as i32);
     let (wx, wy, ww, wh) = window_rect(fw, fh);
     fb.shade_rect(wx, wy, ww, wh, 60);
-    for (x, y, w, h) in [(wx, wy, ww, 1), (wx, wy + wh - 1, ww, 1), (wx, wy, 1, wh), (wx + ww - 1, wy, 1, wh)] {
+    for (x, y, w, h) in [
+        (wx, wy, ww, 1),
+        (wx, wy + wh - 1, ww, 1),
+        (wx, wy, 1, wh),
+        (wx + ww - 1, wy, 1, wh),
+    ] {
         fb.fill_rect(x, y, w, h, [0xC0, 0xC0, 0xC0]);
     }
     fb.draw_text(wx + 8, wy + 6, "Items", [0xFF, 0xE0, 0x70]);
@@ -301,16 +333,37 @@ pub fn draw(fb: &mut Framebuffer, list: &ItemList, labels: &[String], images: &[
         let ix = x + (c.w - iw) / 2;
         let iy = y + PAD;
         match images.get(i).copied().flatten() {
-            Some(im) => fb.blit_sprite(im.px, im.w, 4, 0, 0, iw, ih, ix, iy),
+            Some(im) => fb.blit_sprite(
+                crate::render::Sheet {
+                    px: im.px,
+                    w: im.w,
+                    bpp: 4,
+                },
+                (0, 0, iw, ih),
+                (ix, iy),
+            ),
             None => {
-                let edge = if selected { [0x60, 0x40, 0x10] } else { [0x80, 0x80, 0x80] };
-                for (x, y, w, h) in [(ix, iy, ICON, 1), (ix, iy + ICON - 1, ICON, 1), (ix, iy, 1, ICON), (ix + ICON - 1, iy, 1, ICON)] {
+                let edge = if selected {
+                    [0x60, 0x40, 0x10]
+                } else {
+                    [0x80, 0x80, 0x80]
+                };
+                for (x, y, w, h) in [
+                    (ix, iy, ICON, 1),
+                    (ix, iy + ICON - 1, ICON, 1),
+                    (ix, iy, 1, ICON),
+                    (ix + ICON - 1, iy, 1, ICON),
+                ] {
                     fb.fill_rect(x, y, w, h, edge);
                 }
             }
         }
         let tx = x + (c.w - text_width(l)) / 2;
-        let colour = if selected { [0x20, 0x20, 0x20] } else { [0xFF, 0xFF, 0xFF] };
+        let colour = if selected {
+            [0x20, 0x20, 0x20]
+        } else {
+            [0xFF, 0xFF, 0xFF]
+        };
         fb.draw_text(tx, iy + ih + PAD, l, colour);
     }
 }
@@ -345,7 +398,10 @@ mod tests {
     fn arrows_take_the_nearest_cell_that_way_and_stop_at_the_edge() {
         // Two rows of three.
         let cells: Vec<Cell> = (0..6).map(|i| cell((i % 3) * 40, (i / 3) * 50)).collect();
-        let mut l = ItemList { open: true, selected: Some(0) };
+        let mut l = ItemList {
+            open: true,
+            selected: Some(0),
+        };
         l.key(ListKey::Right, &cells);
         assert_eq!(l.selected, Some(1));
         l.key(ListKey::Down, &cells);
@@ -364,13 +420,18 @@ mod tests {
 
     #[test]
     fn cells_wrap_inside_the_width() {
-        let labels: Vec<String> = ["bow", "bomb", "fireball", "a"].iter().map(|s| s.to_string()).collect();
+        let labels: Vec<String> = ["bow", "bomb", "fireball", "a"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let cells = layout(&labels, &[], 100);
         assert_eq!((cells[0].x, cells[0].y), (0, 0));
         assert_eq!(cells[1].x, cells[0].w);
         assert!(cells.iter().all(|c| c.x == 0 || c.right() <= 100));
         assert!(cells.iter().any(|c| c.y > 0), "a second row");
-        assert!(cells.iter().all(|c| c.w >= ICON + 10 && c.h == ICON + CELL_H + 15));
+        assert!(cells
+            .iter()
+            .all(|c| c.w >= ICON + 10 && c.h == ICON + CELL_H + 15));
     }
 
     #[test]
@@ -387,7 +448,16 @@ mod tests {
         let mut fb = Framebuffer::new(640, 480);
         let labels = vec!["bow".to_string()];
         let px: Vec<u8> = [0x11, 0x22, 0x33, 0xFF].repeat(32 * 32);
-        draw(&mut fb, &ItemList { open: true, selected: None }, &labels, &[Some(Image { w: 32, px: &px })], &Counts::default());
+        draw(
+            &mut fb,
+            &ItemList {
+                open: true,
+                selected: None,
+            },
+            &labels,
+            &[Some(Image { w: 32, px: &px })],
+            &Counts::default(),
+        );
         let (cx, cy, _, _) = content_rect(640, 480);
         let c = layout(&labels, &[Some(Image { w: 32, px: &px })], 1000)[0];
         let (x, y) = (cx + (c.w - 32) / 2 + 16, cy + PAD + 16);
@@ -397,15 +467,28 @@ mod tests {
 
     #[test]
     fn built_in_weapon_images_by_item_name() {
-        assert_eq!(default_weapon_image("bow", ".gif").as_deref(), Some("wbowi1.gif"));
-        assert_eq!(default_weapon_image("Bomb", ".png").as_deref(), Some("wbomb1.png"));
+        assert_eq!(
+            default_weapon_image("bow", ".gif").as_deref(),
+            Some("wbowi1.gif")
+        );
+        assert_eq!(
+            default_weapon_image("Bomb", ".png").as_deref(),
+            Some("wbomb1.png")
+        );
         assert_eq!(default_weapon_image("Sword Spin", ".png"), None);
     }
 
     #[test]
     fn entries_list_default_weapons_then_named_ones_without_hidden_or_repeats() {
-        let named = vec!["Sword Spin".to_string(), "-system".to_string(), "bow".to_string()];
-        assert_eq!(entries(&[7, 8, 3], &named), vec!["bow", "bomb", "Sword Spin"]);
+        let named = vec![
+            "Sword Spin".to_string(),
+            "-system".to_string(),
+            "bow".to_string(),
+        ];
+        assert_eq!(
+            entries(&[7, 8, 3], &named),
+            vec!["bow", "bomb", "Sword Spin"]
+        );
         assert!(entries(&[], &[]).is_empty());
     }
 
@@ -420,8 +503,17 @@ mod tests {
 
     #[test]
     fn counts_line_shows_half_hearts() {
-        let c = Counts { rupees: 12, hearts_half: 5, max_hearts_half: 6, sword: 1, ..Counts::default() };
-        assert_eq!(c.line(), "Rupees 12  Bombs 0  Arrows 0  Hearts 2.5/3  Sword 1  Shield 0  Glove 0");
+        let c = Counts {
+            rupees: 12,
+            hearts_half: 5,
+            max_hearts_half: 6,
+            sword: 1,
+            ..Counts::default()
+        };
+        assert_eq!(
+            c.line(),
+            "Rupees 12  Bombs 0  Arrows 0  Hearts 2.5/3  Sword 1  Shield 0  Glove 0"
+        );
     }
 
     #[test]
@@ -431,8 +523,26 @@ mod tests {
             let labels = entries(&[7, 8], &["Weapon".into()]);
             let px = vec![0xFFu8; 48 * 16 * 4];
             let images = [Some(Image { w: 48, px: &px }), None];
-            draw(&mut fb, &ItemList { open: true, selected: Some(2) }, &labels, &images, &Counts::default());
-            draw(&mut fb, &ItemList { open: true, selected: None }, &[], &[], &Counts::default());
+            draw(
+                &mut fb,
+                &ItemList {
+                    open: true,
+                    selected: Some(2),
+                },
+                &labels,
+                &images,
+                &Counts::default(),
+            );
+            draw(
+                &mut fb,
+                &ItemList {
+                    open: true,
+                    selected: None,
+                },
+                &[],
+                &[],
+                &Counts::default(),
+            );
         }
     }
 }

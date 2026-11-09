@@ -51,7 +51,11 @@ pub struct MapSource {
 
 impl MapSource {
     pub fn new(txt: &str, image: &str) -> Self {
-        Self { txt: txt.trim().to_string(), image: image.trim().to_string(), off_map: None }
+        Self {
+            txt: txt.trim().to_string(),
+            image: image.trim().to_string(),
+            off_map: None,
+        }
     }
 
     pub fn with_off_map(mut self, x: f32, y: f32) -> Self {
@@ -96,7 +100,10 @@ pub struct MapScreen {
 
 /// Pixels a level takes on the picture, across and down.
 pub fn cell_size(grid: &Gmap, pic_w: u32, pic_h: u32) -> (f32, f32) {
-    (pic_w as f32 / grid.width.max(1) as f32, pic_h as f32 / grid.height.max(1) as f32)
+    (
+        pic_w as f32 / grid.width.max(1) as f32,
+        pic_h as f32 / grid.height.max(1) as f32,
+    )
 }
 
 /// Where a player at `(x, y)` (tiles) in `level` is on the picture, if the
@@ -115,8 +122,18 @@ pub fn spot_in_cell((cw, ch): (f32, f32), (cx, cy): (i32, i32), x: f32, y: f32) 
 
 /// Keep the scroll inside the picture (2.05): `0 ..= pic - view` on each
 /// axis; centred when the picture is the smaller.
-pub fn clamp_scroll((sx, sy): (i32, i32), (pw, ph): (i32, i32), (vw, vh): (i32, i32)) -> (i32, i32) {
-    let axis = |s: i32, p: i32, v: i32| if p < v { (p - v) / 2 } else { s.clamp(0, p - v) };
+pub fn clamp_scroll(
+    (sx, sy): (i32, i32),
+    (pw, ph): (i32, i32),
+    (vw, vh): (i32, i32),
+) -> (i32, i32) {
+    let axis = |s: i32, p: i32, v: i32| {
+        if p < v {
+            (p - v) / 2
+        } else {
+            s.clamp(0, p - v)
+        }
+    };
     (axis(sx, pw, vw), axis(sy, ph, vh))
 }
 
@@ -137,7 +154,10 @@ impl MapScreen {
 
     /// Move the view by one key press, `(dx, dy)` in steps (-1, 0 or 1).
     pub fn scroll_by(&mut self, (dx, dy): (i32, i32), pic: (i32, i32), view: (i32, i32)) {
-        let s = (self.scroll.0 + dx * SCROLL_STEP, self.scroll.1 + dy * SCROLL_STEP);
+        let s = (
+            self.scroll.0 + dx * SCROLL_STEP,
+            self.scroll.1 + dy * SCROLL_STEP,
+        );
         self.scroll = clamp_scroll(s, pic, view);
     }
 }
@@ -156,9 +176,17 @@ impl MapFiles {
     /// has (a gmap's, or the `--bigmap` file); without one the text is read
     /// with `read`. A new source drops the old files. Returns the names
     /// still missing, for the caller to ask the server for.
-    pub fn sync(&mut self, want: &MapSource, grid: Option<&Gmap>, read: &dyn Fn(&str) -> Option<Vec<u8>>) -> Vec<String> {
+    pub fn sync(
+        &mut self,
+        want: &MapSource,
+        grid: Option<&Gmap>,
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Vec<String> {
         if self.source.as_ref() != Some(want) {
-            *self = MapFiles { source: Some(want.clone()), ..Default::default() };
+            *self = MapFiles {
+                source: Some(want.clone()),
+                ..Default::default()
+            };
         }
         if let Some(g) = grid {
             if self.grid.as_ref() != Some(g) {
@@ -205,7 +233,10 @@ impl MapFiles {
         let (grid, cell_px) = (self.grid.as_ref()?, self.cell_px()?);
         spot(grid, cell_px, level, x, y).or_else(|| {
             let (ox, oy) = self.source.as_ref()?.off_map?;
-            Some(((ox * cell_px.0).round() as i32, (oy * cell_px.1).round() as i32))
+            Some((
+                (ox * cell_px.0).round() as i32,
+                (oy * cell_px.1).round() as i32,
+            ))
         })
     }
 }
@@ -215,14 +246,21 @@ impl MapFiles {
 /// it, `pixel_in_cell * 64 / cell_size` (whole tiles, as the client's
 /// integer maths gives). `None` off the grid or on an empty cell.
 /// Offline the client goes there; online it says `warpto x y level`.
-pub fn click_target(files: &MapFiles, screen: &MapScreen, (mx, my): (i32, i32)) -> Option<(String, i32, i32)> {
+pub fn click_target(
+    files: &MapFiles,
+    screen: &MapScreen,
+    (mx, my): (i32, i32),
+) -> Option<(String, i32, i32)> {
     let grid = files.grid.as_ref()?;
     let (cw, ch) = files.cell_px()?;
     let (px, py) = (mx + screen.scroll.0, my + screen.scroll.1);
     if px < 0 || py < 0 {
         return None;
     }
-    let (cx, cy) = ((px as f32 / cw).floor() as i32, (py as f32 / ch).floor() as i32);
+    let (cx, cy) = (
+        (px as f32 / cw).floor() as i32,
+        (py as f32 / ch).floor() as i32,
+    );
     let level = grid.level_at(cx, cy)?;
     if level.eq_ignore_ascii_case("x") {
         return None;
@@ -241,7 +279,13 @@ pub fn warpto_line(level: &str, x: i32, y: i32) -> String {
 /// Draw the open map over the whole of `fb`. `others` is `Some(count)`
 /// online (the "Others:" line); `pic` is `None` while the picture has not
 /// arrived (the view is black, with the title).
-pub fn draw(fb: &mut Framebuffer, screen: &MapScreen, pic: Option<&Picture>, markers: &[Marker], others: Option<usize>) {
+pub fn draw(
+    fb: &mut Framebuffer,
+    screen: &MapScreen,
+    pic: Option<&Picture>,
+    markers: &[Marker],
+    others: Option<usize>,
+) {
     let (vw, vh) = (fb.width as i32, fb.height as i32);
     fb.fill_rect(0, 0, vw, vh, [0, 0, 0]);
     let (sx, sy) = screen.scroll;
@@ -250,7 +294,15 @@ pub fn draw(fb: &mut Framebuffer, screen: &MapScreen, pic: Option<&Picture>, mar
         let (x0, y0) = (sx.max(0), sy.max(0));
         let (x1, y1) = ((sx + vw).min(p.w as i32), (sy + vh).min(p.h as i32));
         if x1 > x0 && y1 > y0 {
-            fb.blit_sprite(&p.px, p.w, 4, x0, y0, x1 - x0, y1 - y0, x0 - sx, y0 - sy);
+            fb.blit_sprite(
+                crate::render::Sheet {
+                    px: &p.px,
+                    w: p.w,
+                    bpp: 4,
+                },
+                (x0, y0, x1 - x0, y1 - y0),
+                (x0 - sx, y0 - sy),
+            );
         }
     }
     for m in markers {
@@ -261,11 +313,22 @@ pub fn draw(fb: &mut Framebuffer, screen: &MapScreen, pic: Option<&Picture>, mar
             // Seihai's stand-in until the head image is here.
             None => {
                 fb.fill_rect(hx + 4, hy + 4, HEAD_PX - 8, HEAD_PX - 8, [0, 0, 0]);
-                fb.fill_rect(hx + 5, hy + 5, HEAD_PX - 10, HEAD_PX - 10, [0xF8, 0xD0, 0x98]);
+                fb.fill_rect(
+                    hx + 5,
+                    hy + 5,
+                    HEAD_PX - 10,
+                    HEAD_PX - 10,
+                    [0xF8, 0xD0, 0x98],
+                );
             }
         }
         if let Some(n) = m.name.as_deref().filter(|n| !n.is_empty()) {
-            fb.draw_text_outlined(cx - text_width(n) / 2, hy + HEAD_PX + 1, n, [0xFF, 0xFF, 0xFF]);
+            fb.draw_text_outlined(
+                cx - text_width(n) / 2,
+                hy + HEAD_PX + 1,
+                n,
+                [0xFF, 0xFF, 0xFF],
+            );
         }
     }
     fb.draw_text(22, 22, "Map", [0x00, 0x00, 0xFF]);
@@ -301,8 +364,15 @@ mod tests {
     use super::*;
 
     fn grid(w: usize, h: usize) -> Gmap {
-        let names = (0..w * h).map(|i| format!("l{}-{}.nw", i % w, i / w)).collect();
-        Gmap { width: w, height: h, names, ..Gmap::default() }
+        let names = (0..w * h)
+            .map(|i| format!("l{}-{}.nw", i % w, i / w))
+            .collect();
+        Gmap {
+            width: w,
+            height: h,
+            names,
+            ..Gmap::default()
+        }
     }
 
     #[test]
@@ -373,14 +443,29 @@ mod tests {
     #[test]
     fn the_picture_heads_and_title_are_drawn() {
         let mut fb = Framebuffer::new(64, 48);
-        let pic = Picture { w: 128, h: 96, px: [10u8, 200, 30, 255].repeat(128 * 96) };
+        let pic = Picture {
+            w: 128,
+            h: 96,
+            px: [10u8, 200, 30, 255].repeat(128 * 96),
+        };
         let head = [250u8, 0, 0, 255].repeat(32 * 128);
-        let screen = MapScreen { open: true, scroll: (8, 8) };
-        let markers = [Marker { at: (40, 40), head: Some((32, &head)), name: None }];
+        let screen = MapScreen {
+            open: true,
+            scroll: (8, 8),
+        };
+        let markers = [Marker {
+            at: (40, 40),
+            head: Some((32, &head)),
+            name: None,
+        }];
         draw(&mut fb, &screen, Some(&pic), &markers, None);
         let at = |x: usize, y: usize| fb.pixels[(y * 64 + x) * 3..(y * 64 + x) * 3 + 3].to_vec();
         assert_eq!(at(60, 45), vec![10, 200, 30], "the picture");
-        assert_eq!(at(32, 32), vec![250, 0, 0], "the head centred on (40, 40) - scroll");
+        assert_eq!(
+            at(32, 32),
+            vec![250, 0, 0],
+            "the head centred on (40, 40) - scroll"
+        );
         assert_eq!(at(40, 40), vec![10, 200, 30], "16 pixels wide only");
     }
 
@@ -410,25 +495,49 @@ mod tests {
 
     #[test]
     fn a_level_off_the_map_uses_the_sources_point() {
-        let read = |n: &str| (n == "t.txt").then(|| b"\"a.nw\",\"b.nw\",\"c.nw\"\n\"d.nw\",\"e.nw\",\"f.nw\"\n".to_vec());
+        let read = |n: &str| {
+            (n == "t.txt")
+                .then(|| b"\"a.nw\",\"b.nw\",\"c.nw\"\n\"d.nw\",\"e.nw\",\"f.nw\"\n".to_vec())
+        };
         let mut f = MapFiles::default();
         f.sync(&MapSource::new("t.txt", ""), None, &read);
         assert_eq!(f.spot("elsewhere.nw", 0.0, 0.0), None, "no point given");
         // The tutorial's `setmap ...,1.5,3.8`, at 56 pixels a level.
-        f.sync(&MapSource::new("t.txt", "").with_off_map(1.5, 3.8), None, &read);
+        f.sync(
+            &MapSource::new("t.txt", "").with_off_map(1.5, 3.8),
+            None,
+            &read,
+        );
         assert_eq!(f.spot("elsewhere.nw", 0.0, 0.0), Some((84, 213)));
         assert_eq!(f.spot("e.nw", 0.0, 0.0), Some((56, 56)));
     }
 
     #[test]
     fn ctrl_click_names_the_level_and_spot_under_the_pointer() {
-        let read = |n: &str| (n == "t.txt").then(|| b"\"a.nw\",\"b.nw\"\n\"x\",\"d.nw\"\n".to_vec());
+        let read =
+            |n: &str| (n == "t.txt").then(|| b"\"a.nw\",\"b.nw\"\n\"x\",\"d.nw\"\n".to_vec());
         let mut f = MapFiles::default();
         f.sync(&MapSource::new("t.txt", ""), None, &read);
-        let screen = MapScreen { open: true, scroll: (0, 0) };
+        let screen = MapScreen {
+            open: true,
+            scroll: (0, 0),
+        };
         // 56 pixels a level: (84, 28) is the middle of b.nw.
-        assert_eq!(click_target(&f, &screen, (84, 28)), Some(("b.nw".into(), 32, 32)));
-        assert_eq!(click_target(&f, &MapScreen { open: true, scroll: (56, 56) }, (0, 0)), Some(("d.nw".into(), 0, 0)));
+        assert_eq!(
+            click_target(&f, &screen, (84, 28)),
+            Some(("b.nw".into(), 32, 32))
+        );
+        assert_eq!(
+            click_target(
+                &f,
+                &MapScreen {
+                    open: true,
+                    scroll: (56, 56)
+                },
+                (0, 0)
+            ),
+            Some(("d.nw".into(), 0, 0))
+        );
         assert_eq!(click_target(&f, &screen, (10, 60)), None, "an empty cell");
         assert_eq!(click_target(&f, &screen, (200, 10)), None, "off the grid");
         assert_eq!(warpto_line("b.nw", 32, 32), "warpto 32 32 b.nw");
@@ -438,7 +547,19 @@ mod tests {
     fn without_a_picture_the_view_is_black() {
         let mut fb = Framebuffer::new(64, 48);
         fb.fill_rect(0, 0, 64, 48, [9, 9, 9]);
-        draw(&mut fb, &MapScreen { open: true, scroll: (0, 0) }, None, &[], None);
-        assert_eq!(&fb.pixels[(47 * 64 + 63) * 3..(47 * 64 + 63) * 3 + 3], &[0, 0, 0]);
+        draw(
+            &mut fb,
+            &MapScreen {
+                open: true,
+                scroll: (0, 0),
+            },
+            None,
+            &[],
+            None,
+        );
+        assert_eq!(
+            &fb.pixels[(47 * 64 + 63) * 3..(47 * 64 + 63) * 3 + 3],
+            &[0, 0, 0]
+        );
     }
 }

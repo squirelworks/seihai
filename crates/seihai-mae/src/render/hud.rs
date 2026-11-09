@@ -78,7 +78,11 @@ const ICONS: Rect = Rect(80, 33, 120, 16);
 const BUTTON: Rect = Rect(202, 0, 22, 33);
 /// 1.38 to 1.41 sheets (and 1.33 to 1.37 with the letters on them): three
 /// buttons side by side, action, attack, item. [inferred from the sheets]
-const BUTTONS_OLD: [Rect; 3] = [Rect(158, 0, 22, 30), Rect(180, 0, 22, 30), Rect(202, 0, 22, 30)];
+const BUTTONS_OLD: [Rect; 3] = [
+    Rect(158, 0, 22, 30),
+    Rect(180, 0, 22, 30),
+    Rect(202, 0, 22, 30),
+];
 const DIGIT_Y: i32 = 81;
 const DIGIT_W: i32 = 14;
 const DIGIT_H: i32 = 16;
@@ -133,7 +137,15 @@ fn has(s: &Sheet, r: Rect) -> bool {
 
 fn blit(fb: &mut Framebuffer, s: &Sheet, r: Rect, x: i32, y: i32) {
     if has(s, r) {
-        fb.blit_sprite(s.px, s.w, s.bpp, r.0, r.1, r.2, r.3, x, y);
+        fb.blit_sprite(
+            crate::render::Sheet {
+                px: s.px,
+                w: s.w,
+                bpp: s.bpp,
+            },
+            (r.0, r.1, r.2, r.3),
+            (x, y),
+        );
     }
 }
 
@@ -151,18 +163,39 @@ fn three_buttons(s: &Sheet) -> bool {
     }
 }
 
-fn sprite(fb: &mut Framebuffer, sheet: Sheet, tables: Option<&ObjectTables>, id: u16, x: i32, y: i32) {
+fn sprite(
+    fb: &mut Framebuffer,
+    sheet: Sheet,
+    tables: Option<&ObjectTables>,
+    id: u16,
+    x: i32,
+    y: i32,
+) {
     if !draw_sprite(fb, sheet, tables, id, x, y) {
         if let Some((sx, sy, w, h)) = icon_rect(id) {
             if has(&sheet, Rect(sx, sy, w, h)) {
-                fb.blit_sprite(sheet.px, sheet.w, sheet.bpp, sx, sy, w, h, x, y);
+                fb.blit_sprite(
+                    crate::render::Sheet {
+                        px: sheet.px,
+                        w: sheet.w,
+                        bpp: sheet.bpp,
+                    },
+                    (sx, sy, w, h),
+                    (x, y),
+                );
             }
         }
     }
 }
 
 /// Draw the status display for a build with `art`.
-pub fn draw_hud(fb: &mut Framebuffer, art: HudArt, sheets: &HudSheets, tables: Option<&ObjectTables>, v: &HudValues) {
+pub fn draw_hud(
+    fb: &mut Framebuffer,
+    art: HudArt,
+    sheets: &HudSheets,
+    tables: Option<&ObjectTables>,
+    v: &HudValues,
+) {
     let s = &sheets.state;
     let on = |bit: u16| v.stats & bit != 0;
     let (bx, by) = BASE;
@@ -179,23 +212,35 @@ pub fn draw_hud(fb: &mut Framebuffer, art: HudArt, sheets: &HudSheets, tables: O
     if on(stats::RUPEES) {
         // Up to seven digits, no leading zeros, centred on x 280.
         let text = v.rupees.clamp(0, 9_999_999).to_string();
-        let x = COUNT_X - (text.len() as i32 * DIGIT_ADVANCE >> 1);
+        let x = COUNT_X - ((text.len() as i32 * DIGIT_ADVANCE) >> 1);
         draw_number(fb, s, digits, &text, x);
     }
     if on(stats::BOMBS) {
-        draw_number(fb, s, digits, &format!("{:02}", v.bombs.clamp(0, 99)), BOMBS_X);
+        draw_number(
+            fb,
+            s,
+            digits,
+            &format!("{:02}", v.bombs.clamp(0, 99)),
+            BOMBS_X,
+        );
     }
     if on(stats::ARROWS) {
-        draw_number(fb, s, digits, &format!("{:02}", v.arrows.clamp(0, 99)), ARROWS_X);
+        draw_number(
+            fb,
+            s,
+            digits,
+            &format!("{:02}", v.arrows.clamp(0, 99)),
+            ARROWS_X,
+        );
     }
 
     if on(stats::BUTTONS) {
         let old = matches!(art, HudArt::Letters | HudArt::LettersChat) || three_buttons(s);
         let lettered = matches!(art, HudArt::Letters | HudArt::LettersChat);
         let shown = if v.weapons { 3 } else { 1 };
-        for i in 0..shown {
+        for (i, &old_button) in BUTTONS_OLD.iter().enumerate().take(shown) {
             let x = bx + i as i32 * BUTTON_STEP;
-            blit(fb, s, if old { BUTTONS_OLD[i] } else { BUTTON }, x, by + 15);
+            blit(fb, s, if old { old_button } else { BUTTON }, x, by + 15);
             if !lettered {
                 draw_big_letter(fb, v.keys[i], x + 2, by + 17 + 4);
             }
@@ -221,7 +266,13 @@ pub fn draw_hud(fb: &mut Framebuffer, art: HudArt, sheets: &HudSheets, tables: O
             }
             if let Some(item) = &sheets.item {
                 let h = rows(item);
-                blit(fb, item, Rect(0, 0, item.w as i32, h), bx + 155, by + 30 - (h >> 1));
+                blit(
+                    fb,
+                    item,
+                    Rect(0, 0, item.w as i32, h),
+                    bx + 155,
+                    by + 30 - (h >> 1),
+                );
             }
         }
     }
@@ -246,7 +297,13 @@ fn draw_number(fb: &mut Framebuffer, s: &Sheet, sheet_digits: bool, text: &str, 
     if sheet_digits {
         for (i, c) in text.bytes().enumerate() {
             let d = (c - b'0') as i32;
-            blit(fb, s, Rect(d * DIGIT_W, DIGIT_Y, DIGIT_W, DIGIT_H), x + i as i32 * DIGIT_ADVANCE, COUNT_Y);
+            blit(
+                fb,
+                s,
+                Rect(d * DIGIT_W, DIGIT_Y, DIGIT_W, DIGIT_H),
+                x + i as i32 * DIGIT_ADVANCE,
+                COUNT_Y,
+            );
         }
     } else {
         // 1.33 to 1.37 keep their digits in sprites.png; the font stands in.
@@ -274,7 +331,12 @@ fn draw_hearts(fb: &mut Framebuffer, s: &Sheet, v: &HudValues) {
             break;
         };
         if big {
-            let r = Rect(HEART_BIG.0 + half * HEART_BIG.2, 0, HEART_BIG.2, HEART_BIG.3);
+            let r = Rect(
+                HEART_BIG.0 + half * HEART_BIG.2,
+                0,
+                HEART_BIG.2,
+                HEART_BIG.3,
+            );
             blit(fb, s, r, x0 + i * BIG_STEP, HEARTS_Y);
         } else {
             let (mut x, mut y) = (x0 + i * SMALL_STEP, y0);
@@ -286,7 +348,12 @@ fn draw_hearts(fb: &mut Framebuffer, s: &Sheet, v: &HudValues) {
                     break;
                 }
             }
-            let r = Rect(HEART_SMALL.0 + half * HEART_SMALL.2, 0, HEART_SMALL.2, HEART_SMALL.3);
+            let r = Rect(
+                HEART_SMALL.0 + half * HEART_SMALL.2,
+                0,
+                HEART_SMALL.2,
+                HEART_SMALL.3,
+            );
             blit(fb, s, r, x, y);
         }
     }
@@ -300,7 +367,12 @@ fn draw_hearts(fb: &mut Framebuffer, s: &Sheet, v: &HudValues) {
 /// own font here. [position from the routine, font traced]
 fn draw_small_number(fb: &mut Framebuffer, n: i32, x: i32, y: i32) {
     let text = n.to_string();
-    fb.draw_text_outlined(x - text.len() as i32 * CELL_W / 2, y, &text, [0xFF, 0xFF, 0xFF]);
+    fb.draw_text_outlined(
+        x - text.len() as i32 * CELL_W / 2,
+        y,
+        &text,
+        [0xFF, 0xFF, 0xFF],
+    );
 }
 
 /// A key name on a button. The client asks for `Helvetica`, cell 26, bold
@@ -353,7 +425,16 @@ mod tests {
 
     fn draw(v: &HudValues, sheet_h: u32) -> Framebuffer {
         let px = white(224, sheet_h);
-        let sheets = HudSheets { state: Sheet { px: &px, w: 224, bpp: 4 }, sprites: None, sword: None, item: None };
+        let sheets = HudSheets {
+            state: Sheet {
+                px: &px,
+                w: 224,
+                bpp: 4,
+            },
+            sprites: None,
+            sword: None,
+            item: None,
+        };
         let mut fb = Framebuffer::new(640, 480);
         draw_hud(&mut fb, HudArt::BlankButtons, &sheets, None, v);
         fb
@@ -378,7 +459,10 @@ mod tests {
         let fb = draw(&values(12, 12), 145);
         assert!(lit(&fb, 442 + 4 * 35 + 15, 24 + 16));
         assert!(lit(&fb, 442 - 17 + 15, 44 + 16));
-        assert!(!lit(&fb, 442 + 33, 40), "small hearts leave a gap a big heart would fill");
+        assert!(
+            !lit(&fb, 442 + 33, 40),
+            "small hearts leave a gap a big heart would fill"
+        );
     }
 
     #[test]

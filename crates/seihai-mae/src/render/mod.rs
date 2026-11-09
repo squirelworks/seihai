@@ -6,22 +6,23 @@
 //! from a 2048×512 sheet. A real SDL2/OpenGL path can replace this later.
 
 mod baddies;
+pub mod chattext;
 pub mod font;
+pub mod hud;
 mod npcs;
 mod others;
-mod throw;
-pub mod hud;
 pub mod signs;
-pub mod chattext;
+mod throw;
 mod tiles;
 
 pub use baddies::{draw_baddies, draw_baddy_verses, BaddyArt};
-pub use throw::{draw_floor_items, draw_sprite, draw_throw_layer, BombSheets};
 pub use npcs::{draw_npc_messages, draw_npcs, npc_sheets, NpcArt, NpcPass, NPC_DIR};
 pub use others::{look_images, other_blink_off, other_hidden, other_pose, OTHER_STEP_MS};
+pub use throw::{draw_floor_items, draw_sprite, draw_throw_layer, BombSheets};
 pub use tiles::{
-    camera_origin, draw_gani_frame, draw_other_player, draw_player_marker, draw_player_sprites, PoseSheets, Sheet, player_box_origin, render_view, render_view_tiles, CHEST_CLOSED_TILES, CHEST_OPEN_TILES, chest_art,
-    Framebuffer, TILE_PX,
+    camera_origin, chest_art, draw_gani_frame, draw_other_player, draw_player_marker,
+    draw_player_sprites, player_box_origin, render_view, render_view_tiles, Framebuffer,
+    PoseSheets, Sheet, CHEST_CLOSED_TILES, CHEST_OPEN_TILES, TILE_PX,
 };
 
 use crate::assets::{read_png_rgb, tile_id, Level};
@@ -40,7 +41,14 @@ pub fn render_with_sheet<P: AsRef<Path>>(
 ) -> Result<Framebuffer, String> {
     let data = fs::read(sheet_path.as_ref()).map_err(|e| e.to_string())?;
     let (w, h, sheet) = read_png_rgb(&data).map_err(|e| e.to_string())?;
-    Ok(render_view(session, &sheet, w, h, view_tiles_w, view_tiles_h))
+    Ok(render_view(
+        session,
+        &sheet,
+        w,
+        h,
+        view_tiles_w,
+        view_tiles_h,
+    ))
 }
 
 /// ASCII preview of the current board and player.
@@ -147,12 +155,21 @@ fn tile_char(types: Option<&crate::assets::TileTypes>, id: u16) -> char {
 
 /// ASCII preview of a single stamp (for blit-path proof).
 /// Uses the same wall/water/passable characters as the board view.
-pub fn ascii_stamp(stamp: &crate::assets::Stamp, types: Option<&crate::assets::TileTypes>) -> String {
+pub fn ascii_stamp(
+    stamp: &crate::assets::Stamp,
+    types: Option<&crate::assets::TileTypes>,
+) -> String {
     let mut out = String::new();
-    out.push_str(&format!("stamp {} ({}x{})\n", stamp.name, stamp.width, stamp.height));
+    out.push_str(&format!(
+        "stamp {} ({}x{})\n",
+        stamp.name, stamp.width, stamp.height
+    ));
     for row in 0..stamp.height {
         for col in 0..stamp.width {
-            let id = stamp.tile_at(col, row).map(crate::assets::tile_id).unwrap_or(0);
+            let id = stamp
+                .tile_at(col, row)
+                .map(crate::assets::tile_id)
+                .unwrap_or(0);
             out.push(tile_char(types, id));
         }
         out.push('\n');
@@ -179,10 +196,7 @@ fn tile_at(level: &Level, x: i32, y: i32) -> u16 {
 /// passable light, player red.
 pub fn write_ppm(session: &OfflineSession, path: &str) -> Result<(), String> {
     let mut pixels = vec![0u8; 64 * 64 * 3];
-    let level = session
-        .current_level
-        .as_ref()
-        .ok_or("no level loaded")?;
+    let level = session.current_level.as_ref().ok_or("no level loaded")?;
     let types = session.tiletypes.as_ref();
 
     for y in 0..64 {
@@ -210,7 +224,7 @@ pub fn write_ppm(session: &OfflineSession, path: &str) -> Result<(), String> {
         }
     }
 
-    let mut out = format!("P6\n64 64\n255\n").into_bytes();
+    let mut out = "P6\n64 64\n255\n".to_string().into_bytes();
     out.extend_from_slice(&pixels);
     std::fs::write(path, out).map_err(|e| e.to_string())
 }

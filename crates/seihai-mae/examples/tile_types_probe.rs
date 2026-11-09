@@ -3,7 +3,9 @@
 //! `cargo run --example tile_types_probe -- path/to/arrays.dat`
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: tile_types_probe <arrays.dat>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: tile_types_probe <arrays.dat>");
     let t = seihai::assets::TileTypes::load_arrays(&path).expect("arrays.dat");
     let mut counts = std::collections::BTreeMap::new();
     for &b in t.types.iter() {

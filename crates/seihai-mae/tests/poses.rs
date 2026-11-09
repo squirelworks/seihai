@@ -15,7 +15,11 @@ use seihai::protocol::COMBAT_205;
 use seihai::render::{draw_gani_frame, draw_player_sprites, Framebuffer, PoseSheets, Sheet};
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("assets").join("default")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("assets")
+        .join("default")
 }
 
 fn gani(name: &str) -> Gani {
@@ -29,7 +33,12 @@ fn session() -> OfflineSession {
     s.life.set_rules(Some(seihai::protocol::DEATH_205));
     s.player_x = 30.0;
     s.player_y = 30.0;
-    for k in [PoseKind::Sword, PoseKind::Hurt, PoseKind::Sit, PoseKind::Sleep] {
+    for k in [
+        PoseKind::Sword,
+        PoseKind::Hurt,
+        PoseKind::Sit,
+        PoseKind::Sleep,
+    ] {
         s.set_pose_gani(k, gani(k.file()));
     }
     s
@@ -40,7 +49,13 @@ fn pose(s: &OfflineSession) -> Option<(PoseKind, usize)> {
 }
 
 fn hurt_packet(half: i32) -> HurtPlayer {
-    HurtPlayer { attacker: 7, dx: 0.0, dy: 0.0, half, npc: None }
+    HurtPlayer {
+        attacker: 7,
+        dx: 0.0,
+        dy: 0.0,
+        half,
+        npc: None,
+    }
 }
 
 #[test]
@@ -61,7 +76,9 @@ fn the_s_key_plays_the_sword_animation_and_goes_back_to_idle() {
         seen.push((pose(&s).map_or(usize::MAX, |p| p.1), s.sprite_value()));
     }
     let dir = u32::from(s.player_dir);
-    let expect: Vec<(usize, u8)> = (0..5).map(|i| (i, (dir + 4 * (6 + i as u32)) as u8)).collect();
+    let expect: Vec<(usize, u8)> = (0..5)
+        .map(|i| (i, (dir + 4 * (6 + i as u32)) as u8))
+        .collect();
     assert_eq!(seen[..4], expect[..4]);
     assert_eq!(seen[4].0, 4);
     // the swing ends: the pose is gone (sword.gani says SETBACKTO idle)
@@ -70,7 +87,10 @@ fn the_s_key_plays_the_sword_animation_and_goes_back_to_idle() {
     assert!(!s.combat.is_swinging());
     assert_eq!(s.sprite_value(), s.player_dir);
     assert_eq!(gani("sword.gani").setback_to.as_deref(), Some("idle"));
-    assert!(s.take_sound_events().is_empty(), "no further cue: only step 0 has one");
+    assert!(
+        s.take_sound_events().is_empty(),
+        "no further cue: only step 0 has one"
+    );
 }
 
 #[test]
@@ -78,7 +98,11 @@ fn a_swing_in_one_long_tick_still_plays_every_cue_once() {
     let mut s = session();
     // a second cue on step 2, to see that skipped steps still count
     let mut g = gani("sword.gani");
-    g.frames[2].sounds.push(seihai::assets::GaniSound { file: "x.wav".into(), x: 1.5, y: 2.0 });
+    g.frames[2].sounds.push(seihai::assets::GaniSound {
+        file: "x.wav".into(),
+        x: 1.5,
+        y: 2.0,
+    });
     s.set_pose_gani(PoseKind::Sword, g);
     assert!(s.start_swing());
     s.tick_combat(10_000);
@@ -169,14 +193,30 @@ fn art() -> Art {
         let (w, _, px) = read_png_rgba(&std::fs::read(root().join(rel)).unwrap()).unwrap();
         (w, px)
     };
-    Art { body: load("bodies/body.png"), head: load("heads/head0.png"), sprites: load("sprites.png"), sword: load("swords/sword1.png") }
+    Art {
+        body: load("bodies/body.png"),
+        head: load("heads/head0.png"),
+        sprites: load("sprites.png"),
+        sword: load("swords/sword1.png"),
+    }
 }
 
 fn sheets(a: &Art) -> PoseSheets<'_> {
     fn sh(i: &(u32, Vec<u8>)) -> Option<Sheet<'_>> {
-        Some(Sheet { px: i.1.as_slice(), w: i.0, bpp: 4 })
+        Some(Sheet {
+            px: i.1.as_slice(),
+            w: i.0,
+            bpp: 4,
+        })
     }
-    PoseSheets { body: sh(&a.body), head: sh(&a.head), sprites: sh(&a.sprites), sword: sh(&a.sword), shield: None, attrs: Default::default() }
+    PoseSheets {
+        body: sh(&a.body),
+        head: sh(&a.head),
+        sprites: sh(&a.sprites),
+        sword: sh(&a.sword),
+        shield: None,
+        attrs: Default::default(),
+    }
 }
 
 fn draw(g: &Gani, step: usize, dir: u8, a: &Art) -> Vec<u8> {
@@ -197,12 +237,39 @@ fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
         assert_ne!(idle, blank());
         // idle through the GANI renderer is the same picture draw_player_sprites makes
         let mut fb = Framebuffer::new(64, 64);
-        draw_player_sprites(&mut fb, &a.body.1, a.body.0, 4, &a.head.1, a.head.0, 4, Some((&a.sprites.1, a.sprites.0, 4)), dir, 8, 8, false);
-        assert_eq!(idle, fb.pixels, "dir {dir}: idle.gani and the built-in idle drawing agree");
+        draw_player_sprites(
+            &mut fb,
+            seihai::render::Sheet {
+                px: &a.body.1,
+                w: a.body.0,
+                bpp: 4,
+            },
+            seihai::render::Sheet {
+                px: &a.head.1,
+                w: a.head.0,
+                bpp: 4,
+            },
+            (Some((&a.sprites.1, a.sprites.0, 4))).map(|(px, w, bpp)| seihai::render::Sheet {
+                px,
+                w,
+                bpp,
+            }),
+            dir,
+            (8, 8),
+            false,
+        );
+        assert_eq!(
+            idle, fb.pixels,
+            "dir {dir}: idle.gani and the built-in idle drawing agree"
+        );
 
         let sword = gani("sword.gani");
         let steps: Vec<Vec<u8>> = (0..5).map(|i| draw(&sword, i, dir, &a)).collect();
-        let mut all = vec![idle.clone(), draw(&gani("sit.gani"), 0, dir, &a), draw(&gani("hurt.gani"), 0, dir, &a)];
+        let mut all = vec![
+            idle.clone(),
+            draw(&gani("sit.gani"), 0, dir, &a),
+            draw(&gani("hurt.gani"), 0, dir, &a),
+        ];
         all.extend(steps);
         all.push(draw(&gani("sleep.gani"), 0, dir, &a));
         for i in 0..all.len() {
@@ -211,7 +278,10 @@ fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
                 if (i, j) == (5, 6) {
                     continue;
                 }
-                assert_ne!(all[i], all[j], "dir {dir}: pictures {i} and {j} are the same");
+                assert_ne!(
+                    all[i], all[j],
+                    "dir {dir}: pictures {i} and {j} are the same"
+                );
             }
         }
     }
@@ -221,10 +291,21 @@ fn the_pose_ganis_draw_and_differ_from_idle_and_each_other() {
 fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
     let a = art();
     let mut fb = Framebuffer::new(64, 64);
-    draw_gani_frame(&mut fb, &gani("sword.gani"), 99, 0, &PoseSheets::default(), 0, 0);
+    draw_gani_frame(
+        &mut fb,
+        &gani("sword.gani"),
+        99,
+        0,
+        &PoseSheets::default(),
+        0,
+        0,
+    );
     assert_eq!(fb.pixels, blank());
     // the sword sheet alone draws only the sword
-    let only = PoseSheets { sword: sheets(&a).sword, ..PoseSheets::default() };
+    let only = PoseSheets {
+        sword: sheets(&a).sword,
+        ..PoseSheets::default()
+    };
     draw_gani_frame(&mut fb, &gani("sword.gani"), 2, 2, &only, 8, 8);
     assert_ne!(fb.pixels, blank());
 }
@@ -232,12 +313,16 @@ fn a_missing_sheet_or_a_bad_step_draws_nothing_and_does_not_panic() {
 #[test]
 fn an_attr_sprite_draws_from_its_attribute_sheet() {
     let g = Gani::parse("SPRITE 1 ATTR1 0 0 2 2 hat\nANI\n1 3 4\nANIEND\n").unwrap();
-    let px = vec![200u8, 10, 20, 255].repeat(4);
+    let px = [200u8, 10, 20, 255].repeat(4);
     let mut fb = Framebuffer::new(64, 64);
     draw_gani_frame(&mut fb, &g, 0, 2, &PoseSheets::default(), 8, 8);
     assert_eq!(fb.pixels, blank(), "no hat sheet, nothing drawn");
     let mut sheets = PoseSheets::default();
-    sheets.attrs[0] = Some(Sheet { px: &px, w: 2, bpp: 4 });
+    sheets.attrs[0] = Some(Sheet {
+        px: &px,
+        w: 2,
+        bpp: 4,
+    });
     draw_gani_frame(&mut fb, &g, 0, 2, &sheets, 8, 8);
     assert_ne!(fb.pixels, blank());
     // ATTR2 does not take the hat's sheet.
@@ -302,8 +387,16 @@ fn a_blocked_step_runs_in_place() {
     // 2.05 sets the walk gani on every walk tick, moved or not: the legs
     // keep running against the edge until the push pose takes over.
     let next = (frame + 1) % s.walk_gani.as_ref().unwrap().gani.frames.len();
-    assert_eq!(s.walk_frame(), Some(next), "a refused step steps the animation");
-    assert_eq!(pose(&s), Some((PoseKind::Walk, next)), "a refused step is drawn walking");
+    assert_eq!(
+        s.walk_frame(),
+        Some(next),
+        "a refused step steps the animation"
+    );
+    assert_eq!(
+        pose(&s),
+        Some((PoseKind::Walk, next)),
+        "a refused step is drawn walking"
+    );
     assert!(s.take_sound_events().is_empty(), "no footsteps in place");
 }
 
@@ -313,7 +406,15 @@ fn in_water_the_swim_animation_is_drawn_and_a_swing_or_hurt_is_not() {
     s.combat.set_rules(Some(COMBAT_205));
     s.life.set_rules(Some(seihai::protocol::DEATH_205));
     s.set_pose_gani(PoseKind::Sword, gani("sword.gani"));
-    let tiles: Vec<u16> = (0..64 * 64).map(|i| if (28..40).contains(&(i % 64)) && (20..40).contains(&(i / 64)) { 1 } else { 0 }).collect();
+    let tiles: Vec<u16> = (0..64 * 64)
+        .map(|i| {
+            if (28..40).contains(&(i % 64)) && (20..40).contains(&(i / 64)) {
+                1
+            } else {
+                0
+            }
+        })
+        .collect();
     s.current_level = Some(seihai::assets::Level::from_board(&tiles));
     s.player_x = 24.0;
     s.player_y = 30.0;
@@ -326,8 +427,14 @@ fn in_water_the_swim_animation_is_drawn_and_a_swing_or_hurt_is_not() {
     assert!(p.frame < gani("swim.gani").frame_count());
     // the swim animation is not the walk one
     let a = art();
-    assert_ne!(draw(&gani("swim.gani"), 0, 2, &a), draw(&gani("walk.gani"), 1, 2, &a));
-    assert_ne!(draw(&gani("walk.gani"), 1, 2, &a), draw(&gani("idle.gani"), 0, 2, &a));
+    assert_ne!(
+        draw(&gani("swim.gani"), 0, 2, &a),
+        draw(&gani("walk.gani"), 1, 2, &a)
+    );
+    assert_ne!(
+        draw(&gani("walk.gani"), 1, 2, &a),
+        draw(&gani("idle.gani"), 0, 2, &a)
+    );
 }
 
 // ---- carrying -------------------------------------------------------------
@@ -337,17 +444,31 @@ fn holding_an_object_shows_the_carry_poses_and_sends_the_carry_sprite() {
     let mut s = walker();
     s.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
     s.set_pose_gani(PoseKind::Carry, gani("carry.gani"));
-    s.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    s.carried = Some(seihai::offline::Carried {
+        kind: 0,
+        tiles: [[0, 0], [0, 0]],
+    });
     assert_eq!(pose(&s), Some((PoseKind::CarryStill, 0)));
     let dir = s.player_dir;
-    assert_eq!(s.sprite_value(), dir + 4 * seihai::combat::CARRY_SPRITE_S, "S = 18 while carrying");
+    assert_eq!(
+        s.sprite_value(),
+        dir + 4 * seihai::combat::CARRY_SPRITE_S,
+        "S = 18 while carrying"
+    );
     // walking steps the carry walk with the walk's step
     let mut seen = Vec::new();
     for _ in 0..3 {
         assert!(s.try_move(0.5, 0.0).is_some());
         seen.push(pose(&s).unwrap());
     }
-    assert_eq!(seen, vec![(PoseKind::Carry, 1), (PoseKind::Carry, 2), (PoseKind::Carry, 3)]);
+    assert_eq!(
+        seen,
+        vec![
+            (PoseKind::Carry, 1),
+            (PoseKind::Carry, 2),
+            (PoseKind::Carry, 3)
+        ]
+    );
     assert_eq!(s.sprite_value(), s.player_dir + 4 * 18);
     // empty hands: back to the plain poses and S = 0
     s.carried = None;
@@ -358,14 +479,24 @@ fn holding_an_object_shows_the_carry_poses_and_sends_the_carry_sprite() {
     // the carry pictures differ from idle and walk
     let a = art();
     for d in 0..4u8 {
-        assert_ne!(draw(&gani("carrystill.gani"), 0, d, &a), draw(&gani("idle.gani"), 0, d, &a));
-        assert_ne!(draw(&gani("carry.gani"), 1, d, &a), draw(&gani("walk.gani"), 1, d, &a));
+        assert_ne!(
+            draw(&gani("carrystill.gani"), 0, d, &a),
+            draw(&gani("idle.gani"), 0, d, &a)
+        );
+        assert_ne!(
+            draw(&gani("carry.gani"), 1, d, &a),
+            draw(&gani("walk.gani"), 1, d, &a)
+        );
     }
 }
 
 /// A single-direction GANI of `n` steps, looping or not.
 fn steps(n: usize, looped: bool) -> Gani {
-    let mut text = String::from(if looped { "SINGLEDIRECTION\nLOOP\nANI\n" } else { "SINGLEDIRECTION\nANI\n" });
+    let mut text = String::from(if looped {
+        "SINGLEDIRECTION\nLOOP\nANI\n"
+    } else {
+        "SINGLEDIRECTION\nANI\n"
+    });
     for _ in 0..n {
         text.push_str("1 0 0\n\n");
     }
@@ -397,7 +528,11 @@ fn the_default_dead_gani_falls_and_lies_down() {
         let hurt = draw(&dead, 0, dir, &a);
         let kneel = draw(&dead, 6, dir, &a);
         let lying = draw(&dead, 14, dir, &a);
-        assert_eq!(hurt, draw(&gani("hurt.gani"), 0, dir, &a), "dir {dir}: the fall starts from the hurt pose");
+        assert_eq!(
+            hurt,
+            draw(&gani("hurt.gani"), 0, dir, &a),
+            "dir {dir}: the fall starts from the hurt pose"
+        );
         assert_ne!(kneel, hurt);
         assert_ne!(lying, kneel);
         assert_ne!(lying, blank());
@@ -437,8 +572,14 @@ fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
     let mut s = walker();
     s.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
     // The stock lift.gani: one step of WAIT 5 (6 ticks).
-    s.set_pose_gani(PoseKind::Lift, Gani::parse("SINGLEDIRECTION\nANI\n1 0 0\nWAIT 5\nANIEND\n").unwrap());
-    s.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    s.set_pose_gani(
+        PoseKind::Lift,
+        Gani::parse("SINGLEDIRECTION\nANI\n1 0 0\nWAIT 5\nANIEND\n").unwrap(),
+    );
+    s.carried = Some(seihai::offline::Carried {
+        kind: 0,
+        tiles: [[0, 0], [0, 0]],
+    });
     s.lift_ticks = Some(0);
     let mut seen = Vec::new();
     for _ in 0..7 {
@@ -451,7 +592,10 @@ fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
     // Without lift.gani the carry poses come at once.
     let mut n = walker();
     n.set_pose_gani(PoseKind::CarryStill, gani("carrystill.gani"));
-    n.carried = Some(seihai::offline::Carried { kind: 0, tiles: [[0, 0], [0, 0]] });
+    n.carried = Some(seihai::offline::Carried {
+        kind: 0,
+        tiles: [[0, 0], [0, 0]],
+    });
     n.lift_ticks = Some(0);
     assert_eq!(pose(&n).map(|p| p.0), Some(PoseKind::CarryStill));
 }
@@ -459,7 +603,14 @@ fn a_lift_shows_lift_gani_for_its_waits_then_carrystill() {
 #[test]
 fn s_again_during_a_swing_spins_with_the_has_spin_status() {
     let mut s = session();
-    s.set_pose_gani(PoseKind::Spin, Gani::parse(&format!("SINGLEDIRECTION\nANI\n{}ANIEND\n", "1 0 0\n\n".repeat(13))).unwrap());
+    s.set_pose_gani(
+        PoseKind::Spin,
+        Gani::parse(&format!(
+            "SINGLEDIRECTION\nANI\n{}ANIEND\n",
+            "1 0 0\n\n".repeat(13)
+        ))
+        .unwrap(),
+    );
     // Without the status a second press does nothing.
     assert!(s.start_swing());
     assert!(!s.start_swing());
@@ -503,7 +654,13 @@ fn the_hurt_blink_starts_at_the_hit_or_after_the_hurt_pose() {
     let mut o = session();
     o.set_mannerisms(MANNER_139);
     o.receive_hurtplayer(&hurt_packet(1), Some((o.player_x + 2.0, o.player_y)));
-    let seen: Vec<bool> = (0..40).map(|_| { let b = o.blink_off(); o.tick_combat(50); b }).collect();
+    let seen: Vec<bool> = (0..40)
+        .map(|_| {
+            let b = o.blink_off();
+            o.tick_combat(50);
+            b
+        })
+        .collect();
     assert!(seen[..31].iter().all(|b| !b));
     assert_eq!(&seen[31..34], [false, true, false]);
 }
@@ -516,7 +673,10 @@ fn a_held_arrow_walks_out_of_the_hurt_pose_after_12_ticks() {
     s.receive_hurtplayer(&hurt_packet(1), Some((s.player_x + 2.0, s.player_y)));
     s.tick_combat(11 * 50);
     let x = s.player_x;
-    assert!(s.try_move(0.5, 0.0).is_none(), "the arrows are ignored for 11 ticks");
+    assert!(
+        s.try_move(0.5, 0.0).is_none(),
+        "the arrows are ignored for 11 ticks"
+    );
     assert_eq!(s.player_x, x);
     assert_eq!(pose(&s).map(|p| p.0), Some(PoseKind::Hurt));
     s.tick_combat(50);

@@ -29,7 +29,9 @@ fn pump(rx: &Rx, st: &mut SessionState, ms: u64) {
 
 fn main() {
     let tag = std::env::args().nth(1).expect("account prefix");
-    let addr = std::env::args().nth(2).unwrap_or_else(|| "127.0.0.1:14803".into());
+    let addr = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:14803".into());
     let v = ClientVersion::V139;
     let mut b = Connection::connect(&addr).unwrap();
     b.login_versioned(v, 0x42, &format!("{tag}b"), "x").unwrap();
@@ -56,7 +58,7 @@ fn main() {
 
     let mut sent = Vec::new();
     let mut seen = Vec::new();
-    let mut look = |sb: &mut SessionState, seen: &mut Vec<u8>| {
+    let look = |sb: &mut SessionState, seen: &mut Vec<u8>| {
         pump(&rb, sb, 60);
         if let Some(sp) = sb.others.first().and_then(|o| o.sprite) {
             if seen.last() != Some(&sp) {

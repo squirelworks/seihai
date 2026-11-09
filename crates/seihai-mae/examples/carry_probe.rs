@@ -11,7 +11,9 @@
 //! The lab listserver accepts any account and password. The default address
 //! is the lab GServer.
 
-use seihai::net::{carry_sprite_message, position_message_sprite, throw_carried_message, Connection};
+use seihai::net::{
+    carry_sprite_message, position_message_sprite, throw_carried_message, Connection,
+};
 use seihai::protocol::{ClientVersion, SessionState};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
@@ -27,12 +29,27 @@ fn pump(rx: &Rx, st: &mut SessionState, ms: u64) {
 }
 fn main() {
     let tag = std::env::args().nth(1).expect("account prefix");
-    let addr = std::env::args().nth(2).unwrap_or_else(|| "127.0.0.1:14802".into());
-    let hold = std::env::args().nth(3).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
-    let vs = [ClientVersion::V139, ClientVersion::V205, ClientVersion::V222];
+    let addr = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:14802".into());
+    let hold = std::env::args()
+        .nth(3)
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    let vs = [
+        ClientVersion::V139,
+        ClientVersion::V205,
+        ClientVersion::V222,
+    ];
     for &va in &vs {
         for &vb in &vs {
-            let n = |p: &str| format!("{tag}{p}{}{}", va.label().replace('.', ""), vb.label().replace('.', ""));
+            let n = |p: &str| {
+                format!(
+                    "{tag}{p}{}{}",
+                    va.label().replace('.', ""),
+                    vb.label().replace('.', "")
+                )
+            };
             let mut b = Connection::connect(&addr).unwrap();
             b.login_versioned(vb, 0x42, &n("b"), "x").unwrap();
             let rb = b.spawn_reader().unwrap();
@@ -44,17 +61,40 @@ fn main() {
             let mut sa = SessionState::for_version(va);
             pump(&ra, &mut sa, 1000);
             // Lift: the bush (sprite 261), then S = 18 facing right.
-            a.send_messages(&[carry_sprite_message(Some(261)), position_message_sprite(33.5, 31.0, 3 + 4 * 18)]).unwrap();
+            a.send_messages(&[
+                carry_sprite_message(Some(261)),
+                position_message_sprite(33.5, 31.0, 3 + 4 * 18),
+            ])
+            .unwrap();
             pump(&rb, &mut sb, 1000);
-            let lifted: Vec<_> = sb.others.iter().map(|o| (o.carry, o.sprite.map(|s| s / 4))).collect();
+            let lifted: Vec<_> = sb
+                .others
+                .iter()
+                .map(|o| (o.carry, o.sprite.map(|s| s / 4)))
+                .collect();
             pump(&rb, &mut sb, hold * 1000);
             // Throw.
-            a.send_messages(&[throw_carried_message(), carry_sprite_message(None), position_message_sprite(33.5, 31.0, 3)]).unwrap();
+            a.send_messages(&[
+                throw_carried_message(),
+                carry_sprite_message(None),
+                position_message_sprite(33.5, 31.0, 3),
+            ])
+            .unwrap();
             pump(&rb, &mut sb, 1000);
-            let thrown: Vec<_> = sb.others.iter().map(|o| (o.carry, o.sprite.map(|s| s / 4))).collect();
+            let thrown: Vec<_> = sb
+                .others
+                .iter()
+                .map(|o| (o.carry, o.sprite.map(|s| s / 4)))
+                .collect();
             a.shutdown().unwrap();
             drop(a);
-            println!("A {} -> B {}: after lift B sees (carry, S) {:?}; after throw {:?}", va.label(), vb.label(), lifted, thrown);
+            println!(
+                "A {} -> B {}: after lift B sees (carry, S) {:?}; after throw {:?}",
+                va.label(),
+                vb.label(),
+                lifted,
+                thrown
+            );
         }
     }
 }

@@ -600,14 +600,37 @@ mod tests {
     fn a_fixed_udp_port_is_bound_and_sent() {
         let server = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = server.local_addr().unwrap().to_string();
-        let free = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let s = Session::connect(&addr, &Login::default(), Player::default(), Udp::Fixed(free), None).unwrap();
+        let free = UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let s = Session::connect(
+            &addr,
+            &Login::default(),
+            Player::default(),
+            Udp::Fixed(free),
+            None,
+        )
+        .unwrap();
         assert_eq!(s.me.udp_port, free as u32);
         // The port is taken now: a second client with the same fixed port
         // is refused with the port named.
-        let e = Session::connect(&addr, &Login::default(), Player::default(), Udp::Fixed(free), None).err().unwrap();
-        assert!(e.to_string().contains(&format!("fixed UDP port {free}")), "{e}");
-        let off = Session::connect(&addr, &Login::default(), Player::default(), Udp::Off, None).unwrap();
+        let e = Session::connect(
+            &addr,
+            &Login::default(),
+            Player::default(),
+            Udp::Fixed(free),
+            None,
+        )
+        .err()
+        .unwrap();
+        assert!(
+            e.to_string().contains(&format!("fixed UDP port {free}")),
+            "{e}"
+        );
+        let off =
+            Session::connect(&addr, &Login::default(), Player::default(), Udp::Off, None).unwrap();
         assert_eq!(off.me.udp_port, 0);
     }
 }

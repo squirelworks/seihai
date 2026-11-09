@@ -43,9 +43,15 @@ impl Voices {
         let (l, r) = pan_gains(req.pan);
         let src = &req.pcm.samples;
         let stereo: Vec<i16> = if req.pcm.channels == 1 {
-            src.iter().flat_map(|s| [(*s as f32 * l) as i16, (*s as f32 * r) as i16]).collect()
+            src.iter()
+                .flat_map(|s| [(*s as f32 * l) as i16, (*s as f32 * r) as i16])
+                .collect()
         } else {
-            src.chunks_exact(2).flat_map(|f| [(f[0] as f32 * l) as i16, (f[1] as f32 * r) as i16]).collect()
+            src.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|f| [(f[0] as f32 * l) as i16, (f[1] as f32 * r) as i16])
+                .collect()
         };
         let buf = SamplesBuffer::new(2, req.pcm.rate, stereo);
         if req.looped {
@@ -53,7 +59,11 @@ impl Voices {
         } else {
             sink.append(buf);
         }
-        self.playing.push(Playing { name: req.name.clone(), looped: req.looped, sink });
+        self.playing.push(Playing {
+            name: req.name.clone(),
+            looped: req.looped,
+            sink,
+        });
     }
 
     fn stop_where(&mut self, f: impl Fn(&Playing) -> bool) {
@@ -91,7 +101,10 @@ impl RodioSound {
                     }
                 };
                 let _ = ready_tx.send(Ok(()));
-                let mut voices = Voices { handle, playing: Vec::new() };
+                let mut voices = Voices {
+                    handle,
+                    playing: Vec::new(),
+                };
                 for cmd in rx {
                     match cmd {
                         Cmd::Play(req) => voices.play(&req),
@@ -101,7 +114,9 @@ impl RodioSound {
                 }
             })
             .map_err(|e| e.to_string())?;
-        ready_rx.recv().map_err(|_| "audio thread ended".to_string())??;
+        ready_rx
+            .recv()
+            .map_err(|_| "audio thread ended".to_string())??;
         Ok(Self { tx })
     }
 }

@@ -46,14 +46,23 @@ struct Args {
 }
 
 fn parse_args(raw: Vec<String>) -> Args {
-    let mut a = Args { version: Version::V222, out: None, in_place: false, rows: false, layer: 0, sheet: None, positional: Vec::new() };
+    let mut a = Args {
+        version: Version::V222,
+        out: None,
+        in_place: false,
+        rows: false,
+        layer: 0,
+        sheet: None,
+        positional: Vec::new(),
+    };
     let mut it = raw.into_iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| -> String {
             if let Some(v) = arg.strip_prefix(&format!("{name}=")) {
                 v.to_string()
             } else {
-                it.next().unwrap_or_else(|| fail(format!("{name} needs a value")))
+                it.next()
+                    .unwrap_or_else(|| fail(format!("{name} needs a value")))
             }
         };
         if arg == "--version" || arg.starts_with("--version=") {
@@ -102,10 +111,25 @@ fn open(path: &str) -> Document {
 fn list(path: &str, rows: bool, version: Version) {
     let doc = open(path);
     let s = doc.summary();
-    println!("Level:   {path} (GLEVNW01 text, editor version {})", version.name());
+    println!(
+        "Level:   {path} (GLEVNW01 text, editor version {})",
+        version.name()
+    );
     println!("Board:   {SIZE} x {SIZE}; BOARD rows placed {}, skipped {}, with a layer other than 0 {} (the layer is not read)", s.rows_placed, s.rows_skipped, s.rows_other_layer);
-    println!("Layers:  layer 1 cells filled {}; rows of other layers kept as they are {}", doc.layer1_count(), s.rows_other_layers_kept);
-    println!("Objects: links {}, signs {}, chests {}, baddies {}, NPCs {}, HEIGHTS block {}", s.links, s.signs, s.chests, s.baddies, s.npcs, if s.heights { "yes" } else { "no" });
+    println!(
+        "Layers:  layer 1 cells filled {}; rows of other layers kept as they are {}",
+        doc.layer1_count(),
+        s.rows_other_layers_kept
+    );
+    println!(
+        "Objects: links {}, signs {}, chests {}, baddies {}, NPCs {}, HEIGHTS block {}",
+        s.links,
+        s.signs,
+        s.chests,
+        s.baddies,
+        s.npcs,
+        if s.heights { "yes" } else { "no" }
+    );
     let hist = doc.histogram();
     println!("Tiles:   {} distinct ids; most used:", hist.len());
     for (id, n) in hist.iter().take(10) {
@@ -149,15 +173,32 @@ fn main() {
             list(file, a.rows, a.version);
         }
         Some("paint") => {
-            let file = pos.next().unwrap_or_else(|| fail("paint needs FILE.nw X Y W H TILE"));
+            let file = pos
+                .next()
+                .unwrap_or_else(|| fail("paint needs FILE.nw X Y W H TILE"));
             let nums: Vec<u32> = ["X", "Y", "W", "H", "TILE"]
                 .iter()
-                .map(|n| number(n, pos.next().unwrap_or_else(|| fail(format!("paint needs FILE.nw X Y W H TILE (missing {n})")))))
+                .map(|n| {
+                    number(
+                        n,
+                        pos.next().unwrap_or_else(|| {
+                            fail(format!("paint needs FILE.nw X Y W H TILE (missing {n})"))
+                        }),
+                    )
+                })
                 .collect();
             let out = target(&a, file);
             let mut doc = open(file);
-            let (x, y, w, h, tile) = (nums[0] as usize, nums[1] as usize, nums[2] as usize, nums[3] as usize, nums[4]);
-            let changed = doc.paint_layer(a.layer, x, y, w, h, Some(tile)).unwrap_or_else(|e| fail(e));
+            let (x, y, w, h, tile) = (
+                nums[0] as usize,
+                nums[1] as usize,
+                nums[2] as usize,
+                nums[3] as usize,
+                nums[4],
+            );
+            let changed = doc
+                .paint_layer(a.layer, x, y, w, h, Some(tile))
+                .unwrap_or_else(|e| fail(e));
             doc.save(&out).unwrap_or_else(|e| fail(e));
             println!(
                 "painted {w} x {h} at ({x}, {y}) on layer {} with tile {tile}: {changed} of {} tiles changed; wrote {}",
@@ -170,21 +211,29 @@ fn main() {
             let file = pos.next().map(PathBuf::from);
             let sheet = match &a.sheet {
                 Some(p) => {
-                    let data = std::fs::read(p).unwrap_or_else(|e| fail(format!("cannot read {}: {e}", p.display())));
+                    let data = std::fs::read(p)
+                        .unwrap_or_else(|e| fail(format!("cannot read {}: {e}", p.display())));
                     gui::Sheet::from_png(&data).unwrap_or_else(|e| fail(e))
                 }
                 None => gui::Sheet::builtin(),
             };
-            gui::run(a.version, sheet, file.as_deref()).unwrap_or_else(|e| fail(format!("cannot open the window: {e}")));
+            gui::run(a.version, sheet, file.as_deref())
+                .unwrap_or_else(|e| fail(format!("cannot open the window: {e}")));
         }
         Some("save") => {
             let file = pos.next().unwrap_or_else(|| fail("save needs a FILE.nw"));
             let out = target(&a, file);
             let doc = open(file);
             doc.save(&out).unwrap_or_else(|e| fail(e));
-            println!("wrote {} ({} bytes, unchanged level)", out.display(), doc.to_bytes().len());
+            println!(
+                "wrote {} ({} bytes, unchanged level)",
+                out.display(),
+                doc.to_bytes().len()
+            );
         }
-        Some(file) if file.ends_with(".nw") || Path::new(file).exists() => list(file, a.rows, a.version),
+        Some(file) if file.ends_with(".nw") || Path::new(file).exists() => {
+            list(file, a.rows, a.version)
+        }
         Some(other) => fail(format!("unknown command \"{other}\"\n{USAGE}")),
     }
 }

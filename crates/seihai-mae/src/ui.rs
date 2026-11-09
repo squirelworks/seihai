@@ -6,8 +6,8 @@
 
 use crate::chatlists::{ChatFilter, Identity, NameList};
 use crate::protocol::{ChatKind, ChatLine, OtherPlayer};
-use crate::render::font::{text_width, CELL_H, CELL_W};
 use crate::render::chattext::{draw_chat_text, draw_nick_text, ChatFont};
+use crate::render::font::{text_width, CELL_H, CELL_W};
 use crate::render::{Framebuffer, TILE_PX};
 
 /// Chat history lines shown at once.
@@ -147,7 +147,13 @@ pub fn quit_key(was_open: bool, yes: bool, no: bool, escape: bool) -> QuitKey {
 }
 
 /// [`quit_key`] with the S key, which goes back to the server list.
-pub fn quit_key_with_list(was_open: bool, yes: bool, no: bool, escape: bool, list: bool) -> QuitKey {
+pub fn quit_key_with_list(
+    was_open: bool,
+    yes: bool,
+    no: bool,
+    escape: bool,
+    list: bool,
+) -> QuitKey {
     if yes {
         QuitKey::Quit
     } else if list {
@@ -181,10 +187,19 @@ mod quit_key_tests {
     /// S answers it with the server list.
     #[test]
     fn s_goes_back_to_the_server_list() {
-        assert_eq!(quit_key_with_list(true, false, false, false, true), QuitKey::ServerList);
-        assert_eq!(quit_key_with_list(true, false, false, false, false), QuitKey::None);
+        assert_eq!(
+            quit_key_with_list(true, false, false, false, true),
+            QuitKey::ServerList
+        );
+        assert_eq!(
+            quit_key_with_list(true, false, false, false, false),
+            QuitKey::None
+        );
         // Y still wins if both are down.
-        assert_eq!(quit_key_with_list(true, true, false, false, true), QuitKey::Quit);
+        assert_eq!(
+            quit_key_with_list(true, true, false, false, true),
+            QuitKey::Quit
+        );
     }
 }
 
@@ -208,11 +223,17 @@ impl MissingLevelNotice {
     /// The player is in a link to `dest`, which has no local file. Returns
     /// the line to show, or `None` when it was already shown.
     pub fn missing(&mut self, dest: &str) -> Option<String> {
-        if self.shown.as_deref().is_some_and(|s| s.eq_ignore_ascii_case(dest)) {
+        if self
+            .shown
+            .as_deref()
+            .is_some_and(|s| s.eq_ignore_ascii_case(dest))
+        {
             return None;
         }
         self.shown = Some(dest.to_string());
-        Some(format!("{dest} is not here offline (not in your levels or the download cache)"))
+        Some(format!(
+            "{dest} is not here offline (not in your levels or the download cache)"
+        ))
     }
 
     /// The player is in no link (or went through one): the next missing
@@ -343,7 +364,13 @@ pub fn draw_chat(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &
 }
 
 /// [`draw_chat`] with `lines` history lines; 0 shows only the input line.
-pub fn draw_chat_lines(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, input: &Input, lines: usize) {
+pub fn draw_chat_lines(
+    fb: &mut Framebuffer,
+    log: &[ChatLine],
+    scroll: usize,
+    input: &Input,
+    lines: usize,
+) {
     let w = fb.width as i32;
     let line_h = CELL_H + 1;
     let input_h = line_h + 4;
@@ -354,7 +381,12 @@ pub fn draw_chat_lines(fb: &mut Framebuffer, log: &[ChatLine], scroll: usize, in
     let top = fb.height as i32 - h - 2;
     fb.shade_rect(0, top - 2, w, h + 4, 140);
     for (i, l) in shown.iter().enumerate() {
-        fb.draw_text(4, top + i as i32 * line_h, &fit(&chat_line_text(l), w - 8), kind_colour(l.kind));
+        fb.draw_text(
+            4,
+            top + i as i32 * line_h,
+            &fit(&chat_line_text(l), w - 8),
+            kind_colour(l.kind),
+        );
     }
     if scroll > 0 {
         let more = format!("^{scroll}");
@@ -392,7 +424,13 @@ fn chat_line_text(l: &ChatLine) -> String {
 /// input line is open, or the history is scrolled back (`scroll > 0`), the
 /// full window is drawn instead and nothing fades, so older lines can be
 /// read.
-pub fn draw_chat_overlay(fb: &mut Framebuffer, log: &[ChatLine], now_ms: u64, scroll: usize, input: &Input) {
+pub fn draw_chat_overlay(
+    fb: &mut Framebuffer,
+    log: &[ChatLine],
+    now_ms: u64,
+    scroll: usize,
+    input: &Input,
+) {
     if input.is_open() || scroll > 0 {
         return draw_chat(fb, log, scroll, input);
     }
@@ -409,7 +447,13 @@ pub fn draw_chat_overlay(fb: &mut Framebuffer, log: &[ChatLine], now_ms: u64, sc
         // The window's own shade is 140/256; fade it with the text.
         let keep = 256 - (116 * u16::from(alpha) / 255);
         fb.shade_rect(0, y - 1, w, line_h, keep);
-        fb.draw_text_alpha(4, y, &fit(&chat_line_text(l), w - 8), kind_colour(l.kind), alpha);
+        fb.draw_text_alpha(
+            4,
+            y,
+            &fit(&chat_line_text(l), w - 8),
+            kind_colour(l.kind),
+            alpha,
+        );
     }
 }
 
@@ -417,7 +461,13 @@ pub fn draw_chat_overlay(fb: &mut Framebuffer, log: &[ChatLine], now_ms: u64, sc
 /// (the overlay shows it), becomes our own bubble, and starts the bubble's
 /// clock held until the player moves. An empty line clears the bubble
 /// without a history entry. Returns whether a line was recorded.
-pub fn own_say(state: &mut crate::protocol::SessionState, who: &str, text: &str, bubble: &mut String, timer: &mut crate::chatlists::BubbleTimer) -> bool {
+pub fn own_say(
+    state: &mut crate::protocol::SessionState,
+    who: &str,
+    text: &str,
+    bubble: &mut String,
+    timer: &mut crate::chatlists::BubbleTimer,
+) -> bool {
     *bubble = text.to_string();
     if text.is_empty() {
         *timer = crate::chatlists::BubbleTimer::default();
@@ -433,10 +483,18 @@ pub fn own_say(state: &mut crate::protocol::SessionState, who: &str, text: &str,
 /// history entry, as the real client shows it. Returns whether it should go
 /// to the server as CURCHAT: only a change does, so a script that sets the
 /// same text every second does not send it every second.
-pub fn script_say(text: &str, bubble: &mut String, timer: &mut crate::chatlists::BubbleTimer) -> bool {
+pub fn script_say(
+    text: &str,
+    bubble: &mut String,
+    timer: &mut crate::chatlists::BubbleTimer,
+) -> bool {
     let changed = bubble != text;
     *bubble = text.to_string();
-    *timer = if text.is_empty() { crate::chatlists::BubbleTimer::default() } else { crate::chatlists::BubbleTimer::start() };
+    *timer = if text.is_empty() {
+        crate::chatlists::BubbleTimer::default()
+    } else {
+        crate::chatlists::BubbleTimer::start()
+    };
     changed
 }
 
@@ -450,13 +508,25 @@ fn to_screen(x: f32, y: f32, cam: (i32, i32)) -> (i32, i32) {
 
 /// Draw a player's chat text over the 48×48 player box at `(dx, dy)`, the
 /// way the version's own client does (see [`crate::render::chattext`]).
-pub fn draw_bubble(fb: &mut Framebuffer, font: Option<&ChatFont>, text: &str, dx: i32, dy: i32, carrying: bool) {
+pub fn draw_bubble(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    text: &str,
+    dx: i32,
+    dy: i32,
+    carrying: bool,
+) {
     draw_chat_text(fb, font, text, dx, dy, carrying);
 }
 
 /// Nicknames and chat text for other players. Their nickname is always up,
 /// in the colour of their AP (50, white, until the server sends one).
-pub fn draw_other_labels(fb: &mut Framebuffer, font: Option<&ChatFont>, others: &[OtherPlayer], cam: (i32, i32)) {
+pub fn draw_other_labels(
+    fb: &mut Framebuffer,
+    font: Option<&ChatFont>,
+    others: &[OtherPlayer],
+    cam: (i32, i32),
+) {
     for o in others {
         let (dx, dy) = to_screen(o.x, o.y, cam);
         if let Some(nick) = &o.nick {
@@ -473,13 +543,29 @@ pub fn draw_other_labels(fb: &mut Framebuffer, font: Option<&ChatFont>, others: 
 /// player with `[buddy]`, `[ignored]` and `[muted]` marks from the lists.
 /// A buddy mark is also the online marker: only players in the level
 /// are listed.
-pub fn player_list_rows(me: &str, others: &[OtherPlayer], buddy: &NameList, filter: &ChatFilter) -> Vec<String> {
-    let mut rows = vec![format!("Players ({})", others.len() + 1), format!("  {me} (you)")];
+pub fn player_list_rows(
+    me: &str,
+    others: &[OtherPlayer],
+    buddy: &NameList,
+    filter: &ChatFilter,
+) -> Vec<String> {
+    let mut rows = vec![
+        format!("Players ({})", others.len() + 1),
+        format!("  {me} (you)"),
+    ];
     for o in others {
         let name = o.nick.clone().unwrap_or_default();
-        let who = Identity { account: o.account.clone(), nick: o.nick.clone() };
+        let who = Identity {
+            account: o.account.clone(),
+            nick: o.nick.clone(),
+        };
         let mut row = format!("  {name} #{} {:.1},{:.1}", o.id, o.x, o.y);
-        if who.account.as_deref().or(who.nick.as_deref()).is_some_and(|k| buddy.contains(k)) {
+        if who
+            .account
+            .as_deref()
+            .or(who.nick.as_deref())
+            .is_some_and(|k| buddy.contains(k))
+        {
             row.push_str(" [buddy]");
         }
         if filter.ignored(&who) {
@@ -494,10 +580,22 @@ pub fn player_list_rows(me: &str, others: &[OtherPlayer], buddy: &NameList, filt
 }
 
 /// Player list window in the top-right corner.
-pub fn draw_player_list(fb: &mut Framebuffer, me: &str, others: &[OtherPlayer], buddy: &NameList, filter: &ChatFilter) {
+pub fn draw_player_list(
+    fb: &mut Framebuffer,
+    me: &str,
+    others: &[OtherPlayer],
+    buddy: &NameList,
+    filter: &ChatFilter,
+) {
     let line_h = CELL_H + 2;
     let rows = player_list_rows(me, others, buddy, filter);
-    let w = rows.iter().map(|r| text_width(r)).max().unwrap_or(0).min(fb.width as i32 - 16) + 8;
+    let w = rows
+        .iter()
+        .map(|r| text_width(r))
+        .max()
+        .unwrap_or(0)
+        .min(fb.width as i32 - 16)
+        + 8;
     let x = fb.width as i32 - w - 4;
     let y = 72;
     fb.shade_rect(x, y, w, rows.len() as i32 * line_h + 6, 90);
@@ -582,7 +680,12 @@ pub fn draw_panel(fb: &mut Framebuffer, title: &str, text: &str) {
     fb.fill_rect(x, y + h - 1, w, 1, [0xC0, 0xC0, 0xC0]);
     fb.draw_text(x + 8, y + 6, title, [0xFF, 0xE0, 0x70]);
     for (i, l) in lines.iter().enumerate() {
-        fb.draw_text(x + 8, y + 6 + (i as i32 + 1) * line_h, &fit(l, w - 16), [0xFF, 0xFF, 0xFF]);
+        fb.draw_text(
+            x + 8,
+            y + 6 + (i as i32 + 1) * line_h,
+            &fit(l, w - 16),
+            [0xFF, 0xFF, 0xFF],
+        );
     }
     let hint = "A / Space to close";
     fb.draw_text(
@@ -668,12 +771,26 @@ impl<K: PartialEq + Copy> CharRepeat<K> {
     /// system sent this frame, `pressed` the key that went down this frame
     /// (if any) and `down(key)` whether a key is still held. Returns the
     /// characters to type: `typed`, plus any repeats due.
-    pub fn frame(&mut self, now: std::time::Duration, typed: &[char], pressed: Option<K>, down: impl Fn(K) -> bool) -> Vec<char> {
+    pub fn frame(
+        &mut self,
+        now: std::time::Duration,
+        typed: &[char],
+        pressed: Option<K>,
+        down: impl Fn(K) -> bool,
+    ) -> Vec<char> {
         let mut out = typed.to_vec();
         for &c in typed {
             match (&mut self.held, pressed) {
                 // A new press: this key is the one to repeat.
-                (_, Some(k)) => self.held = Some(Held { ch: c, key: k, since: now, last: now, system: false }),
+                (_, Some(k)) => {
+                    self.held = Some(Held {
+                        ch: c,
+                        key: k,
+                        since: now,
+                        last: now,
+                        system: false,
+                    })
+                }
                 // The same character with no new press: the system repeats.
                 (Some(h), None) if h.ch == c && down(h.key) => {
                     h.system = true;
@@ -688,7 +805,11 @@ impl<K: PartialEq + Copy> CharRepeat<K> {
         if let Some(h) = self.held.as_mut().filter(|h| !h.system && typed.is_empty()) {
             if now >= h.since + REPEAT_DELAY {
                 // The first repeat comes at the delay, then one per rate.
-                let mut next = if h.last < h.since + REPEAT_DELAY { h.since + REPEAT_DELAY } else { h.last + REPEAT_RATE };
+                let mut next = if h.last < h.since + REPEAT_DELAY {
+                    h.since + REPEAT_DELAY
+                } else {
+                    h.last + REPEAT_RATE
+                };
                 while next <= now {
                     out.push(h.ch);
                     h.last = next;
@@ -731,7 +852,10 @@ mod char_repeat_tests {
         let mut r = CharRepeat::new();
         r.frame(ms(0), &['y'], Some(7u8), |_| true);
         assert!(r.frame(ms(600), &[], None, |_| false).is_empty());
-        assert!(r.frame(ms(900), &[], None, |_| true).is_empty(), "nothing held any more");
+        assert!(
+            r.frame(ms(900), &[], None, |_| true).is_empty(),
+            "nothing held any more"
+        );
     }
 
     #[test]
@@ -766,13 +890,19 @@ mod editor_key_tests {
             editor_key(true, "2.17", true, true),
             EditorKey::Refuse("You cannot open the editor in the online mode.".into())
         );
-        assert_eq!(editor_key(false, "2.3", true, true), EditorKey::Refuse("2.3 has no built-in editor".into()));
+        assert_eq!(
+            editor_key(false, "2.3", true, true),
+            EditorKey::Refuse("2.3 has no built-in editor".into())
+        );
     }
 
     #[test]
     fn offline_runs_and_no_editor_refuses() {
         assert_eq!(editor_key(true, "2.17", false, true), EditorKey::Run);
-        assert_eq!(editor_key(false, "2.3", false, true), EditorKey::Refuse("2.3 has no built-in editor".into()));
+        assert_eq!(
+            editor_key(false, "2.3", false, true),
+            EditorKey::Refuse("2.3 has no built-in editor".into())
+        );
     }
 
     /// F5 opens the level window online and offline, editor or not.
@@ -780,7 +910,10 @@ mod editor_key_tests {
     fn f5_always_opens_the_level_window() {
         for has_editor in [false, true] {
             for online in [false, true] {
-                assert_eq!(editor_key(has_editor, "2.22", online, false), EditorKey::Run);
+                assert_eq!(
+                    editor_key(has_editor, "2.22", online, false),
+                    EditorKey::Run
+                );
             }
         }
     }
@@ -824,7 +957,12 @@ mod tests {
             carry: None,
             looks: Default::default(),
         };
-        let others = vec![mk(2, "Pal", Some("pal_acct")), mk(3, "Jerk", Some("jerk_acct")), mk(4, "Loud", None), mk(5, "Plain", None)];
+        let others = vec![
+            mk(2, "Pal", Some("pal_acct")),
+            mk(3, "Jerk", Some("jerk_acct")),
+            mk(4, "Loud", None),
+            mk(5, "Plain", None),
+        ];
         let mut buddy = NameList::default();
         buddy.add("PAL_ACCT");
         let mut f = ChatFilter::default();
@@ -840,11 +978,17 @@ mod tests {
 
     #[test]
     fn toall_prefix() {
-        assert_eq!(classify_chat("  ToAll: hi all "), ChatSend::Toall("hi all".into()));
+        assert_eq!(
+            classify_chat("  ToAll: hi all "),
+            ChatSend::Toall("hi all".into())
+        );
         assert_eq!(classify_chat("hello"), ChatSend::Say("hello".into()));
         assert_eq!(classify_chat("toal"), ChatSend::Say("toal".into()));
         assert_eq!(classify_chat(" ShowName "), ChatSend::ShowName);
-        assert_eq!(classify_chat("showname please"), ChatSend::Say("showname please".into()));
+        assert_eq!(
+            classify_chat("showname please"),
+            ChatSend::Say("showname please".into())
+        );
     }
 
     #[test]
@@ -897,7 +1041,12 @@ mod tests {
     }
 
     fn line(kind: ChatKind, from: &str, text: &str, born_ms: u64) -> ChatLine {
-        ChatLine { kind, from: from.into(), text: text.into(), born_ms }
+        ChatLine {
+            kind,
+            from: from.into(),
+            text: text.into(),
+            born_ms,
+        }
     }
 
     fn lit(fb: &Framebuffer, rgb: [u8; 3]) -> bool {
@@ -910,7 +1059,9 @@ mod tests {
         assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS - 1), 255);
         // Four equal steps across the fade.
         let step = OVERLAY_FADE_MS / OVERLAY_FADE_STEPS;
-        let a: Vec<u8> = (0..OVERLAY_FADE_STEPS).map(|k| overlay_alpha(OVERLAY_VISIBLE_MS + k * step)).collect();
+        let a: Vec<u8> = (0..OVERLAY_FADE_STEPS)
+            .map(|k| overlay_alpha(OVERLAY_VISIBLE_MS + k * step))
+            .collect();
         assert_eq!(a, [204, 153, 102, 51]);
         assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS - 1), 51);
         assert_eq!(overlay_alpha(OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS), 0);
@@ -919,7 +1070,9 @@ mod tests {
 
     #[test]
     fn overlay_keeps_newest_lines_and_drops_faded_ones() {
-        let log: Vec<ChatLine> = (0..10).map(|i| line(ChatKind::Say, "a", &format!("m{i}"), i * 100)).collect();
+        let log: Vec<ChatLine> = (0..10)
+            .map(|i| line(ChatKind::Say, "a", &format!("m{i}"), i * 100))
+            .collect();
         // All fresh: only the newest CHAT_LINES, oldest first.
         let v = overlay_lines(&log, 1000);
         assert_eq!(v.len(), CHAT_LINES);
@@ -929,7 +1082,10 @@ mod tests {
         // Late: the oldest have faded away first, the newest linger.
         let late = OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS + 450;
         let v = overlay_lines(&log, late);
-        assert_eq!(v.iter().map(|(l, _)| l.text.as_str()).collect::<Vec<_>>(), ["m5", "m6", "m7", "m8", "m9"]);
+        assert_eq!(
+            v.iter().map(|(l, _)| l.text.as_str()).collect::<Vec<_>>(),
+            ["m5", "m6", "m7", "m8", "m9"]
+        );
         assert!(v[0].1 <= v[4].1, "older lines are never brighter");
         // Long after: nothing.
         assert!(overlay_lines(&log, 1_000_000).is_empty());
@@ -942,10 +1098,14 @@ mod tests {
         let mut fb = Framebuffer::new(320, 120);
         draw_chat_overlay(&mut fb, &log, 0, 0, &Input::default());
         let rows = |fb: &Framebuffer| -> Vec<i32> {
-            (0..fb.height as i32).filter(|&y| (0..fb.width as i32).any(|x| {
-                let i = (y as usize * fb.width as usize + x as usize) * 3;
-                fb.pixels[i..i + 3] == kind_colour(ChatKind::Toall)
-            })).collect()
+            (0..fb.height as i32)
+                .filter(|&y| {
+                    (0..fb.width as i32).any(|x| {
+                        let i = (y as usize * fb.width as usize + x as usize) * 3;
+                        fb.pixels[i..i + 3] == kind_colour(ChatKind::Toall)
+                    })
+                })
+                .collect()
         };
         let before = rows(&fb);
         assert!(!before.is_empty(), "the line is drawn");
@@ -953,8 +1113,15 @@ mod tests {
         let mut fb2 = Framebuffer::new(320, 120);
         draw_chat_overlay(&mut fb2, &log, 10, 0, &Input::default());
         let after = rows(&fb2);
-        assert!(after.iter().min() < before.iter().min(), "the older line moved up");
-        assert_eq!(after.iter().max(), before.iter().max(), "the newest sits where the last one did");
+        assert!(
+            after.iter().min() < before.iter().min(),
+            "the older line moved up"
+        );
+        assert_eq!(
+            after.iter().max(),
+            before.iter().max(),
+            "the newest sits where the last one did"
+        );
     }
 
     #[test]
@@ -982,14 +1149,20 @@ mod tests {
 
     #[test]
     fn open_input_or_scrollback_shows_the_whole_window_without_fading() {
-        let log = vec![line(ChatKind::Toall, "a", "old", 0), line(ChatKind::Toall, "a", "newer", 1)];
+        let log = vec![
+            line(ChatKind::Toall, "a", "old", 0),
+            line(ChatKind::Toall, "a", "newer", 1),
+        ];
         let say = kind_colour(ChatKind::Toall);
         let late = OVERLAY_VISIBLE_MS + OVERLAY_FADE_MS + 1;
         let mut input = Input::default();
         input.open(InputMode::Chat);
         let mut fb = Framebuffer::new(200, 80);
         draw_chat_overlay(&mut fb, &log, late, 0, &input);
-        assert!(lit(&fb, say), "the open input shows old lines at full colour");
+        assert!(
+            lit(&fb, say),
+            "the open input shows old lines at full colour"
+        );
         let mut fb = Framebuffer::new(200, 80);
         draw_chat_overlay(&mut fb, &log, late, 1, &Input::default());
         assert!(lit(&fb, say), "scrolled back shows them too");
@@ -1017,7 +1190,13 @@ mod tests {
         let mut timer = crate::chatlists::BubbleTimer::default();
         // Some time has passed in the session.
         st.tick_bubbles(5000);
-        assert!(own_say(&mut st, "me", "hello there", &mut bubble, &mut timer));
+        assert!(own_say(
+            &mut st,
+            "me",
+            "hello there",
+            &mut bubble,
+            &mut timer
+        ));
         // 1. history
         assert_eq!(st.chat_log.len(), 1);
         assert_eq!(st.chat_log[0].from, "me");
@@ -1025,10 +1204,19 @@ mod tests {
         assert_eq!(st.chat_log[0].born_ms, 5000);
         // 2. overlay
         let mut fb = Framebuffer::new(320, 120);
-        draw_chat_overlay(&mut fb, &st.chat_log, st.chat_clock_ms, 0, &Input::default());
+        draw_chat_overlay(
+            &mut fb,
+            &st.chat_log,
+            st.chat_clock_ms,
+            0,
+            &Input::default(),
+        );
         let mut bar = Framebuffer::new(320, 120);
         draw_chat_overlay(&mut bar, &[], st.chat_clock_ms, 0, &Input::default());
-        assert_ne!(fb.pixels, bar.pixels, "more than the bare input bar is drawn");
+        assert_ne!(
+            fb.pixels, bar.pixels,
+            "more than the bare input bar is drawn"
+        );
         // 3. own bubble, held while the player stands still
         assert_eq!(bubble, "hello there");
         assert!(timer.is_held());

@@ -59,15 +59,27 @@ impl WeaponBar {
     /// their order, then server weapons). `image_ext` is the build's image
     /// extension (`.gif` or `.png`), for built-in weapons.
     /// `weapons` are the server weapons as (name, image) pairs, in order.
-    pub fn sync<'a>(&mut self, defaults: &[u8], weapons: impl IntoIterator<Item = (&'a str, Option<&'a str>)>, image_ext: &str) {
+    pub fn sync<'a>(
+        &mut self,
+        defaults: &[u8],
+        weapons: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+        image_ext: &str,
+    ) {
         let wanted: Vec<Entry> = defaults
             .iter()
             .filter_map(|&id| default_weapon(id))
-            .map(|d| Entry { name: d.name.to_string(), image: Some(format!("{}{image_ext}", d.image)) })
-            .chain(weapons.into_iter().map(|(name, image)| Entry { name: name.to_string(), image: weapon_image(image) }))
+            .map(|d| Entry {
+                name: d.name.to_string(),
+                image: Some(format!("{}{image_ext}", d.image)),
+            })
+            .chain(weapons.into_iter().map(|(name, image)| Entry {
+                name: name.to_string(),
+                image: weapon_image(image),
+            }))
             .collect();
         let before = self.entries.len();
-        self.entries.retain(|e| wanted.iter().any(|w| w.name == e.name));
+        self.entries
+            .retain(|e| wanted.iter().any(|w| w.name == e.name));
         if self.entries.len() != before {
             let n = self.entries.len();
             match self.selected {
@@ -105,7 +117,11 @@ impl WeaponBar {
     /// built-in weapons in lower case (`bow`), the bar as `Bow`, so the
     /// match ignores case. Returns false when the bar has no such weapon.
     pub fn select_name(&mut self, name: &str) -> bool {
-        match self.entries.iter().position(|e| e.name.eq_ignore_ascii_case(name)) {
+        match self
+            .entries
+            .iter()
+            .position(|e| e.name.eq_ignore_ascii_case(name))
+        {
             Some(i) => {
                 self.selected = Some(i);
                 true
@@ -128,7 +144,11 @@ impl WeaponBar {
 /// [`crate::protocol::weapon_images`]).
 fn weapon_image(image: Option<&str>) -> Option<String> {
     let s = image.filter(|s| !s.is_empty())?;
-    Some(if s.contains('.') { s.to_string() } else { format!("{s}.gif") })
+    Some(if s.contains('.') {
+        s.to_string()
+    } else {
+        format!("{s}.gif")
+    })
 }
 
 #[cfg(test)]
@@ -192,7 +212,11 @@ mod tests {
         let mut bar = WeaponBar::default();
         bar.sync(&[8], [w("Bomb", Some("mybomb.png"))], ".png");
         assert_eq!(bar.entries.len(), 1);
-        assert_eq!(default_weapon(3), None, "bombs (the counter) is not a weapon");
+        assert_eq!(
+            default_weapon(3),
+            None,
+            "bombs (the counter) is not a weapon"
+        );
         assert_eq!(default_weapon(23).unwrap().image, "wbomb3");
     }
 }

@@ -22,7 +22,11 @@ fn main() {
 
     let mut session = OfflineSession::new();
     session.load_level(Path::new(&args[1])).unwrap();
-    let sign = session.current_level.as_ref().and_then(|l| l.signs.first().cloned()).expect("no sign");
+    let sign = session
+        .current_level
+        .as_ref()
+        .and_then(|l| l.signs.first().cloned())
+        .expect("no sign");
     session.player_x = sign.x as f32 - 0.5;
     session.player_y = sign.y as f32 + 0.5;
     session.player_dir = DIR_NORTH;
@@ -31,7 +35,17 @@ fn main() {
     while let Some(first) = page {
         let mut fb = render_view(&session, &sheet, sw, sh, VIEW_W, VIEW_H);
         let row = player_box_origin(&session, VIEW_W, VIEW_H).1 as f32 / 16.0;
-        signs::draw_sign(&mut fb, &Sheet { px: &lpx, w: lw, bpp: 4 }, &text, first, row);
+        signs::draw_sign(
+            &mut fb,
+            &Sheet {
+                px: &lpx,
+                w: lw,
+                bpp: 4,
+            },
+            &text,
+            first,
+            row,
+        );
         let name = format!("sign-page-{}.png", first / signs::LINES_PER_PAGE + 1);
         let mut file = std::fs::File::create(out.join(&name)).unwrap();
         seihai::assets::write_png_rgb(&mut file, fb.width, fb.height, &fb.pixels).unwrap();

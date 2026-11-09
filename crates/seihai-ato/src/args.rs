@@ -65,12 +65,17 @@ pub const BUILDS: [ClientVersion; 2] = [ClientVersion::V304, ClientVersion::V315
 /// The build to run. No `--version` gives 3.153, the newer of the two.
 /// A label that is not a 3.x build is an error, with the labels Ato knows.
 pub fn build(a: &Args) -> Result<ClientVersion, String> {
-    let Some(label) = a.version.as_deref() else { return Ok(ClientVersion::V3153) };
+    let Some(label) = a.version.as_deref() else {
+        return Ok(ClientVersion::V3153);
+    };
     match ClientVersion::from_label(label) {
         Some(v) if BUILDS.contains(&v) => Ok(v),
         _ => {
             let known: Vec<&str> = BUILDS.iter().map(|v| v.label()).collect();
-            Err(format!("seihai-ato runs the 3.x builds ({}); {label:?} is not one of them", known.join(", ")))
+            Err(format!(
+                "seihai-ato runs the 3.x builds ({}); {label:?} is not one of them",
+                known.join(", ")
+            ))
         }
     }
 }

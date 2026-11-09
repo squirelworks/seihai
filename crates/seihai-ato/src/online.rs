@@ -58,24 +58,45 @@ pub fn run(
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
     };
-    let mut s = login_gserver(addr, version, random_key(), &login.account, &login.password, false).map_err(|e| e.to_string())?;
+    let mut s = login_gserver(
+        addr,
+        version,
+        random_key(),
+        &login.account,
+        &login.password,
+        false,
+    )
+    .map_err(|e| e.to_string())?;
     for w in &s.warnings {
         let _ = writeln!(out, "warning: {w}");
     }
-    let _ = writeln!(out, "logged in at {addr} as {} ({})", login.account, version.label());
+    let _ = writeln!(
+        out,
+        "logged in at {addr} as {} ({})",
+        login.account,
+        version.label()
+    );
     let frames = s.conn.spawn_reader().map_err(|e| e.to_string())?;
     let mut st = SessionState::for_version(version);
     let mut store = LevelStore::default();
     // A level was stored and has not been logged yet.
     let mut owed = false;
     loop {
-        let wait = if owed { SETTLE } else { Duration::from_secs(3600) };
+        let wait = if owed {
+            SETTLE
+        } else {
+            Duration::from_secs(3600)
+        };
         match frames.recv_timeout(wait) {
             Ok(Ok(body)) => {
                 st.apply_body(&body);
                 let before = st.current_level_name();
                 // A new level ends the one owed: log it as it stood.
-                if owed && store.level_name().is_some_and(|n| before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))) {
+                if owed
+                    && store.level_name().is_some_and(|n| {
+                        before.as_deref().is_none_or(|b| !b.eq_ignore_ascii_case(n))
+                    })
+                {
                     log_level(version, &store, &st, out, shown);
                     owed = false;
                 }
@@ -85,7 +106,10 @@ pub fn run(
                 if owed {
                     log_level(version, &store, &st, out, shown);
                 }
-                let why = st.disconnect_message.take().unwrap_or_else(|| e.to_string());
+                let why = st
+                    .disconnect_message
+                    .take()
+                    .unwrap_or_else(|| e.to_string());
                 let _ = writeln!(out, "connection closed: {why}");
                 return Ok(());
             }
@@ -104,7 +128,13 @@ pub fn run(
     }
 }
 
-fn log_level(version: ClientVersion, store: &LevelStore, st: &SessionState, out: &mut impl Write, shown: &mut dyn FnMut(&Level, &Arrival)) {
+fn log_level(
+    version: ClientVersion,
+    store: &LevelStore,
+    st: &SessionState,
+    out: &mut impl Write,
+    shown: &mut dyn FnMut(&Level, &Arrival),
+) {
     if let (Some(a), Some(level)) = (store.arrival(st), store.level.as_ref()) {
         let _ = writeln!(out, "{}", a.line());
         for l in crate::fields::lines(version, level, &a.name, st) {

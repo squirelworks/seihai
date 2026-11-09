@@ -65,7 +65,14 @@ pub struct CameraRig {
 
 impl Default for CameraRig {
     fn default() -> Self {
-        CameraRig { distance: CAM_DIST, turn: CAM_TURN, height: CAM_HEIGHT, y_rate: CAM_Y_RATE, pitch: CAM_PITCH, fov: CAM_FOV }
+        CameraRig {
+            distance: CAM_DIST,
+            turn: CAM_TURN,
+            height: CAM_HEIGHT,
+            y_rate: CAM_Y_RATE,
+            pitch: CAM_PITCH,
+            fov: CAM_FOV,
+        }
     }
 }
 
@@ -104,7 +111,11 @@ impl Ground {
                 // Skip walls: faces whose normal is nearly flat.
                 let a = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
                 let b = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
-                let n = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+                let n = [
+                    a[1] * b[2] - a[2] * b[1],
+                    a[2] * b[0] - a[0] * b[2],
+                    a[0] * b[1] - a[1] * b[0],
+                ];
                 let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
                 if len > 0.0 && (n[1] / len).abs() > 0.5 {
                     tris.push(p);
@@ -116,7 +127,9 @@ impl Ground {
 
     /// The highest surface at (x, z) no higher than `max_y`.
     pub fn height(&self, x: f32, z: f32, max_y: f32) -> Option<f32> {
-        self.surfaces(x, z).filter(|&y| y <= max_y + 1e-3).fold(None, |b: Option<f32>, y| Some(b.map_or(y, |b| b.max(y))))
+        self.surfaces(x, z)
+            .filter(|&y| y <= max_y + 1e-3)
+            .fold(None, |b: Option<f32>, y| Some(b.map_or(y, |b| b.max(y))))
     }
 
     /// Whether a surface at (x, z) lies between `lo` and `hi` (exclusive
@@ -177,7 +190,15 @@ impl FollowCam {
     pub fn behind(p: &Player) -> FollowCam {
         let (s, c) = (p.angle as f32).to_radians().sin_cos();
         let rig = CameraRig::default();
-        FollowCam { pos: [p.x - s * rig.distance, p.y + rig.height, p.z - c * rig.distance], yaw: p.angle as f32, rig }
+        FollowCam {
+            pos: [
+                p.x - s * rig.distance,
+                p.y + rig.height,
+                p.z - c * rig.distance,
+            ],
+            yaw: p.angle as f32,
+            rig,
+        }
     }
 
     pub fn tick(&mut self, p: &Player) {
@@ -197,7 +218,11 @@ impl FollowCam {
         self.pos[1] += (p.y + self.rig.height - self.pos[1]) * self.rig.y_rate;
         let want = dx.atan2(dz).to_degrees();
         let mut turn = (want - self.yaw + 540.0).rem_euclid(360.0) - 180.0;
-        let max = if turn.abs() > 90.0 { self.rig.turn * 3.0 } else { self.rig.turn };
+        let max = if turn.abs() > 90.0 {
+            self.rig.turn * 3.0
+        } else {
+            self.rig.turn
+        };
         turn = turn.clamp(-max, max);
         self.yaw = (self.yaw + turn).rem_euclid(360.0);
     }
@@ -208,11 +233,19 @@ impl FollowCam {
     pub fn target(&self, p: &Player) -> V3 {
         let (dx, dy, dz) = (p.x - self.pos[0], p.y - self.pos[1], p.z - self.pos[2]);
         let h = (dx * dx + dz * dz).sqrt();
-        let (hx, hz) = if h > 1e-3 { (dx / h, dz / h) } else { self.yaw.to_radians().sin_cos() };
+        let (hx, hz) = if h > 1e-3 {
+            (dx / h, dz / h)
+        } else {
+            self.yaw.to_radians().sin_cos()
+        };
         let elev = dy.atan2(h) - self.rig.pitch;
         let (s, c) = elev.sin_cos();
         let d = self.rig.distance;
-        [self.pos[0] + hx * c * d, self.pos[1] + s * d, self.pos[2] + hz * c * d]
+        [
+            self.pos[0] + hx * c * d,
+            self.pos[1] + s * d,
+            self.pos[2] + hz * c * d,
+        ]
     }
 }
 
@@ -228,7 +261,14 @@ pub struct Walker {
 
 impl Walker {
     pub fn new(seed: u32) -> Walker {
-        Walker { walk_ticks: 0, jump: Jump::None, jump_held: false, back_dir: None, fall: 0.0, rng: seed | 1 }
+        Walker {
+            walk_ticks: 0,
+            jump: Jump::None,
+            jump_held: false,
+            back_dir: None,
+            fall: 0.0,
+            rng: seed | 1,
+        }
     }
 
     fn coin(&mut self) -> bool {
@@ -242,7 +282,11 @@ impl Walker {
     pub fn tick(&mut self, p: &mut Player, cam: &FollowCam, inp: Input, ground: &dyn Collider) {
         // Facing: the camera-to-player direction.
         let (dx, dz) = (p.x - cam.pos[0], p.z - cam.pos[2]);
-        let view = if dx * dx + dz * dz > 1.0 { dx.atan2(dz).to_degrees() } else { p.angle as f32 };
+        let view = if dx * dx + dz * dz > 1.0 {
+            dx.atan2(dz).to_degrees()
+        } else {
+            p.angle as f32
+        };
         p.angle = (view.rem_euclid(360.0).round() as u16) % 360;
 
         let only_back = inp.back && !inp.forward && !inp.left && !inp.right;
@@ -276,9 +320,16 @@ impl Walker {
                 p.anim = if self.coin() { 20 } else { 0 };
             }
             self.walk_ticks += 1;
-            let speed = if self.walk_ticks > RUN_AFTER { RUN } else { WALK };
+            let speed = if self.walk_ticks > RUN_AFTER {
+                RUN
+            } else {
+                WALK
+            };
             let (nx, nz) = (p.x + mx / len * speed, p.z + mz / len * speed);
-            if nx.abs() <= BOUND && nz.abs() <= BOUND && !ground.blocked(nx, nz, p.y + STEP, p.y + BODY) {
+            if nx.abs() <= BOUND
+                && nz.abs() <= BOUND
+                && !ground.blocked(nx, nz, p.y + STEP, p.y + BODY)
+            {
                 match ground.height(nx, nz, p.y + STEP) {
                     Some(h) if self.jump == Jump::None && self.fall == 0.0 && h > p.y - STEP => {
                         p.x = nx;
@@ -327,7 +378,11 @@ impl Walker {
                     self.jump = Jump::Down(0);
                 } else {
                     p.y += JUMP_UP[i];
-                    self.jump = if i + 1 < JUMP_UP.len() { Jump::Up(i + 1) } else { Jump::Down(0) };
+                    self.jump = if i + 1 < JUMP_UP.len() {
+                        Jump::Up(i + 1)
+                    } else {
+                        Jump::Down(0)
+                    };
                 }
             }
             Jump::Down(i) => {
@@ -367,9 +422,13 @@ mod tests {
             vec![[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]]
         };
         let mut m = Mesh::default();
-        for (i, q) in [quad(-1000.0, -1000.0, 1000.0, 1000.0, 0.0), quad(-50.0, 100.0, 50.0, 200.0, 10.0), quad(-50.0, 300.0, 50.0, 400.0, 40.0)]
-            .into_iter()
-            .enumerate()
+        for (i, q) in [
+            quad(-1000.0, -1000.0, 1000.0, 1000.0, 0.0),
+            quad(-50.0, 100.0, 50.0, 200.0, 10.0),
+            quad(-50.0, 300.0, 50.0, 400.0, 40.0),
+        ]
+        .into_iter()
+        .enumerate()
         {
             m.vertices.extend(q);
             let b = i as u32 * 4;
@@ -388,7 +447,11 @@ mod tests {
     }
 
     fn walk(p: &mut Player, w: &mut Walker, g: &Ground, inp: Input, n: usize) {
-        let cam = FollowCam { pos: [p.x, p.y + CAM_HEIGHT, p.z - CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        let cam = FollowCam {
+            pos: [p.x, p.y + CAM_HEIGHT, p.z - CAM_DIST],
+            yaw: 0.0,
+            rig: CameraRig::default(),
+        };
         for _ in 0..n {
             w.tick(p, &cam, inp, g);
         }
@@ -399,7 +462,10 @@ mod tests {
         let g = flat_with_step();
         let mut p = Player::default();
         let mut w = Walker::new(7);
-        let fwd = Input { forward: true, ..Input::default() };
+        let fwd = Input {
+            forward: true,
+            ..Input::default()
+        };
         walk(&mut p, &mut w, &g, fwd, 1);
         assert_eq!((p.x, p.z, p.angle), (0.0, 8.0, 0));
         walk(&mut p, &mut w, &g, fwd, 24);
@@ -407,11 +473,17 @@ mod tests {
         walk(&mut p, &mut w, &g, fwd, 1);
         assert_eq!(p.z, 212.0, "running after 25 ticks");
         // The 10-high step was climbed on the way.
-        let mut q = Player { z: 96.0, ..Player::default() };
+        let mut q = Player {
+            z: 96.0,
+            ..Player::default()
+        };
         walk(&mut q, &mut Walker::new(1), &g, fwd, 1);
         assert_eq!((q.z, q.y), (104.0, 10.0));
         // The 40-high ledge stops the player.
-        let mut r = Player { z: 296.0, ..Player::default() };
+        let mut r = Player {
+            z: 296.0,
+            ..Player::default()
+        };
         walk(&mut r, &mut Walker::new(1), &g, fwd, 3);
         assert_eq!(r.z, 296.0);
     }
@@ -421,13 +493,19 @@ mod tests {
         let g = flat_with_step();
         let mut p = Player::default();
         let mut w = Walker::new(3);
-        let jump = Input { jump: true, ..Input::default() };
+        let jump = Input {
+            jump: true,
+            ..Input::default()
+        };
         let mut heights = Vec::new();
         for _ in 0..16 {
             walk(&mut p, &mut w, &g, jump, 1);
             heights.push(p.y);
         }
-        assert_eq!(&heights[..8], &[0.0, 10.0, 20.0, 29.0, 37.0, 43.0, 46.0, 47.0]);
+        assert_eq!(
+            &heights[..8],
+            &[0.0, 10.0, 20.0, 29.0, 37.0, 43.0, 46.0, 47.0]
+        );
         assert_eq!(heights[8], 46.0);
         assert_eq!(*heights.last().unwrap(), 0.0);
         assert_eq!(p.anim, 40);
@@ -436,11 +514,19 @@ mod tests {
     #[test]
     fn camera_closes_the_gap_by_the_clients_factor() {
         let p = Player::default();
-        let mut c = FollowCam { pos: [0.0, 80.0, -600.0], yaw: 0.0, rig: CameraRig::default() };
+        let mut c = FollowCam {
+            pos: [0.0, 80.0, -600.0],
+            yaw: 0.0,
+            rig: CameraRig::default(),
+        };
         // First tick: gap 380, factor (380 / 220)² / 10.
         c.tick(&p);
         let k = (380.0f32 / 220.0).powi(2) / 10.0;
-        assert!((c.pos[2] - (-600.0 + 380.0 * k)).abs() < 1e-3, "{}", c.pos[2]);
+        assert!(
+            (c.pos[2] - (-600.0 + 380.0 * k)).abs() < 1e-3,
+            "{}",
+            c.pos[2]
+        );
         // It never overshoots, and the factor shrinks with the gap, so the
         // last stretch is slow.
         let mut last = -c.pos[2];
@@ -452,15 +538,26 @@ mod tests {
         }
         assert!((last - 244.4).abs() < 0.5, "{last}");
         // At exactly 220 the factor is 0 and the camera stays put.
-        let mut still = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        let mut still = FollowCam {
+            pos: [0.0, 80.0, -CAM_DIST],
+            yaw: 0.0,
+            rig: CameraRig::default(),
+        };
         still.tick(&p);
         assert_eq!(still.pos[2], -CAM_DIST);
     }
 
     #[test]
     fn camera_follows_80_above_by_a_tenth_a_tick() {
-        let p = Player { y: 100.0, ..Player::default() };
-        let mut c = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        let p = Player {
+            y: 100.0,
+            ..Player::default()
+        };
+        let mut c = FollowCam {
+            pos: [0.0, 80.0, -CAM_DIST],
+            yaw: 0.0,
+            rig: CameraRig::default(),
+        };
         c.tick(&p);
         assert!((c.pos[1] - 90.0).abs() < 1e-4, "{}", c.pos[1]);
         assert_eq!(FollowCam::behind(&Player::default()).pos[1], 80.0);
@@ -469,7 +566,11 @@ mod tests {
     #[test]
     fn view_aims_at_the_player_then_lifts_by_the_pitch() {
         let p = Player::default();
-        let c = FollowCam { pos: [0.0, 80.0, -CAM_DIST], yaw: 0.0, rig: CameraRig::default() };
+        let c = FollowCam {
+            pos: [0.0, 80.0, -CAM_DIST],
+            yaw: 0.0,
+            rig: CameraRig::default(),
+        };
         let t = c.target(&p);
         let (dy, dz) = (t[1] - c.pos[1], t[2] - c.pos[2]);
         let to_player = (-80.0f32).atan2(CAM_DIST);

@@ -32,8 +32,16 @@ impl ListEndpoint {
         let host = it.next().unwrap_or("").trim();
         let port = it.next().unwrap_or("").trim();
         Self {
-            host: if host.is_empty() { version.listserver_host().to_string() } else { host.to_string() },
-            port: if port.is_empty() { version.listserver_port().to_string() } else { port.to_string() },
+            host: if host.is_empty() {
+                version.listserver_host().to_string()
+            } else {
+                host.to_string()
+            },
+            port: if port.is_empty() {
+                version.listserver_port().to_string()
+            } else {
+                port.to_string()
+            },
             port_user_set: !port.is_empty(),
         }
     }
@@ -111,7 +119,10 @@ impl Launcher {
         Self {
             list: ListEndpoint::from_saved(
                 s.listserver.as_deref(),
-                s.version.as_deref().and_then(ClientVersion::from_label_or_offline).unwrap_or(ClientVersion::V205),
+                s.version
+                    .as_deref()
+                    .and_then(ClientVersion::from_label_or_offline)
+                    .unwrap_or(ClientVersion::V205),
             ),
             account: s.account.clone().unwrap_or_default(),
             password: s.password.clone().unwrap_or_default(),
@@ -203,7 +214,8 @@ impl Launcher {
         if self.version == GRAAL3D_LABEL {
             return GRAAL3D_LABEL;
         }
-        self.offline_build().map_or(self.version_enum().label(), |b| b.label)
+        self.offline_build()
+            .map_or(self.version_enum().label(), |b| b.label)
     }
 
     fn connect_list(&mut self) {
@@ -214,7 +226,11 @@ impl Launcher {
         let version = self.version_enum();
         let list_version = version.list_version();
         if list_version != version {
-            self.status = format!("{} has no listserver; fetching as {}", version.label(), list_version.label());
+            self.status = format!(
+                "{} has no listserver; fetching as {}",
+                version.label(),
+                list_version.label()
+            );
         }
         let addr = self.list.addr(version);
         match Connection::fetch_server_list(&addr, list_version, &self.account, &self.password) {
@@ -241,6 +257,12 @@ impl Launcher {
             }
             Err(e) => self.status = crate::net::list_failure_text(&addr, &e),
         }
+    }
+}
+
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -410,7 +432,10 @@ impl eframe::App for Launcher {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for (i, (name, host, port)) in self.servers.iter().enumerate() {
                         if ui
-                            .selectable_label(self.selected == Some(i), format!("{name} ({host}:{port})"))
+                            .selectable_label(
+                                self.selected == Some(i),
+                                format!("{name} ({host}:{port})"),
+                            )
                             .clicked()
                         {
                             self.selected = Some(i);
@@ -470,7 +495,9 @@ fn run_inner(mut error: Option<String>) -> Option<String> {
         );
         // A 3.x build or Graal3D was picked: Ato or G3D takes over. If it
         // cannot start, the window comes back with the reason.
-        let Some(handoff) = ato.lock().unwrap().take() else { return Settings::load().last_server };
+        let Some(handoff) = ato.lock().unwrap().take() else {
+            return Settings::load().last_server;
+        };
         let why = handoff.start();
         eprintln!("seihai-mae: {why}");
         error = Some(why);
@@ -501,7 +528,9 @@ impl ServerLevel {
     pub fn cache_line(&self) -> String {
         match (&self.level, &self.cached) {
             (Some(_), Some(p)) => format!("Saved copy: {}", p.display()),
-            (Some(l), None) => format!("{l} is not in the download cache (the server drew it without sending the file)"),
+            (Some(l), None) => format!(
+                "{l} is not in the download cache (the server drew it without sending the file)"
+            ),
             (None, _) => String::new(),
         }
     }
@@ -542,7 +571,10 @@ pub fn level_entries(dir: &std::path::Path, exts: &[String]) -> Vec<String> {
                 dirs.push(format!("{name}/"));
             } else {
                 let lower = name.to_ascii_lowercase();
-                if exts.iter().any(|x| lower.ends_with(&x.to_ascii_lowercase())) {
+                if exts
+                    .iter()
+                    .any(|x| lower.ends_with(&x.to_ascii_lowercase()))
+                {
                     files.push(name);
                 }
             }
@@ -604,7 +636,10 @@ pub fn level_window(w: LevelWindow) -> Option<LevelChoice> {
                         ui.heading(s.line());
                         if let Some(level) = &s.level {
                             ui.horizontal_wrapped(|ui| {
-                                let open = ui.add_enabled(s.cached.is_some(), egui::Button::new(format!("Open {level} offline")));
+                                let open = ui.add_enabled(
+                                    s.cached.is_some(),
+                                    egui::Button::new(format!("Open {level} offline")),
+                                );
                                 if open.clicked() {
                                     if let Some(p) = s.cached.clone() {
                                         self.pick(ctx, LevelChoice::Open(p));
@@ -652,32 +687,43 @@ pub fn level_window(w: LevelWindow) -> Option<LevelChoice> {
                     ui.label(self.dir.display().to_string());
                 });
                 ui.separator();
-                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                    if self.entries.is_empty() {
-                        ui.label("No levels in this folder.");
-                    }
-                    for name in self.entries.clone() {
-                        if ui.button(&name).clicked() {
-                            let path = self.dir.join(name.trim_end_matches('/'));
-                            if path.is_dir() {
-                                self.go(path);
-                            } else {
-                                self.pick(ctx, LevelChoice::Open(path));
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if self.entries.is_empty() {
+                            ui.label("No levels in this folder.");
+                        }
+                        for name in self.entries.clone() {
+                            if ui.button(&name).clicked() {
+                                let path = self.dir.join(name.trim_end_matches('/'));
+                                if path.is_dir() {
+                                    self.go(path);
+                                } else {
+                                    self.pick(ctx, LevelChoice::Open(path));
+                                }
                             }
                         }
-                    }
-                });
+                    });
             });
         }
     }
     let chosen: Arc<Mutex<Option<LevelChoice>>> = Arc::default();
-    let mut picker = Picker { dir: w.start.clone(), w, entries: Vec::new(), out: chosen.clone() };
+    let mut picker = Picker {
+        dir: w.start.clone(),
+        w,
+        entries: Vec::new(),
+        out: chosen.clone(),
+    };
     picker.go(picker.dir.clone());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 520.0]),
         ..Default::default()
     };
-    let _ = eframe::run_native("Seihai: levels", options, Box::new(|_| Ok(Box::new(picker))));
+    let _ = eframe::run_native(
+        "Seihai: levels",
+        options,
+        Box::new(|_| Ok(Box::new(picker))),
+    );
     let picked = chosen.lock().unwrap().take();
     picked
 }
@@ -697,10 +743,29 @@ mod tests {
     /// unknown one opens "All versions".
     #[test]
     fn saved_minor_version_opens_all_versions() {
-        for l in ["1.28 beta 2", "1.3 test", "1.31", "1.39", "2.05", "2.22", "3.04", "5.00r7", "6.03r7"] {
+        for l in [
+            "1.28 beta 2",
+            "1.3 test",
+            "1.31",
+            "1.39",
+            "2.05",
+            "2.22",
+            "3.04",
+            "5.00r7",
+            "6.03r7",
+        ] {
             assert!(!needs_all_versions(l), "{l}");
         }
-        for l in ["1.21", "1.32", "2.00", "2.1", "3.153", "5.24r4", "6.03r7 Linux", "no such build"] {
+        for l in [
+            "1.21",
+            "1.32",
+            "2.00",
+            "2.1",
+            "3.153",
+            "5.24r4",
+            "6.03r7 Linux",
+            "no such build",
+        ] {
             assert!(needs_all_versions(l), "{l}");
         }
         if let Some(b) = offline_builds::OFFLINE_BUILDS.first() {
@@ -718,13 +783,21 @@ mod tests {
     #[test]
     fn port_box_follows_the_selected_version() {
         let mut l = ListEndpoint::from_saved(None, V205);
-        assert_eq!((l.host.as_str(), l.port.as_str(), l.port_user_set), ("listserver.graal.in", "14923", false));
+        assert_eq!(
+            (l.host.as_str(), l.port.as_str(), l.port_user_set),
+            ("listserver.graal.in", "14923", false)
+        );
         l.follow_version(V200);
         assert_eq!(l.port, "14923");
         l.follow_version(V222);
         assert_eq!(l.port, "14922");
         // 2.1 to 2.17 send the classic login: their box shows 14923.
-        for v in [ClientVersion::V210, ClientVersion::V212, ClientVersion::V216, ClientVersion::V217] {
+        for v in [
+            ClientVersion::V210,
+            ClientVersion::V212,
+            ClientVersion::V216,
+            ClientVersion::V217,
+        ] {
             l.follow_version(v);
             assert_eq!(l.port, "14923", "{v:?}");
             l.follow_version(V222);
@@ -757,9 +830,15 @@ mod tests {
     #[test]
     fn saved_port_is_user_set_and_saved_host_alone_follows() {
         let l = ListEndpoint::from_saved(Some("example.org:14925"), V200);
-        assert_eq!((l.host.as_str(), l.port.as_str(), l.port_user_set), ("example.org", "14925", true));
+        assert_eq!(
+            (l.host.as_str(), l.port.as_str(), l.port_user_set),
+            ("example.org", "14925", true)
+        );
         let mut l = ListEndpoint::from_saved(Some("example.org"), V200);
-        assert_eq!((l.host.as_str(), l.port.as_str(), l.port_user_set), ("example.org", "14923", false));
+        assert_eq!(
+            (l.host.as_str(), l.port.as_str(), l.port_user_set),
+            ("example.org", "14923", false)
+        );
         l.follow_version(V222);
         assert_eq!(l.port, "14922");
         // What gets saved: a port only when the user set one, so saving the
@@ -809,18 +888,28 @@ mod tests {
             std::fs::write(d.join(f), b"x").unwrap();
         }
         let exts = vec![".nw".to_string()];
-        assert_eq!(level_entries(&d, &exts), ["bodies/", "Alpha.NW", "mid.nw", "zeta.nw"]);
+        assert_eq!(
+            level_entries(&d, &exts),
+            ["bodies/", "Alpha.NW", "mid.nw", "zeta.nw"]
+        );
         assert!(level_entries(&d.join("missing"), &exts).is_empty());
         let n = tmp("natural");
         for f in ["level10.nw", "level2.nw", "level1.nw"] {
             std::fs::write(n.join(f), b"x").unwrap();
         }
-        assert_eq!(level_entries(&n, &exts), ["level1.nw", "level2.nw", "level10.nw"]);
+        assert_eq!(
+            level_entries(&n, &exts),
+            ["level1.nw", "level2.nw", "level10.nw"]
+        );
     }
 
     #[test]
     fn server_level_lines() {
-        let mut s = ServerLevel { server: "Classic".into(), level: Some("onlinestartlocal.nw".into()), cached: None };
+        let mut s = ServerLevel {
+            server: "Classic".into(),
+            level: Some("onlinestartlocal.nw".into()),
+            cached: None,
+        };
         assert_eq!(s.line(), "On Classic: onlinestartlocal.nw");
         assert!(s.cache_line().contains("not in the download cache"));
         s.cached = Some("/c/levels/onlinestartlocal.nw".into());

@@ -214,11 +214,20 @@ impl Document {
         if start < data.len() {
             lines.push(data[start..].to_vec());
         }
-        let header_ok = lines.first().map(|l| strip_eol(l).trim_ascii() == b"GLEVNW01").unwrap_or(false);
+        let header_ok = lines
+            .first()
+            .map(|l| strip_eol(l).trim_ascii() == b"GLEVNW01")
+            .unwrap_or(false);
         if !header_ok {
-            return Err(EditError::NotText("not a GLEVNW01 text level (the first line must be GLEVNW01)".into()));
+            return Err(EditError::NotText(
+                "not a GLEVNW01 text level (the first line must be GLEVNW01)".into(),
+            ));
         }
-        let eol: &'static [u8] = if lines[0].ends_with(b"\r\n") { b"\r\n" } else { b"\n" };
+        let eol: &'static [u8] = if lines[0].ends_with(b"\r\n") {
+            b"\r\n"
+        } else {
+            b"\n"
+        };
 
         let mut doc = Document {
             lines,
@@ -236,7 +245,10 @@ impl Document {
         let mut i = 1;
         while i < doc.lines.len() {
             let raw = strip_eol(&doc.lines[i]).to_vec();
-            let toks: Vec<&[u8]> = raw.split(|&b| b == b' ').filter(|t| !t.is_empty()).collect();
+            let toks: Vec<&[u8]> = raw
+                .split(|&b| b == b' ')
+                .filter(|t| !t.is_empty())
+                .collect();
             let key = toks.first().copied().unwrap_or(b"");
             let block_end: Option<&[u8]> = match key {
                 b"NPC" => {
@@ -271,7 +283,11 @@ impl Document {
                     _ => None,
                 };
                 if let Some(kind) = kind {
-                    doc.records.push(objects::Record { kind, first, last: i.min(doc.lines.len() - 1) });
+                    doc.records.push(objects::Record {
+                        kind,
+                        first,
+                        last: i.min(doc.lines.len() - 1),
+                    });
                 }
                 i += 1;
                 continue;
@@ -283,11 +299,19 @@ impl Document {
                 }
                 b"LINK" => {
                     doc.summary.links += 1;
-                    doc.records.push(objects::Record { kind: ObjectKind::Link, first: i, last: i });
+                    doc.records.push(objects::Record {
+                        kind: ObjectKind::Link,
+                        first: i,
+                        last: i,
+                    });
                 }
                 b"CHEST" => {
                     doc.summary.chests += 1;
-                    doc.records.push(objects::Record { kind: ObjectKind::Chest, first: i, last: i });
+                    doc.records.push(objects::Record {
+                        kind: ObjectKind::Chest,
+                        first: i,
+                        last: i,
+                    });
                 }
                 _ => {}
             }
@@ -338,7 +362,8 @@ impl Document {
 
     /// Read a level file.
     pub fn open(path: &Path) -> Result<Document, EditError> {
-        let data = fs::read(path).map_err(|e| EditError::Io(format!("cannot read {}: {e}", path.display())))?;
+        let data = fs::read(path)
+            .map_err(|e| EditError::Io(format!("cannot read {}: {e}", path.display())))?;
         Document::parse(&data)
     }
 
@@ -393,22 +418,43 @@ impl Document {
     /// Paint a `w` x `h` rectangle with its top-left corner at (x, y) with one
     /// tile id. Checks the bounds and the id first and changes nothing when
     /// they fail. Returns how many tiles changed value.
-    pub fn paint(&mut self, x: usize, y: usize, w: usize, h: usize, tile: u32) -> Result<usize, EditError> {
+    pub fn paint(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        tile: u32,
+    ) -> Result<usize, EditError> {
         self.paint_layer(0, x, y, w, h, Some(tile))
     }
 
     /// Paint a rectangle of `layer` (0 or 1) with one tile id, or empty it
     /// (`None`, layer 1 only). The same checks as `paint`. Returns how many
     /// cells of that layer changed.
-    pub fn paint_layer(&mut self, layer: usize, x: usize, y: usize, w: usize, h: usize, tile: Option<u32>) -> Result<usize, EditError> {
+    pub fn paint_layer(
+        &mut self,
+        layer: usize,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        tile: Option<u32>,
+    ) -> Result<usize, EditError> {
         if layer >= LAYERS {
-            return Err(EditError::Bounds(format!("layer {layer} is not editable; the editor edits layers 0 and 1")));
+            return Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 and 1"
+            )));
         }
         if layer == 0 && tile.is_none() {
-            return Err(EditError::Bounds("layer 0 has no empty cells; paint a tile instead".into()));
+            return Err(EditError::Bounds(
+                "layer 0 has no empty cells; paint a tile instead".into(),
+            ));
         }
         if w == 0 || h == 0 {
-            return Err(EditError::Bounds(format!("the rectangle is empty ({w} x {h}); width and height must be at least 1")));
+            return Err(EditError::Bounds(format!(
+                "the rectangle is empty ({w} x {h}); width and height must be at least 1"
+            )));
         }
         if x >= SIZE || y >= SIZE || x + w > SIZE || y + h > SIZE {
             return Err(EditError::Bounds(format!(
@@ -454,7 +500,10 @@ impl Document {
             }
         }
         for raw in &self.other_rows {
-            let toks: Vec<&[u8]> = raw.split(|&b| b == b' ').filter(|t| !t.is_empty()).collect();
+            let toks: Vec<&[u8]> = raw
+                .split(|&b| b == b' ')
+                .filter(|t| !t.is_empty())
+                .collect();
             let (Some(x), Some(y), Some(w)) = (
                 toks.get(1).and_then(|t| parse_num(t)),
                 toks.get(2).and_then(|t| parse_num(t)),
@@ -464,7 +513,10 @@ impl Document {
             };
             let data = toks.get(5).copied().unwrap_or(b"");
             for k in 0..w as usize {
-                let (Some(hi), Some(lo)) = (data.get(2 * k).and_then(|&c| b64_value(c)), data.get(2 * k + 1).and_then(|&c| b64_value(c))) else {
+                let (Some(hi), Some(lo)) = (
+                    data.get(2 * k).and_then(|&c| b64_value(c)),
+                    data.get(2 * k + 1).and_then(|&c| b64_value(c)),
+                ) else {
                     break;
                 };
                 self.board[y as usize * SIZE + x as usize + k] = (hi << 6) | lo;
@@ -496,11 +548,14 @@ impl Document {
                 let start = x;
                 let mut data = Vec::new();
                 while x < SIZE {
-                    let Some(t) = self.layer1[y * SIZE + x] else { break };
+                    let Some(t) = self.layer1[y * SIZE + x] else {
+                        break;
+                    };
                     data.extend_from_slice(&tile_code(t));
                     x += 1;
                 }
-                canonical.extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
+                canonical
+                    .extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
                 canonical.extend_from_slice(&data);
                 canonical.extend_from_slice(self.eol);
             }
@@ -541,7 +596,10 @@ impl Document {
 /// Write `bytes` to `path` via a temporary sibling file and a rename.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), EditError> {
     let io = |e: std::io::Error| EditError::Io(format!("cannot write {}: {e}", path.display()));
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "level".into());
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "level".into());
     let tmp = path.with_file_name(format!(".{name}.tmp{}", std::process::id()));
     let result = (|| {
         let mut f = fs::File::create(&tmp)?;
