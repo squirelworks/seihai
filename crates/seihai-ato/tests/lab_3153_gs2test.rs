@@ -118,8 +118,19 @@ fn the_lab_level_is_kept_and_its_fields_logged() {
     );
 }
 
+/// 4.20r8 has no Torque profile (its protocol number was not read), but it
+/// is a Graal3D build: its fields are logged like the other Ato builds'.
 #[test]
-fn a_build_without_a_torque_profile_logs_no_fields() {
+fn a_graal3d_build_without_a_torque_profile_logs_its_fields() {
+    let v = ClientVersion::V420R8;
+    assert!(seihai_ato::torque::of(v).is_none());
+    let st = SessionState::for_version(v);
+    let out = fields::lines(v, &Level::from_board(&[0; 4096]), "x.nw", &st);
+    assert!(out[0].starts_with("board: 4096 tiles"), "{out:?}");
+}
+
+#[test]
+fn a_2d_build_logs_no_fields() {
     let st = SessionState::for_version(ClientVersion::V231);
     assert!(fields::lines(
         ClientVersion::V231,

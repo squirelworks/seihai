@@ -2,8 +2,9 @@
 //! links, chests and signs, the player's props and the server NPCs' props.
 //! Logged under the level line; nothing here is drawn or acted on.
 //!
-//! Only a build with a Torque profile ([`crate::torque::of`]) logs them, so
-//! the dump stays on the 3.x line. The values are the core readers'
+//! Only a Graal3D build (a `G3D` token: the 3.x, 4.x and 5.x builds Ato
+//! runs) logs them, so the dump stays off the 2D line. It does not need the
+//! build's Torque profile: 4.20r8 has none and still logs its fields. The values are the core readers'
 //! (`parse_player_props_in` with the build's own prop set, `NpcProps`);
 //! a player prop is shown as its wire bytes, with the text when it is one.
 
@@ -14,9 +15,9 @@ use seihai_core::protocol::{parse_player_props_in, ClientVersion, PlayerProp, Se
 use std::collections::BTreeSet;
 
 /// The log lines for `level` and what `st` holds for it, or none when
-/// `version` has no Torque profile.
+/// `version` is not a Graal3D build.
 pub fn lines(version: ClientVersion, level: &Level, name: &str, st: &SessionState) -> Vec<String> {
-    if crate::torque::of(version).is_none() {
+    if !version.token().starts_with("G3D") {
         return Vec::new();
     }
     let mut out = vec![board_line(level)];
