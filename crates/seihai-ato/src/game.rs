@@ -18,6 +18,7 @@ use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::ClientVersion;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// The view, in tiles: 640 x 480 pixels, the 3.x window size.
@@ -51,6 +52,10 @@ pub struct Game {
     pub others: online::SharedOthers,
     /// The other players drawn last frame.
     drawn_others: Vec<online::Other>,
+    /// Where the network thread takes a link request from.
+    pub link: Arc<Mutex<Option<online::LinkAsk>>>,
+    /// The link asked for, until its level arrives.
+    link_to: Option<online::LinkAsk>,
 }
 
 impl Game {
@@ -68,6 +73,8 @@ impl Game {
             pose: online::SharedPose::default(),
             others: online::SharedOthers::default(),
             drawn_others: Vec::new(),
+            link: Default::default(),
+            link_to: None,
         })
     }
 
@@ -78,9 +85,13 @@ impl Game {
                 Event::Level(level, a) => {
                     self.session.current_level = Some(*level);
                     self.session.level_serial += 1;
-                    (self.session.player_x, self.session.player_y) = a.start.unwrap_or(NO_START);
-                    self.session.warp_pending = None;
-                    self.session.refresh_water();
+                    // The server's start position; after a link, where the
+                    // link said to arrive; else the default.
+                    let at = a
+                        .start
+                        .or(self.link_to.take().map(|l| (l.x, l.y)))
+                        .unwrap_or(NO_START);
+                    self.session.arrive(at.0, at.1);
                     self.status = a.line();
                     self.set_pose(false);
                 }
@@ -129,8 +140,21 @@ impl Game {
         self.last_step = now;
         self.session.try_move(dx as f32 * 0.5, dy as f32 * 0.5);
         self.set_pose(true);
-        if let Some(dest) = self.session.warp_pending.take() {
-            self.status = format!("Link to {dest}: level changes are not in Ato yet.");
+        // A link the feet are now in: ask the server once and wait for the
+        // level (no walking meanwhile, core's warp-pending state).
+        if self.session.check_links() {
+            if let Some((dest, x, y)) = self.session.pending_link.take() {
+                self.session.begin_warp(&dest);
+                let ask = online::LinkAsk {
+                    dest: dest.clone(),
+                    x,
+                    y,
+                    dir: self.session.player_dir % 4,
+                };
+                *self.link.lock().unwrap_or_else(|e| e.into_inner()) = Some(ask.clone());
+                self.link_to = Some(ask);
+                self.status = format!("Link to {dest}: asking the server.");
+            }
         }
         self.dirty = true;
     }
@@ -286,6 +310,7 @@ impl AtoApp {
             Ok(mut g) => {
                 g.pose = live.pose;
                 g.others = live.others;
+                g.link = live.link;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
@@ -460,6 +485,42 @@ mod tests {
         assert_eq!(p.dir, 3, "facing right");
         g.walk(0, 0, t0 + Duration::from_millis(1));
         assert!(!g.pose.lock().unwrap().unwrap().walking);
+    }
+
+    /// Walking into a link asks the network thread for it once, holds the
+    /// walk, and the next level arrives where the link said.
+    #[test]
+    fn a_link_is_asked_for_and_the_level_arrives_there() {
+        let (mut g, tx) = game();
+        let mut level = Level::from_board(&[0; 4096]);
+        level.add_server_links(&["next.nw 34 28 2 4 5 6".to_string()]);
+        tx.send(Event::Level(Box::new(level), arrival(Some((30.0, 30.0)))))
+            .unwrap();
+        g.poll();
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..20 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+            if g.link.lock().unwrap().is_some() {
+                break;
+            }
+        }
+        let ask = g.link.lock().unwrap().clone().expect("a link request");
+        assert_eq!((ask.dest.as_str(), ask.x, ask.y), ("next.nw", 5.0, 6.0));
+        assert_eq!(g.session.warp_pending.as_deref(), Some("next.nw"));
+        // No walking while the warp is pending.
+        let x = g.session.player_x;
+        g.walk(1, 0, t + Duration::from_secs(1));
+        assert_eq!(g.session.player_x, x);
+        // The server's level, with no start of its own: the link's place.
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(None),
+        ))
+        .unwrap();
+        g.poll();
+        assert_eq!((g.session.player_x, g.session.player_y), (5.0, 6.0));
+        assert!(g.session.warp_pending.is_none());
     }
 
     #[test]

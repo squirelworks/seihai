@@ -92,10 +92,15 @@ walk on core's captured cadence (`protocol::walkcadence::WalkCadence`:
 changed props only, GANI `walk`/`idle`); the other builds send their whole
 walk message (`net::walk_message_for`: X2/Y2 where the profile has precise
 positions) when the pose changes, as `seihai-mae` does for them. A link
-the player walks into is noted on the status bar and dropped.
+the player walks into is asked for once with the build's own request
+(core's `net::link_request_frame`: `PLI_LEVELWARP`, or the cached form
+where the build has one); the walk holds until the server's level comes,
+and the player arrives where the link said unless the server says
+otherwise. A new level owes the builds that send it a 46
+(`EnterLevelSender`), with the arrival props after it.
 
 ## Not in yet
 
-Offline mode, level changes, NPCs, other players' looks and names
+Offline mode, gmaps, NPCs, other players' looks and names
 (they show as plain markers), GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
