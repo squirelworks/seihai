@@ -202,7 +202,7 @@ debug=1
 
 For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.txt` form) or `keyset_<action>=S,Space` rebind the game keys. The defaults are the readme's: arrows or I/J/K/L, A action, S or Space sword, D item, M map, Q item list, Tab chat (F7 shows the player list). See `documentation/keys.md`.
 
-`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai-mae --no-default-features --features dev`.
+`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default; on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai-mae --no-default-features --features dev`. For the whole workspace (as Linux CI builds it): `cargo build --workspace --no-default-features --features seihai-mae/dev,seihai-core/dev`.
 
 ## Features
 
