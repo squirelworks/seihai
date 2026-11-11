@@ -131,6 +131,28 @@ pub struct Live {
     pub others: SharedOthers,
     /// A link to ask the server for; the network thread takes it.
     pub link: Arc<Mutex<Option<LinkAsk>>>,
+    /// Sounds the view could not find on disk; the network thread asks
+    /// the server for each (WANTFILE), as 2.05 does, and the sound plays
+    /// on a later cue once it is saved.
+    pub wanted_sounds: Arc<Mutex<Vec<String>>>,
+}
+
+/// The file messages for the sounds the view is missing: each name taken
+/// from `wanted` and passed to `need` (core's `FileSession::need_missing`,
+/// which skips a file already on disk or already asked for).
+fn sound_requests(
+    wanted: &Mutex<Vec<String>>,
+    mut need: impl FnMut(&str) -> Vec<Vec<u8>>,
+) -> Vec<(String, Vec<Vec<u8>>)> {
+    let names = std::mem::take(&mut *wanted.lock().unwrap_or_else(|e| e.into_inner()));
+    names
+        .into_iter()
+        .map(|n| {
+            let m = need(&n);
+            (n, m)
+        })
+        .filter(|(_, m)| !m.is_empty())
+        .collect()
 }
 
 /// The other players in `st` that stand in this level: those with no gmap
@@ -228,6 +250,7 @@ pub fn run_with_pose(
     let pose = live.as_ref().map(|l| l.pose.clone());
     let others = live.as_ref().map(|l| l.others.clone());
     let link = live.as_ref().map(|l| l.link.clone());
+    let wanted_sounds = live.as_ref().map(|l| l.wanted_sounds.clone());
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
@@ -426,6 +449,14 @@ pub fn run_with_pose(
                     let _ = writeln!(out, "link to {} at {} {}", a.dest, a.x, a.y);
                 }
             }
+            // Sounds the view is missing: ask the server for them.
+            if let Some(w) = wanted_sounds.as_ref() {
+                for (name, msgs) in sound_requests(w, |n| files.need_missing(n)) {
+                    if s.conn.send_messages(&msgs).is_ok() {
+                        let _ = writeln!(out, "requesting {name}");
+                    }
+                }
+            }
             // The post-login frame, once it is due (core decides when).
             let now = Instant::now();
             if let Some(b) = login_burst.as_mut() {
@@ -592,5 +623,30 @@ mod link_tests {
         };
         arrive_by_link(&mut st, &a);
         assert_eq!(st.player_x.zip(st.player_y), Some((54.5, 19.0)));
+    }
+}
+
+#[cfg(test)]
+mod sound_request_tests {
+    use super::*;
+
+    /// Each wanted name is taken once; a name `need` has nothing for (on
+    /// disk, or asked for already) sends nothing.
+    #[test]
+    fn wanted_sounds_are_asked_for_once() {
+        let w = Mutex::new(vec!["steps.wav".to_string(), "have.wav".to_string()]);
+        let got = sound_requests(&w, |n| {
+            if n == "have.wav" {
+                Vec::new()
+            } else {
+                vec![n.as_bytes().to_vec()]
+            }
+        });
+        assert_eq!(
+            got,
+            vec![("steps.wav".to_string(), vec![b"steps.wav".to_vec()])]
+        );
+        assert!(w.lock().unwrap().is_empty());
+        assert!(sound_requests(&w, |_| vec![vec![1]]).is_empty());
     }
 }
