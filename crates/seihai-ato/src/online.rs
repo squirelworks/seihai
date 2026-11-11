@@ -153,6 +153,16 @@ fn others_of(st: &SessionState) -> Vec<Other> {
         .collect()
 }
 
+/// After a link request the player stands where the link said: the
+/// client moves itself there, and GServer does not send X/Y again with the
+/// new level. Without this the login's X/Y stayed in the state, and the
+/// new level drew the player at the login start (lab, 2026-11-11). X/Y the
+/// server does send after this still win.
+fn arrive_by_link(st: &mut SessionState, a: &LinkAsk) {
+    st.player_x = Some(a.x);
+    st.player_y = Some(a.y);
+}
+
 /// One walk tick, as the real clients run it.
 const WALK_TICK: Duration = Duration::from_millis(50);
 
@@ -412,6 +422,7 @@ pub fn run_with_pose(
                         st.expect_cached_level(&a.dest);
                         s.enter_level.cached_link(&a.dest, frame.with_enter_level);
                     }
+                    arrive_by_link(&mut st, &a);
                     let _ = writeln!(out, "link to {} at {} {}", a.dest, a.x, a.y);
                 }
             }
@@ -559,5 +570,27 @@ mod others_tests {
         assert!(st.gmap.is_none());
         let got: Vec<_> = others_of(&st).iter().map(|o| o.id).collect();
         assert_eq!(got, vec![2]);
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    /// The login put the player at (23.5, 30.5); the link says (54.5, 19).
+    /// The next level's start is the link's, not the login's.
+    #[test]
+    fn a_link_moves_the_start_to_its_destination() {
+        let mut st = SessionState::for_version(ClientVersion::V3153);
+        st.player_x = Some(23.5);
+        st.player_y = Some(30.5);
+        let a = LinkAsk {
+            dest: "egk-10.graal".into(),
+            x: 54.5,
+            y: 19.0,
+            dir: 2,
+        };
+        arrive_by_link(&mut st, &a);
+        assert_eq!(st.player_x.zip(st.player_y), Some((54.5, 19.0)));
     }
 }
