@@ -1,8 +1,8 @@
 //! The `seihai` command: start the client for the chosen version.
 //!
 //! The classic builds (1.x and 2.x) run in `seihai-mae`; the Torque / 3.x
-//! builds run in `seihai-ato`; a 6.x profile runs in `seihai-issho`. 4.x and
-//! 5.x stay on mae's flat path. This program reads `--version` against the
+//! to 5.x builds run in `seihai-ato`; a 6.x profile runs in `seihai-issho`.
+//! This program reads `--version` against the
 //! profile table in `seihai-core`, then hands every argument, unchanged, to
 //! the client binary for that line. With no `--version` (and with no
 //! arguments at all, which opens the start window) it is `seihai-mae`, as
@@ -29,7 +29,7 @@ use std::process::Command;
 enum Line {
     /// 1.x and 2.x: `seihai-mae`.
     Mae,
-    /// Torque / 3.x: `seihai-ato`.
+    /// Torque / 3.x to 5.x: `seihai-ato`.
     Ato,
     /// v6 quattro_lib: `seihai-issho`. Not started unless the profile is 6.x.
     Issho,
@@ -49,13 +49,12 @@ impl Line {
 }
 
 /// Which line a profile belongs to. v6 is Issho. The token says the rest:
-/// `GNW` for the 2D builds, `G3D` for the 3.x ones. The 4.x and 5.x builds
-/// send `G3D` tokens too but play in `seihai-mae` (their profile has the
-/// Login lobby).
+/// `GNW` for the 2D builds, `G3D` for the 3.x to 5.x ones, which run in
+/// `seihai-ato` (4.x and 5.x with their Login lobby).
 fn line_for(p: &VersionProfile) -> Line {
     if is_v6(p.version) {
         Line::Issho
-    } else if p.token.starts_with("G3D") && p.protocol.lobby.is_none() {
+    } else if p.token.starts_with("G3D") {
         Line::Ato
     } else {
         Line::Mae
@@ -154,7 +153,7 @@ fn main() {
     };
     if line == Line::Ato {
         let label = profile.map_or("3.x", |p| p.label);
-        eprintln!("seihai: {label} is a Torque / 3.x build; seihai-ato draws it with the flat 2D fallback (no Torque 3D yet)");
+        eprintln!("seihai: {label} is a Torque (3.x to 5.x) build; seihai-ato draws it with the flat 2D fallback (no Torque 3D yet)");
     }
     if line == Line::Issho {
         let label = profile.map_or("6.x", |p| p.label);
@@ -218,10 +217,11 @@ mod tests {
     #[test]
     fn torque_builds_start_ato() {
         assert_eq!(line("--version 3.153"), Line::Ato);
-        // The 4.x and 5.x tokens start with G3D too, but they play on the flat path.
-        assert_eq!(line("--version 4.04r2"), Line::Mae);
-        assert_eq!(line("--version 4.20r6"), Line::Mae);
-        assert_eq!(line("--version 5.12"), Line::Mae);
+        // 4.x and 5.x are Ato's too, with their Login lobby.
+        assert_eq!(line("--version 4.04r2"), Line::Ato);
+        assert_eq!(line("--version 4.20r8"), Line::Ato);
+        assert_eq!(line("--version 5.00r7"), Line::Ato);
+        assert_eq!(line("--version 5.12"), Line::Ato);
         assert_eq!(line("--version 3.04 --account a"), Line::Ato);
         // The last --version wins, as in seihai-mae.
         assert_eq!(line("--version 2.22 --version 3.153"), Line::Ato);
@@ -240,9 +240,9 @@ mod tests {
         );
         assert_eq!(line("--version 3.04"), Line::Ato);
         assert_eq!(line("--version 3.153"), Line::Ato);
-        assert_eq!(line("--version 4.20r8"), Line::Mae);
-        assert_eq!(line("--version 5.00r7"), Line::Mae);
-        assert_eq!(line("--version 5.31r4"), Line::Mae);
+        assert_eq!(line("--version 4.20r8"), Line::Ato);
+        assert_eq!(line("--version 5.00r7"), Line::Ato);
+        assert_eq!(line("--version 5.31r4"), Line::Ato);
         // Tools stay in mae even for a 6.x label: they never start a session.
         assert_eq!(line("--version-chain --version 6.03r7"), Line::Mae);
         assert_eq!(line("--help --version 6.03r7"), Line::Mae);
@@ -284,7 +284,7 @@ mod tests {
         for p in seihai_core::protocol::PROFILES {
             let want = if is_v6(p.version) {
                 Line::Issho
-            } else if p.label.starts_with("3.") {
+            } else if ["3.", "4.", "5."].iter().any(|m| p.label.starts_with(m)) {
                 Line::Ato
             } else {
                 Line::Mae

@@ -70,11 +70,11 @@ impl Target {
 }
 
 /// True for a build that runs in `seihai-ato`. The token says it, as in
-/// `seihai-launcher`: `GNW` for the 2D builds, `G3D` for the 3.x ones. The
-/// 4.x, 5.x and 6.x builds also send `G3D` tokens, but play on the flat path
-/// here (their profile has the Login lobby).
+/// `seihai-launcher`: `GNW` for the 2D builds, `G3D` for the 3.x to 5.x
+/// ones. 6.x also sends `G3D` but is `seihai-issho`'s, and stays here when
+/// picked in this window.
 pub fn runs_in_ato(v: ClientVersion) -> bool {
-    v.token().starts_with("G3D") && v.profile().protocol.lobby.is_none()
+    v.token().starts_with("G3D") && matches!(v.label().as_bytes().first(), Some(b'3' | b'4' | b'5'))
 }
 
 /// What Ato or G3D is started with.
@@ -169,13 +169,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_3x_builds_run_in_ato() {
+    fn the_3x_to_5x_builds_run_in_ato() {
         assert!(runs_in_ato(ClientVersion::V304));
         assert!(runs_in_ato(ClientVersion::V3153));
         for v in ClientVersion::all_versions() {
             assert_eq!(
                 runs_in_ato(*v),
-                v.label().starts_with("3."),
+                ["3.", "4.", "5."].iter().any(|m| v.label().starts_with(m)),
                 "{}",
                 v.label()
             );

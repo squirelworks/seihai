@@ -1,7 +1,10 @@
 # seihai-ato
 
-The Torque / 3.x client line: Graal 3.04 (Linux, Jan 2004) and 3.153 (Mac,
-Feb 2005).
+The Torque client line: Graal 3.04 (Linux, Jan 2004), 3.153 (Mac,
+Feb 2005), and the 4.x and 5.x builds (4.04r2 to 5.31r4), which log in to
+a game server named `Login` first and play after its server warp (178).
+The 4.x and 5.x start window is 3.153's until their own GUI files are
+read.
 
 The 3.x clients still speak gen-5 framing and use the same board, gmap and
 GS1 formats as 2.22 and 2.31, so this crate shares `seihai-core` with the
@@ -20,8 +23,9 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
 ## Stage 1
 
 - `args`: the command line. `seihai-launcher` passes the user's arguments
-  through, so unknown flags are ignored. `--version 3.04` or
-  `--version 3.153` (the default); `--account`, `--password-env VAR`,
+  through, so unknown flags are ignored. `--version` takes any 3.x, 4.x
+  or 5.x row (`3.04`, `3.153` the default, `4.04r2`, `4.20r8`, `5.00r7`,
+  `5.12`, ...); `--account`, `--password-env VAR`,
   `--nick`.
 - `wire`: the build's game and listserver tokens and the ids it adds or
   drops against 2.31, all read from the build's row in

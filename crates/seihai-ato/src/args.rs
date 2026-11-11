@@ -63,21 +63,35 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
     a
 }
 
-/// The 3.x builds Ato runs.
-pub const BUILDS: [ClientVersion; 2] = [ClientVersion::V304, ClientVersion::V3153];
+/// True for a build Ato runs: a `G3D` token from 3.x, 4.x or 5.x. The 1.x
+/// and 2.x builds are `seihai-mae`'s; 6.x is `seihai-issho`'s (Graal3D was
+/// removed from 6.x on).
+pub fn runs_in_ato(v: ClientVersion) -> bool {
+    v.token().starts_with("G3D") && matches!(v.label().as_bytes().first(), Some(b'3' | b'4' | b'5'))
+}
 
-/// The build to run. No `--version` gives 3.153, the newer of the two.
-/// A label that is not a 3.x build is an error, with the labels Ato knows.
+/// The builds Ato runs, in profile order.
+pub fn builds() -> Vec<ClientVersion> {
+    ClientVersion::all_versions()
+        .iter()
+        .copied()
+        .filter(|v| runs_in_ato(*v))
+        .collect()
+}
+
+/// The build to run. No `--version` gives 3.153.
+/// A label that is not a 3.x to 5.x build is an error, with the labels Ato
+/// knows.
 pub fn build(a: &Args) -> Result<ClientVersion, String> {
     let Some(label) = a.version.as_deref() else {
         return Ok(ClientVersion::V3153);
     };
     match ClientVersion::from_label(label) {
-        Some(v) if BUILDS.contains(&v) => Ok(v),
+        Some(v) if runs_in_ato(v) => Ok(v),
         _ => {
-            let known: Vec<&str> = BUILDS.iter().map(|v| v.label()).collect();
+            let known: Vec<&str> = builds().iter().map(|v| v.label()).collect();
             Err(format!(
-                "seihai-ato runs the 3.x builds ({}); {label:?} is not one of them",
+                "seihai-ato runs the 3.x to 5.x builds ({}); {label:?} is not one of them",
                 known.join(", ")
             ))
         }
@@ -125,6 +139,24 @@ mod tests {
         assert_eq!(a.version, None);
         let a = p("--assets dir --version 3.04");
         assert_eq!(a.version.as_deref(), Some("3.04"));
+    }
+
+    #[test]
+    fn ato_runs_3x_to_5x() {
+        let labels: Vec<&str> = builds().iter().map(|v| v.label()).collect();
+        for l in [
+            "3.04", "3.153", "4.04r2", "4.20r8", "5.00r7", "5.12", "5.31r4",
+        ] {
+            assert!(labels.contains(&l), "{l} in {labels:?}");
+        }
+        for v in ClientVersion::all_versions() {
+            let l = v.label();
+            let want = l.starts_with('3') || l.starts_with('4') || l.starts_with('5');
+            assert_eq!(runs_in_ato(*v), want, "{l}");
+        }
+        assert_eq!(build(&p("--version 4.20r8")), Ok(ClientVersion::V420R8));
+        assert!(build(&p("--version 2.31")).is_err());
+        assert!(build(&p("--version 6.03r7")).is_err());
     }
 
     #[test]

@@ -97,7 +97,11 @@ pub fn by_protocol(protocol: u32) -> Option<TorqueProfile> {
 pub fn of(v: ClientVersion) -> Option<TorqueProfile> {
     match v {
         ClientVersion::V304 => Some(TGE_9),
-        ClientVersion::V3153 => Some(GRAAL3D_19),
+        ClientVersion::V3153 | ClientVersion::V404R2 => Some(GRAAL3D_19),
+        ClientVersion::V420R6 => Some(GRAAL3D_21),
+        ClientVersion::V500R7 | ClientVersion::V512 => Some(GRAAL3D_24),
+        // 4.20r8's protocol number was not read; 5.24 on and 6.x have no
+        // Graal3D.
         _ => None,
     }
 }

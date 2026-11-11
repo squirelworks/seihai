@@ -27,7 +27,7 @@ The login tail is four fields, as in 5.00r7: `win,"","",""` (`LOBBY_404`), and `
 
 ## 3D stays held
 
-4.04r2's `Graal3DEngine.dll` (Torque protocol 19) and the Mac 4.20r6's 3D side (protocol 21) are in `seihai-ato::torque` as profiles only. These rows have the lobby, so `seihai-launcher` and `seihai-mae` keep them on the flat path and nothing opens Torque.
+4.04r2's `Graal3DEngine.dll` (Torque protocol 19) and the Mac 4.20r6's 3D side (protocol 21) are in `seihai-ato::torque` as profiles only. These rows have the lobby. Since 2026-11-11 `seihai-launcher` starts `seihai-ato` for them (Squirrel: 4.x and 5.x stay with Ato); Ato logs in to the Login server, follows its warp and draws the level on its flat path. Nothing opens Torque yet. `seihai-mae --version 4.04r2` run on its own still plays them on mae's flat path.
 
 ## Lab check
 
