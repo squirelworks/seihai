@@ -6,9 +6,9 @@
 //! two differ only in the Tutorial button's text and the background
 //! images), their English language tables and `customProfiles.cs`. Seihai
 //! ships none of the clients' images, so the two background bitmaps are
-//! plain fills. The buttons do not do anything yet beyond saying what the
-//! real client would do next: the server list and offline mode come in
-//! later stages.
+//! plain fills. Start opens the server list ([`crate::server_list`]), or
+//! logs in at once when `--online` names a game server. Tutorial (offline
+//! mode) and Options only say they are not in Ato yet.
 
 use crate::online::Login;
 use seihai_core::protocol::ClientVersion;
@@ -117,6 +117,17 @@ pub fn layout(v: ClientVersion) -> Layout {
     }
 }
 
+/// Where Start goes next.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Next {
+    /// Nothing: Start was not pressed.
+    Stay,
+    /// Log in at this game server (`host:port`).
+    Login(String),
+    /// Open the server list.
+    ServerList,
+}
+
 /// What the player typed, and the last button pressed.
 pub struct StartWindow {
     pub version: ClientVersion,
@@ -126,9 +137,11 @@ pub struct StartWindow {
     pub account: String,
     pub password: String,
     pub status: String,
-    /// The game server Start logs in to (`--online`). The real client
-    /// opens its server list here; Ato has none yet.
+    /// The game server Start logs in to (`--online`). Without it, Start
+    /// opens the server list.
     pub online: Option<String>,
+    /// The listserver the server list comes from (`host:port`).
+    pub listserver: String,
     /// Set by Start when there is a server: the form, taken before 3.153
     /// clears the password.
     pub started: Arc<Mutex<Option<Login>>>,
@@ -145,14 +158,16 @@ impl StartWindow {
             password,
             status: String::new(),
             online: None,
+            listserver: crate::server_list::default_listserver(version),
             started: Arc::default(),
         }
     }
 
     /// The Start button. The real client stores the fields and opens the
-    /// server list; Ato has no server list yet, so with `--online` it hands
-    /// the form over for a login at that server. True when it did.
-    pub fn press_start(&mut self) -> bool {
+    /// server list. Ato does the same, or with `--online` goes straight to
+    /// that game server. The form is handed over in `started` before 3.153
+    /// clears the password.
+    pub fn press_start(&mut self) -> Next {
         let login = Login {
             account: self.account.clone(),
             password: self.password.clone(),
@@ -162,16 +177,15 @@ impl StartWindow {
         if self.layout.start_clears_password {
             self.password.clear();
         }
+        *self.started.lock().unwrap() = Some(login);
         match &self.online {
             Some(addr) => {
                 self.status = format!("Start: logging in at {addr}.");
-                *self.started.lock().unwrap() = Some(login);
-                true
+                Next::Login(addr.clone())
             }
             None => {
-                self.status =
-                    "Start: the 3.x server list is not in Ato yet; give --online host:port.".into();
-                false
+                self.status = format!("Start: asking {} for the server list.", self.listserver);
+                Next::ServerList
             }
         }
     }
@@ -201,10 +215,10 @@ fn place(origin: egui::Pos2, r: Rect4) -> egui::Rect {
 }
 
 impl StartWindow {
-    /// Draw the window and take its input. True when Start handed the form
-    /// over (see [`Self::press_start`]).
-    pub fn show(&mut self, ctx: &egui::Context) -> bool {
-        let mut started = false;
+    /// Draw the window and take its input: where Start goes, if it was
+    /// pressed (see [`Self::press_start`]).
+    pub fn show(&mut self, ctx: &egui::Context) -> Next {
+        let mut started = Next::Stay;
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(egui::Color32::BLACK))
             .show(ctx, |ui| {
@@ -281,8 +295,8 @@ impl StartWindow {
                 if button(ui, GET_ACCOUNT_BUTTON, t.get_account) {
                     self.press_get_account();
                 }
-                if button(ui, START_BUTTON, t.start) && self.press_start() {
-                    started = true;
+                if button(ui, START_BUTTON, t.start) {
+                    started = self.press_start();
                 }
 
                 if !self.status.is_empty() {
@@ -352,13 +366,14 @@ mod tests {
     }
 
     #[test]
-    fn start_hands_over_the_form_only_with_a_server() {
+    fn start_opens_the_list_or_logs_in_at_the_given_server() {
         let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), "a".into(), "p".into());
-        assert!(!w.press_start());
-        assert!(w.started.lock().unwrap().is_none());
+        assert_eq!(w.press_start(), Next::ServerList);
+        assert!(w.started.lock().unwrap().is_some());
+        assert!(w.status.contains("listserver.graal.in:"), "{}", w.status);
         let mut w = StartWindow::new(ClientVersion::V3153, "n".into(), "a".into(), "p".into());
         w.online = Some("127.0.0.1:14900".into());
-        assert!(w.press_start());
+        assert_eq!(w.press_start(), Next::Login("127.0.0.1:14900".into()));
         let login = w.started.lock().unwrap().take().unwrap();
         // Taken before 3.153 clears the field.
         assert_eq!(
