@@ -167,11 +167,16 @@ mod tests {
         // asked, and the watch reports once this limit passes with no mark
         // (it only wakes that often). A line after the limit is the watch
         // doing its job. A line before the limit is the pause/resume bug.
+        // The watch keeps whole milliseconds (`as_millis` truncates both the
+        // mark and "now"), so it may fire up to 1 ms before the limit as
+        // measured here with a full-precision clock: Windows CI saw 99.25 ms
+        // for a 100 ms limit. Allow that granularity, not more.
+        const GRAIN: Duration = Duration::from_millis(1);
         let wait = limit.saturating_sub(resumed.elapsed());
         if let Ok(line) = rx.recv_timeout(wait) {
             let elapsed = resumed.elapsed();
             assert!(
-                elapsed >= limit,
+                elapsed + GRAIN >= limit,
                 "stall line {elapsed:?} after resume, before the {limit:?} limit: {line}"
             );
         }
