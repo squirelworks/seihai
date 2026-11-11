@@ -29,12 +29,15 @@ pub struct Args {
     pub no_window: bool,
     /// `--first-level`: disconnect once the first level is stored.
     pub first_level: bool,
+    /// The listserver Start asks for the server list (`--listserver
+    /// host:port`); without it, the version's row (`listserver.graal.in`).
+    pub listserver: Option<String>,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
 /// value-taking flag Ato does not use must be listed here, or its value
 /// would be read as the next flag.
-const VALUE_FLAGS: &[&str] = &["--level", "--listserver"];
+const VALUE_FLAGS: &[&str] = &["--level"];
 
 pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
     let mut a = Args::default();
@@ -50,6 +53,7 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--assets" => a.assets = it.next().or(a.assets),
             "--no-window" => a.no_window = true,
             "--first-level" => a.first_level = true,
+            "--listserver" => a.listserver = it.next().or(a.listserver),
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
             }
@@ -153,5 +157,12 @@ mod tests {
         assert_eq!(build(&p("--version 4.20r8")), Ok(ClientVersion::V420R8));
         assert!(build(&p("--version 2.31")).is_err());
         assert!(build(&p("--version 6.03r7")).is_err());
+    }
+
+    #[test]
+    fn listserver_is_taken() {
+        let a = p("--version 3.04 --listserver 127.0.0.1:14922 --account a");
+        assert_eq!(a.listserver.as_deref(), Some("127.0.0.1:14922"));
+        assert_eq!(a.account.as_deref(), Some("a"));
     }
 }

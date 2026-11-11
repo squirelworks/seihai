@@ -36,9 +36,14 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   (listed port + 1). Data only. Source: Graal_analysis
   `torque/wire-by-build.md`.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
-  files (positions, texts, colours, language list). With `--online`,
-  Start hands the form to Stage 2; otherwise the buttons say what the real
-  client would do next.
+  files (positions, texts, colours, language list). Start opens the
+  server list; with `--online`, it hands the form straight to Stage 2.
+  Tutorial and Options say they are not in Ato yet.
+- `server_list`: Start logs in at the version's listserver with core's
+  `Connection::fetch_server_list` (`listserver.graal.in` on the row's
+  port, the `G3D30123` token, login shape D as the real 3.04 and 3.153
+  sent it in the lab; `--listserver host:port` for a lab listserver),
+  shows the servers, and logs in at the one picked as `--online` does.
 
 ## Stage 2
 
@@ -55,6 +60,8 @@ after the first level is logged (for lab runs).
 
 ```
 cargo run -p seihai-ato -- --version 3.153
+GRAAL_PW=... cargo run -p seihai-ato -- --version 3.04 --listserver 127.0.0.1:14922 \
+    --account lab --password-env GRAAL_PW
 cargo run -p seihai-ato -- --version 3.04 --print-profile
 GRAAL_PW=... cargo run -p seihai-ato -- --version 3.04 --online 127.0.0.1:14900 \
     --account lab --password-env GRAAL_PW --no-window --first-level
@@ -84,7 +91,7 @@ into is noted on the status bar and dropped.
 
 ## Not in yet
 
-The server list, offline mode, the post-login frame the real 3.x client
+Offline mode, the post-login frame the real 3.x client
 sends once the board is in (file checks and props, which carry the
 nickname and language), sending the walk, level changes, NPCs, other
 players, GANI art, and the Torque UDP side. The clients' background images are not shipped,

@@ -8,6 +8,9 @@
 //! the core readers, and keep and log the level ([`level`]) with the
 //! board's and props' fields ([`fields`]), for builds with a Torque profile.
 //!
+//! Start asks the listserver for its servers ([`server_list`]) and logs in
+//! at the one picked, unless `--online` names a game server.
+//!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
 //! ([`render`]) and walk it with the arrow keys ([`game`]).
 //!
@@ -22,6 +25,7 @@ pub mod game;
 pub mod level;
 pub mod online;
 pub mod render;
+pub mod server_list;
 pub mod start_window;
 pub mod torque;
 pub mod wire;
