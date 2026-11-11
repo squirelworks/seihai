@@ -83,7 +83,8 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
   maths is copied from mae, not shared, so the two lines stay apart.
 - `game`: after Start, the 640x480 window shows the level the server sent.
   The arrow keys walk it with core's `OfflineSession::try_move`, which
-  gives the same pace, walls and water as mae.
+  gives the same pace, walls and water as mae. Other players the server
+  places in the level (`PLO_OTHERPLPROPS`) show as yellow markers.
 
 The walk is sent: the view hands its pose to the network thread, which
 sends it once a 50 ms tick after the post-login frame. 3.04 and 4.04r2
@@ -95,6 +96,6 @@ the player walks into is noted on the status bar and dropped.
 
 ## Not in yet
 
-Offline mode, level changes, NPCs, other
-players, GANI art, and the Torque UDP side. The clients' background images are not shipped,
+Offline mode, level changes, NPCs, other players' looks and names
+(they show as plain markers), GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

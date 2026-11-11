@@ -25,6 +25,8 @@ pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
 /// The player marker: red, blue in water.
 const MARKER: [u8; 3] = [0xFF, 0x40, 0x40];
 const MARKER_WATER: [u8; 3] = [0x40, 0x80, 0xFF];
+/// Another player's marker.
+const MARKER_OTHER: [u8; 3] = [0xFF, 0xD0, 0x40];
 /// A link's outline. The real clients draw nothing for a link; this only
 /// shows where the level's links are.
 pub const LINK_OUTLINE: [u8; 3] = [0xFF, 0xE0, 0x40];
@@ -144,9 +146,16 @@ fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
     })
 }
 
-/// Draw the session's level around the player, `view_w` x `view_h` tiles.
-/// Off the level is black.
-pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Frame {
+/// Draw the session's level around the player, `view_w` x `view_h` tiles,
+/// with a marker for each other player at `others` (tile positions). Off
+/// the level is black.
+pub fn draw(
+    s: &OfflineSession,
+    sheet: &Sheet,
+    others: &[(f32, f32)],
+    view_w: u32,
+    view_h: u32,
+) -> Frame {
     let mut f = Frame::new(view_w * TILE_PX, view_h * TILE_PX);
     let Some(level) = &s.current_level else {
         return f;
@@ -194,6 +203,11 @@ pub fn draw(s: &OfflineSession, sheet: &Sheet, view_w: u32, view_h: u32) -> Fram
             LINK_OUTLINE,
         );
     }
+    // Other players: the same marker as the player's, in their own colour.
+    for &(x, y) in others {
+        let (ox, oy) = ((x * t as f32) as i32 - cam_x, (y * t as f32) as i32 - cam_y);
+        f.fill_rect(ox + 16, oy + 24, 16, 16, MARKER_OTHER);
+    }
     // The player's box starts at its tile position; the marker sits where
     // the body would be.
     let (bx, by) = (
@@ -238,7 +252,7 @@ mod tests {
     fn tiles_come_from_the_sheet_position_mae_uses() {
         let sheet = Sheet::load(None).unwrap();
         // Tile 600: column 600 % 16 + (600 / 512) * 16 = 24, row (600 / 16) % 32 = 5.
-        let f = draw(&session(600), &sheet, 40, 30);
+        let f = draw(&session(600), &sheet, &[], 40, 30);
         let (cam_x, cam_y) = camera_origin(&session(600), 40, 30);
         // A screen pixel at a tile corner is that sheet tile's corner pixel.
         let (sx, sy) = (
@@ -255,7 +269,7 @@ mod tests {
     #[test]
     fn the_player_marker_is_at_the_centre() {
         let sheet = Sheet::load(None).unwrap();
-        let f = draw(&session(0), &sheet, 40, 30);
+        let f = draw(&session(0), &sheet, &[], 40, 30);
         // The box (48x48) is centred; the marker is its middle-bottom 16x16.
         assert_eq!(px(&f, 320, 248), MARKER);
     }
@@ -266,7 +280,7 @@ mod tests {
         let mut s = session(0);
         let level = s.current_level.as_mut().unwrap();
         level.add_server_links(&["next.nw 20 25 2 3 30 30".to_string()]);
-        let f = draw(&s, &sheet, 40, 30);
+        let f = draw(&s, &sheet, &[], 40, 30);
         let (cam_x, cam_y) = camera_origin(&s, 40, 30);
         let (x0, y0) = ((20 * 16 - cam_x) as u32, (25 * 16 - cam_y) as u32);
         // Its corners and edges, 2 x 3 tiles; not its inside.
@@ -277,19 +291,31 @@ mod tests {
     }
 
     #[test]
+    fn another_player_gets_a_marker() {
+        let sheet = Sheet::load(None).unwrap();
+        let s = session(0);
+        let (ox, oy) = (s.player_x + 3.0, s.player_y + 2.0);
+        let f = draw(&s, &sheet, &[(ox, oy)], 40, 30);
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        let x = (ox * 16.0) as i32 - cam_x + 20;
+        let y = (oy * 16.0) as i32 - cam_y + 28;
+        assert_eq!(px(&f, x as u32, y as u32), MARKER_OTHER);
+    }
+
+    #[test]
     fn off_the_level_is_black() {
         let sheet = Sheet::load(None).unwrap();
         let mut s = session(600);
         s.player_x = 0.0;
         s.player_y = 0.0;
-        let f = draw(&s, &sheet, 40, 30);
+        let f = draw(&s, &sheet, &[], 40, 30);
         assert_eq!(px(&f, 0, 0), [0, 0, 0]);
     }
 
     #[test]
     fn no_level_draws_black() {
         let sheet = Sheet::load(None).unwrap();
-        let f = draw(&OfflineSession::default(), &sheet, 4, 4);
+        let f = draw(&OfflineSession::default(), &sheet, &[], 4, 4);
         assert!(f.rgb.iter().all(|&b| b == 0));
     }
 }
