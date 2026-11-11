@@ -99,6 +99,43 @@ pub struct Pose {
 /// 50 ms tick and sends the walk props.
 pub type SharedPose = Arc<Mutex<Option<Pose>>>;
 
+/// Another player in the level, as the server last placed them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Other {
+    pub id: u16,
+    pub x: f32,
+    pub y: f32,
+    pub dir: u8,
+    pub nick: Option<String>,
+}
+
+/// The network thread writes the other players here after each frame; the
+/// game view draws them.
+pub type SharedOthers = Arc<Mutex<Vec<Other>>>;
+
+/// What the game view and the network thread share.
+#[derive(Debug, Clone, Default)]
+pub struct Live {
+    pub pose: SharedPose,
+    pub others: SharedOthers,
+}
+
+/// The other players in `st` that stand in this level: those with no gmap
+/// cell of their own (Ato has no gmap view yet).
+fn others_of(st: &SessionState) -> Vec<Other> {
+    st.others
+        .iter()
+        .filter(|o| o.cell.is_none())
+        .map(|o| Other {
+            id: o.id,
+            x: o.x,
+            y: o.y,
+            dir: o.dir,
+            nick: o.nick.clone(),
+        })
+        .collect()
+}
+
 /// One walk tick, as the real clients run it.
 const WALK_TICK: Duration = Duration::from_millis(50);
 
@@ -148,7 +185,8 @@ impl WalkSender {
     }
 }
 
-/// As [`run`], with the game view's pose: the walk is sent to the server.
+/// As [`run`], with the game view's [`Live`] state: the walk is sent to the
+/// server and the other players come back.
 #[allow(clippy::too_many_arguments)]
 pub fn run_with_pose(
     addr: &str,
@@ -158,8 +196,10 @@ pub fn run_with_pose(
     first_level_only: bool,
     out: &mut impl Write,
     shown: &mut dyn FnMut(&Level, &Arrival),
-    pose: Option<SharedPose>,
+    live: Option<Live>,
 ) -> Result<(), String> {
+    let pose = live.as_ref().map(|l| l.pose.clone());
+    let others = live.as_ref().map(|l| l.others.clone());
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
@@ -205,6 +245,7 @@ pub fn run_with_pose(
         // A level was stored and has not been logged yet.
         let mut owed = false;
         let mut owed_at: Option<Instant> = None;
+        let mut quit = false;
         loop {
             let burst_owed = login_burst.as_ref().is_some_and(|b| b.pending())
                 || lobby_burst.as_ref().is_some_and(|b| b.pending());
@@ -222,6 +263,13 @@ pub fn run_with_pose(
             match frames.recv_timeout(wait) {
                 Ok(Ok(body)) => {
                     st.apply_body(&body);
+                    if let Some(o) = others.as_ref() {
+                        let now = others_of(&st);
+                        let mut slot = o.lock().unwrap_or_else(|e| e.into_inner());
+                        if *slot != now {
+                            *slot = now;
+                        }
+                    }
                     if let Some(w) = st.server_warp.take() {
                         if owed {
                             log_level(version, &store, &st, out, shown);
@@ -233,6 +281,9 @@ pub fn run_with_pose(
                                 "server warp to {name:?} has no usable host and port"
                             ));
                         };
+                        if let Some(o) = others.as_ref() {
+                            o.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                        }
                         let _ = writeln!(out, "server warp to {name:?}: {to}");
                         addr = to;
                         server_name = Some(name);
@@ -282,10 +333,10 @@ pub fn run_with_pose(
                         log_level(version, &store, &st, out, shown);
                         owed = false;
                         owed_at = None;
-                        if first_level_only {
-                            let _ = s.conn.shutdown();
-                            return Ok(());
-                        }
+                        // Hang up once the post-login frames due by now
+                        // have gone (below), as a client would have sent
+                        // them before the level settled.
+                        quit = first_level_only;
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
@@ -341,6 +392,10 @@ pub fn run_with_pose(
                     }
                     let _ = writeln!(out, "sent the post-login frames ({})", frames.len());
                 }
+            }
+            if quit {
+                let _ = s.conn.shutdown();
+                return Ok(());
             }
         }
     }
@@ -405,5 +460,27 @@ mod tests {
             }
             assert!(sent >= 1, "{}", v.label());
         }
+    }
+}
+
+#[cfg(test)]
+mod others_tests {
+    use super::*;
+
+    /// `PLO_OTHERPLPROPS` (8) for player `id` at half-tile `x`, `y`.
+    fn other(id: u16, x: u8, y: u8) -> Vec<u8> {
+        let mut m = vec![8 + 0x20];
+        m.extend([((id >> 7) & 0x7F) as u8 + 0x20, (id & 0x7F) as u8 + 0x20]);
+        m.extend([15 + 0x20, x + 0x20, 16 + 0x20, y + 0x20, b'\n']);
+        m
+    }
+
+    #[test]
+    fn the_players_the_server_places_are_shared() {
+        let mut st = SessionState::for_version(ClientVersion::V3153);
+        st.apply_body(&[other(2, 20, 24), other(3, 40, 10)].concat());
+        let o = others_of(&st);
+        let got: Vec<_> = o.iter().map(|o| (o.id, o.x, o.y)).collect();
+        assert_eq!(got, vec![(2, 10.0, 12.0), (3, 20.0, 5.0)]);
     }
 }

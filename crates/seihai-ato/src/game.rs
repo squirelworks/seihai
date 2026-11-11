@@ -47,6 +47,10 @@ pub struct Game {
     dirty: bool,
     /// Where the network thread reads the player's pose.
     pub pose: online::SharedPose,
+    /// Where the network thread puts the other players.
+    pub others: online::SharedOthers,
+    /// The other players drawn last frame.
+    drawn_others: Vec<online::Other>,
 }
 
 impl Game {
@@ -62,6 +66,8 @@ impl Game {
             texture: None,
             dirty: true,
             pose: online::SharedPose::default(),
+            others: online::SharedOthers::default(),
+            drawn_others: Vec::new(),
         })
     }
 
@@ -135,8 +141,18 @@ impl Game {
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;
         let dy = held(egui::Key::ArrowDown) as i8 - held(egui::Key::ArrowUp) as i8;
         self.walk(dx, dy, Instant::now());
+        let others = self
+            .others
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if others != self.drawn_others {
+            self.drawn_others = others;
+            self.dirty = true;
+        }
         if self.dirty || self.texture.is_none() {
-            let f = render::draw(&self.session, &self.sheet, VIEW_TILES.0, VIEW_TILES.1);
+            let at: Vec<(f32, f32)> = self.drawn_others.iter().map(|o| (o.x, o.y)).collect();
+            let f = render::draw(&self.session, &self.sheet, &at, VIEW_TILES.0, VIEW_TILES.1);
             let image = egui::ColorImage::from_rgb([f.w as usize, f.h as usize], &f.rgb);
             match &mut self.texture {
                 Some(t) => t.set(image, egui::TextureOptions::NEAREST),
@@ -241,8 +257,8 @@ impl AtoApp {
         let (tx, rx) = mpsc::channel();
         let assets = self.assets.clone();
         let repaint = ctx.clone();
-        let pose = online::SharedPose::default();
-        let net_pose = pose.clone();
+        let live = online::Live::default();
+        let net_live = live.clone();
         std::thread::spawn(move || {
             let shown_tx = tx.clone();
             let shown_ctx = repaint.clone();
@@ -258,7 +274,7 @@ impl AtoApp {
                 false,
                 &mut std::io::stdout(),
                 &mut shown,
-                Some(net_pose),
+                Some(net_live),
             ) {
                 Ok(()) => "The server closed the connection.".to_string(),
                 Err(e) => format!("Could not log in: {e}"),
@@ -268,7 +284,8 @@ impl AtoApp {
         });
         match Game::new(rx, resolver.as_ref()) {
             Ok(mut g) => {
-                g.pose = pose;
+                g.pose = live.pose;
+                g.others = live.others;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
