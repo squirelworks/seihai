@@ -32,6 +32,8 @@ pub struct Args {
     /// The listserver Start asks for the server list (`--listserver
     /// host:port`); without it, the version's row (`listserver.graal.in`).
     pub listserver: Option<String>,
+    /// `--no-sound`: no sound effects (the device is never opened).
+    pub no_sound: bool,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
@@ -53,6 +55,7 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--assets" => a.assets = it.next().or(a.assets),
             "--no-window" => a.no_window = true,
             "--first-level" => a.first_level = true,
+            "--no-sound" => a.no_sound = true,
             "--listserver" => a.listserver = it.next().or(a.listserver),
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
@@ -164,5 +167,11 @@ mod tests {
         let a = p("--version 3.04 --listserver 127.0.0.1:14922 --account a");
         assert_eq!(a.listserver.as_deref(), Some("127.0.0.1:14922"));
         assert_eq!(a.account.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn no_sound_turns_sound_off() {
+        assert!(!p("--version 3.04").no_sound);
+        assert!(p("--version 3.04 --no-sound").no_sound);
     }
 }
