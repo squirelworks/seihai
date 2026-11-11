@@ -38,6 +38,13 @@ fn board(fill: u16) -> Vec<u8> {
 const SCRIPT: &[u8] = include_bytes!("../../seihai-core/tests/fixtures/gs2/shared.gs2bc");
 
 fn serve(version: ClientVersion, listener: TcpListener) {
+    serve_with(version, listener, None);
+}
+
+/// As [`serve`]; with `warp_to`, a Login server: after the login it sends
+/// only a `PLO_SERVERWARP` (178) to that port and waits for the client to
+/// leave.
+fn serve_with(version: ClientVersion, listener: TcpListener, warp_to: Option<u16>) {
     let (mut s, _) = listener.accept().unwrap();
     s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     // The login frame: u16 length, plain zlib, the login line first.
@@ -60,6 +67,15 @@ fn serve(version: ClientVersion, listener: TcpListener) {
         };
         s.write_all(&frame).unwrap();
     };
+    if let Some(port) = warp_to {
+        send(msg(
+            178,
+            format!("0,Lab Server,127.0.0.1,{port}").as_bytes(),
+        ));
+        let mut rest = Vec::new();
+        let _ = s.read_to_end(&mut rest);
+        return;
+    }
     // PLO_PLAYERPROPS (9): X 30.5, Y 31; PLO_LEVELNAME (6); the board.
     let mut first = msg(9, &[gc(15), gc(61), gc(16), gc(62)]);
     first.extend(msg(6, b"lab3x.nw"));
@@ -124,5 +140,48 @@ fn each_3x_build_logs_in_and_logs_the_level() {
         // Only 3.153 handles 131: it reads the script and logs its opcodes.
         let read = out.contains("npc 1: GS2 script, ") && out.contains("OP_CALL");
         assert_eq!(read, v == ClientVersion::V3153, "{}: {out}", v.label());
+    }
+}
+
+/// A 4.x or 5.x build logs in to its Login server, follows the warp to the
+/// game server, logs in again there and logs the level.
+#[test]
+fn lobby_builds_follow_the_login_servers_warp() {
+    for v in [
+        ClientVersion::V420R8,
+        ClientVersion::V500R7,
+        ClientVersion::V512,
+    ] {
+        let game = TcpListener::bind("127.0.0.1:0").unwrap();
+        let game_port = game.local_addr().unwrap().port();
+        let lobby = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = lobby.local_addr().unwrap().to_string();
+        let a = std::thread::spawn(move || serve_with(v, lobby, Some(game_port)));
+        let b = std::thread::spawn(move || serve(v, game));
+        let login = Login {
+            account: "lab".into(),
+            password: "pw".into(),
+            nick: "lab".into(),
+            language: "English".into(),
+        };
+        let mut out = Vec::new();
+        let mut levels = 0;
+        online::run(&addr, v, &login, None, true, &mut out, &mut |_, _| {
+            levels += 1
+        })
+        .unwrap();
+        a.join().unwrap();
+        b.join().unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains(&format!(
+                "server warp to \"Lab Server\": 127.0.0.1:{game_port}"
+            )),
+            "{}: {out}",
+            v.label()
+        );
+        assert_eq!(out.matches("logged in at").count(), 2, "{out}");
+        assert!(out.contains("level lab3x.nw"), "{}: {out}", v.label());
+        assert_eq!(levels, 1);
     }
 }

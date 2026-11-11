@@ -16,7 +16,7 @@ that part is one library and each client line is its own binary.
 | `tools/level-editor`  | library + binary | The level editor. Reads levels and gmaps through `seihai-core`; uses the mae renderer for its tile view. It stays the client's offline editor. |
 
 The `seihai` launcher (`crates/seihai-launcher`) starts `seihai-mae` when
-there is no `--version` and for 1.x, 2.x, 4.x and 5.x, `seihai-ato` for 3.x,
+there is no `--version` and for 1.x and 2.x, `seihai-ato` for 3.x to 5.x,
 `seihai-g3d` for `graal3d`, and `seihai-issho` for 6.x. A 7.x label starts
 nothing. Issho is not on the play path unless v6 was selected.
 
