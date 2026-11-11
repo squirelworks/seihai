@@ -136,9 +136,13 @@ pub struct Live {
 /// The other players in `st` that stand in this level: those with no gmap
 /// cell of their own (Ato has no gmap view yet).
 fn others_of(st: &SessionState) -> Vec<Other> {
+    // Off a gmap the cell props (43/44) mean nothing: GServer sends them
+    // as 0, 0 with every full OTHERPLPROPS. On a gmap, only the players in
+    // the player's own cell are drawn (x, y are local to their cell).
+    let own = st.gmap.as_ref().map(|g| g.cell);
     st.others
         .iter()
-        .filter(|o| o.cell.is_none())
+        .filter(|o| own.is_none() || o.cell.is_none() || o.cell == own)
         .map(|o| Other {
             id: o.id,
             x: o.x,
@@ -147,6 +151,16 @@ fn others_of(st: &SessionState) -> Vec<Other> {
             nick: o.nick.clone(),
         })
         .collect()
+}
+
+/// After a link request the player stands where the link said: the
+/// client moves itself there, and GServer does not send X/Y again with the
+/// new level. Without this the login's X/Y stayed in the state, and the
+/// new level drew the player at the login start (lab, 2026-11-11). X/Y the
+/// server does send after this still win.
+fn arrive_by_link(st: &mut SessionState, a: &LinkAsk) {
+    st.player_x = Some(a.x);
+    st.player_y = Some(a.y);
 }
 
 /// One walk tick, as the real clients run it.
@@ -408,6 +422,7 @@ pub fn run_with_pose(
                         st.expect_cached_level(&a.dest);
                         s.enter_level.cached_link(&a.dest, frame.with_enter_level);
                     }
+                    arrive_by_link(&mut st, &a);
                     let _ = writeln!(out, "link to {} at {} {}", a.dest, a.x, a.y);
                 }
             }
@@ -539,5 +554,43 @@ mod others_tests {
         let o = others_of(&st);
         let got: Vec<_> = o.iter().map(|o| (o.id, o.x, o.y)).collect();
         assert_eq!(got, vec![(2, 10.0, 12.0), (3, 20.0, 5.0)]);
+    }
+
+    /// GServer's full OTHERPLPROPS carries GMAPLEVELX/Y (43/44) = 0 on a
+    /// plain level too (lab, 2026-11-11: two Ato clients never saw each
+    /// other). Off a gmap that cell is ignored.
+    #[test]
+    fn a_zero_cell_off_a_gmap_still_draws_the_player() {
+        let mut st = SessionState::for_version(ClientVersion::V3153);
+        let mut m = other(2, 20, 24);
+        m.pop();
+        m.extend([43 + 0x20, 0x20, 44 + 0x20, 0x20, b'\n']);
+        st.apply_body(&m);
+        assert_eq!(st.others[0].cell, Some((0, 0)));
+        assert!(st.gmap.is_none());
+        let got: Vec<_> = others_of(&st).iter().map(|o| o.id).collect();
+        assert_eq!(got, vec![2]);
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    /// The login put the player at (23.5, 30.5); the link says (54.5, 19).
+    /// The next level's start is the link's, not the login's.
+    #[test]
+    fn a_link_moves_the_start_to_its_destination() {
+        let mut st = SessionState::for_version(ClientVersion::V3153);
+        st.player_x = Some(23.5);
+        st.player_y = Some(30.5);
+        let a = LinkAsk {
+            dest: "egk-10.graal".into(),
+            x: 54.5,
+            y: 19.0,
+            dir: 2,
+        };
+        arrive_by_link(&mut st, &a);
+        assert_eq!(st.player_x.zip(st.player_y), Some((54.5, 19.0)));
     }
 }

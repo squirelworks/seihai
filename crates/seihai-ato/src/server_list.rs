@@ -1,14 +1,15 @@
 //! The server list: what Start opens when no game server was given.
 //!
 //! The listserver login is core's (`Connection::fetch_server_list`), with
-//! the 3.x row's listserver: `listserver.graal.in` on the row's port, the
+//! the 3.x row's listserver: `listserver.graal.in` on port 14923, the
 //! `G3D30123` token and login shape D (id 7 and id 1 in one plain zlib
 //! frame, as the real 3.04 and 3.153 sent it in the lab). `--listserver
 //! host:port` points it at a lab listserver instead.
 //!
-//! The fetch runs on its own thread so the window keeps drawing. Picking a
-//! server and pressing Connect hands back its `host:port`; the login at
-//! that game server is the same as with `--online`.
+//! The fetch runs on its own thread so the window keeps drawing; its
+//! result is also printed to stdout. Picking a server and pressing Connect
+//! hands back its `host:port`; the login at that game server is the same
+//! as with `--online`.
 
 use seihai_core::net::{list_failure_text, Connection};
 use seihai_core::protocol::{ClientVersion, ListReply, ServerEntry};
@@ -121,6 +122,7 @@ impl ServerList {
             Err(TryRecvError::Disconnected) => {
                 self.pending = None;
                 self.status = format!("{}: the list fetch stopped.", self.listserver);
+                self.print();
             }
         }
     }
@@ -145,6 +147,17 @@ impl ServerList {
                 };
             }
             Err(e) => self.status = list_failure_text(&self.listserver, &e),
+        }
+        self.print();
+    }
+
+    /// The reply on stdout, as the game login's lines are, so a run with
+    /// the window open can be read without a screenshot: the status, then
+    /// one line per server.
+    fn print(&self) {
+        println!("server list from {}: {}", self.listserver, self.status);
+        for s in &self.servers {
+            println!("  {}  {}:{}", Self::row(s), s.host, s.port);
         }
     }
 
@@ -231,7 +244,9 @@ mod tests {
         for v in [ClientVersion::V304, ClientVersion::V3153] {
             let d = default_listserver(v);
             assert!(d.starts_with("listserver.graal.in:"), "{d}");
-            assert_eq!(d, format!("listserver.graal.in:{}", v.listserver_port()));
+            // 14923: the public listserver sent the list there to this
+            // login, and only the account error on 14922.
+            assert_eq!(d, "listserver.graal.in:14923");
         }
     }
 
