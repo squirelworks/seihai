@@ -20,9 +20,33 @@ jobs:
       - name: No line-ending conversion
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+      # The ALSA headers come from a cache of their .deb files, so a run
+      # needs the Ubuntu mirrors only when the runner image's ALSA library
+      # changes (the cache key). When the mirrors are down the job fails
+      # here only on such a change, not on every PR.
+      - name: ALSA library version (cache key)
+        if: runner.os == 'Linux'
+        id: alsa
+        run: echo "version=$(dpkg-query -W -f='${Version}' libasound2t64 2>/dev/null || dpkg-query -W -f='${Version}' libasound2)" >> "$GITHUB_OUTPUT"
+      - name: Cached audio header packages
+        if: runner.os == 'Linux'
+        id: debs
+        uses: actions/cache@v4
+        with:
+          path: ~/alsa-debs
+          key: alsa-debs-${{ runner.arch }}-${{ steps.alsa.outputs.version }}
+      - name: Download the audio header packages
+        if: runner.os == 'Linux' && steps.debs.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --download-only libasound2-dev pkg-config
+          mkdir -p ~/alsa-debs
+          cp /var/cache/apt/archives/*.deb ~/alsa-debs/
       - name: Linux audio headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        run: |
+          sudo dpkg -i --skip-same-version ~/alsa-debs/*.deb
+          pkg-config --modversion alsa
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
