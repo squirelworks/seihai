@@ -128,6 +128,14 @@ fn run(version: ClientVersion) -> String {
 
 #[test]
 fn each_3x_build_logs_in_and_logs_the_level() {
+    // Both 3.x rows carry a recorded post-login frame.
+    for v in [ClientVersion::V304, ClientVersion::V3153] {
+        assert!(
+            seihai_core::protocol::login::LoginBurst::for_version(v).is_some(),
+            "{}",
+            v.label()
+        );
+    }
     for v in [ClientVersion::V304, ClientVersion::V3153] {
         let out = run(v);
         assert!(out.contains(&format!("as lab ({})", v.label())), "{out}");
@@ -137,6 +145,15 @@ fn each_3x_build_logs_in_and_logs_the_level() {
             v.label()
         );
         assert_eq!(out.matches("level lab3x.nw").count(), 1, "{out}");
+        // The frame the real 3.x client answers the board with goes out
+        // (core's LoginBurst), before the level is logged.
+        if seihai_core::protocol::login::LoginBurst::for_version(v).is_some() {
+            assert!(
+                out.contains("sent the post-login frame"),
+                "{}: {out}",
+                v.label()
+            );
+        }
         // Only 3.153 handles 131: it reads the script and logs its opcodes.
         let read = out.contains("npc 1: GS2 script, ") && out.contains("OP_CALL");
         assert_eq!(read, v == ClientVersion::V3153, "{}: {out}", v.label());
@@ -183,5 +200,23 @@ fn lobby_builds_follow_the_login_servers_warp() {
         assert_eq!(out.matches("logged in at").count(), 2, "{out}");
         assert!(out.contains("level lab3x.nw"), "{}: {out}", v.label());
         assert_eq!(levels, 1);
+        // On the game server the build's post-login frames go out.
+        if seihai_core::protocol::lobby::LobbyBurst::for_version(v).is_some() {
+            assert!(
+                out.contains("sent the post-login frames"),
+                "{}: {out}",
+                v.label()
+            );
+        }
     }
+}
+
+/// 4.04r2, the 4.x build with recorded after-login messages, sends them
+/// once its level has been in for 240 ms without a 182.
+#[test]
+fn the_404_lobby_burst_goes_out() {
+    let v = ClientVersion::V404R2;
+    assert!(seihai_core::protocol::lobby::LobbyBurst::for_version(v).is_some());
+    let out = run(v);
+    assert!(out.contains("sent the post-login frames"), "{out}");
 }
