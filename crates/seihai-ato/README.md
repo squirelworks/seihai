@@ -85,12 +85,16 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
   The arrow keys walk it with core's `OfflineSession::try_move`, which
   gives the same pace, walls and water as mae.
 
-The walk is local: Ato does not send its position, because what a 3.x
-client sends while walking has not been captured. A link the player walks
-into is noted on the status bar and dropped.
+The walk is sent: the view hands its pose to the network thread, which
+sends it once a 50 ms tick after the post-login frame. 3.04 and 4.04r2
+walk on core's captured cadence (`protocol::walkcadence::WalkCadence`:
+changed props only, GANI `walk`/`idle`); the other builds send their whole
+walk message (`net::walk_message_for`: X2/Y2 where the profile has precise
+positions) when the pose changes, as `seihai-mae` does for them. A link
+the player walks into is noted on the status bar and dropped.
 
 ## Not in yet
 
-Offline mode, sending the walk, level changes, NPCs, other
+Offline mode, level changes, NPCs, other
 players, GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

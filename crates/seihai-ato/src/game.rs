@@ -3,9 +3,10 @@
 //! way `seihai-mae` walks (core's `OfflineSession::try_move`, the same walls
 //! and water).
 //!
-//! The walk is local: Ato does not send its position yet, because what a
-//! 3.x client sends while walking has not been captured. A link the player
-//! walks into is noted and dropped; level changes are not in Ato yet.
+//! The walk goes to the server: the view keeps the pose in a
+//! [`online::SharedPose`] and the network thread sends it once a 50 ms
+//! tick ([`online::run_with_pose`]). A link the player walks into is noted
+//! and dropped; level changes are not in Ato yet.
 
 use crate::level::Arrival;
 use crate::online::{self, Login};
@@ -44,6 +45,8 @@ pub struct Game {
     texture: Option<egui::TextureHandle>,
     /// The frame needs drawing again.
     dirty: bool,
+    /// Where the network thread reads the player's pose.
+    pub pose: online::SharedPose,
 }
 
 impl Game {
@@ -58,6 +61,7 @@ impl Game {
             last_step: Instant::now(),
             texture: None,
             dirty: true,
+            pose: online::SharedPose::default(),
         })
     }
 
@@ -72,11 +76,22 @@ impl Game {
                     self.session.warp_pending = None;
                     self.session.refresh_water();
                     self.status = a.line();
+                    self.set_pose(false);
                 }
                 Event::Ended(why) => self.status = why,
             }
             self.dirty = true;
         }
+    }
+
+    /// Hand the current pose to the network thread.
+    fn set_pose(&self, walking: bool) {
+        *self.pose.lock().unwrap_or_else(|e| e.into_inner()) = Some(online::Pose {
+            x: self.session.player_x,
+            y: self.session.player_y,
+            dir: self.session.player_dir % 4,
+            walking,
+        });
     }
 
     /// The player's position in tiles, for the view, once a level is in.
@@ -94,6 +109,9 @@ impl Game {
         if (dx, dy) == (0, 0) {
             if self.session.stop_walking() {
                 self.dirty = true;
+                if self.session.current_level.is_some() {
+                    self.set_pose(false);
+                }
             }
             return;
         }
@@ -104,6 +122,7 @@ impl Game {
         }
         self.last_step = now;
         self.session.try_move(dx as f32 * 0.5, dy as f32 * 0.5);
+        self.set_pose(true);
         if let Some(dest) = self.session.warp_pending.take() {
             self.status = format!("Link to {dest}: level changes are not in Ato yet.");
         }
@@ -222,6 +241,8 @@ impl AtoApp {
         let (tx, rx) = mpsc::channel();
         let assets = self.assets.clone();
         let repaint = ctx.clone();
+        let pose = online::SharedPose::default();
+        let net_pose = pose.clone();
         std::thread::spawn(move || {
             let shown_tx = tx.clone();
             let shown_ctx = repaint.clone();
@@ -229,7 +250,7 @@ impl AtoApp {
                 let _ = shown_tx.send(Event::Level(Box::new(l.clone()), a.clone()));
                 shown_ctx.request_repaint();
             };
-            let why = match online::run(
+            let why = match online::run_with_pose(
                 &addr,
                 version,
                 &login,
@@ -237,6 +258,7 @@ impl AtoApp {
                 false,
                 &mut std::io::stdout(),
                 &mut shown,
+                Some(net_pose),
             ) {
                 Ok(()) => "The server closed the connection.".to_string(),
                 Err(e) => format!("Could not log in: {e}"),
@@ -245,7 +267,10 @@ impl AtoApp {
             repaint.request_repaint();
         });
         match Game::new(rx, resolver.as_ref()) {
-            Ok(g) => self.game = Some(g),
+            Ok(mut g) => {
+                g.pose = pose;
+                self.game = Some(g);
+            }
             Err(e) => self.start.status = e,
         }
     }
@@ -395,6 +420,29 @@ mod tests {
         assert_eq!(g.session.player_x, x);
         g.walk(0, 1, t0 + g.session.step_interval());
         assert!(g.session.player_y > 30.0);
+    }
+
+    /// The level sets the pose (standing), each step updates it (walking),
+    /// and the stop sets it standing again: the network thread reads it.
+    #[test]
+    fn the_walk_reaches_the_shared_pose() {
+        let (mut g, tx) = game();
+        assert!(g.pose.lock().unwrap().is_none());
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        let p = g.pose.lock().unwrap().unwrap();
+        assert_eq!((p.x, p.y, p.walking), (30.0, 30.0, false));
+        let t0 = g.last_step + Duration::from_secs(1);
+        g.walk(1, 0, t0);
+        let p = g.pose.lock().unwrap().unwrap();
+        assert!(p.walking && p.x > 30.0, "{p:?}");
+        assert_eq!(p.dir, 3, "facing right");
+        g.walk(0, 0, t0 + Duration::from_millis(1));
+        assert!(!g.pose.lock().unwrap().unwrap().walking);
     }
 
     #[test]

@@ -29,13 +29,15 @@
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
 use seihai_core::filecache::FileSession;
-use seihai_core::net::{login_gserver_with, random_key, wantfile_message};
+use seihai_core::net::{login_gserver_with, random_key, walk_message_for, wantfile_message};
 use seihai_core::protocol::lobby::LobbyBurst;
 use seihai_core::protocol::login::LoginBurst;
+use seihai_core::protocol::walkcadence::WalkCadence;
 use seihai_core::protocol::{ClientVersion, SessionState};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::mpsc::RecvTimeoutError;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// How often the loop looks while a post-login frame is owed, so a frame
@@ -70,6 +72,93 @@ pub fn run(
     first_level_only: bool,
     out: &mut impl Write,
     shown: &mut dyn FnMut(&Level, &Arrival),
+) -> Result<(), String> {
+    run_with_pose(
+        addr,
+        version,
+        login,
+        assets,
+        first_level_only,
+        out,
+        shown,
+        None,
+    )
+}
+
+/// Where the player stands and faces, as the game view last set it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pose {
+    pub x: f32,
+    pub y: f32,
+    /// 0 up, 1 left, 2 down, 3 right.
+    pub dir: u8,
+    pub walking: bool,
+}
+
+/// The game view writes the pose here; the network thread reads it each
+/// 50 ms tick and sends the walk props.
+pub type SharedPose = Arc<Mutex<Option<Pose>>>;
+
+/// One walk tick, as the real clients run it.
+const WALK_TICK: Duration = Duration::from_millis(50);
+
+/// Sends the player's walk props on the build's own terms: core's
+/// [`WalkCadence`] for the builds whose walk was captured (3.04 and the 4.x
+/// builds with recorded after-login messages: changed props only, GANI
+/// `walk`/`idle`), otherwise the whole walk message
+/// ([`walk_message_for`]: X2/Y2 with precise positions, X/Y otherwise) at
+/// most once a tick when the pose changed, as `seihai-mae` does for those
+/// builds.
+struct WalkSender {
+    version: ClientVersion,
+    cadence: Option<WalkCadence>,
+    last: Option<Pose>,
+    ganis: bool,
+}
+
+impl WalkSender {
+    fn new(version: ClientVersion) -> Self {
+        WalkSender {
+            version,
+            cadence: WalkCadence::for_version(version),
+            last: None,
+            ganis: version.profile().ui.ganis,
+        }
+    }
+
+    /// The message for this tick, if any.
+    fn tick(&mut self, pose: Pose) -> Option<Vec<u8>> {
+        if let Some(wc) = self.cadence.as_mut() {
+            let gani = self
+                .ganis
+                .then_some(if pose.walking { "walk" } else { "idle" });
+            let st = wc.state(pose.x, pose.y, pose.dir, gani);
+            return wc.tick(st);
+        }
+        let first = self.last.is_none();
+        let same = self
+            .last
+            .is_some_and(|l| (l.x, l.y, l.dir) == (pose.x, pose.y, pose.dir));
+        self.last = Some(pose);
+        // The first pose is where the server put the player: nothing to say.
+        if first || same {
+            return None;
+        }
+        Some(walk_message_for(self.version, pose.x, pose.y, pose.dir))
+    }
+}
+
+/// As [`run`], with the game view's pose: the walk is sent to the server.
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_pose(
+    addr: &str,
+    version: ClientVersion,
+    login: &Login,
+    assets: Option<PathBuf>,
+    first_level_only: bool,
+    out: &mut impl Write,
+    shown: &mut dyn FnMut(&Level, &Arrival),
+    pose: Option<SharedPose>,
 ) -> Result<(), String> {
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
@@ -110,6 +199,8 @@ pub fn run(
         let mut lobby_burst = LobbyBurst::for_version(version);
         let title = version.profile().window_title(server_name.as_deref());
         let mut st = SessionState::for_version(version);
+        let mut walker = WalkSender::new(version);
+        let mut walk_clock = Instant::now();
         let mut store = LevelStore::default();
         // A level was stored and has not been logged yet.
         let mut owed = false;
@@ -117,11 +208,14 @@ pub fn run(
         loop {
             let burst_owed = login_burst.as_ref().is_some_and(|b| b.pending())
                 || lobby_burst.as_ref().is_some_and(|b| b.pending());
-            let wait = match (owed, burst_owed) {
+            let mut wait = match (owed, burst_owed) {
                 (_, true) => BURST_TICK,
                 (true, false) => SETTLE,
                 (false, false) => Duration::from_secs(3600),
             };
+            if pose.is_some() {
+                wait = wait.min(WALK_TICK);
+            }
             // The time `owed` started, so the settle wait is not cut short
             // by the burst tick.
             let settle_until = owed_at.map(|t| t + SETTLE);
@@ -196,6 +290,19 @@ pub fn run(
                 }
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
             }
+            // The walk, once a tick, after the post-login frame has gone
+            // (the real clients send nothing before it).
+            let burst_owed = login_burst.as_ref().is_some_and(|b| b.pending())
+                || lobby_burst.as_ref().is_some_and(|b| b.pending());
+            if let Some(p) = pose.as_ref() {
+                if !burst_owed && walk_clock.elapsed() >= WALK_TICK {
+                    walk_clock = Instant::now();
+                    let current = *p.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(m) = current.and_then(|c| walker.tick(c)) {
+                        let _ = s.conn.send_messages(&[m]);
+                    }
+                }
+            }
             // The post-login frame, once it is due (core decides when).
             let now = Instant::now();
             if let Some(b) = login_burst.as_mut() {
@@ -255,5 +362,48 @@ fn log_level(
             let _ = writeln!(out, "{l}");
         }
         shown(level, &a);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pose(x: f32, dir: u8, walking: bool) -> Pose {
+        Pose {
+            x,
+            y: 30.0,
+            dir,
+            walking,
+        }
+    }
+
+    /// 3.153 has X2/Y2 and no captured cadence: the whole walk message,
+    /// once the pose changes from where the server put the player.
+    #[test]
+    fn a_build_without_a_cadence_sends_its_walk_message_on_change() {
+        let mut w = WalkSender::new(ClientVersion::V3153);
+        assert!(w.cadence.is_none());
+        assert_eq!(w.tick(pose(30.0, 2, false)), None);
+        assert_eq!(w.tick(pose(30.0, 2, false)), None);
+        let m = w.tick(pose(30.5, 3, true)).unwrap();
+        assert_eq!(m, walk_message_for(ClientVersion::V3153, 30.5, 30.0, 3));
+        assert_eq!(w.tick(pose(30.5, 3, true)), None);
+    }
+
+    /// 3.04 and 4.04r2 walk on core's cadence: nothing on the first tick,
+    /// then the changed props.
+    #[test]
+    fn the_captured_builds_walk_on_cores_cadence() {
+        for v in [ClientVersion::V304, ClientVersion::V404R2] {
+            let mut w = WalkSender::new(v);
+            assert!(w.cadence.is_some(), "{}", v.label());
+            assert_eq!(w.tick(pose(30.0, 2, false)), None, "{}", v.label());
+            let mut sent = 0;
+            for i in 1..=4 {
+                sent += w.tick(pose(30.0 + 0.5 * i as f32, 3, true)).is_some() as u32;
+            }
+            assert!(sent >= 1, "{}", v.label());
+        }
     }
 }
