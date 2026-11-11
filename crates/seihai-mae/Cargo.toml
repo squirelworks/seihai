@@ -17,9 +17,6 @@ ab_glyph = "0.2"
 minifb = "0.27"
 eframe = "0.29"
 egui = "0.29"
-# Sound device output. Optional: the client runs without it, with sound
-# silent. Needs the ALSA development files on Linux.
-rodio = { version = "0.19", optional = true, default-features = false }
 
 # `seihai-mae`: the 1.x and 2.x client. The `seihai` command is
 # `seihai-launcher`, which starts this binary (or `seihai-ato` for a 3.x
@@ -31,12 +28,12 @@ path = "src/bin/main.rs"
 [features]
 # Developer mode (F9 wallhack). On for now; build with
 # `--no-default-features` to compile it out.
-default = ["dev", "audio-rodio"]
+default = ["dev", "audio"]
 dev = ["seihai-core/dev"]
-# Real audio output through rodio/cpal. On by default. On Linux this
-# needs the ALSA development files (libasound2-dev). Build with
-# `--no-default-features --features dev` to compile it out.
-audio-rodio = ["dep:rodio"]
+# Sound through seihai-core's device output (rodio/cpal). On by default.
+# On Linux this needs the ALSA development files (libasound2-dev). Build
+# with `--no-default-features --features dev` to leave it out.
+audio = ["seihai-core/audio"]
 
 [dev-dependencies]
 serde_json = "1"

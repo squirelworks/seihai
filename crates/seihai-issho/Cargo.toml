@@ -17,3 +17,9 @@ path = "src/main.rs"
 
 [dependencies]
 seihai-core = { path = "../seihai-core", default-features = false }
+
+[features]
+default = ["audio"]
+# Sound through seihai-core's device output. On by default; on Linux it
+# needs the ALSA development files. `--no-default-features` leaves it out.
+audio = ["seihai-core/audio"]

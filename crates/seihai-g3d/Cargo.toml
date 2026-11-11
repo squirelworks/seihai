@@ -24,3 +24,9 @@ minifb = "0.27"
 # The start window (the connect form). Same versions as seihai-mae.
 eframe = "0.29"
 egui = "0.29"
+
+[features]
+default = ["audio"]
+# Sound through seihai-core's device output. On by default; on Linux it
+# needs the ALSA development files. `--no-default-features` leaves it out.
+audio = ["seihai-core/audio"]
