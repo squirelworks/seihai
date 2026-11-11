@@ -31,7 +31,8 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   `swim.gani` from the asset folder (`--assets`), through seihai-core's
   sound engine and device output (the `audio` feature, on by default;
   `--no-default-features` builds Ato without it). A sound that is not on
-  disk stays silent; Ato does not ask the server for it yet.
+  disk is asked for from the server (WANTFILE) and plays on a later cue
+  once it is saved, as in 2.05.
 - `wire`: the build's game and listserver tokens and the ids it adds or
   drops against 2.31, all read from the build's row in
   `seihai-core::protocol::chain` (nothing restated).

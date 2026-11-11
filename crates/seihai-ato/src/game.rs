@@ -67,6 +67,8 @@ pub struct Game {
     sound_clock: Instant,
     /// The level the looped sounds belong to; a new one stops them.
     sound_serial: u64,
+    /// Where missing sounds go for the network thread to ask for.
+    pub wanted_sounds: Arc<Mutex<Vec<String>>>,
 }
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
@@ -128,12 +130,14 @@ impl Game {
             sound: sound_engine(resolver, sound_on),
             sound_clock: Instant::now(),
             sound_serial: 0,
+            wanted_sounds: Default::default(),
         })
     }
 
     /// Play the sounds the session queued: the GANI cues of the steps just
-    /// taken. A new level stops the looped ones. A sound not on disk stays
-    /// silent (Ato does not ask the server for it yet).
+    /// taken. A new level stops the looped ones. A sound not on disk is
+    /// handed to the network thread to ask the server for, and plays on a
+    /// later cue once it has arrived.
     pub fn play_sounds(&mut self) {
         if !self.sound.is_enabled() {
             self.session.sound_events.clear();
@@ -153,7 +157,12 @@ impl Game {
             self.sound.stop(&name);
         }
         for ev in self.session.take_sound_events() {
-            self.sound.play(&ev, listener, now);
+            if self.sound.play(&ev, listener, now) == sound::Outcome::Missing {
+                self.wanted_sounds
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(sound::wanted_name(&ev.file));
+            }
         }
     }
 
@@ -395,6 +404,7 @@ impl AtoApp {
                 g.pose = live.pose;
                 g.others = live.others;
                 g.link = live.link;
+                g.wanted_sounds = live.wanted_sounds;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
