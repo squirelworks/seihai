@@ -64,7 +64,7 @@ Exact IDs and layouts are recorded in `../shworkingpapers/protocol/` as they are
 ## Login-time server messages (ids 10, 25, 39, 41, 44, 47, 156, 168, 171, 172, 174, 179, 180, 182)
 
 Every public 2.22 gserver tried on 2026-10-24 sent these around the level
-data. `client/src/protocol/extras.rs` decodes them into `SessionState`.
+data. `crates/seihai-core/src/protocol/extras.rs` decodes them into `SessionState`.
 Layouts come from gs2lib's `IEnums.h` and Graal_analysis `packet-ids.md`, and
 each was checked against the captured payload shapes (four gservers).
 
@@ -96,7 +96,7 @@ CLEARWEAPONS (empty).
 
 ## Layouts read from the 2.17.1, 2.22 and 2.31 decompiles
 
-`client/src/protocol/layouts.rs` decodes the ids the 2.22 dispatcher handles
+`crates/seihai-core/src/protocol/layouts.rs` decodes the ids the 2.22 dispatcher handles
 that the capture-backed set above did not cover. Source: Graal_analysis
 `client-internals/decomp-findings-2026-10-24-b/` (`plo_layouts.tsv`). Which
 versions handle an id is the profile's `plo` set; the tests compare every
@@ -129,7 +129,7 @@ answered with a process list of `"seihai"` only; see above.)
 
 ## Tamper check (client to server id 39)
 
-`client/src/protocol/tampercheck.rs`. Off by default; `--send-tampercheck`
+`crates/seihai-core/src/protocol/tampercheck.rs`. Off by default; `--send-tampercheck`
 turns it on for 2.17, 2.22 and 2.31 (GServer-v2 ignores the packet, and four
 public 2.22 servers did not kick a client that never sent it for 20 s).
 
@@ -365,7 +365,7 @@ Real clients (2.17, 2.22, 2.31) against a local lab. No public server.
 
 ## Gmaps
 
-A gmap is a grid of ordinary 64×64-tile levels (`client/src/gmap.rs`). The
+A gmap is a grid of ordinary 64×64-tile levels (`crates/seihai-core/src/gmap.rs`). The
 sources are the lab captures of real 2.22 and 2.31 clients on a 2x2 gmap
 (Graal_analysis feature spec 06, lab notes of 2026-10-24). Everything is
 gated by the version profile: `GmapRules::for_version` reads `levels.gmap`,

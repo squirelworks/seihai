@@ -3,7 +3,7 @@
 Date: 2026-10-30. Covers the two readable 3.x clients, 3.04 (Linux, `G3D03014`)
 and 3.153 (Mac OS X, `G3D28015`), and only their 2D Graal TCP session: login
 and framing. The rows themselves are the `3.04` and `3.153` steps in
-`client/src/protocol/chain.rs`.
+`crates/seihai-core/src/protocol/chain.rs`.
 
 Sources, all already in Graal_analysis (no new decompile):
 

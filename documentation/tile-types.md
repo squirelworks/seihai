@@ -13,7 +13,7 @@ The client picks a tileset per level from its tile definitions
   `arrays.dat`. This is the only kind Seihai draws today.
 - **Types 1 and 2, the new kind.** Tile types follow from where the tile
   sits on the sheet, with no file. `new_world_tile_type` in
-  `client/src/assets/level.rs` is that rule. Seihai does not yet switch to
+  `crates/seihai-core/src/assets/level.rs` is that rule. Seihai does not yet switch to
   this rule when a level uses such a tileset, because `addtiledef` is not
   wired.
 - **Type 5.** It has no tile lists at all. Only NPC shapes have types there.

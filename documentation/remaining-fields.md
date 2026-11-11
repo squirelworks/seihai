@@ -24,7 +24,7 @@ alone, which is the `GCHAR 9` that the lab saw from 2.22 and 2.31. The
 receiver keeps the list per player and, after a marked (full) text, drops
 every image of that player that the text did not name.
 
-The format is in the header of `client/src/protocol/showimg.rs`:
+The format is in the header of `crates/seihai-core/src/protocol/showimg.rs`:
 
 ```text
 text    = [ 0x29 ] record*

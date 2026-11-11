@@ -1,6 +1,6 @@
 # Item drops from bushes and pots
 
-What a cut or lifted bush and a lifted pot leave, and the items on the floor. Read in the 1.3, 1.39, 1.41 and 2.05 rev 2 binaries and checked in the lab with real 1.39, 2.05 rev 2 and 2.22 clients, then with Seihai against the same lab servers. The findings and captures are in Graal_analysis `client-internals/item-drops.md`. Code: `client/src/items.rs`, `client/src/offline/drops.rs`, `render::draw_floor_items`.
+What a cut or lifted bush and a lifted pot leave, and the items on the floor. Read in the 1.3, 1.39, 1.41 and 2.05 rev 2 binaries and checked in the lab with real 1.39, 2.05 rev 2 and 2.22 clients, then with Seihai against the same lab servers. The findings and captures are in Graal_analysis `client-internals/item-drops.md`. Code: `crates/seihai-core/src/items.rs`, `crates/seihai-core/src/offline/drops.rs`, `render::draw_floor_items`.
 
 ## Per build (`ItemDrops` in the version profile)
 

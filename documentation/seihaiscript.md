@@ -34,7 +34,7 @@ The 2.05 client uses a **parse-tree interpreter**, not bytecode. Command opcode 
 
 ## Implemented GS1 engine
 
-`client/src/scripting/engine/` is a first working GS1 interpreter. It is written from observed behaviour and its own design.
+`crates/seihai-core/src/scripting/engine/` is a first working GS1 interpreter. It is written from observed behaviour and its own design.
 
 **Pipeline.** `parse(src, era)` never fails: it returns a `Script` plus diagnostics, and an unknown or not-yet-introduced command becomes an `Unknown` statement that is logged and ignored when run. The tree compiles to a flat node list with jump targets. Every event runs that list from the top; `if (created)`-style blocks test the event flag. `sleep` remembers the next node and the next `timeout` event resumes there.
 

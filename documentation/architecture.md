@@ -20,12 +20,9 @@ there is no `--version` and for 1.x, 2.x, 4.x and 5.x, `seihai-ato` for 3.x,
 `seihai-g3d` for `graal3d`, and `seihai-issho` for 6.x. A 7.x label starts
 nothing. Issho is not on the play path unless v6 was selected.
 
-Notes and older documents that cite `client/src/...` mean the same file
-under `crates/seihai-core/src/...` (shared modules above) or
-`crates/seihai-mae/src/...` (the rest).
-
-Build the client with `cargo build --release -p seihai-mae`; the binary
-is still `seihai`.
+Build everything with `cargo build --release`. That gives the `seihai`
+launcher and the `seihai-mae`, `seihai-ato`, `seihai-issho` and `seihai-g3d`
+binaries it starts; keep them in one folder.
 
 ## Client Runtime
 

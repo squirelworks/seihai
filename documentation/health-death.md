@@ -10,7 +10,7 @@ documents, the timings from the decompile.
 
 ## Where it lives
 
-- `client/src/life.rs`: the state machine (`Life`), the two messages
+- `crates/seihai-core/src/life.rs`: the state machine (`Life`), the two messages
   (`claim_message`, `status_message`), `respawn_half_hearts` and
   `messages_for`, which turns an event into the messages for a version.
 - `VersionProfile.life.death` (`DeathRules`, `DEATH_205` in `profile.rs`): the
