@@ -25,6 +25,24 @@ pub fn default_listserver(version: ClientVersion) -> String {
     )
 }
 
+/// For a build with no listserver of its own (4.x and 5.x, which reach a
+/// game server named `Login` instead): how its list is fetched. Core falls
+/// back to an older build's listserver login (`ClientVersion::list_version`,
+/// as `seihai-mae` does); the picked server is then logged in to with the
+/// build's own game login, as if the Login server had warped there. The
+/// real 4.x and 5.x clients show the list as scripted GUI on the Login
+/// server, so this is Seihai's choice, not theirs.
+pub fn borrowed_list_note(version: ClientVersion) -> Option<String> {
+    let list = version.list_version();
+    (list != version).then(|| {
+        format!(
+            "{} has no listserver; the list comes with the {} login.",
+            version.label(),
+            list.label()
+        )
+    })
+}
+
 /// What the list screen asks the app to do.
 #[derive(Debug, PartialEq)]
 pub enum Pick {
@@ -60,8 +78,12 @@ impl ServerList {
             let _ = tx.send(r);
             repaint();
         });
+        let mut status = format!("Asking {listserver} for the server list.");
+        if let Some(note) = borrowed_list_note(version) {
+            status = format!("{note} {status}");
+        }
         ServerList {
-            status: format!("Asking {listserver} for the server list."),
+            status,
             listserver,
             servers: Vec::new(),
             selected: None,
@@ -210,6 +232,23 @@ mod tests {
             let d = default_listserver(v);
             assert!(d.starts_with("listserver.graal.in:"), "{d}");
             assert_eq!(d, format!("listserver.graal.in:{}", v.listserver_port()));
+        }
+    }
+
+    #[test]
+    fn the_lobby_builds_say_whose_list_login_they_borrow() {
+        assert_eq!(borrowed_list_note(ClientVersion::V304), None);
+        assert_eq!(borrowed_list_note(ClientVersion::V3153), None);
+        for v in [
+            ClientVersion::V420R8,
+            ClientVersion::V500R7,
+            ClientVersion::V512,
+        ] {
+            let n = borrowed_list_note(v).unwrap();
+            assert!(
+                n.starts_with(&format!("{} has no listserver", v.label())),
+                "{n}"
+            );
         }
     }
 

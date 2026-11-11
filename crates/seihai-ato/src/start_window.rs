@@ -185,6 +185,9 @@ impl StartWindow {
             }
             None => {
                 self.status = format!("Start: asking {} for the server list.", self.listserver);
+                if let Some(note) = crate::server_list::borrowed_list_note(self.version) {
+                    self.status = format!("{} {note}", self.status);
+                }
                 Next::ServerList
             }
         }
