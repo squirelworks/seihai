@@ -22,6 +22,10 @@ eframe = "0.29"
 egui = "0.29"
 
 [features]
+default = ["audio"]
+# Sound through seihai-core's device output. On by default; on Linux it
+# needs the ALSA development files. `--no-default-features` leaves it out.
+audio = ["seihai-core/audio"]
 # v6 and later: leave the Torque reimplementation out of the binary.
 # The default build does not enable this, so `torque::engine` is compiled.
 # The product default follows the selected era and is on for v3, v4 and v5.

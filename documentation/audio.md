@@ -19,8 +19,10 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
   the backend only through `SoundOut`, so every rule is tested without a
   device.
 - `crates/seihai-core/src/sound/wav.rs`: the WAV decoder.
-- `crates/seihai-mae/src/sound/rodio_out.rs`: the device backend, only with the
-  `audio-rodio` feature.
+- `crates/seihai-core/src/sound/rodio_out.rs`: the device backend, only with
+  seihai-core's `audio` feature. Every client has an `audio` feature (on by
+  default) that turns it on, so all of them share the one backend and
+  `sound::default_backend`.
 - `crates/seihai-core/src/assets/gani.rs`: the parser now reads steps and `PLAYSOUND`.
 - `OfflineSession`: steps the walk or swim GANI on every successful move and
   queues a `SoundEvent` for each cue in the frame entered
@@ -91,7 +93,7 @@ exactly.
 
 ## The device backend
 
-Real output is the `audio-rodio` cargo feature (`rodio` 0.19 on `cpal`). It is on by default; `--no-default-features --features dev` compiles it out. On Linux it needs the ALSA development files and `pkg-config` to build. If no device opens at run time, the engine falls back to the null backend and logs one line.
+Real output is seihai-core's `audio` cargo feature (`rodio` 0.19 on `cpal`). Each client (`seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d`) has an `audio` feature, on by default, that turns it on; `--no-default-features` on a client compiles it out (for `seihai-mae`, `--no-default-features --features dev` keeps the developer mode). With no client asking for it, seihai-core is built without audio and nothing gets it. On Linux it needs the ALSA development files and `pkg-config` to build. If no device opens at run time, the engine falls back to the null backend and logs one line.
 
 The output stream runs on its own thread (`seihai-audio`) and the engine sends it play and stop commands over a channel. On Windows the launcher's window (winit, drag and drop on) makes the main thread a single-threaded COM apartment, and a WASAPI stream opened on that thread opened fine but played nothing. The first Windows run (2026-10-30, Realtek headphones, Graal the Adventure on 2.22) was silent that way. With the stream on its own thread, footsteps and script sounds played.
 

@@ -16,4 +16,5 @@ path = "src/main.rs"
 
 [dependencies]
 seihai-core = { path = "../seihai-core", default-features = false }
-seihai-issho = { path = "../seihai-issho" }
+# The launcher plays no sound: issho without its `audio` feature.
+seihai-issho = { path = "../seihai-issho", default-features = false }

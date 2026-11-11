@@ -13,10 +13,9 @@ name = "level-editor"
 path = "src/main.rs"
 
 [dependencies]
-seihai-core = { path = "../../crates/seihai-core" }
+# No sound in the editor: core without its `audio` feature.
+seihai-core = { path = "../../crates/seihai-core", default-features = false, features = ["dev"] }
 # The tile renderer (`seihai::render`) belongs to the client, not the core.
-# No sound in the editor: without audio-rodio it builds with no ALSA
-# development files.
 seihai = { package = "seihai-mae", path = "../../crates/seihai-mae", default-features = false, features = ["dev"] }
 # The window (`level-editor gui`). The same versions as the client, so
 # nothing new is built.

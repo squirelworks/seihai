@@ -1,4 +1,4 @@
-//! Device backend on `rodio` (feature `audio-rodio`).
+//! Device backend on `rodio` (feature `audio`).
 //!
 //! The output stream lives on its own thread and is told what to do over
 //! a channel. On Windows the launcher's window (winit, with drag and drop)
