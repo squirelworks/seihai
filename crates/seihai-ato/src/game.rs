@@ -6,16 +6,21 @@
 //! The walk goes to the server: the view keeps the pose in a
 //! [`online::SharedPose`] and the network thread sends it once a 50 ms
 //! tick ([`online::run_with_pose`]). A link the player walks into is noted
-//! and dropped; level changes are not in Ato yet.
+//! and asked for, and the level it leads to is drawn when it comes in.
+//! Walking plays the footstep and water sounds of `walk.gani` and
+//! `swim.gani` through core's sound engine ([`Game::play_sounds`]).
 
 use crate::level::Arrival;
 use crate::online::{self, Login};
 use crate::render::{self, Sheet};
 use crate::server_list::{Pick, ServerList};
 use crate::start_window::{Next, StartWindow, CANVAS};
-use seihai_core::assets::{AssetResolver, AssetRoot, Level};
+use seihai_core::assets::{
+    AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
+};
 use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::ClientVersion;
+use seihai_core::sound::{self, SoundEngine};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
@@ -56,12 +61,57 @@ pub struct Game {
     pub link: Arc<Mutex<Option<online::LinkAsk>>>,
     /// The link asked for, until its level arrives.
     link_to: Option<online::LinkAsk>,
+    /// Sound effects: core's engine and device output (the `audio`
+    /// feature). Silent with no sounds folder, no device, or `--no-sound`.
+    sound: SoundEngine,
+    sound_clock: Instant,
+    /// The level the looped sounds belong to; a new one stops them.
+    sound_serial: u64,
+}
+
+/// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
+/// are the footsteps and the water, as in `seihai-mae`.
+fn load_motion_ganis(resolver: &AssetResolver, session: &mut OfflineSession) {
+    for name in ["walk.gani", "swim.gani"] {
+        let Some(path) = resolver.pose_gani(name) else {
+            continue;
+        };
+        match Gani::load(&path) {
+            Ok(g) if name == "swim.gani" => session.set_swim_gani(GaniPlayer::new(g)),
+            Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
+            Err(e) => eprintln!("sound: cannot read {name}: {e}"),
+        }
+    }
+}
+
+/// The sound engine for this run: core's default backend over the asset
+/// folders' sounds, or off.
+fn sound_engine(resolver: Option<&AssetResolver>, sound_on: bool) -> SoundEngine {
+    let Some(r) = resolver.filter(|_| sound_on) else {
+        return SoundEngine::off();
+    };
+    let dirs = r.sound_dirs();
+    if dirs.is_empty() {
+        eprintln!("sound: no sounds folder; sound is silent");
+        return SoundEngine::off();
+    }
+    let (out, why) = sound::default_backend();
+    let list: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
+    eprintln!("sound: {why}; sounds from {}", list.join(", "));
+    SoundEngine::with_dirs(out, dirs, true)
 }
 
 impl Game {
-    pub fn new(rx: Receiver<Event>, resolver: Option<&AssetResolver>) -> Result<Game, String> {
+    pub fn new(
+        rx: Receiver<Event>,
+        resolver: Option<&AssetResolver>,
+        sound_on: bool,
+    ) -> Result<Game, String> {
         let mut session = OfflineSession::default();
         session.tiletypes = render::tile_types(resolver);
+        if let Some(r) = resolver {
+            load_motion_ganis(r, &mut session);
+        }
         Ok(Game {
             session,
             sheet: Sheet::load(resolver)?,
@@ -75,7 +125,36 @@ impl Game {
             drawn_others: Vec::new(),
             link: Default::default(),
             link_to: None,
+            sound: sound_engine(resolver, sound_on),
+            sound_clock: Instant::now(),
+            sound_serial: 0,
         })
+    }
+
+    /// Play the sounds the session queued: the GANI cues of the steps just
+    /// taken. A new level stops the looped ones. A sound not on disk stays
+    /// silent (Ato does not ask the server for it yet).
+    pub fn play_sounds(&mut self) {
+        if !self.sound.is_enabled() {
+            self.session.sound_events.clear();
+            self.session.sound_stops.clear();
+            return;
+        }
+        if self.session.level_serial != self.sound_serial {
+            self.sound_serial = self.session.level_serial;
+            self.sound.stop_all_loops();
+        }
+        let now = self.sound_clock.elapsed().as_millis() as u64;
+        let listener = (
+            self.session.player_x + LISTENER_DX,
+            self.session.player_y + LISTENER_DY,
+        );
+        for name in self.session.take_sound_stops() {
+            self.sound.stop(&name);
+        }
+        for ev in self.session.take_sound_events() {
+            self.sound.play(&ev, listener, now);
+        }
     }
 
     /// Take what the network thread sent.
@@ -165,6 +244,7 @@ impl Game {
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;
         let dy = held(egui::Key::ArrowDown) as i8 - held(egui::Key::ArrowUp) as i8;
         self.walk(dx, dy, Instant::now());
+        self.play_sounds();
         let others = self
             .others
             .lock()
@@ -244,6 +324,8 @@ pub struct AtoApp {
     assets: Option<PathBuf>,
     /// Log in on the first frame, without the start window.
     skip_start: bool,
+    /// Sound effects on (off with `--no-sound`).
+    pub sound_on: bool,
 }
 
 impl AtoApp {
@@ -254,6 +336,7 @@ impl AtoApp {
             list: None,
             assets,
             skip_start: false,
+            sound_on: true,
         }
     }
 
@@ -268,6 +351,7 @@ impl AtoApp {
             list: None,
             assets,
             skip_start,
+            sound_on: true,
         }
     }
 
@@ -306,7 +390,7 @@ impl AtoApp {
             let _ = tx.send(Event::Ended(why));
             repaint.request_repaint();
         });
-        match Game::new(rx, resolver.as_ref()) {
+        match Game::new(rx, resolver.as_ref(), self.sound_on) {
             Ok(mut g) => {
                 g.pose = live.pose;
                 g.others = live.others;
@@ -389,6 +473,7 @@ pub fn run(
     version: ClientVersion,
     start: StartWindow,
     assets: Option<PathBuf>,
+    sound_on: bool,
 ) -> Result<(), String> {
     let title = format!("Graal {} (Seihai Ato)", version.label());
     let options = eframe::NativeOptions {
@@ -397,7 +482,8 @@ pub fn run(
             .with_resizable(false),
         ..Default::default()
     };
-    let app = AtoApp::new_skipping_start(start, assets);
+    let mut app = AtoApp::new_skipping_start(start, assets);
+    app.sound_on = sound_on;
     eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
 }
@@ -408,7 +494,7 @@ mod tests {
 
     fn game() -> (Game, mpsc::Sender<Event>) {
         let (tx, rx) = mpsc::channel();
-        (Game::new(rx, None).unwrap(), tx)
+        (Game::new(rx, None, true).unwrap(), tx)
     }
 
     fn arrival(start: Option<(f32, f32)>) -> Arrival {
@@ -551,5 +637,22 @@ mod tests {
     #[test]
     fn the_view_is_the_3x_window() {
         assert_eq!(VIEW_TILES, (40, 30));
+    }
+
+    /// The session's queued sounds are taken every frame, so they never pile
+    /// up, whether sound is on or not; no asset folder means sound is off.
+    #[test]
+    fn queued_sounds_are_taken_each_frame() {
+        let (mut g, _tx) = game();
+        assert!(!g.sound.is_enabled());
+        g.session.sound_events.push(seihai_core::sound::SoundEvent {
+            file: "steps.wav".into(),
+            x: 1.0,
+            y: 1.0,
+        });
+        g.session.sound_stops.push("water.wav".into());
+        g.play_sounds();
+        assert!(g.session.sound_events.is_empty());
+        assert!(g.session.sound_stops.is_empty());
     }
 }

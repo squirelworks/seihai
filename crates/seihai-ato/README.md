@@ -26,7 +26,12 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   through, so unknown flags are ignored. `--version` takes any 3.x, 4.x
   or 5.x row (`3.04`, `3.153` the default, `4.04r2`, `4.20r8`, `5.00r7`,
   `5.12`, ...); `--account`, `--password-env VAR`,
-  `--nick`.
+  `--nick`, `--no-sound`.
+- Sound: walking plays the footstep and water cues of `walk.gani` and
+  `swim.gani` from the asset folder (`--assets`), through seihai-core's
+  sound engine and device output (the `audio` feature, on by default;
+  `--no-default-features` builds Ato without it). A sound that is not on
+  disk stays silent; Ato does not ask the server for it yet.
 - `wire`: the build's game and listserver tokens and the ids it adds or
   drops against 2.31, all read from the build's row in
   `seihai-core::protocol::chain` (nothing restated).

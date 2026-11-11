@@ -51,7 +51,7 @@ fn main() -> ExitCode {
         if let Some(ls) = a.listserver.clone() {
             w.listserver = ls;
         }
-        return match game::run(version, w, a.assets.map(Into::into)) {
+        return match game::run(version, w, a.assets.map(Into::into), !a.no_sound) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("seihai-ato: could not open the window: {e}");
