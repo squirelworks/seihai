@@ -378,9 +378,9 @@ impl eframe::App for Launcher {
             }
             ui.text_edit_singleline(&mut self.version_assets);
             let direct = if offline_build.is_some() { None } else { Some(profile.ui.server_list) };
-            if let Some(ServerList::Direct { default }) = direct {
+            if let Some(ServerList::Direct) = direct {
                 ui.separator();
-                ui.label(format!("{} connects straight to a game server (default was {default})", profile.label));
+                ui.label(format!("{} connects straight to a game server", profile.label));
                 ui.horizontal(|ui| {
                     ui.text_edit_singleline(&mut self.direct);
                     if ui.button("Connect").clicked() {

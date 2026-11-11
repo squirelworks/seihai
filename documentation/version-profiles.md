@@ -40,7 +40,7 @@ The 3.x login and framing, locked against unknown, is in `3x-session.md`.
 - **Sends**: a message the version could not send is refused. 2.05 and later
   send `PLI_LANGUAGE` after login; 1.3x builds do not.
 - **Launcher**: 1.33–1.39 have no listserver, so the launcher offers a direct
-  game-server field (the original default was `www.graalonline.com:14900`).
+  game-server field.
   Each version can point at its own asset folder (`assets.<label>=` in the
   settings file), so it can use that install's images.
 - **Game window**: the title follows the version (2.05+ add the server name).

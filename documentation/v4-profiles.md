@@ -12,7 +12,7 @@ Sources, all in Graal_analysis: `protocol/v4x-clients.md` (static reads of all t
 | 4.20r6 | `G3D27076` | 99 | as 4.20r8 | Mac (PowerPC, never run); login platform `mac`; no case for 41 |
 | 4.20r8 | `G3D20126` | 101 | send code read (a floor), plus 3.153's | read from a third-party packet-logger copy of the engine DLL |
 
-Every row is client type 5, gen 5, no tamper check, no showimg timer, the Login lobby, the built-in `loginserver.graalonline.com:14900`, and 3.153's prop sets.
+Every row is client type 5, gen 5, no tamper check, no showimg timer, the Login lobby, a direct login server (`ServerList::Direct`; Seihai dials the address it is given), and 3.153's prop sets.
 
 - **Server ids.** 4.04r2 is 3.153's set plus the update packages (105, 106), ghost mode (170), the window list (182, 183), `onServerListerConnect` (190), `SHOOT2` (191), the cache check (193), the script-list clear (194) and server ganis (195). 4.20r8 adds the layered board change (107), 108 and 196. The Mac 4.20r6 has 4.20r8's set without 41 and 196: 99 ids. Its packet switch (re-read 2026-10-31) has 97 cases, 0 to 195 without 41, and like 4.20r8 it takes 100 and 108 before the switch; the earlier note's count of 97 was the switch alone. Its 108 handler answers subtype 0 with 162.
 - **Client ids.** Only 4.20r8's send code was read, and some sends pass the id in a register, so that list is a floor. The rows take it, plus the ids both 3.153 and 5.00r7 send (as the 5.00r7 row did with its neighbours); 40 and 43 are sent by neither 4.x nor 5.00r7 and are left out. 4.04r2 has no 108 handler, so it does not get 162 (the answer to 108). 11, 23, 34, 37, 38, 44 and 157 were seen from the real 4.04r2.
@@ -48,7 +48,7 @@ Not covered in this first check: the real 4.x clients side by side with Seihai. 
 
 ## Live run: the real 4.04r2 and 4.20r8 next to Seihai
 
-Run on 2026-10-31 in the cloud container. Wine 9 (32-bit prefix), Xvfb, and a net and mount namespace with only loopback up and a private hosts file that points `loginserver.graalonline.com` (and `loginserver2`, `loginserver3`) at 127.0.0.1. The same server pack, stock gs2lib, `G3D17026` and `G3D20126` in `allowedversions.txt`, the lab listserver moved to 14899 so that `warpproxy.py` can listen on 14900 (the license port) and inject `0,Lab Server,127.0.0.1,14900`. Clients: the stock 4.04r2 from the Thinstall installer, and the 4.20r8 packet-logger copy with the 8 original bytes put back at its only hook (`GraalEngine.dll` file offset 0x1a3ae3: `e9 f3 cc 08 00 90 90 90` back to `5f 5e 5d b8 01 00 00 00`, the end of zlib's inflate). Logs and screenshots: project folder `v4/lab-4x-live-2026-10-31/`.
+Run on 2026-10-31 in the cloud container. Wine 9 (32-bit prefix), Xvfb, and a net and mount namespace with only loopback up and a private hosts file that points the clients' built-in login-server names at 127.0.0.1. The same server pack, stock gs2lib, `G3D17026` and `G3D20126` in `allowedversions.txt`, the lab listserver moved to 14899 so that `warpproxy.py` can listen on 14900 (the license port) and inject `0,Lab Server,127.0.0.1,14900`. Clients: the stock 4.04r2 from the Thinstall installer, and the 4.20r8 packet-logger copy with the original bytes put back at its only hook (the end of zlib's inflate in `GraalEngine.dll`). Logs and screenshots: project folder `v4/lab-4x-live-2026-10-31/`.
 
 | | real 4.04r2 | real 4.20r8 | Seihai 4.04r2 / 4.20r8 |
 |---|---|---|---|
