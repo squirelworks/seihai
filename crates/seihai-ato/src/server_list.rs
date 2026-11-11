@@ -6,9 +6,10 @@
 //! frame, as the real 3.04 and 3.153 sent it in the lab). `--listserver
 //! host:port` points it at a lab listserver instead.
 //!
-//! The fetch runs on its own thread so the window keeps drawing. Picking a
-//! server and pressing Connect hands back its `host:port`; the login at
-//! that game server is the same as with `--online`.
+//! The fetch runs on its own thread so the window keeps drawing; its
+//! result is also printed to stdout. Picking a server and pressing Connect
+//! hands back its `host:port`; the login at that game server is the same
+//! as with `--online`.
 
 use seihai_core::net::{list_failure_text, Connection};
 use seihai_core::protocol::{ClientVersion, ListReply, ServerEntry};
@@ -121,6 +122,7 @@ impl ServerList {
             Err(TryRecvError::Disconnected) => {
                 self.pending = None;
                 self.status = format!("{}: the list fetch stopped.", self.listserver);
+                self.print();
             }
         }
     }
@@ -145,6 +147,17 @@ impl ServerList {
                 };
             }
             Err(e) => self.status = list_failure_text(&self.listserver, &e),
+        }
+        self.print();
+    }
+
+    /// The reply on stdout, as the game login's lines are, so a run with
+    /// the window open can be read without a screenshot: the status, then
+    /// one line per server.
+    fn print(&self) {
+        println!("server list from {}: {}", self.listserver, self.status);
+        for s in &self.servers {
+            println!("  {}  {}:{}", Self::row(s), s.host, s.port);
         }
     }
 
