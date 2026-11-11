@@ -10,7 +10,8 @@
 use crate::level::Arrival;
 use crate::online::{self, Login};
 use crate::render::{self, Sheet};
-use crate::start_window::{StartWindow, CANVAS};
+use crate::server_list::{Pick, ServerList};
+use crate::start_window::{Next, StartWindow, CANVAS};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
 use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::ClientVersion;
@@ -179,6 +180,8 @@ impl Game {
 pub struct AtoApp {
     start: StartWindow,
     game: Option<Game>,
+    /// The server list, while it is open.
+    list: Option<ServerList>,
     assets: Option<PathBuf>,
     /// Log in on the first frame, without the start window.
     skip_start: bool,
@@ -189,6 +192,7 @@ impl AtoApp {
         AtoApp {
             start,
             game: None,
+            list: None,
             assets,
             skip_start: false,
         }
@@ -202,6 +206,7 @@ impl AtoApp {
         AtoApp {
             start,
             game: None,
+            list: None,
             assets,
             skip_start,
         }
@@ -246,25 +251,62 @@ impl AtoApp {
     }
 }
 
+impl AtoApp {
+    /// Act on where Start went.
+    fn next(&mut self, next: Next, ctx: &egui::Context) {
+        match next {
+            Next::Stay => {}
+            Next::Login(addr) => self.login_at(addr, ctx),
+            Next::ServerList => {
+                let login = self.start.started.lock().unwrap().clone();
+                let Some(login) = login else {
+                    return;
+                };
+                let repaint = ctx.clone();
+                self.list = Some(ServerList::fetch(
+                    self.start.listserver.clone(),
+                    self.start.version,
+                    login.account,
+                    login.password,
+                    move || repaint.request_repaint(),
+                ));
+            }
+        }
+    }
+
+    /// Log in at `addr` with the form Start handed over.
+    fn login_at(&mut self, addr: String, ctx: &egui::Context) {
+        let login = self.start.started.lock().unwrap().take();
+        if let Some(login) = login {
+            self.list = None;
+            self.begin(addr, login, ctx);
+        }
+    }
+}
+
 impl eframe::App for AtoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if std::mem::take(&mut self.skip_start) && self.start.press_start() {
-            let login = self.start.started.lock().unwrap().take();
-            if let (Some(addr), Some(login)) = (self.start.online.clone(), login) {
-                self.begin(addr, login, ctx);
-            }
+        if std::mem::take(&mut self.skip_start) {
+            let next = self.start.press_start();
+            self.next(next, ctx);
         }
-        match &mut self.game {
-            Some(g) => g.show(ctx),
-            None => {
-                if self.start.show(ctx) {
-                    let login = self.start.started.lock().unwrap().take();
-                    if let (Some(addr), Some(login)) = (self.start.online.clone(), login) {
-                        self.begin(addr, login, ctx);
-                    }
+        if let Some(g) = &mut self.game {
+            g.show(ctx);
+            return;
+        }
+        if let Some(list) = &mut self.list {
+            match list.show(ctx) {
+                Some(Pick::Connect(addr)) => self.login_at(addr, ctx),
+                Some(Pick::Back) => {
+                    self.list = None;
+                    self.start.started.lock().unwrap().take();
                 }
+                None => {}
             }
+            return;
         }
+        let next = self.start.show(ctx);
+        self.next(next, ctx);
     }
 }
 
