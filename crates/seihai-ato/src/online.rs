@@ -245,6 +245,7 @@ pub fn run_with_pose(
         // A level was stored and has not been logged yet.
         let mut owed = false;
         let mut owed_at: Option<Instant> = None;
+        let mut quit = false;
         loop {
             let burst_owed = login_burst.as_ref().is_some_and(|b| b.pending())
                 || lobby_burst.as_ref().is_some_and(|b| b.pending());
@@ -332,10 +333,10 @@ pub fn run_with_pose(
                         log_level(version, &store, &st, out, shown);
                         owed = false;
                         owed_at = None;
-                        if first_level_only {
-                            let _ = s.conn.shutdown();
-                            return Ok(());
-                        }
+                        // Hang up once the post-login frames due by now
+                        // have gone (below), as a client would have sent
+                        // them before the level settled.
+                        quit = first_level_only;
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
@@ -391,6 +392,10 @@ pub fn run_with_pose(
                     }
                     let _ = writeln!(out, "sent the post-login frames ({})", frames.len());
                 }
+            }
+            if quit {
+                let _ = s.conn.shutdown();
+                return Ok(());
             }
         }
     }
