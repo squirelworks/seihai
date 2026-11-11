@@ -3,9 +3,13 @@
 //!
 //! The login is core's (`seihai_core::net::login_gserver`): the 3.04 and
 //! 3.153 profiles already carry the login token, the bundled first frame
-//! and the props the lab run of the real 3.04 showed. The post-login frame
-//! the real client sends once the board is in (file checks and props,
-//! `protocol::login::LoginBurst`) is not sent yet.
+//! and the props the lab run of the real 3.04 showed. Once the server's
+//! login burst is in, Ato sends the frame the real client answers with,
+//! as `seihai-mae` does: core's `protocol::login::LoginBurst` (3.x: the
+//! file checks and props once the board is in) or, for a 4.x build,
+//! `protocol::lobby::LobbyBurst` (idle.gani, the PM and lister setup, 46,
+//! the window list and the own props with the nickname). File replies are
+//! kept by core's `FileSession`.
 //!
 //! A server NPC's GS2 script (`PLO_NPCBYTECODE`, 131, which 3.153 handles
 //! and 3.04 does not) is kept by core's session state, read with
@@ -24,12 +28,19 @@
 
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
+use seihai_core::filecache::FileSession;
 use seihai_core::net::{login_gserver_with, random_key, wantfile_message};
+use seihai_core::protocol::lobby::LobbyBurst;
+use seihai_core::protocol::login::LoginBurst;
 use seihai_core::protocol::{ClientVersion, SessionState};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::mpsc::RecvTimeoutError;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// How often the loop looks while a post-login frame is owed, so a frame
+/// due 240 ms after the level goes out on time.
+const BURST_TICK: Duration = Duration::from_millis(20);
 
 /// What the start window (or the command line) hands over for a login.
 /// The nickname and language are not sent yet: the real 3.04 sends them in
@@ -64,8 +75,13 @@ pub fn run(
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
     };
+    let file_resolver = resolver
+        .clone()
+        .unwrap_or_else(|| AssetResolver::empty(version.profile()));
+    let mut files = FileSession::new(file_resolver, false);
     let mut addr = addr.to_string();
     let mut first_session = true;
+    let mut server_name: Option<String> = None;
     'servers: loop {
         let mut s = login_gserver_with(
             &addr,
@@ -89,16 +105,26 @@ pub fn run(
             version.label()
         );
         let frames = s.conn.spawn_reader().map_err(|e| e.to_string())?;
+        files.new_connection();
+        let mut login_burst = LoginBurst::for_version(version);
+        let mut lobby_burst = LobbyBurst::for_version(version);
+        let title = version.profile().window_title(server_name.as_deref());
         let mut st = SessionState::for_version(version);
         let mut store = LevelStore::default();
         // A level was stored and has not been logged yet.
         let mut owed = false;
+        let mut owed_at: Option<Instant> = None;
         loop {
-            let wait = if owed {
-                SETTLE
-            } else {
-                Duration::from_secs(3600)
+            let burst_owed = login_burst.as_ref().is_some_and(|b| b.pending())
+                || lobby_burst.as_ref().is_some_and(|b| b.pending());
+            let wait = match (owed, burst_owed) {
+                (_, true) => BURST_TICK,
+                (true, false) => SETTLE,
+                (false, false) => Duration::from_secs(3600),
             };
+            // The time `owed` started, so the settle wait is not cut short
+            // by the burst tick.
+            let settle_until = owed_at.map(|t| t + SETTLE);
             match frames.recv_timeout(wait) {
                 Ok(Ok(body)) => {
                     st.apply_body(&body);
@@ -115,6 +141,7 @@ pub fn run(
                         };
                         let _ = writeln!(out, "server warp to {name:?}: {to}");
                         addr = to;
+                        server_name = Some(name);
                         continue 'servers;
                     }
                     let before = st.current_level_name();
@@ -127,7 +154,23 @@ pub fn run(
                         log_level(version, &store, &st, out, shown);
                         owed = false;
                     }
-                    owed |= store.update(&mut st, local);
+                    if store.update(&mut st, local) {
+                        owed = true;
+                        owed_at = Some(Instant::now());
+                    }
+                    if st.current_level_name().is_some() {
+                        let now = Instant::now();
+                        if let Some(b) = login_burst.as_mut() {
+                            b.note_level(now);
+                        }
+                        if let Some(b) = lobby_burst.as_mut() {
+                            b.note_level(now);
+                        }
+                    }
+                    let got = files.process(&mut st);
+                    if !got.send.is_empty() {
+                        let _ = s.conn.send_messages(&got.send);
+                    }
                 }
                 Ok(Err(e)) => {
                     if owed {
@@ -141,9 +184,10 @@ pub fn run(
                     return Ok(());
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    if owed {
+                    if owed && settle_until.is_some_and(|t| Instant::now() >= t) {
                         log_level(version, &store, &st, out, shown);
                         owed = false;
+                        owed_at = None;
                         if first_level_only {
                             let _ = s.conn.shutdown();
                             return Ok(());
@@ -151,6 +195,45 @@ pub fn run(
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
+            }
+            // The post-login frame, once it is due (core decides when).
+            let now = Instant::now();
+            if let Some(b) = login_burst.as_mut() {
+                let el = &mut s.enter_level;
+                let conn = &mut s.conn;
+                let msgs = b.take(
+                    &st,
+                    &login.account,
+                    now,
+                    |n| files.need(n),
+                    || el.take_login(),
+                    Vec::new,
+                );
+                if !msgs.is_empty() {
+                    let _ = conn.send_messages(&msgs);
+                    let _ = writeln!(out, "sent the post-login frame ({} messages)", msgs.len());
+                }
+            }
+            if let Some(b) = lobby_burst.as_mut() {
+                let el = &mut s.enter_level;
+                let frames = b.take(
+                    &st,
+                    if login.nick.is_empty() {
+                        &login.account
+                    } else {
+                        &login.nick
+                    },
+                    now,
+                    |n| files.need(n),
+                    || el.take_login(),
+                    &[title.as_str()],
+                );
+                if !frames.is_empty() {
+                    for f in &frames {
+                        let _ = s.conn.send_messages(f);
+                    }
+                    let _ = writeln!(out, "sent the post-login frames ({})", frames.len());
+                }
             }
         }
     }

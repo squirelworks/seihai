@@ -91,8 +91,6 @@ into is noted on the status bar and dropped.
 
 ## Not in yet
 
-Offline mode, the post-login frame the real 3.x client
-sends once the board is in (file checks and props, which carry the
-nickname and language), sending the walk, level changes, NPCs, other
+Offline mode, sending the walk, level changes, NPCs, other
 players, GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
