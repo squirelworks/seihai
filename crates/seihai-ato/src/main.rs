@@ -2,10 +2,13 @@
 //!
 //!   seihai-ato --version 3.153 [--account A] [--password-env VAR] [--nick N]
 //!   seihai-ato --version 3.04 --print-profile
+//!   seihai-ato --version 3.04 [--listserver host:port] --account A --password-env VAR
 //!   seihai-ato --version 3.04 --online host:port --account A --password-env VAR
 //!              [--assets DIR] [--no-window] [--first-level]
 //!
-//! With `--online`, Start logs in at that game server, logs each level the
+//! Start asks the version's listserver (`listserver.graal.in`, or
+//! `--listserver host:port`) for its servers and logs in at the one picked.
+//! With `--online`, Start logs in at that game server instead, logs each level the
 //! server sends (its name, the start position and the NPC count) and draws
 //! it flat; the arrow keys walk it. With both `--online` and `--account`
 //! the start window is skipped and the login starts at once. `--no-window`
@@ -45,6 +48,9 @@ fn main() -> ExitCode {
     if !a.no_window {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
+        if let Some(ls) = a.listserver.clone() {
+            w.listserver = ls;
+        }
         return match game::run(version, w, a.assets.map(Into::into)) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
