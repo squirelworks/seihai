@@ -29,7 +29,9 @@
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
 use seihai_core::filecache::FileSession;
-use seihai_core::net::{login_gserver_with, random_key, walk_message_for, wantfile_message};
+use seihai_core::net::{
+    link_request_frame, login_gserver_with, random_key, walk_message_for, wantfile_message,
+};
 use seihai_core::protocol::lobby::LobbyBurst;
 use seihai_core::protocol::login::LoginBurst;
 use seihai_core::protocol::walkcadence::WalkCadence;
@@ -113,11 +115,22 @@ pub struct Other {
 /// game view draws them.
 pub type SharedOthers = Arc<Mutex<Vec<Other>>>;
 
+/// A level link the player walked into: the level and where to arrive.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkAsk {
+    pub dest: String,
+    pub x: f32,
+    pub y: f32,
+    pub dir: u8,
+}
+
 /// What the game view and the network thread share.
 #[derive(Debug, Clone, Default)]
 pub struct Live {
     pub pose: SharedPose,
     pub others: SharedOthers,
+    /// A link to ask the server for; the network thread takes it.
+    pub link: Arc<Mutex<Option<LinkAsk>>>,
 }
 
 /// The other players in `st` that stand in this level: those with no gmap
@@ -200,6 +213,7 @@ pub fn run_with_pose(
 ) -> Result<(), String> {
     let pose = live.as_ref().map(|l| l.pose.clone());
     let others = live.as_ref().map(|l| l.others.clone());
+    let link = live.as_ref().map(|l| l.link.clone());
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
@@ -240,6 +254,8 @@ pub fn run_with_pose(
         let title = version.profile().window_title(server_name.as_deref());
         let mut st = SessionState::for_version(version);
         let mut walker = WalkSender::new(version);
+        // The last link asked for: where the player arrives in its level.
+        let mut last_link: Option<LinkAsk> = None;
         let mut walk_clock = Instant::now();
         let mut store = LevelStore::default();
         // A level was stored and has not been logged yet.
@@ -352,6 +368,47 @@ pub fn run_with_pose(
                     if let Some(m) = current.and_then(|c| walker.tick(c)) {
                         let _ = s.conn.send_messages(&[m]);
                     }
+                }
+            }
+            // A new level after login owes a 46 on the builds that send it
+            // (core's EnterLevelSender), with the arrival props after it in
+            // the same frame, as the real 2.31 and 4.x clients do.
+            if let Some(name) = st.current_level_name() {
+                s.enter_level.note_level(&name);
+            }
+            if s.enter_level.is_pending() {
+                let then: Vec<Vec<u8>> = last_link
+                    .as_ref()
+                    .filter(|a| {
+                        st.current_level_name()
+                            .is_some_and(|n| n.eq_ignore_ascii_case(&a.dest))
+                    })
+                    .map(|a| vec![walk_message_for(version, a.x, a.y, a.dir)])
+                    .unwrap_or_default();
+                let _ = s.enter_level.send_pending(&mut s.conn, &then);
+            }
+            // A level link the player walked into: the request the build
+            // sends (core's `link_request_frame`: `PLI_LEVELWARP`, or the
+            // cached form with its mod time where the build has one). The
+            // server answers with the level, which is logged and shown as
+            // at login.
+            let ask = link
+                .as_ref()
+                .and_then(|l| l.lock().unwrap_or_else(|e| e.into_inner()).take());
+            if let Some(a) = ask {
+                let cached = if version.sends_cached_links() {
+                    st.cached_mod_time(&a.dest)
+                } else {
+                    None
+                };
+                let frame = link_request_frame(version, cached, a.x, a.y, a.dir, &a.dest, None);
+                last_link = Some(a.clone());
+                if s.conn.send_messages(&frame.messages).is_ok() {
+                    if cached.is_some() {
+                        st.expect_cached_level(&a.dest);
+                        s.enter_level.cached_link(&a.dest, frame.with_enter_level);
+                    }
+                    let _ = writeln!(out, "link to {} at {} {}", a.dest, a.x, a.y);
                 }
             }
             // The post-login frame, once it is due (core decides when).
