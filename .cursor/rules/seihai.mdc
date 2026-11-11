@@ -32,6 +32,10 @@ PRs; never merge, never push to `main`/`seihai`, never create a tag or release.
   listserver) in code, docs, tests, config or UI. Use `127.0.0.1`, `127.0.0.2`, the lab
   ports (14802, 14803, 14804, 14900, 14921–14923), or placeholders `<listserver-host>`,
   `<public-host>`. No built-in "known servers" list. Site/upgrade URLs default to empty.
+- **Client exception (Squirrel, 2026-11-11):** the Seihai client in `squirelworks/seihai`
+  may name `listserver.graal.in`, the one listserver it dials, in code, docs and
+  examples. No other real host. The defunct graalonline.com hosts and what each old
+  build carried are history: they belong in Graal_analysis, not here.
 - No decompiled source, no binary offsets (`0x00…`, `FUN_…`). Decompile findings are
   written as plain behaviour only.
 - Never run old Graal tools from the archives on a real machine (`ListServer.exe`

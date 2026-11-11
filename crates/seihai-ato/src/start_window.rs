@@ -46,10 +46,6 @@ pub const BUTTON_FILL: [u8; 3] = [40, 0, 0];
 /// `GuiStartScreenTextProfile` font colour, used by the labels.
 pub const LABEL_FONT: [u8; 3] = [255, 224, 160];
 
-/// Where "Get an account" sends the player in both builds. Shown, not
-/// opened.
-pub const SIGNUP_URL: &str = "http://www.graalonline.com/accounts/signup.php";
-
 /// The texts of one build, from its English language table.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Texts {
@@ -192,7 +188,7 @@ impl StartWindow {
     }
 
     pub fn press_get_account(&mut self) {
-        self.status = format!("Get an account: {SIGNUP_URL}");
+        self.status = "Get an account: accounts are made by the listserver you play on.".into();
     }
 }
 

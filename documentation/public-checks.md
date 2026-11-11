@@ -151,7 +151,7 @@ binaries, sources and the lab.
 | 2.05 rev 2 on Reborn | 14922 or 14923 | earlier notes, public runs | 14923 for a classic login (observed 2.00 profile); 14922 answers only the gen-5 login (observed with the 2.05 profile of the user's binary) |
 | 1.41 | 14923 (the only surviving copy is patched) | binary | open |
 | 2.17 | list host and port from `arrays2.dat`, default 14922 | binary | classic login on 14922: **no reply** (observed, 3 of 3); on 14923 a **legacy list** (matrix, 2026-10-25) |
-| 2.22 | `listserver.graal.in`, then `.graal.cc`, then `.graalonline.biz`, port 14922; token `GNW30123` | binary, lab, public | **answered** on 14922 and 14923 (observed) |
+| 2.22 | `listserver.graal.in` first (fallbacks are history, in Graal_analysis), port 14922; token `GNW30123` | binary, lab, public | **answered** on 14922 and 14923 (observed) |
 | 2.31 | as 2.22 | binary, public | **answered** on 14922 and 14923 (observed) |
 
 Seihai's per-profile defaults were the ports the client binaries carry (14921
