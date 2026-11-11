@@ -15,24 +15,30 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Linux builds without audio (the documented no-audio build:
+      # seihai-mae's audio-rodio feature off), so the job needs no ALSA
+      # development files and no apt step, and a Ubuntu mirror outage
+      # cannot fail it. Windows and macOS build the default, with audio.
+      FEATURES: ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features seihai-mae/dev,seihai-core/dev' || '' }}
+    defaults:
+      run:
+        shell: bash
     steps:
       # Keep text fixtures (levels, ganis, scripts) byte-for-byte on Windows.
       - name: No line-ending conversion
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
-      - name: Linux audio headers
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: Build
-        run: cargo build --workspace
+        run: cargo build --workspace $FEATURES
       - name: Test
-        run: cargo test --workspace --no-fail-fast
+        run: cargo test --workspace --no-fail-fast $FEATURES
       - name: Format
         if: ${{ !cancelled() }}
         run: cargo fmt --all -- --check
       - name: Clippy
         if: ${{ !cancelled() }}
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets $FEATURES -- -D warnings
