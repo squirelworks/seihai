@@ -14,7 +14,7 @@ Dated 2026-10-25. Based on `chiaki/asset-inventory` (#49, still open when this w
 
 ### The mapping
 
-Seihai (`client/src/render/tiles.rs`, `Framebuffer::blit_tile`) draws tile id `t` (0 to 4095) from this cell of a 16 px grid:
+Seihai (`crates/seihai-mae/src/render/tiles.rs`, `Framebuffer::blit_tile`) draws tile id `t` (0 to 4095) from this cell of a 16 px grid:
 
 ```
 column = t % 16 + (t / 512) * 16
@@ -41,7 +41,7 @@ A throwaway integration test (not committed, to keep this PR to the note; the so
 | Hyroko `temp/pics1.png` | 2048x512 | 4096 | 0 | 4096 | 127 | 31 | 4096 |
 | Lumina-1 `drak_images/pics1c.png` | 1856x512 | 3712 | 384 | 3712 | 115 | 31 | 3712 |
 
-Every drawn id also matched the formula above (asserted in the test). The existing unit test at `client/src/render/tiles.rs` (flat-colour sheet, tile `n` in the red byte) covers the same mapping on a synthetic sheet.
+Every drawn id also matched the formula above (asserted in the test). The existing unit test at `crates/seihai-mae/src/render/tiles.rs` (flat-colour sheet, tile `n` in the red byte) covers the same mapping on a synthetic sheet.
 
 ### Checked against real levels
 
@@ -58,7 +58,7 @@ Seihai's mapping is about five times better than chance and the alternatives are
 
 ### Surprise: `assets::tile_src_rect` uses the other mapping
 
-`client/src/assets/level.rs` has `pub fn tile_src_rect(id)` (re-exported from `assets`) that returns the **linear** cell (`col = id % 128`, `row = id / 128`) and its comment says "on a 2048x512 sheet (128x32 of 16 px)". That is the 74.92 row above, not the mapping the renderer uses. Nothing in the client calls it (only the re-export names it), so nothing draws wrongly today, but any caller that picked it up would. It has since been deleted; the renderer's mapping in `render/tiles.rs` is the only one.
+`crates/seihai-core/src/assets/level.rs` has `pub fn tile_src_rect(id)` (re-exported from `assets`) that returns the **linear** cell (`col = id % 128`, `row = id / 128`) and its comment says "on a 2048x512 sheet (128x32 of 16 px)". That is the 74.92 row above, not the mapping the renderer uses. Nothing in the client calls it (only the re-export names it), so nothing draws wrongly today, but any caller that picked it up would. It has since been deleted; the renderer's mapping in `render/tiles.rs` is the only one.
 
 ### Other widths
 
@@ -76,7 +76,7 @@ The 8 tiledef files in the corpora are 59 to 730 bytes. Their lines are `image,p
 
 ## 2. Palette types and the readers
 
-Every PNG below was measured from its header and chunk list (colour type, bit depth, `PLTE` entry count, `tRNS` length, interlace). Seihai's `read_png_rgba` (`client/src/assets/png.rs`) reads non-interlaced gray, RGB, RGBA, gray+alpha and **palette PNGs at 1, 2, 4 and 8 bits with `tRNS`** into RGBA, so both palette depths below already go through the existing palette reader. There is no GIF or MNG decoder.
+Every PNG below was measured from its header and chunk list (colour type, bit depth, `PLTE` entry count, `tRNS` length, interlace). Seihai's `read_png_rgba` (`crates/seihai-core/src/assets/png.rs`) reads non-interlaced gray, RGB, RGBA, gray+alpha and **palette PNGs at 1, 2, 4 and 8 bits with `tRNS`** into RGBA, so both palette depths below already go through the existing palette reader. There is no GIF or MNG decoder.
 
 | File (world) | Size | Type | `PLTE` | `tRNS` | Reader |
 |--|--|--|--:|--:|--|

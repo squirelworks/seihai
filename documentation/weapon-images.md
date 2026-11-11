@@ -3,7 +3,7 @@
 The status display draws the selected weapon's image next to the D button
 (see `hud.md`). This page covers which weapons are in the list, which one is
 selected, and which image each one has. The code is in
-`client/src/weaponbar.rs`, and `main.rs` wires it in.
+`crates/seihai-mae/src/weaponbar.rs`, and `main.rs` wires it in.
 
 ## Built-in weapons (`PLO_DEFAULTWEAPON`, 43)
 

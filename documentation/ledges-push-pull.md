@@ -1,6 +1,6 @@
 # Ledge jumps, pushing and pulling
 
-Derived from the 2.05 rev 2 client and the 2.22 `arrays.dat`. No addresses or code are quoted. Units are tiles; a tick is the 50 ms game tick, and a walk step is one arrow key in one tick. Test level: `client/tests/fixtures/levels/new3.nw`. Code: `client/src/offline/pushpull.rs`.
+Derived from the 2.05 rev 2 client and the 2.22 `arrays.dat`. No addresses or code are quoted. Units are tiles; a tick is the 50 ms game tick, and a walk step is one arrow key in one tick. Test level: `client/tests/fixtures/levels/new3.nw`. Code: `crates/seihai-core/src/offline/pushpull.rs`.
 
 ## What the player sees
 

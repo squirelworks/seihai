@@ -53,7 +53,7 @@ From the merged chat/HUD PRs:
 - F2 opens a PM to the nearest player.
 - F3 toggles the debug overlay (fps, position, level, frames, players).
 - F7 toggles the player list; Tab opens the chat bar, as in the readme (`keys.md`). (F4 is the level editor, not built yet.)
-- F1 or ? shows the key help; a hint says so at start. The list is `client/src/help.rs`, and a test keeps it in step with `bin/main.rs`.
+- F1 or ? shows the key help; a hint says so at start. The list is `crates/seihai-mae/src/help.rs`, and a test keeps it in step with `bin/main.rs`.
 - F12 saves a PNG to `screenshots/`.
 - F9 is developer mode (wallhack). It is off at every start, never saved, shows `DEV MODE` while on, and turns itself off on a level change, warp or disconnect. Build with `--no-default-features` to compile the wallhack out.
 - Chests open with A or Space when facing them. The terminal prints the item.

@@ -1,6 +1,6 @@
 # The sign panel
 
-What the client shows while the player reads a sign, and how Seihai draws it. The code is `client/src/render/signs.rs`, the keys are in `bin/main.rs`, and `examples/sign_probe.rs` renders a level's first sign to PNG files, one a page.
+What the client shows while the player reads a sign, and how Seihai draws it. The code is `crates/seihai-mae/src/render/signs.rs`, the keys are in `bin/main.rs`, and `examples/sign_probe.rs` renders a level's first sign to PNG files, one a page.
 
 Sources: the 2.05 client's sign drawing and its key handling while reading (read from the program, nothing of it kept here), and the `letters.png` sheets of 1.39 and 2.22.
 

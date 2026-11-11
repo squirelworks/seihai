@@ -4,7 +4,7 @@ Source: Graal_analysis `client-internals/player-mannerisms-live.md` (2.05 rev 2 
 
 ## The rule
 
-A GANI step is shown for `1 + WAIT` ticks, where `WAIT n` is the line after the step's rows (the stock `hidden.gani` writes `WAIT4` with no space; both are read). A file with no `WAIT` steps once a tick. Code: `Gani::frame_ticks`, `Gani::total_ticks`, `Gani::frame_at_tick` in `client/src/assets/gani.rs`; the poses in `client/src/pose.rs`.
+A GANI step is shown for `1 + WAIT` ticks, where `WAIT n` is the line after the step's rows (the stock `hidden.gani` writes `WAIT4` with no space; both are read). A file with no `WAIT` steps once a tick. Code: `Gani::frame_ticks`, `Gani::total_ticks`, `Gani::frame_at_tick` in `crates/seihai-core/src/assets/gani.rs`; the poses in `crates/seihai-core/src/pose.rs`.
 
 ## The poses
 
@@ -47,4 +47,4 @@ Where each row starts in the chain:
 * **1.39.** It has no ganis. Its push frames change about every 2 ticks, not 4 (video only). Seihai has no built-in pre-gani poses, so a 1.39 profile draws whatever ganis it finds.
 * **The pull sprite after A is let go.** The pose was read live; what sprite number the 2.05 client sends others then was not traced. Seihai sends the pull sprite while the pose is on (inferred).
 * **Walk with `WAIT`.** The walk GANI still steps once per move. The stock `walk.gani` has no `WAIT`, so that matches; `walkslow` (8 × 2) is not used.
-* **Hiding (D while carrying).** Code: `client/src/offline/hide.rs`. You can hide under a bush, a light stone or a black stone; D on a pot or a sign does nothing. D or A comes out, and the leaves fly when you come out from under a bush. S throws. Walking hidden goes at 0.1 tile a tick. A hidden player cannot be hit. Others are sent STATUS 0x02 and sprites 18 (still) or 19, 20, 19, 18 (walking). 2.05 on plays `hiddenstill` / `hidden` and draws the object where the player stands; without those files only the object is drawn. 1.39 and NewMain 1.41 keep the carry poses. Not done: hiding under a carried NPC (Seihai cannot carry NPCs). The 2.22 pack's `hidden.gani` draws the bush itself as `ATTR3`, so with that pack the bush would be drawn twice.
+* **Hiding (D while carrying).** Code: `crates/seihai-core/src/offline/hide.rs`. You can hide under a bush, a light stone or a black stone; D on a pot or a sign does nothing. D or A comes out, and the leaves fly when you come out from under a bush. S throws. Walking hidden goes at 0.1 tile a tick. A hidden player cannot be hit. Others are sent STATUS 0x02 and sprites 18 (still) or 19, 20, 19, 18 (walking). 2.05 on plays `hiddenstill` / `hidden` and draws the object where the player stands; without those files only the object is drawn. 1.39 and NewMain 1.41 keep the carry poses. Not done: hiding under a carried NPC (Seihai cannot carry NPCs). The 2.22 pack's `hidden.gani` draws the bush itself as `ATTR3`, so with that pack the bush would be drawn twice.

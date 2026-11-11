@@ -3,7 +3,7 @@
 Seihai draws the status display from the selected version's own `state.png`,
 following the rules of the 2.05 rev 2 client's status routine. If no
 `state.png` is found, it falls back to the two plain bars it drew before.
-The code is in `client/src/render/hud.rs`.
+The code is in `crates/seihai-mae/src/render/hud.rs`.
 
 ## Sources
 
@@ -59,7 +59,7 @@ names a base point `B = (15, 15)`.
   the `graalconfig.txt` font (Tempus Sans ITC, cell 24, bold), white over a
   blue shadow, as the names under characters do. Seihai still draws all of
   these in its own pixel font. Source: Graal_analysis
-  `client-internals/rebuild-traces-2026-11-05.md` (from graal-delphi #121
+  `client-internals/rebuild-traces-2026-11-05.md` (from graal-client-repro, formerly graal-delphi, #121
   and #138).
 * **Weapons off.** The client's weapons flag also gates the S and D keys.
   When it is off, only the A button, its key name and the AP bar are drawn.

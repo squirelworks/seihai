@@ -42,7 +42,7 @@ hearts) are on the HUD, not in it.
 
 ## Seihai (first slice)
 
-`client/src/inventory.rs`, drawn and driven from `bin/main.rs`.
+`crates/seihai-mae/src/inventory.rs`, drawn and driven from `bin/main.rs`.
 
 * Q toggles the list, offline and online. Esc, Q, D, S, A, Space and Enter
   close it. Arrows move the selection with the 2.05 nearest-cell rule.

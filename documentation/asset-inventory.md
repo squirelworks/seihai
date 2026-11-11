@@ -132,7 +132,7 @@ By palette type, PNG pass is 100% for 4-bit palettes (6,753 of 6,753), 99.89% fo
 - **WAV (10 files):** 8 are format tag 0x55 (MP3-in-WAV) and 2 are tag 2 (MS ADPCM). Both are unsupported formats, not corruption.
 - **GRMAP002** is unsupported (one file in Hyroko).
 - **Tiledefs:** one of the 7 text files does not parse; the other 6 do.
-- **`.nw` panic (a real reader bug).** One level, `s_b-skate-park.nw` in Delteria-12-6-02, makes `Level::parse` **panic** (`slice index starts at 1 but ends at 0`, `client/src/assets/level.rs`, `parse_npc`). It has an `NPC` header line with no body and no `NPCEND`; `lines[1..lines.len().saturating_sub(1)]` then slices `1..0` when the block is a single line. The fix is to return `None` (or an empty script) when there are fewer than two lines. Not fixed in this PR (docs only); a one-line change plus a test.
+- **`.nw` panic (a real reader bug).** One level, `s_b-skate-park.nw` in Delteria-12-6-02, makes `Level::parse` **panic** (`slice index starts at 1 but ends at 0`, `crates/seihai-core/src/assets/level.rs`, `parse_npc`). It has an `NPC` header line with no body and no `NPCEND`; `lines[1..lines.len().saturating_sub(1)]` then slices `1..0` when the block is a single line. The fix is to return `None` (or an empty script) when there are fewer than two lines. Not fixed in this PR (docs only); a one-line change plus a test.
 
 A second thing the scan showed: `--level-info` is only right for binary levels. It does not reject a text `GLEVNW01` or `GRMAP001` file; it prints a nonsense layout instead (counts that do not mean anything) and exits 0. A text `.nw` has to go through `Level::parse`, and a `.gmap` through `Gmap::parse`. The numbers above use the right reader for each magic.
 

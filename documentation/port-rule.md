@@ -31,8 +31,8 @@ The launcher port box must follow the selected version's default. When the user 
 
 ## Where it is implemented
 
-- `Listserver { host, port, kind, status, built_in, token }` in `client/src/protocol/profile.rs`; the chain steps in `chain.rs` set it; `ClientVersion::listserver_host/port/addr` read it.
-- The launcher (`ListEndpoint` in `client/src/gui.rs`): the port box shows the version's default and follows the version selector. The line under it says the login type and whether the port is confirmed or assumed (hover for what that means). A typed port, or a port in the settings file, is kept and marked user-set ("Use default" gives it back). The settings file gets a port only when the user set one.
+- `Listserver { host, port, kind, status, built_in, token }` in `crates/seihai-core/src/protocol/profile.rs`; the chain steps in `chain.rs` set it; `ClientVersion::listserver_host/port/addr` read it.
+- The launcher (`ListEndpoint` in `crates/seihai-mae/src/gui.rs`): the port box shows the version's default and follows the version selector. The line under it says the login type and whether the port is confirmed or assumed (hover for what that means). A typed port, or a port in the settings file, is kept and marked user-set ("Use default" gives it back). The settings file gets a port only when the user set one.
 - `--online host:port` is used as given. A bare `--online listserver.graal.in` gets the version's default port. 1.33 to 1.39 have no listserver and borrow 2.05's (classic login, 14923).
 - Tests: no profile defaults to 14921, every host is `listserver.graal.in`, `login_type_decides_the_default_port` (classic -> 14923, gen-5 -> 14922, kind agrees with the login the code sends), `port_status_confirmed_versus_assumed`, the fixture agrees with the Graal_analysis profiles, and the launcher follow tests.
 - Evidence: `protocol/listserver-login-type-matrix-2026-10-25.md` and `client-internals/version-profiles/list-ports.md` in Graal_analysis.

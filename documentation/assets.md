@@ -44,7 +44,7 @@ All loaders should be usable by both the client and the offline tools (editors, 
 ## Status: loaders and the 2.22 data folder
 
 The 2.22 folder ("Graal Reborn 2.22.0") is the reference layout. One resolver,
-`AssetResolver` (`client/src/assets/resolve.rs`), is the only code that maps a
+`AssetResolver` (`crates/seihai-core/src/assets/resolve.rs`), is the only code that maps a
 name to a file. It takes the data folder and a version profile.
 
 ### Layout it reads
@@ -203,7 +203,7 @@ What this settled:
 
 ### `.zelda` (Z3-V1) levels
 
-`Z3-V1.03` and `Z3-V1.04` files have their own reader, `client/src/assets/zelda.rs`
+`Z3-V1.03` and `Z3-V1.04` files have their own reader, `crates/seihai-core/src/assets/zelda.rs`
 (`ZeldaLevel::parse`, `to_level`, `to_bytes`). `Level::load` and
 `Level::parse_binary_with_layout` hand every `Z3-V1` magic to it; the `.graal`
 section reader no longer sees them. The layout, settled against the Java Zelda
@@ -315,7 +315,7 @@ Not settled:
 files a version uses (tile sheet, tile types, HUD art, player art, walk/swim
 GANIs, the named sound effects, a MIDI file, a sample level and gmap, the
 offline tiledefs) and prints them. The list per build is
-`expected_files(profile)` in `client/src/assets/coverage.rs`; it follows the
+`expected_files(profile)` in `crates/seihai-core/src/assets/coverage.rs`; it follows the
 profile (no GANIs for 1.39, `.nw` only where `levels.nw`, the 24-name 1.39
 sound list below the GANI builds and the 15-name 2.05 list from there, the
 offline tiledefs from 2.17). It then reads every `.zelda` and `.graal` file under

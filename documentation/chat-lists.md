@@ -21,7 +21,7 @@ the laundry specs `10-right-click-menu.md` and `14-friends-ignore.md`, and the
 
 ## Where it lives
 
-- `client/src/chatlists.rs`: `NameList` (parse, add, remove, load, atomic
+- `crates/seihai-core/src/chatlists.rs`: `NameList` (parse, add, remove, load, atomic
   save), `ChatLists` (the three files in the settings directory),
   `ChatFilter` (what is hidden), `parse_command` and `apply_command` (the
   chat-bar commands), `mute_message` (the id 43 bytes), `menu_items` (the

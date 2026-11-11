@@ -29,7 +29,7 @@ Dominant tags: tricxta (HUD/inventory), Ace2896 (weapons + smartbaddy), Agret (U
 
 ## Relevance to Seihaiscript
 
-The current engine in `client/src/scripting/engine/` already implements a practical GS1 subset with version gating, timeout scheduling, and host effects. The archive supplies concrete real-world patterns for the open items listed in `documentation/seihaiscript.md` and the roadmap (layer 4):
+The current engine in `crates/seihai-core/src/scripting/engine/` already implements a practical GS1 subset with version gating, timeout scheduling, and host effects. The archive supplies concrete real-world patterns for the open items listed in `documentation/seihaiscript.md` and the roadmap (layer 4):
 
 - **Image ID management** — Classic HUDs and shops fight over the ~300+ band; the Ash runtime notes document the bands and collision patterns.
 - **`toweapons` / weapon-bar persistence** and `weaponfired` input — larency inventory and shop scripts are the clearest examples.

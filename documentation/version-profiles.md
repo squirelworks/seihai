@@ -2,7 +2,7 @@
 
 Picking a version in the launcher makes Seihai act as that client, not only
 speak its protocol generation. Each version has one row in
-`client/src/protocol/profile.rs` (`PROFILES`, resolved from `chain.rs`), and the rest of the client reads
+`crates/seihai-core/src/protocol/profile.rs` (`PROFILES`, resolved from `chain.rs`), and the rest of the client reads
 that row instead of matching on versions.
 
 The builds before 1.21 and the NewWorld betas have no row; they are listed as
@@ -23,7 +23,7 @@ There are 26 rows: 2.02 rev 2, 2.03 and 2.04 are rows of their own, because
 each differs on the wire from the build before (LANGUAGE at 2.02 rev 2,
 TRIGGERACTION and PLO 48/165 at 2.03, SHOWIMGNPC and prop 42 at 2.04).
 
-The rows are the resolved **version chain** (`client/src/protocol/chain.rs`):
+The rows are the resolved **version chain** (`crates/seihai-core/src/protocol/chain.rs`):
 1.33 is written out in full, and every later build is a small delta against the
 build before it, so a new version is one step with only what changed. A
 generated per-step handler-change table (`seihai --version-chain`) lists those
@@ -63,10 +63,10 @@ table; GServer-v2 and gs2lib for tokens and the server's version branches.
 
 ## Keeping rows in step with Graal_analysis
 
-`client/src/protocol/profile_toml.tsv` holds the per-version data from the
+`crates/seihai-core/src/protocol/profile_toml.tsv` holds the per-version data from the
 Graal_analysis version-profile TOMLs (token, server and client id sets, prop
 limits, tampercheck, listserver endpoint). `tools/gen_profile_fixture.py
-PATH/TO/Graal_analysis > client/src/protocol/profile_toml.tsv` regenerates it,
+PATH/TO/Graal_analysis > crates/seihai-core/src/protocol/profile_toml.tsv` regenerates it,
 and the unit test `rows_match_version_profile_toml` fails if any row differs.
 When the TOMLs change, regenerate the file and fix the rows the test names.
 Default list endpoint (`documentation/port-rule.md`): every profile dials
@@ -129,4 +129,4 @@ Graal_analysis `version-profiles/matrix/` has the cross-era matrix (1998 to
 - HUD text (key names, sword and glove power) is still Seihai's pixel font;
   the traced fonts are in `hud.md`.
 - Sources for these four: Graal_analysis
-  `client-internals/rebuild-traces-2026-11-05.md` (graal-delphi v0.0.4).
+  `client-internals/rebuild-traces-2026-11-05.md` (graal-client-repro, then named graal-delphi, v0.0.4).

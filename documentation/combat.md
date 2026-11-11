@@ -14,7 +14,7 @@ derived in item 7; `damage-respawn.md` has what is known and open.
 
 ## Where it lives
 
-- `client/src/combat.rs`: the rules (`judge_sword`, `judge_hurtplayer`,
+- `crates/seihai-core/src/combat.rs`: the rules (`judge_sword`, `judge_hurtplayer`,
   `attacker_may_send`), the decoders for ids 40 and 46, the swing and hurt
   state (`CombatState`) and the session methods (`receive_all`,
   `receive_sword`, `receive_hurtplayer`, `start_swing`, `tick_combat`).

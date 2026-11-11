@@ -12,16 +12,16 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
 
 ## Where it lives
 
-- `client/src/sound/mod.rs`: the `SoundOut` trait (`play`, `stop`,
+- `crates/seihai-core/src/sound/mod.rs`: the `SoundOut` trait (`play`, `stop`,
   `stop_all_loops`), `NullSound`, `RecordingSound` (for tests), `pan_gains`,
   `default_backend`.
-- `client/src/sound/engine.rs`: `SoundEngine`, the rules below. It talks to
+- `crates/seihai-core/src/sound/engine.rs`: `SoundEngine`, the rules below. It talks to
   the backend only through `SoundOut`, so every rule is tested without a
   device.
-- `client/src/sound/wav.rs`: the WAV decoder.
-- `client/src/sound/rodio_out.rs`: the device backend, only with the
+- `crates/seihai-core/src/sound/wav.rs`: the WAV decoder.
+- `crates/seihai-mae/src/sound/rodio_out.rs`: the device backend, only with the
   `audio-rodio` feature.
-- `client/src/assets/gani.rs`: the parser now reads steps and `PLAYSOUND`.
+- `crates/seihai-core/src/assets/gani.rs`: the parser now reads steps and `PLAYSOUND`.
 - `OfflineSession`: steps the walk or swim GANI on every successful move and
   queues a `SoundEvent` for each cue in the frame entered
   (`take_sound_events`). `bin/main.rs` plays them.
