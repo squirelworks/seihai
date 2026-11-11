@@ -1,7 +1,7 @@
 //! The server list: what Start opens when no game server was given.
 //!
 //! The listserver login is core's (`Connection::fetch_server_list`), with
-//! the 3.x row's listserver: `listserver.graal.in` on the row's port, the
+//! the 3.x row's listserver: `listserver.graal.in` on port 14923, the
 //! `G3D30123` token and login shape D (id 7 and id 1 in one plain zlib
 //! frame, as the real 3.04 and 3.153 sent it in the lab). `--listserver
 //! host:port` points it at a lab listserver instead.
@@ -231,7 +231,9 @@ mod tests {
         for v in [ClientVersion::V304, ClientVersion::V3153] {
             let d = default_listserver(v);
             assert!(d.starts_with("listserver.graal.in:"), "{d}");
-            assert_eq!(d, format!("listserver.graal.in:{}", v.listserver_port()));
+            // 14923: the public listserver sent the list there to this
+            // login, and only the account error on 14922.
+            assert_eq!(d, "listserver.graal.in:14923");
         }
     }
 
