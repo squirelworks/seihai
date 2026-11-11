@@ -136,9 +136,13 @@ pub struct Live {
 /// The other players in `st` that stand in this level: those with no gmap
 /// cell of their own (Ato has no gmap view yet).
 fn others_of(st: &SessionState) -> Vec<Other> {
+    // Off a gmap the cell props (43/44) mean nothing: GServer sends them
+    // as 0, 0 with every full OTHERPLPROPS. On a gmap, only the players in
+    // the player's own cell are drawn (x, y are local to their cell).
+    let own = st.gmap.as_ref().map(|g| g.cell);
     st.others
         .iter()
-        .filter(|o| o.cell.is_none())
+        .filter(|o| own.is_none() || o.cell.is_none() || o.cell == own)
         .map(|o| Other {
             id: o.id,
             x: o.x,
@@ -539,5 +543,21 @@ mod others_tests {
         let o = others_of(&st);
         let got: Vec<_> = o.iter().map(|o| (o.id, o.x, o.y)).collect();
         assert_eq!(got, vec![(2, 10.0, 12.0), (3, 20.0, 5.0)]);
+    }
+
+    /// GServer's full OTHERPLPROPS carries GMAPLEVELX/Y (43/44) = 0 on a
+    /// plain level too (lab, 2026-11-11: two Ato clients never saw each
+    /// other). Off a gmap that cell is ignored.
+    #[test]
+    fn a_zero_cell_off_a_gmap_still_draws_the_player() {
+        let mut st = SessionState::for_version(ClientVersion::V3153);
+        let mut m = other(2, 20, 24);
+        m.pop();
+        m.extend([43 + 0x20, 0x20, 44 + 0x20, 0x20, b'\n']);
+        st.apply_body(&m);
+        assert_eq!(st.others[0].cell, Some((0, 0)));
+        assert!(st.gmap.is_none());
+        let got: Vec<_> = others_of(&st).iter().map(|o| o.id).collect();
+        assert_eq!(got, vec![2]);
     }
 }
