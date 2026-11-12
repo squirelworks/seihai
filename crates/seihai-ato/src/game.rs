@@ -73,6 +73,9 @@ pub struct Game {
     resolver: Option<AssetResolver>,
     /// NPC images read so far, by name.
     npc_images: NpcImages,
+    /// Playing level files with no server (`--level`): links load the
+    /// next level from the asset folder instead of asking a server.
+    offline: bool,
 }
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
@@ -137,7 +140,55 @@ impl Game {
             wanted_sounds: Default::default(),
             resolver: resolver.cloned(),
             npc_images: NpcImages::new(),
+            offline: false,
         })
+    }
+
+    /// A game with no server: level `name` from the asset folder (or the
+    /// path `name` with no asset folder), and links that load their level
+    /// the same way, as `seihai-mae --level` plays offline.
+    pub fn open_offline(
+        resolver: Option<&AssetResolver>,
+        name: &str,
+        sound_on: bool,
+    ) -> Result<Game, String> {
+        // No network thread: the channel's sender is dropped at once.
+        let (_, rx) = mpsc::channel();
+        let mut g = Game::new(rx, resolver, sound_on)?;
+        g.offline = true;
+        g.enter_offline(name, None)?;
+        Ok(g)
+    }
+
+    /// Load level `name` offline and stand at `at` (the link's arrival), or
+    /// at the default start.
+    fn enter_offline(&mut self, name: &str, at: Option<(f32, f32)>) -> Result<(), String> {
+        let path = match &self.resolver {
+            Some(r) => r.level(name),
+            None => Some(PathBuf::from(name)).filter(|p| p.is_file()),
+        };
+        // Checked first: core's `load_level` names the session after the
+        // file before reading it, so a failed read would rename the level
+        // the player is still on.
+        let Some(path) = path else {
+            return Err("not in the asset folder".into());
+        };
+        self.session
+            .load_level(&path)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        self.session.note_entry(name);
+        let at = at.unwrap_or(NO_START);
+        self.session.arrive(at.0, at.1);
+        if let Some(level) = &self.session.current_level {
+            for missing in
+                render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
+            {
+                eprintln!("npc image {missing}: not in the asset folders; outlined");
+            }
+        }
+        self.status = format!("{name} (offline)");
+        self.dirty = true;
+        Ok(())
     }
 
     /// Play the sounds the session queued: the GANI cues of the steps just
@@ -253,6 +304,12 @@ impl Game {
         // level (no walking meanwhile, core's warp-pending state).
         if self.session.check_links() {
             if let Some((dest, x, y)) = self.session.pending_link.take() {
+                if self.offline {
+                    if let Err(e) = self.enter_offline(&dest, Some((x, y))) {
+                        self.status = format!("Link to {dest}: {e}");
+                    }
+                    return;
+                }
                 self.session.begin_warp(&dest);
                 let ask = online::LinkAsk {
                     dest: dest.clone(),
@@ -531,6 +588,33 @@ impl eframe::App for AtoApp {
     }
 }
 
+/// Open the window on level `level` with no server (`--level`), and block
+/// until it is closed.
+pub fn run_offline(
+    version: ClientVersion,
+    level: &str,
+    assets: Option<PathBuf>,
+    sound_on: bool,
+) -> Result<(), String> {
+    let resolver = assets
+        .clone()
+        .map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
+    let game = Game::open_offline(resolver.as_ref(), level, sound_on)?;
+    let title = format!("Graal {} (Seihai Ato, offline)", version.label());
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([CANVAS.0, CANVAS.1])
+            .with_resizable(false),
+        ..Default::default()
+    };
+    let start = StartWindow::new(version, String::new(), String::new(), String::new());
+    let mut app = AtoApp::new(start, assets);
+    app.sound_on = sound_on;
+    app.game = Some(game);
+    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
+        .map_err(|e| e.to_string())
+}
+
 /// True when the form names a server and an account, so the start window
 /// can be skipped.
 pub fn skips_start(start: &StartWindow) -> bool {
@@ -772,5 +856,68 @@ mod tests {
             tags,
             vec![("Ann".to_string(), 11.5 * 16.0 - 100.0, 23.0 * 16.0 - 200.0)]
         );
+    }
+
+    /// A folder with `levels/a.nw` (a link east to `b.nw`) and `levels/b.nw`.
+    fn offline_levels(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("seihai-ato-offline-{tag}-{}", std::process::id()));
+        let levels = dir.join("levels");
+        std::fs::create_dir_all(&levels).unwrap();
+        std::fs::write(levels.join("a.nw"), "GLEVNW01\nLINK b.nw 34 28 2 4 5 6\n").unwrap();
+        std::fs::write(levels.join("b.nw"), "GLEVNW01\n").unwrap();
+        dir
+    }
+
+    fn resolver(dir: &std::path::Path) -> AssetResolver {
+        AssetResolver::new(
+            AssetRoot::new(dir.to_path_buf()),
+            ClientVersion::V304.profile(),
+        )
+    }
+
+    #[test]
+    fn offline_a_link_loads_the_next_level_file() {
+        let dir = offline_levels("link");
+        let r = resolver(&dir);
+        let mut g = Game::open_offline(Some(&r), "a.nw", false).unwrap();
+        assert_eq!(g.session.level_name().as_deref(), Some("a.nw"));
+        assert_eq!((g.session.player_x, g.session.player_y), NO_START);
+        assert_eq!(g.status, "a.nw (offline)");
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..20 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+            if g.session.level_name().as_deref() == Some("b.nw") {
+                break;
+            }
+        }
+        assert_eq!(g.session.level_name().as_deref(), Some("b.nw"));
+        assert_eq!((g.session.player_x, g.session.player_y), (5.0, 6.0));
+        // Nothing went to a server, and no warp is left waiting.
+        assert!(g.link.lock().unwrap().is_none());
+        assert!(g.session.warp_pending.is_none());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn offline_a_missing_level_is_an_error_and_a_missing_link_target_says_so() {
+        let dir = offline_levels("missing");
+        let r = resolver(&dir);
+        assert!(Game::open_offline(Some(&r), "nowhere.nw", false).is_err());
+        std::fs::write(
+            dir.join("levels").join("a.nw"),
+            "GLEVNW01\nLINK gone.nw 34 28 2 4 5 6\n",
+        )
+        .unwrap();
+        let mut g = Game::open_offline(Some(&r), "a.nw", false).unwrap();
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..20 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+        }
+        assert!(g.status.starts_with("Link to gone.nw:"), "{}", g.status);
+        assert_eq!(g.session.level_name().as_deref(), Some("a.nw"));
+        std::fs::remove_dir_all(dir).ok();
     }
 }

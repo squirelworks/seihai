@@ -114,9 +114,23 @@ and the player arrives where the link said unless the server says
 otherwise. A new level owes the builds that send it a 46
 (`EnterLevelSender`), with the arrival props after it.
 
+## Offline
+
+`--level NAME` (`-l`, as in `seihai-mae`) with no `--online` plays level
+files with no server. The name is looked up in `--assets` (its `levels`
+folder and the build's level extensions); with no asset folder it is read
+as a path. The window opens on that level at (30, 30). A link loads its
+level from the same place and puts the player where the link says; a link
+whose level is not there says so in the status bar and the player stays.
+Nothing is sent anywhere. Gmaps are not opened offline yet.
+
+```
+cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlocal.nw
+```
+
 ## Not in yet
 
-Offline mode, gmaps, NPC scripts and NPC animations, NPC changes after
+Gmaps, NPC scripts and NPC animations, NPC changes after
 the level arrives, other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

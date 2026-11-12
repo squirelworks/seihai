@@ -34,12 +34,16 @@ pub struct Args {
     pub listserver: Option<String>,
     /// `--no-sound`: no sound effects (the device is never opened).
     pub no_sound: bool,
+    /// `--level NAME` (`-l`): play this level offline, with no server, as
+    /// `seihai-mae --level` does. The name is looked up in `--assets`, or
+    /// read as a path when there is no asset folder.
+    pub level: Option<String>,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
 /// value-taking flag Ato does not use must be listed here, or its value
 /// would be read as the next flag.
-const VALUE_FLAGS: &[&str] = &["--level"];
+const VALUE_FLAGS: &[&str] = &[];
 
 pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
     let mut a = Args::default();
@@ -57,6 +61,7 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--first-level" => a.first_level = true,
             "--no-sound" => a.no_sound = true,
             "--listserver" => a.listserver = it.next().or(a.listserver),
+            "--level" | "-l" => a.level = it.next().or(a.level),
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
             }
@@ -173,5 +178,13 @@ mod tests {
     fn no_sound_turns_sound_off() {
         assert!(!p("--version 3.04").no_sound);
         assert!(p("--version 3.04 --no-sound").no_sound);
+    }
+
+    #[test]
+    fn level_is_taken_for_offline_play() {
+        let a = p("--version 3.04 -l start.nw --assets dir");
+        assert_eq!(a.level.as_deref(), Some("start.nw"));
+        assert_eq!(p("--level other.nw").level.as_deref(), Some("other.nw"));
+        assert_eq!(p("--version 3.04").level, None);
     }
 }
