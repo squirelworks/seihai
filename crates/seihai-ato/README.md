@@ -122,7 +122,16 @@ folder and the build's level extensions); with no asset folder it is read
 as a path. The window opens on that level at (30, 30). A link loads its
 level from the same place and puts the player where the link says; a link
 whose level is not there says so in the status bar and the player stays.
-Nothing is sent anywhere. Gmaps are not opened offline yet.
+Nothing is sent anywhere.
+
+A `.gmap` name (on the command line or as a link's level) opens the gmap
+offline with core's gmap walk. Without a position the player starts at
+(30, 30) of the first cell that names a level; a link into a gmap gives a
+position on the whole map, which picks the cell (64 tiles each) and the
+place in it. The levels next to the player's cell are loaded from the same
+place, drawn past the cell's edges (tiles only, not their NPCs), and the
+walk crosses into them; a neighbour that is not on disk leaves its edge a
+wall. A plain level link leaves the gmap.
 
 ```
 cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlocal.nw
@@ -130,7 +139,8 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-Gmaps, NPC scripts and NPC animations, NPC changes after
+Gmaps online (the server's gmap is not entered yet), the NPCs of
+neighbouring gmap levels, NPC scripts and NPC animations, NPC changes after
 the level arrives, other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
