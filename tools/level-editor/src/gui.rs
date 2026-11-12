@@ -774,8 +774,8 @@ impl EditorApp {
                         .on_hover_text("The layer painting, erasing and stamps go to. The 2.22 client does not read the layer: it draws layer 1 tiles over layer 0 on one board.");
                 }
                 ui.label("Show");
-                for l in 0..LAYERS {
-                    ui.checkbox(&mut self.editor.show[l], l.to_string());
+                for (l, shown) in self.editor.show.iter_mut().enumerate() {
+                    ui.checkbox(shown, l.to_string());
                 }
                 ui.separator();
                 ui.label("Tool");

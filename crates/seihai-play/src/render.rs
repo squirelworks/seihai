@@ -1,29 +1,32 @@
-//! Stage 3: the flat 2D fallback renderer. It draws the level's tiles the
-//! way `seihai-mae` does (`render::tiles::render_view`): 16-pixel tiles from
-//! a `pics1.png` sheet, the camera centred on the player's 48x48 box,
-//! chest records over the board, each link as an outline of its rectangle,
-//! the neighbouring levels of a gmap cell past its edges, the level's NPCs
-//! as their images (or an outline where the image is not
-//! on disk), other players and the player as plain markers. No GANI art
-//! or HUD.
+//! Stage 3: the flat 2D fallback renderer. It draws the level the way
+//! `seihai-mae` does (`render::tiles::render_view`): 16-pixel tiles from a
+//! `pics1.png` sheet, the camera centred on the player's 48x48 box, chest
+//! records over the board, each link as an outline of its rectangle, the
+//! neighbouring levels of a gmap cell past its edges, the level's NPCs as
+//! their images (or an outline where the image is not on disk), and the
+//! players from their GANIs in the looks the server sent
+//! ([`crate::chars`]). A player whose pose GANI is missing is a plain
+//! marker. No HUD.
+//!
+//! Every pixel goes through `seihai-draw` (seihai-core): the tile sheet
+//! maths, the sprite copy and the gani frames are the ones the level
+//! editor and tools use, not copies of `seihai-mae`'s (#443).
 //!
 //! The 3.x clients drew their 2D levels from the same board and tile sheet
 //! as 2.x, so this is a stand-in until Ato has its own 3.x view (and Issho
-//! its 6.x one). The tile
-//! sheet maths and the chest tiles are copied from `seihai-mae` rather than
-//! shared, so the two lines stay apart until the drawing moves to core.
+//! its 6.x one).
 
+use crate::chars::{self, Characters, Figure};
 use seihai_core::assets::gif::read_gif_rgba;
 use seihai_core::assets::{
     builtin, read_png_rgb, read_png_rgba, tile_id, AssetResolver, Level, TileTypes, TileTypesFile,
 };
 use seihai_core::offline::OfflineSession;
+use seihai_draw::{draw_sprite, draw_tile, PixelBuffer};
 use std::collections::HashMap;
 
 /// Width of a tile in pixels.
-pub const TILE_PX: u32 = 16;
-/// Rows on the `pics1.png` sheet (128 columns of 16-column blocks).
-const SHEET_ROWS: u32 = 32;
+pub const TILE_PX: u32 = seihai_draw::TILE_PX;
 /// The 2x2 chest art, closed and open (`seihai-mae` `render::tiles`).
 pub const CHEST_CLOSED_TILES: [u16; 4] = [1784, 1785, 1800, 1801];
 pub const CHEST_OPEN_TILES: [u16; 4] = [829, 830, 845, 846];
@@ -125,91 +128,30 @@ pub fn tile_types(resolver: Option<&AssetResolver>) -> Option<TileTypes> {
     }
 }
 
-/// An RGB frame.
-pub struct Frame {
-    pub w: u32,
-    pub h: u32,
-    pub rgb: Vec<u8>,
+/// A frame: row-major RGBA, opaque.
+pub type Frame = PixelBuffer;
+
+/// An opaque pixel.
+fn rgba([r, g, b]: [u8; 3]) -> [u8; 4] {
+    [r, g, b, 255]
 }
 
-impl Frame {
-    fn new(w: u32, h: u32) -> Frame {
-        Frame {
-            w,
-            h,
-            rgb: vec![0; (w * h * 3) as usize],
-        }
+impl Sheet {
+    fn image(&self) -> seihai_draw::Image<'_> {
+        seihai_draw::Image::rgb(&self.rgb, self.w, self.h)
     }
+}
 
-    /// Copy tile `tile` of the sheet to `(dx, dy)`, clipped.
-    fn blit_tile(&mut self, s: &Sheet, tile: u16, dx: i32, dy: i32) {
-        let t = tile as u32;
-        let (sx, sy) = (
-            (t % 16 + (t / 512) * 16) * TILE_PX,
-            ((t / 16) % SHEET_ROWS) * TILE_PX,
-        );
-        if sx + TILE_PX > s.w || sy + TILE_PX > s.h {
-            return;
-        }
-        for ty in 0..TILE_PX as i32 {
-            let py = dy + ty;
-            if py < 0 || py >= self.h as i32 {
-                continue;
-            }
-            for tx in 0..TILE_PX as i32 {
-                let px = dx + tx;
-                if px < 0 || px >= self.w as i32 {
-                    continue;
-                }
-                let si =
-                    ((sy as usize + ty as usize) * s.w as usize + sx as usize + tx as usize) * 3;
-                let di = (py as usize * self.w as usize + px as usize) * 3;
-                self.rgb[di..di + 3].copy_from_slice(&s.rgb[si..si + 3]);
-            }
-        }
+impl Image {
+    fn view(&self) -> seihai_draw::Image<'_> {
+        seihai_draw::Image::rgba(&self.rgba, self.w, self.h)
     }
+}
 
-    /// Copy `part` (`x, y, w, h` in the image; the whole image when
-    /// `None`) of `img` to `(dx, dy)`. A pixel is drawn when its alpha is
-    /// at least half, as the 2D clients mask GIF and PNG images.
-    fn blit_image(&mut self, img: &Image, part: Option<(i32, i32, i32, i32)>, dx: i32, dy: i32) {
-        let (sx, sy, w, h) = part.unwrap_or((0, 0, img.w as i32, img.h as i32));
-        for y in 0..h {
-            let (iy, py) = (sy + y, dy + y);
-            if iy < 0 || iy >= img.h as i32 || py < 0 || py >= self.h as i32 {
-                continue;
-            }
-            for x in 0..w {
-                let (ix, px) = (sx + x, dx + x);
-                if ix < 0 || ix >= img.w as i32 || px < 0 || px >= self.w as i32 {
-                    continue;
-                }
-                let si = (iy as usize * img.w as usize + ix as usize) * 4;
-                if img.rgba[si + 3] < 128 {
-                    continue;
-                }
-                let di = (py as usize * self.w as usize + px as usize) * 3;
-                self.rgb[di..di + 3].copy_from_slice(&img.rgba[si..si + 3]);
-            }
-        }
-    }
-
-    fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, rgb: [u8; 3]) {
-        for py in y.max(0)..(y + h).min(self.h as i32) {
-            for px in x.max(0)..(x + w).min(self.w as i32) {
-                let di = (py as usize * self.w as usize + px as usize) * 3;
-                self.rgb[di..di + 3].copy_from_slice(&rgb);
-            }
-        }
-    }
-
-    /// A one-pixel outline of the rectangle, clipped.
-    fn stroke_rect(&mut self, x: i32, y: i32, w: i32, h: i32, rgb: [u8; 3]) {
-        self.fill_rect(x, y, w, 1, rgb);
-        self.fill_rect(x, y + h - 1, w, 1, rgb);
-        self.fill_rect(x, y, 1, h, rgb);
-        self.fill_rect(x + w - 1, y, 1, h, rgb);
-    }
+/// `f` as RGB bytes, for a texture (the frame is opaque).
+pub fn rgb_of(f: &Frame) -> Vec<u8> {
+    let (pixels, _) = f.rgba.as_chunks::<4>();
+    pixels.iter().flat_map(|&[r, g, b, _]| [r, g, b]).collect()
 }
 
 /// Top-left of the view in level pixels: centred on the middle of the
@@ -234,18 +176,52 @@ fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
     })
 }
 
+/// The players drawn over the level: the other players' figures, the pose
+/// GANIs and pictures, and the clock the walking poses run on.
+#[derive(Clone, Copy)]
+pub struct Players<'a> {
+    pub chars: &'a Characters,
+    pub others: &'a [Figure],
+    pub clock_ms: u64,
+}
+
+impl Players<'_> {
+    /// No GANIs: every player is a marker.
+    pub fn markers(others: &[Figure]) -> Players<'_> {
+        static NONE: std::sync::OnceLock<Characters> = std::sync::OnceLock::new();
+        Players {
+            chars: NONE.get_or_init(Characters::default),
+            others,
+            clock_ms: 0,
+        }
+    }
+}
+
+/// The player's own figure: swimming, walking or standing, in the
+/// session's looks.
+pub fn own_figure(s: &OfflineSession) -> Figure {
+    chars::own_figure(
+        s.player_x,
+        s.player_y,
+        s.player_dir,
+        &s.looks,
+        s.in_water,
+        s.walking,
+        s.walk_gani.as_ref().map(|g| g.frame),
+    )
+}
+
 /// Draw the session's level around the player, `view_w` x `view_h` tiles,
-/// with a marker for each other player at `others` (tile positions). Off
-/// the level is black.
+/// with the other players and the player over it. Off the level is black.
 pub fn draw(
     s: &OfflineSession,
     sheet: &Sheet,
     npc_images: &NpcImages,
-    others: &[(f32, f32)],
+    players: Players<'_>,
     view_w: u32,
     view_h: u32,
 ) -> Frame {
-    let mut f = Frame::new(view_w * TILE_PX, view_h * TILE_PX);
+    let mut f = Frame::filled(view_w * TILE_PX, view_h * TILE_PX, [0, 0, 0, 255]);
     let Some(level) = &s.current_level else {
         return f;
     };
@@ -273,7 +249,7 @@ pub fn draw(
                 continue;
             };
             if let Some(id) = tile_at(from, lx, ly) {
-                f.blit_tile(sheet, id, tx * t - sub_x, ty * t - sub_y);
+                draw_tile(&mut f, sheet.image(), id, tx * t - sub_x, ty * t - sub_y);
             }
         }
     }
@@ -291,7 +267,13 @@ pub fn draw(
         };
         for (i, id) in art.into_iter().enumerate() {
             let (dx, dy) = ((i % 2) as i32, (i / 2) as i32);
-            f.blit_tile(sheet, id, (c.x + dx) * t - cam_x, (c.y + dy) * t - cam_y);
+            draw_tile(
+                &mut f,
+                sheet.image(),
+                id,
+                (c.x + dx) * t - cam_x,
+                (c.y + dy) * t - cam_y,
+            );
         }
     }
     // Links over the tiles and chests, under the player.
@@ -301,7 +283,7 @@ pub fn draw(
             l.y * t - cam_y,
             l.width * t,
             l.height * t,
-            LINK_OUTLINE,
+            rgba(LINK_OUTLINE),
         );
     }
     // The visible NPCs (file and server), in level order, as their
@@ -332,29 +314,33 @@ pub fn draw(
                 (npc.y * t as f32) as i32 + by,
             );
             match npc_images.get(name) {
-                Some(Some(img)) => f.blit_image(img, npc.image_part, nx, ny),
-                _ => f.stroke_rect(nx, ny, NPC_MISSING_PX, NPC_MISSING_PX, NPC_MISSING),
+                Some(Some(img)) => {
+                    let part = npc.image_part.unwrap_or((0, 0, img.w as i32, img.h as i32));
+                    draw_sprite(&mut f, img.view(), part, nx, ny);
+                }
+                _ => f.stroke_rect(nx, ny, NPC_MISSING_PX, NPC_MISSING_PX, rgba(NPC_MISSING)),
             }
         }
     }
-    // Other players: the same marker as the player's, in their own colour.
-    for &(x, y) in others {
-        let (ox, oy) = ((x * t as f32) as i32 - cam_x, (y * t as f32) as i32 - cam_y);
-        f.fill_rect(ox + 16, oy + 24, 16, 16, MARKER_OTHER);
+    // Other players, then the player over them: their GANI's frame, or a
+    // marker where the pose GANI is missing.
+    let figure = |f: &mut Frame, fig: &Figure, marker: [u8; 3]| {
+        let (bx, by) = (
+            (fig.x * t as f32) as i32 - cam_x,
+            (fig.y * t as f32) as i32 - cam_y,
+        );
+        if players.chars.gani(fig.pose).is_some() {
+            players.chars.draw(f, fig, players.clock_ms, bx, by);
+        } else {
+            // The marker sits where the body would be.
+            f.fill_rect(bx + 16, by + 24, 16, 16, rgba(marker));
+        }
+    };
+    for o in players.others {
+        figure(&mut f, o, MARKER_OTHER);
     }
-    // The player's box starts at its tile position; the marker sits where
-    // the body would be.
-    let (bx, by) = (
-        (s.player_x * t as f32) as i32 - cam_x,
-        (s.player_y * t as f32) as i32 - cam_y,
-    );
-    f.fill_rect(
-        bx + 16,
-        by + 24,
-        16,
-        16,
-        if s.in_water { MARKER_WATER } else { MARKER },
-    );
+    let own = own_figure(s);
+    figure(&mut f, &own, if s.in_water { MARKER_WATER } else { MARKER });
     f
 }
 
@@ -371,8 +357,13 @@ mod tests {
     }
 
     fn px(f: &Frame, x: u32, y: u32) -> [u8; 3] {
-        let i = ((y * f.w + x) * 3) as usize;
-        [f.rgb[i], f.rgb[i + 1], f.rgb[i + 2]]
+        let p = f.pixel(x, y).unwrap();
+        [p[0], p[1], p[2]]
+    }
+
+    /// No GANIs and no other players: the player is a marker.
+    fn none() -> Players<'static> {
+        Players::markers(&[])
     }
 
     #[test]
@@ -386,7 +377,7 @@ mod tests {
     fn tiles_come_from_the_sheet_position_mae_uses() {
         let sheet = Sheet::load(None).unwrap();
         // Tile 600: column 600 % 16 + (600 / 512) * 16 = 24, row (600 / 16) % 32 = 5.
-        let f = draw(&session(600), &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&session(600), &sheet, &NpcImages::new(), none(), 40, 30);
         let (cam_x, cam_y) = camera_origin(&session(600), 40, 30);
         // A screen pixel at a tile corner is that sheet tile's corner pixel.
         let (sx, sy) = (
@@ -403,7 +394,7 @@ mod tests {
     #[test]
     fn the_player_marker_is_at_the_centre() {
         let sheet = Sheet::load(None).unwrap();
-        let f = draw(&session(0), &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&session(0), &sheet, &NpcImages::new(), none(), 40, 30);
         // The box (48x48) is centred; the marker is its middle-bottom 16x16.
         assert_eq!(px(&f, 320, 248), MARKER);
     }
@@ -414,7 +405,7 @@ mod tests {
         let mut s = session(0);
         let level = s.current_level.as_mut().unwrap();
         level.add_server_links(&["next.nw 20 25 2 3 30 30".to_string()]);
-        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
         let (cam_x, cam_y) = camera_origin(&s, 40, 30);
         let (x0, y0) = ((20 * 16 - cam_x) as u32, (25 * 16 - cam_y) as u32);
         // Its corners and edges, 2 x 3 tiles; not its inside.
@@ -429,7 +420,19 @@ mod tests {
         let sheet = Sheet::load(None).unwrap();
         let s = session(0);
         let (ox, oy) = (s.player_x + 3.0, s.player_y + 2.0);
-        let f = draw(&s, &sheet, &NpcImages::new(), &[(ox, oy)], 40, 30);
+        let others = [chars::other_figure(&seihai_core::client::Other {
+            x: ox,
+            y: oy,
+            ..Default::default()
+        })];
+        let f = draw(
+            &s,
+            &sheet,
+            &NpcImages::new(),
+            Players::markers(&others),
+            40,
+            30,
+        );
         let (cam_x, cam_y) = camera_origin(&s, 40, 30);
         let x = (ox * 16.0) as i32 - cam_x + 20;
         let y = (oy * 16.0) as i32 - cam_y + 28;
@@ -442,7 +445,7 @@ mod tests {
         let mut s = session(600);
         s.player_x = 0.0;
         s.player_y = 0.0;
-        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
         assert_eq!(px(&f, 0, 0), [0, 0, 0]);
     }
 
@@ -453,11 +456,48 @@ mod tests {
             &OfflineSession::default(),
             &sheet,
             &NpcImages::new(),
-            &[],
+            none(),
             4,
             4,
         );
-        assert!(f.rgb.iter().all(|&b| b == 0));
+        assert!(rgb_of(&f).iter().all(|&b| b == 0));
+    }
+
+    /// With the built-in GANIs, the player and another player are drawn
+    /// from their idle frames where the markers were, over the tiles.
+    #[test]
+    fn players_are_drawn_from_their_ganis() {
+        let sheet = Sheet::load(None).unwrap();
+        let s = session(0);
+        let plain = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
+        let mut chars = Characters::load(None);
+        let other = chars::other_figure(&seihai_core::client::Other {
+            x: s.player_x + 4.0,
+            y: s.player_y,
+            dir: 2,
+            ..Default::default()
+        });
+        let own = own_figure(&s);
+        assert!(chars.load_pictures(None, &[own, other.clone()]));
+        let others = [other];
+        let players = Players {
+            chars: &chars,
+            others: &others,
+            clock_ms: 0,
+        };
+        let f = draw(&s, &sheet, &NpcImages::new(), players, 40, 30);
+        // The player's box is 320-24 .. 320+24 across; the other's 64 px
+        // to the right. Both differ from the bare board, and no marker
+        // colour is left.
+        let differs = |x0: u32| {
+            (0..48)
+                .flat_map(|dx| (0..48).map(move |dy| (x0 + dx, 216 + dy)))
+                .filter(|&(x, y)| px(&f, x, y) != px(&plain, x, y))
+                .count()
+        };
+        assert!(differs(296) > 100, "the player: {}", differs(296));
+        assert!(differs(360) > 100, "the other player: {}", differs(360));
+        assert_ne!(px(&f, 320, 248), MARKER);
     }
 
     /// A 4x4 image: opaque red on its left half, clear on its right.
@@ -498,11 +538,11 @@ mod tests {
         let (s, x, y) = with_npc("block.png", 5.0, -4.0);
         let images = NpcImages::from([("block.png".to_string(), Some(half_red()))]);
         let under = px(
-            &draw(&session(0), &sheet, &NpcImages::new(), &[], 40, 30),
+            &draw(&session(0), &sheet, &NpcImages::new(), none(), 40, 30),
             x as u32 + 3,
             y as u32,
         );
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_eq!(px(&f, x as u32, y as u32), [255, 0, 0]);
         assert_eq!(px(&f, x as u32 + 1, y as u32 + 3), [255, 0, 0]);
         // The clear half shows the tiles under it.
@@ -516,7 +556,7 @@ mod tests {
         // Only the clear half: nothing red is drawn.
         s.current_level.as_mut().unwrap().npcs[0].image_part = Some((2, 0, 2, 4));
         let images = NpcImages::from([("block.png".to_string(), Some(half_red()))]);
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_ne!(px(&f, x as u32, y as u32), [255, 0, 0]);
     }
 
@@ -525,11 +565,11 @@ mod tests {
         let sheet = Sheet::load(None).unwrap();
         let (mut s, x, y) = with_npc("gone.png", 5.0, -4.0);
         let images = NpcImages::from([("gone.png".to_string(), None)]);
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_eq!(px(&f, x as u32, y as u32), NPC_MISSING);
         assert_eq!(px(&f, x as u32 + 31, y as u32 + 31), NPC_MISSING);
         s.current_level.as_mut().unwrap().npcs[0].visible = false;
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_ne!(px(&f, x as u32, y as u32), NPC_MISSING);
     }
 
@@ -537,8 +577,8 @@ mod tests {
     fn an_npc_with_no_image_draws_nothing() {
         let sheet = Sheet::load(None).unwrap();
         let (s, x, y) = with_npc("", 5.0, -4.0);
-        let plain = draw(&session(0), &sheet, &NpcImages::new(), &[], 40, 30);
-        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        let plain = draw(&session(0), &sheet, &NpcImages::new(), none(), 40, 30);
+        let f = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
         assert_eq!(px(&f, x as u32, y as u32), px(&plain, x as u32, y as u32));
     }
 
@@ -572,7 +612,7 @@ mod tests {
         let (cam_x, cam_y) = camera_origin(&s, 40, 30);
         // The middle of tile (64, 30): one tile past the east edge.
         let (ex, ey) = ((64 * 16 - cam_x + 8) as u32, (30 * 16 - cam_y + 8) as u32);
-        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
         assert_eq!(px(&f, ex, ey), [0, 0, 0], "no gmap: black past the edge");
         s.enter_gmap(
             "w.gmap".into(),
@@ -584,8 +624,8 @@ mod tests {
             .unwrap()
             .levels
             .insert((1, 0), Level::from_board(&[600; 4096]));
-        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
-        let want = draw(&session(600), &sheet, &NpcImages::new(), &[], 40, 30);
+        let f = draw(&s, &sheet, &NpcImages::new(), none(), 40, 30);
+        let want = draw(&session(600), &sheet, &NpcImages::new(), none(), 40, 30);
         // Tile 600's middle pixel, wherever it is drawn.
         let (cx, cy) = camera_origin(&session(600), 40, 30);
         let (wx, wy) = ((30 * 16 - cx + 8) as u32, (30 * 16 - cy + 8) as u32);
@@ -617,10 +657,10 @@ mod tests {
         let (cam_x, cam_y) = camera_origin(&s, 40, 30);
         // Tile (2, 30) of the east cell is tile (66, 30) from this one.
         let (nx, ny) = ((66 * 16 - cam_x) as u32, (30 * 16 - cam_y) as u32);
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_eq!(px(&f, nx, ny), NPC_MISSING);
         s.gmap.as_mut().unwrap().levels.clear();
-        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_ne!(px(&f, nx, ny), NPC_MISSING);
     }
 }

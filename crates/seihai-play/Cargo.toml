@@ -14,8 +14,20 @@ path = "src/lib.rs"
 
 [dependencies]
 seihai-core.workspace = true
+# Tiles, NPC images and players' gani frames are drawn through it (#443).
+seihai-draw.workspace = true
 # The view. Same version as seihai-ato and seihai-mae.
 egui = "0.29"
+# The windows (`window::run_native`): OpenGL first, then wgpu where a
+# machine has no OpenGL 2.0 (#475). The `wgpu` feature is on for every
+# crate that links eframe, since Cargo unifies features.
+eframe = { version = "0.29", features = ["wgpu"] }
+
+# eframe's wgpu has no Direct3D 12 of its own (only Vulkan, Metal and GL).
+# Direct3D 12 is what reaches WARP, Windows' software renderer, on a PC
+# with no 3D driver.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "22", default-features = false, features = ["dx12", "wgsl"] }
 
 [features]
 default = []

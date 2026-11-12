@@ -231,7 +231,8 @@ fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
         if let Some((var, value)) = h.env() {
             std::env::set_var(var, value);
         }
-        run_line(h.line(), h.args());
+        // The start window comes back whatever the game's exit code.
+        let _ = run_line(h.line(), h.args());
     }
 }
 
@@ -266,8 +267,11 @@ fn open_window(error: Option<String>) -> Option<Handoff> {
         viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 520.0]),
         ..Default::default()
     };
-    if let Err(e) = eframe::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app)))) {
+    if let Err(e) =
+        seihai_play::window::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app))))
+    {
         eprintln!("seihai: could not open the start window: {e}");
+        eprintln!("seihai: neither OpenGL 2.0 nor wgpu (Direct3D 12, Vulkan or Metal) could draw a window here; install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe");
         eprintln!("seihai: run a client with --version and --online instead (see `seihai --help`)");
         std::process::exit(1);
     }

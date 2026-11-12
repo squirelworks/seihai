@@ -14,7 +14,8 @@
 //! This was `seihai-ato`'s `game` module. It moved here unchanged, less
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
-use crate::render::{self, Frame, NpcImages, Sheet};
+use crate::chars::{self, Characters, Figure};
+use crate::render::{self, Frame, NpcImages, Players, Sheet};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
 };
@@ -55,6 +56,10 @@ pub struct Game {
     pub others: online::SharedOthers,
     /// The other players drawn last frame.
     drawn_others: Vec<online::Other>,
+    /// The players' pose GANIs and pictures.
+    chars: Characters,
+    /// When the game started: the clock the walking poses run on.
+    started: Instant,
     /// Where the network thread takes a link request from.
     pub link: Arc<Mutex<Option<online::LinkAsk>>>,
     /// The link asked for, until its level arrives.
@@ -149,6 +154,8 @@ impl Game {
             pose: online::SharedPose::default(),
             others: online::SharedOthers::default(),
             drawn_others: Vec::new(),
+            chars: Characters::load(resolver),
+            started: Instant::now(),
             link: Default::default(),
             link_to: None,
             sound: sound_engine(resolver, sound_on),
@@ -693,18 +700,38 @@ impl Game {
             self.drawn_others = others;
             self.dirty = true;
         }
+        // The pictures the players are drawn with, read once each.
+        let mut figures = self.other_figures();
+        figures.push(render::own_figure(&self.session));
+        if self.chars.load_pictures(self.resolver.as_ref(), &figures) {
+            self.dirty = true;
+        }
+        // A pose that runs on the clock (another player walking, the swim
+        // stroke) needs every frame drawn.
+        if figures.iter().any(|f| f.step == chars::Step::Clock) {
+            self.dirty = true;
+        }
         std::mem::take(&mut self.dirty)
+    }
+
+    fn other_figures(&self) -> Vec<Figure> {
+        self.drawn_others.iter().map(chars::other_figure).collect()
     }
 
     /// The level around the player, `view` tiles wide and high, with the
     /// other players as last taken.
     pub fn draw(&self, view: (u32, u32)) -> Frame {
-        let at: Vec<(f32, f32)> = self.drawn_others.iter().map(|o| (o.x, o.y)).collect();
+        let others = self.other_figures();
+        let players = Players {
+            chars: &self.chars,
+            others: &others,
+            clock_ms: self.started.elapsed().as_millis() as u64,
+        };
         render::draw(
             &self.session,
             &self.sheet,
             &self.npc_images,
-            &at,
+            players,
             view.0,
             view.1,
         )
@@ -1151,6 +1178,7 @@ mod tests {
             y: 20.0,
             dir: 2,
             nick: nick.map(Into::into),
+            ..Default::default()
         };
         let tags = name_tags(
             &[other(1, Some("Ann")), other(2, None), other(3, Some(" "))],

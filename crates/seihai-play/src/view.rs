@@ -34,7 +34,10 @@ impl View {
         let changed = self.game.tick(dx, dy, Instant::now());
         if changed || self.texture.is_none() {
             let f = self.game.draw(self.tiles());
-            let image = egui::ColorImage::from_rgb([f.w as usize, f.h as usize], &f.rgb);
+            let image = egui::ColorImage::from_rgb(
+                [f.width as usize, f.height as usize],
+                &render::rgb_of(&f),
+            );
             match &mut self.texture {
                 Some(t) => t.set(image, egui::TextureOptions::NEAREST),
                 None => {

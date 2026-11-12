@@ -501,7 +501,7 @@ fn run_inner(mut error: Option<String>) -> Option<String> {
         };
         let ato: Arc<Mutex<Option<crate::ato::Handoff>>> = Arc::default();
         let ato2 = ato.clone();
-        let _ = eframe::run_native(
+        let _ = seihai_play::window::run_native(
             "Seihai",
             options,
             Box::new(move |_cc| {
@@ -736,7 +736,7 @@ pub fn level_window(w: LevelWindow) -> Option<LevelChoice> {
         viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 520.0]),
         ..Default::default()
     };
-    let _ = eframe::run_native(
+    let _ = seihai_play::window::run_native(
         "Seihai: levels",
         options,
         Box::new(|_| Ok(Box::new(picker))),

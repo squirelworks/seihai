@@ -19,6 +19,9 @@ path = "src/main.rs"
 
 [dependencies]
 seihai-core.workspace = true
+# `window::run_native`: its eframe windows open with wgpu where OpenGL 2.0
+# is missing (#475).
+seihai-play = { path = "../seihai-play" }
 # The window. Same version as seihai-mae.
 minifb = "0.27"
 # The start window (the connect form). Same versions as seihai-mae.

@@ -29,15 +29,14 @@
 //! saved in `launcher.conf` in the settings folder.
 //!
 //! This module holds only the window and the hand-over; the server list
-//! login is core's (`Connection::fetch_server_list`).
+//! login is core's (`Connection::fetch_server_list`), through
+//! [`crate::servers::ServerList`], which Ato's own list screen shows too.
 
-use seihai_core::net::{list_failure_text, Connection};
+use crate::servers::ServerList;
 use seihai_core::protocol::offline_builds::{self, OfflineBuild};
-use seihai_core::protocol::{ClientVersion, ListReply, ServerEntry, ServerList};
+use seihai_core::protocol::{self as proto, ClientVersion, ServerEntry};
 use std::collections::BTreeMap;
-use std::io;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 /// The environment variable the password is handed over in
 /// (`--password-env`). Every client reads `--password-env`.
@@ -218,7 +217,7 @@ impl Choice {
     pub fn direct_first(self) -> bool {
         match self {
             Choice::Graal3D => true,
-            Choice::Version(v) => v.profile().ui.server_list == ServerList::Direct,
+            Choice::Version(v) => v.profile().ui.server_list == proto::ServerList::Direct,
             Choice::Offline(_) => false,
         }
     }
@@ -473,11 +472,10 @@ pub struct StartScreen {
     /// The game server for a version with no listserver, and for Graal3D.
     pub direct: String,
     pub all_versions: bool,
-    pub status: String,
     pub error: Option<String>,
-    pub servers: Vec<ServerEntry>,
-    pub selected: Option<usize>,
-    pending: Option<Receiver<io::Result<ListReply>>>,
+    /// The server list and its status line (`seihai_play::servers`, the
+    /// same list Ato's own screen shows).
+    pub list: ServerList,
 }
 
 /// The default listserver box for a pick.
@@ -524,11 +522,8 @@ impl StartScreen {
             all_versions: saved.all_versions
                 || matches!(choice, Choice::Version(v) if !v.listed_by_default())
                 || choice.offline_only(),
-            status: "Ready.".into(),
             error,
-            servers: Vec::new(),
-            selected: None,
-            pending: None,
+            list: ServerList::empty("Ready."),
         }
     }
 
@@ -575,10 +570,7 @@ impl StartScreen {
         if self.direct == old_direct {
             self.direct = default_direct(c);
         }
-        self.servers.clear();
-        self.selected = None;
-        self.pending = None;
-        self.status = format!("{}: {}", c.label(), c.line().heading());
+        self.list = ServerList::empty(format!("{}: {}", c.label(), c.line().heading()));
     }
 
     /// The hand-over for `server` (or the client's own window with `None`).
@@ -606,7 +598,7 @@ impl StartScreen {
 
     /// Join the selected server.
     pub fn join_selected(&self) -> Option<Handoff> {
-        let s = self.servers.get(self.selected?)?;
+        let s = self.list.picked()?;
         Some(self.handoff(Some(format!("{}:{}", s.host, s.port)), is_3d_server(s)))
     }
 
@@ -617,68 +609,16 @@ impl StartScreen {
         };
         let addr = v.complete_list_addr(self.listserver.trim());
         let (account, password) = (self.account.clone(), self.password.clone());
-        let (tx, rx) = mpsc::channel();
-        let a = addr.clone();
-        std::thread::spawn(move || {
-            let _ = tx.send(Connection::fetch_server_list(&a, v, &account, &password));
-            repaint();
-        });
-        self.status = if v.list_version() != v {
-            format!(
-                "{} has no listserver of its own; asking {addr} as {}.",
-                v.label(),
-                v.list_version().label()
-            )
-        } else {
-            format!("Asking {addr} for the server list.")
-        };
-        self.servers.clear();
-        self.selected = None;
-        self.pending = Some(rx);
+        self.list = ServerList::fetch(addr, v, account, password, repaint);
     }
 
     pub fn waiting(&self) -> bool {
-        self.pending.is_some()
+        self.list.waiting()
     }
 
     /// Take the reply if it has come in.
     pub fn poll(&mut self) {
-        let Some(rx) = &self.pending else { return };
-        let reply = match rx.try_recv() {
-            Ok(r) => r,
-            Err(TryRecvError::Empty) => return,
-            Err(TryRecvError::Disconnected) => Err(io::Error::other("the list fetch stopped")),
-        };
-        self.pending = None;
-        self.take(reply);
-    }
-
-    /// A list reply, from the fetch or a test.
-    pub fn take(&mut self, reply: io::Result<ListReply>) {
-        let addr = self.listserver.trim().to_string();
-        match reply {
-            Ok(reply) => {
-                self.servers = reply.servers;
-                self.selected = None;
-                let n = self.servers.len();
-                self.status = match reply.error {
-                    Some(err) => format!("listserver: {err}"),
-                    None if n == 0 => format!("{addr}: no servers in the reply."),
-                    None => format!("{n} server{}.", if n == 1 { "" } else { "s" }),
-                };
-            }
-            Err(e) => self.status = list_failure_text(&addr, &e),
-        }
-    }
-
-    /// One server row.
-    pub fn row(s: &ServerEntry) -> String {
-        let kind = match s.kind.trim() {
-            "" => String::new(),
-            k => format!("[{k}] "),
-        };
-        let players = s.players.map_or_else(|| "?".into(), |n| n.to_string());
-        format!("{kind}{}  ({players})", s.name)
+        self.list.poll();
     }
 
     /// Draw the window and take its input. Returns the hand-over once the
@@ -691,26 +631,17 @@ impl StartScreen {
             .default_width(300.0)
             .show(ctx, |ui| {
                 ui.heading("Servers");
-                ui.label(&self.status);
+                ui.label(&self.list.status);
                 ui.separator();
-                egui::ScrollArea::vertical()
-                    .max_height(ui.available_height() - 40.0)
-                    .show(ui, |ui| {
-                        for (i, s) in self.servers.iter().enumerate() {
-                            let r = ui
-                                .selectable_label(self.selected == Some(i), Self::row(s))
-                                .on_hover_text(format!("{}:{}", s.host, s.port));
-                            if r.clicked() {
-                                self.selected = Some(i);
-                            }
-                            if r.double_clicked() {
-                                self.selected = Some(i);
-                                out = self.join_selected();
-                            }
-                        }
-                    });
+                if self
+                    .list
+                    .rows_ui(ui, ui.available_height() - 40.0)
+                    .is_some()
+                {
+                    out = self.join_selected();
+                }
                 ui.separator();
-                let join = ui.add_enabled(self.selected.is_some(), egui::Button::new("Join"));
+                let join = ui.add_enabled(self.list.selected.is_some(), egui::Button::new("Join"));
                 if join.clicked() {
                     out = self.join_selected();
                 }
@@ -909,7 +840,7 @@ mod tests {
     fn a_3d_server_adds_graal3d_for_ato_only() {
         let mut s = screen();
         s.pick(Choice::Version(ClientVersion::V512));
-        s.take(Ok(ListReply {
+        s.list.take(Ok(proto::ListReply {
             servers: vec![ServerEntry {
                 kind: "3".into(),
                 name: "Lab 3D".into(),
@@ -919,7 +850,7 @@ mod tests {
             }],
             ..Default::default()
         }));
-        s.selected = Some(0);
+        s.list.selected = Some(0);
         let h = s.join_selected().unwrap();
         assert_eq!(h.line(), Line::Ato);
         assert!(h.args().ends_with(&["--graal3d".to_string()]));
