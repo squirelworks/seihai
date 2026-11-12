@@ -12,7 +12,8 @@
 //! at the one picked, unless `--online` names a game server.
 //!
 //! Stage 3: draw the level flat as `seihai-mae` draws its tiles
-//! ([`render`]) and walk it with the arrow keys ([`game`]).
+//! ([`render`]) and walk it with the arrow keys ([`game`]). The loop and
+//! the renderer are `seihai-play`'s, shared with Issho.
 //!
 //! The Torque reimplementation for eras 3–5 lives in `torque::engine`
 //! and is part of the default build. `--features era6` leaves it out.
@@ -24,8 +25,10 @@ pub mod fields;
 pub mod game;
 pub mod level;
 pub mod online;
-pub mod render;
 pub mod server_list;
 pub mod start_window;
 pub mod torque;
 pub mod wire;
+
+/// The flat renderer, shared with Issho in `seihai-play`.
+pub use seihai_play::render;

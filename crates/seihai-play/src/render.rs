@@ -8,7 +8,8 @@
 //! or HUD.
 //!
 //! The 3.x clients drew their 2D levels from the same board and tile sheet
-//! as 2.x, so this is a stand-in until Ato has its own 3.x view. The tile
+//! as 2.x, so this is a stand-in until Ato has its own 3.x view (and Issho
+//! its 6.x one). The tile
 //! sheet maths and the chest tiles are copied from `seihai-mae` rather than
 //! shared, so the two lines stay apart until the drawing moves to core.
 
