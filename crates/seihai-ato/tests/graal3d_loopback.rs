@@ -10,6 +10,7 @@
 
 use seihai_ato::torque::net::bits::BitReader;
 use seihai_ato::torque::net::events::{ClassTable, Events};
+use seihai_ato::torque::net::ghosts::{GameObjectUpdate, Transform};
 use seihai_ato::torque::net::handshake::{self, ServerPacket};
 use seihai_ato::torque::net::session::{self, Ended, Identity};
 use seihai_ato::torque::GRAAL3D_24;
@@ -118,6 +119,8 @@ fn reaches_the_control_object_against_a_replaying_server() {
     let mut last_seq = 0;
     let mut events = Events::new();
     let mut acks = Vec::new();
+    let mut own_updates = Vec::new();
+    let mut ack_packets = 0;
     let mut packet = 0;
     while packet < SESSION.len() {
         let (n, _) = server.recv_from(&mut buf).unwrap();
@@ -134,6 +137,9 @@ fn reaches_the_control_object_against_a_replaying_server() {
         let ty = body.int(2).unwrap();
         let ack_bytes = body.int(3).unwrap();
         body.int(ack_bytes * 8).unwrap();
+        if ty == 2 {
+            ack_packets += 1;
+        }
         if ty != 0 || seq == last_seq {
             continue;
         }
@@ -151,8 +157,9 @@ fn reaches_the_control_object_against_a_replaying_server() {
             body.f32().unwrap();
         }
         if body.flag().unwrap() {
-            body.int(12).unwrap();
-            assert!(!body.flag().unwrap(), "no update of its own object");
+            assert_eq!(body.int(12).unwrap(), 1, "its control object");
+            assert!(body.flag().unwrap(), "an update of its own object");
+            own_updates.push(GameObjectUpdate::read(body, None).unwrap());
         }
         assert!(!body.flag().unwrap());
         for ev in events.read(body, &classes).unwrap() {
@@ -161,8 +168,24 @@ fn reaches_the_control_object_against_a_replaying_server() {
         server.send_to(&hex(SESSION[packet]), peer).unwrap();
         packet += 1;
     }
-    // Let the client read the last packet, then stop it.
+    // Let the client read and ack the last packet, then stop it.
     std::thread::sleep(Duration::from_millis(300));
+    while let Ok((n, _)) = {
+        server
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        server.recv_from(&mut buf)
+    } {
+        if buf[0] & 1 == 1
+            && (u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) >> 20) & 3 == 2
+            && n > 0
+        {
+            ack_packets += 1;
+        }
+    }
+    server
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
     stop.store(true, Ordering::Relaxed);
     let disconnect = loop {
         let (n, _) = server.recv_from(&mut buf).unwrap();
@@ -182,6 +205,27 @@ fn reaches_the_control_object_against_a_replaying_server() {
         ],
         "{log}"
     );
+    assert_eq!(
+        ack_packets,
+        SESSION.len(),
+        "one ack packet per server data packet"
+    );
+    // After taking ghost 1, the client echoes its shape, transform (zero
+    // rotation as axis 1, 0, 0) and flags once, then sends empty updates.
+    let echo = GameObjectUpdate {
+        shape: Some(b"labcube.3ds".to_vec()),
+        transform: Some(Transform {
+            position: [0.0, 0.0, 1.0],
+            axis: [1.0, 0.0, 0.0],
+            angle: 0.0,
+        }),
+        flags: Some(0x48),
+        ..Default::default()
+    };
+    assert_eq!(own_updates.first(), Some(&echo), "{log}");
+    assert!(own_updates[1..]
+        .iter()
+        .all(|u| *u == GameObjectUpdate::default()));
     for line in [
         "3d: Connection established (19 classes)",
         "3d: MissionStartPhase1",

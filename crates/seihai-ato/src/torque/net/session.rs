@@ -9,7 +9,7 @@
 //! case it sends a disconnect first.
 
 use super::events::{mission_start_answer, ClassTable, Events};
-use super::ghosts::{ClientGame, GhostChange, GhostState, Ghosts};
+use super::ghosts::{ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Transform};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use crate::torque::TorqueProfile;
@@ -192,6 +192,10 @@ pub fn run_with_sequence(
         if due && !link.window_full() {
             if let Some(mut w) = link.data(None, max_rate.take()) {
                 game.write(&mut w);
+                if game.update.is_some() {
+                    // After the echo, every packet carries the empty update.
+                    game.update = Some(GameObjectUpdate::default());
+                }
                 events.write(&mut w, link.last_sent(), &classes, MAX_PACKET * 8 - 1);
                 w.flag(false); // no ghosts from the client
                 socket
@@ -233,7 +237,9 @@ pub fn run_with_sequence(
         for note in &got.notifies {
             events.notify(*note);
         }
-        if got.answer_with_ack {
+        // As the real 5.12 client: answer pings, and ack every new data
+        // packet at once with an ack packet.
+        if got.answer_with_ack || got.data.is_some() {
             socket
                 .send_to(&link.ack(), server)
                 .map_err(|e| e.to_string())?;
@@ -297,13 +303,38 @@ pub fn run_with_sequence(
                     describe(&ghosts, i)
                 );
             }
-            game.control = Some(i);
-            if let Some(GhostState::GameObject(me)) = ghosts.ghosts.get(&i) {
-                if let Some(t) = me.transform {
-                    game.position = t.position;
+            if game.control != Some(i) {
+                game.control = Some(i);
+                if let Some(GhostState::GameObject(me)) = ghosts.ghosts.get(&i) {
+                    game.update = Some(control_echo(me));
+                    if let Some(t) = me.transform {
+                        game.position = t.position;
+                    }
                 }
             }
         }
+    }
+}
+
+/// The client's first update of a new control object, as the real 5.12
+/// sends it: its shape, transform and flags back, with a zero rotation
+/// written as axis (1, 0, 0), angle 0.
+pub fn control_echo(me: &GameObjectUpdate) -> GameObjectUpdate {
+    let transform = me.transform.map(|t| {
+        if t.angle == 0.0 {
+            Transform {
+                axis: [1.0, 0.0, 0.0],
+                ..t
+            }
+        } else {
+            t
+        }
+    });
+    GameObjectUpdate {
+        shape: me.shape.clone(),
+        transform,
+        flags: me.flags,
+        ..Default::default()
     }
 }
 
