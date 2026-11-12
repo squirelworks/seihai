@@ -77,6 +77,16 @@ pub struct Game {
     /// Playing level files with no server (`--level`): links load the
     /// next level from the asset folder instead of asking a server.
     offline: bool,
+    /// Where the network thread puts the gmap it has the player on.
+    pub world: Arc<Mutex<Option<online::WorldView>>>,
+    /// Where the walk's gmap crossings go for the network thread to send.
+    pub crossings: Arc<Mutex<Vec<seihai_core::gmap::Crossing>>>,
+    /// The network thread's gmap, as last taken.
+    net_world: Option<online::WorldView>,
+    /// Crossings handed to the network thread so far.
+    crossings_sent: u64,
+    /// The name of the level `session.current_level` holds (online).
+    level_here: Option<String>,
 }
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
@@ -142,6 +152,11 @@ impl Game {
             resolver: resolver.cloned(),
             npc_images: NpcImages::new(),
             offline: false,
+            world: Default::default(),
+            crossings: Default::default(),
+            net_world: None,
+            crossings_sent: 0,
+            level_here: None,
         })
     }
 
@@ -280,6 +295,118 @@ impl Game {
         Ok(())
     }
 
+    /// A level named `name` from the server is the one the view already
+    /// holds on a gmap: the cell the walk crossed into (and not a link).
+    fn same_gmap_level(&self, name: &str) -> bool {
+        self.session.gmap.is_some()
+            && self.link_to.is_none()
+            && self
+                .level_here
+                .as_deref()
+                .is_some_and(|h| h.eq_ignore_ascii_case(name))
+    }
+
+    /// The server's copy of the level the view is on: its board and NPCs
+    /// replace the neighbour copy the walk crossed into.
+    fn refresh_level(&mut self, level: Level, a: &Arrival) {
+        self.session.current_level = Some(level);
+        for (id, p) in &a.server_npc_props {
+            self.session.take_server_npc(*id, p);
+        }
+        if let Some(level) = &self.session.current_level {
+            for name in render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
+            {
+                eprintln!("npc image {name}: not in the asset folders; outlined");
+            }
+        }
+        self.status = a.line();
+    }
+
+    /// A new level from the server while the view is on a gmap: a level
+    /// of the gmap moves the view to its cell (a warp inside the gmap), any
+    /// other leaves the gmap.
+    fn gmap_cell_for(&mut self, name: &str) {
+        let Some(w) = self.session.gmap.as_mut() else {
+            return;
+        };
+        match w.map.cell_of(name) {
+            Some(c) if c != w.cell => {
+                w.cell = c;
+                w.levels.clear();
+            }
+            Some(_) => {}
+            None => self.session.leave_gmap(),
+        }
+    }
+
+    /// The walk crossed a gmap edge: hand the crossing to the network
+    /// thread, and note the level the view is on now.
+    fn crossed(&mut self, c: seihai_core::gmap::Crossing) {
+        self.crossings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(c);
+        self.crossings_sent += 1;
+        self.level_here = self.session.level_name();
+        if let Some(level) = &self.session.current_level {
+            render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
+        }
+        self.apply_world();
+    }
+
+    /// Bring the view's gmap in line with the network thread's: enter it
+    /// once the view holds the level of its cell, take a server move to
+    /// another cell, and fill in the neighbours the view is missing. While
+    /// the network thread has not sent all of the view's crossings its
+    /// cell is behind, so only its levels are used.
+    fn apply_world(&mut self) {
+        let Some(v) = self.net_world.as_ref() else {
+            return;
+        };
+        let holds = |cell: (i32, i32)| {
+            let here = self.level_here.as_deref();
+            v.map
+                .level_at(cell.0, cell.1)
+                .is_some_and(|n| here.is_some_and(|h| h.eq_ignore_ascii_case(n)))
+        };
+        let caught_up = v.crossings >= self.crossings_sent;
+        match self.session.gmap.as_mut() {
+            Some(w) if w.name.eq_ignore_ascii_case(&v.name) => {
+                if caught_up && w.cell != v.cell {
+                    if !holds(v.cell) {
+                        // The server moved the player: wait for the level.
+                        return;
+                    }
+                    w.cell = v.cell;
+                    w.levels.clear();
+                }
+            }
+            _ => {
+                if !holds(v.cell) {
+                    return;
+                }
+                self.session
+                    .enter_gmap(v.name.clone(), v.map.clone(), v.cell);
+            }
+        }
+        let w = self.session.gmap.as_mut().expect("entered above");
+        let around = w.map.neighbours(w.cell);
+        w.levels.retain(|c, _| around.contains(c));
+        let mut added = Vec::new();
+        for (c, l) in &v.levels {
+            if *c != w.cell && around.contains(c) && !w.levels.contains_key(c) {
+                w.levels.insert(*c, l.clone());
+                added.push(*c);
+            }
+        }
+        for c in added {
+            if let Some(level) = w.levels.get(&c) {
+                render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
+            }
+        }
+        self.dirty = true;
+    }
+
     /// Play the sounds the session queued: the GANI cues of the steps just
     /// taken. A new level stops the looped ones. A sound not on disk is
     /// handed to the network thread to ask the server for, and plays on a
@@ -314,9 +441,24 @@ impl Game {
 
     /// Take what the network thread sent.
     pub fn poll(&mut self) {
+        let taken = self.world.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(v) = taken {
+            self.net_world = Some(v);
+            self.apply_world();
+        }
         while let Ok(ev) = self.rx.try_recv() {
             match ev {
                 Event::Level(level, a) => {
+                    if self.same_gmap_level(&a.name) {
+                        // The server's copy of the cell the walk crossed
+                        // into: the player stays where the walk put them
+                        // (the server sends no position with it).
+                        self.refresh_level(*level, &a);
+                        self.apply_world();
+                        self.dirty = true;
+                        continue;
+                    }
+                    self.gmap_cell_for(&a.name);
                     self.session.current_level = Some(*level);
                     self.session.level_serial += 1;
                     // The server's start position; after a link, where the
@@ -342,7 +484,9 @@ impl Game {
                         }
                     }
                     self.status = a.line();
+                    self.level_here = Some(a.name.clone());
                     self.set_pose(false);
+                    self.apply_world();
                 }
                 Event::Ended(why) => self.status = why,
             }
@@ -393,6 +537,13 @@ impl Game {
         if self.offline && self.session.take_gmap_crossing().is_some() {
             self.load_gmap_neighbours();
             self.level_entered();
+        }
+        // Online: the network thread sends the crossing, and the server
+        // follows with the new cell's level.
+        if !self.offline {
+            if let Some(c) = self.session.take_gmap_crossing() {
+                self.crossed(c);
+            }
         }
         self.set_pose(true);
         // A link the feet are now in: ask the server once and wait for the
@@ -617,6 +768,8 @@ impl AtoApp {
                 g.others = live.others;
                 g.link = live.link;
                 g.wanted_sounds = live.wanted_sounds;
+                g.world = live.world;
+                g.crossings = live.crossings;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
@@ -1098,5 +1251,128 @@ mod tests {
         g.enter_offline("c.nw", Some((30.0, 30.0))).unwrap();
         assert!(g.session.gmap.is_none());
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The two-cell gmap of the online tests: `a.nw` west, `b.nw` east.
+    fn world(cell: (i32, i32), with: &[(i32, i32)], crossings: u64) -> online::WorldView {
+        online::WorldView {
+            name: "w.gmap".into(),
+            map: Gmap::parse(
+                "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n",
+            )
+            .unwrap(),
+            cell,
+            levels: with
+                .iter()
+                .map(|c| (*c, Level::from_board(&[0; 4096])))
+                .collect(),
+            crossings,
+        }
+    }
+
+    fn level_named(name: &str, start: Option<(f32, f32)>) -> Event {
+        let mut a = arrival(start);
+        a.name = name.into();
+        Event::Level(Box::new(Level::from_board(&[0; 4096])), a)
+    }
+
+    /// Walk east until the walk crosses into the next cell.
+    fn walk_east_across(g: &mut Game) {
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..40 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+            if g.crossings_sent > 0 {
+                return;
+            }
+        }
+        panic!("no crossing; x = {}", g.session.player_x);
+    }
+
+    /// Online on a gmap: the network thread's world comes in with the
+    /// level, the walk crosses into the neighbour it sent, the crossing
+    /// goes to the network thread, and the server's copy of the new cell
+    /// keeps the player where the walk put them.
+    #[test]
+    fn online_the_walk_crosses_a_gmap_edge_and_keeps_its_place() {
+        let (mut g, tx) = game();
+        tx.send(level_named("a.nw", Some((60.0, 30.0)))).unwrap();
+        *g.world.lock().unwrap() = Some(world((0, 0), &[(1, 0)], 0));
+        g.poll();
+        let w = g.session.gmap.as_ref().expect("on the gmap");
+        assert_eq!(w.cell, (0, 0));
+        assert!(w.levels.contains_key(&(1, 0)));
+        walk_east_across(&mut g);
+        let sent = g.crossings.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1);
+        assert_eq!((sent[0].from, sent[0].to), ((0, 0), (1, 0)));
+        assert_eq!(g.session.level_name().as_deref(), Some("b.nw"));
+        let x = g.session.player_x;
+        assert!(x < 4.0, "{x}");
+        // A snapshot taken before the network thread sent the crossing
+        // does not pull the view back.
+        *g.world.lock().unwrap() = Some(world((0, 0), &[(1, 0)], 0));
+        g.poll();
+        assert_eq!(g.session.gmap.as_ref().unwrap().cell, (1, 0));
+        // The server's copy of b.nw, with the login's stale position.
+        tx.send(level_named("b.nw", Some((60.0, 30.0)))).unwrap();
+        g.poll();
+        assert_eq!(g.session.player_x, x);
+        assert!(g.status.starts_with("level b.nw"), "{}", g.status);
+        // The network thread caught up: the west cell is the neighbour.
+        *g.world.lock().unwrap() = Some(world((1, 0), &[(0, 0)], 1));
+        g.poll();
+        let w = g.session.gmap.as_ref().unwrap();
+        assert_eq!(w.cell, (1, 0));
+        assert!(w.levels.contains_key(&(0, 0)));
+    }
+
+    /// The server moving the player to another cell (a warp inside the
+    /// gmap) waits for that cell's level, which arrives at its start.
+    #[test]
+    fn online_a_server_move_inside_a_gmap_waits_for_its_level() {
+        let (mut g, tx) = game();
+        tx.send(level_named("a.nw", Some((30.0, 30.0)))).unwrap();
+        *g.world.lock().unwrap() = Some(world((0, 0), &[(1, 0)], 0));
+        g.poll();
+        *g.world.lock().unwrap() = Some(world((1, 0), &[], 0));
+        g.poll();
+        assert_eq!(g.session.gmap.as_ref().unwrap().cell, (0, 0));
+        tx.send(level_named("b.nw", Some((10.0, 20.0)))).unwrap();
+        g.poll();
+        assert_eq!(g.session.gmap.as_ref().unwrap().cell, (1, 0));
+        assert_eq!((g.session.player_x, g.session.player_y), (10.0, 20.0));
+    }
+
+    /// A level outside the gmap leaves it.
+    #[test]
+    fn online_a_level_off_the_gmap_leaves_it() {
+        let (mut g, tx) = game();
+        tx.send(level_named("a.nw", Some((30.0, 30.0)))).unwrap();
+        *g.world.lock().unwrap() = Some(world((0, 0), &[(1, 0)], 0));
+        g.poll();
+        assert!(g.session.gmap.is_some());
+        tx.send(level_named("house.nw", Some((5.0, 5.0)))).unwrap();
+        g.poll();
+        assert!(g.session.gmap.is_none());
+        assert_eq!((g.session.player_x, g.session.player_y), (5.0, 5.0));
+    }
+
+    /// The gmap waits for the level of its cell: a world that comes in
+    /// before that level (the view still on the last one) is held.
+    #[test]
+    fn online_the_gmap_waits_for_the_level_of_its_cell() {
+        let (mut g, tx) = game();
+        tx.send(level_named("start.nw", Some((30.0, 30.0))))
+            .unwrap();
+        *g.world.lock().unwrap() = Some(world((1, 0), &[(0, 0)], 0));
+        g.poll();
+        assert!(g.session.gmap.is_none());
+        tx.send(level_named("b.nw", Some((20.0, 30.0)))).unwrap();
+        g.poll();
+        let w = g.session.gmap.as_ref().expect("entered with its level");
+        assert_eq!(w.cell, (1, 0));
+        assert!(w.levels.contains_key(&(0, 0)));
+        assert_eq!(g.session.player_x, 20.0);
     }
 }

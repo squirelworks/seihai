@@ -114,6 +114,20 @@ and the player arrives where the link said unless the server says
 otherwise. A new level owes the builds that send it a 46
 (`EnterLevelSender`), with the arrival props after it.
 
+Gmaps online: the network thread keeps the gmap the server has the player
+on with core's `gmap::sync_world` (the `.gmap` from the asset folder or
+asked for from the server, the neighbours from the server's boards or the
+local files the file rules allow, `PLI_ADJACENTLEVEL` for the rest) and
+hands each new snapshot to the view. The view enters the gmap once it
+holds the level of the snapshot's cell, and draws and walks into the
+neighbours as offline. A crossing goes back to the network thread, which
+sends it as the build does: with a walk cadence (3.04, 4.04r2) the 46 opens
+the next tick's frame and the cell props ride the cadence; otherwise
+core's whole crossing frame (`Connection::send_gmap_crossing`). The
+server's copy of the new cell replaces the view's without moving the
+player; a level of the gmap at another cell moves the view there, and a
+level off the gmap leaves it.
+
 ## Offline
 
 `--level NAME` (`-l`, as in `seihai-mae`) with no `--online` plays level
@@ -139,8 +153,8 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-Gmaps online (the server's gmap is not entered yet), the NPCs of
-neighbouring gmap levels, NPC scripts and NPC animations, NPC changes after
+The NPCs of neighbouring gmap levels, board changes (`PLO_BOARDMODIFY`)
+in the view, NPC scripts and NPC animations, NPC changes after
 the level arrives, other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
