@@ -9,6 +9,7 @@
 //! builds read these messages with the core readers.
 
 use seihai_core::assets::Level;
+use seihai_core::protocol::npcprops::NpcProps;
 use seihai_core::protocol::SessionState;
 use seihai_core::scripting::gs2::Script;
 
@@ -31,6 +32,8 @@ pub struct Arrival {
     pub start: Option<(f32, f32)>,
     /// NPCs the server sent (`PLO_NPCPROPS`) for this level.
     pub server_npcs: usize,
+    /// Those NPCs' props, by NPC id, for the view to place on the level.
+    pub server_npc_props: Vec<(u32, NpcProps)>,
     /// NPCs in the local level file (none for a level built from the board).
     pub file_npcs: usize,
     /// The GS2 scripts the server sent (`PLO_NPCBYTECODE`) for this level's
@@ -168,7 +171,13 @@ impl LevelStore {
         let level = self.level.as_ref()?;
         let name = self.loaded.clone().unwrap_or_default();
         let here = |l: &Option<String>| l.as_deref().is_none_or(|l| l.eq_ignore_ascii_case(&name));
-        let server_npcs = st.server_npcs.values().filter(|(l, _)| here(l)).count();
+        let server_npc_props: Vec<(u32, NpcProps)> = st
+            .server_npcs
+            .iter()
+            .filter(|(_, (l, _))| here(l))
+            .map(|(&id, (_, p))| (id, p.clone()))
+            .collect();
+        let server_npcs = server_npc_props.len();
         let scripts = st
             .npc_bytecode
             .iter()
@@ -184,6 +193,7 @@ impl LevelStore {
             },
             start: st.player_x.zip(st.player_y),
             server_npcs,
+            server_npc_props,
             file_npcs: level.npcs.len(),
             scripts,
         })
