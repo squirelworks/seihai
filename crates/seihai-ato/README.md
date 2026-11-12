@@ -41,6 +41,16 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   table, 12-bit class ids, 14-bit length prefixes, and the port rule
   (listed port + 1). Data only. Source: Graal_analysis
   `torque/wire-by-build.md`.
+- `torque::net` and `graal3d`: the 3D side of a Graal3D server, the
+  Torque UDP link to the listed port + 1, for 4.20r6 and 5.x (protocols
+  21 and 24): bit stream and strings, handshake, data packet numbering
+  and acks, events (the mission start is answered), ghosts and the
+  control object. `--graal3d` with `--online host:port --no-window` opens
+  it beside the TCP login and logs its progress with a `3d:` prefix
+  (login steps, ghosts created, the control object). Nothing is drawn in
+  3D yet, and the start window does not open it yet. 3.153 and 4.04r2
+  (protocol 19, the Torque game layer) are not run. Source: Graal_analysis
+  `torque/udp-session.md` and the open (MIT) Torque net layer.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). Start opens the
   server list; with `--online`, it hands the form straight to Stage 2.

@@ -22,6 +22,7 @@
 pub mod args;
 pub mod fields;
 pub mod game;
+pub mod graal3d;
 pub mod level;
 pub mod online;
 pub mod render;
