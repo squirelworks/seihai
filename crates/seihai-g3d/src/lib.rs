@@ -23,6 +23,7 @@
 //! - [`options`]: the F1 "Hardware options" and F2 "Player look" windows.
 
 pub mod admin;
+pub mod app;
 pub mod bmp;
 pub mod codec;
 pub mod config;

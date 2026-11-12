@@ -13,8 +13,9 @@
 //! account and password.
 //!
 //! The password goes over in an environment variable, never on the
-//! command line. The binary is looked for the way `seihai-launcher` looks
-//! for it: next to this one first, then on `PATH`.
+//! command line. Inside the `seihai` program the client is started as
+//! `seihai ato|g3d ...`; run on its own, the binary is looked for next to
+//! this one first, then on `PATH`.
 
 use crate::protocol::ClientVersion;
 use std::path::PathBuf;
@@ -56,6 +57,14 @@ impl Target {
         match self {
             Target::Ato(_) => PASSWORD_ENV,
             Target::Graal3D => G3D_PASSWORD_ENV,
+        }
+    }
+
+    /// The `seihai` subcommand for the client.
+    fn subcommand(self) -> &'static str {
+        match self {
+            Target::Ato(_) => "ato",
+            Target::Graal3D => "g3d",
         }
     }
 
@@ -115,9 +124,23 @@ impl Handoff {
         out
     }
 
-    /// The command that starts the client.
+    /// The command that starts the client. Inside the `seihai` program
+    /// (which sets `SEIHAI_PROGRAM` to its path) that is
+    /// `seihai ato|g3d ARGS...`, since only `seihai` is shipped; on its own,
+    /// the client's binary.
     pub fn command(&self) -> Command {
-        let mut cmd = Command::new(find_binary(self.target.binary()));
+        self.command_in(program())
+    }
+
+    fn command_in(&self, program: Option<PathBuf>) -> Command {
+        let mut cmd = match program {
+            Some(p) => {
+                let mut c = Command::new(p);
+                c.arg(self.target.subcommand());
+                c
+            }
+            None => Command::new(find_binary(self.target.binary())),
+        };
         cmd.args(self.args());
         if !self.password.is_empty() {
             cmd.env(self.target.password_env(), &self.password);
@@ -129,13 +152,20 @@ impl Handoff {
     /// failed, with the text to show.
     pub fn start(&self) -> String {
         let name = self.target.binary();
-        let bin = find_binary(name);
+        let bin = program().unwrap_or_else(|| find_binary(name));
         let err = run(self.command());
         format!(
             "cannot start {}: {err}. Build it with `cargo build --release -p {name}`.",
             bin.display()
         )
     }
+}
+
+/// The `seihai` program this runs inside, if it does (`SEIHAI_PROGRAM`).
+pub fn program() -> Option<PathBuf> {
+    std::env::var_os("SEIHAI_PROGRAM")
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
 }
 
 /// The binary next to this one, or the bare name for a `PATH` lookup.
@@ -212,6 +242,26 @@ mod tests {
             .any(|(k, v)| k == PASSWORD_ENV && v == Some("secret".as_ref())));
         // No server: Ato shows its start window.
         assert!(!args.iter().any(|a| a == "--online"));
+    }
+
+    #[test]
+    fn inside_the_seihai_program_the_client_is_a_subcommand() {
+        let h = Handoff {
+            target: Target::Ato(ClientVersion::V304),
+            account: String::new(),
+            password: String::new(),
+            assets: None,
+        };
+        let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
+        assert_eq!(cmd.get_program(), "/opt/seihai");
+        let args: Vec<_> = cmd.get_args().collect();
+        assert_eq!(args, ["ato", "--version", "3.04"]);
+        let h = Handoff {
+            target: Target::Graal3D,
+            ..h
+        };
+        let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
+        assert_eq!(cmd.get_args().next().unwrap(), "g3d");
     }
 
     #[test]

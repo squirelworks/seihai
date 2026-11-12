@@ -57,14 +57,16 @@ This creates the binary at:
 - Linux / macOS: `target/release/seihai`
 - Windows: `target\release\seihai.exe`
 
-A plain `cargo build --release` builds every package: `seihai`, `seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d` and the level editor. `seihai-draw`, the window-less tile and gani painter that tools use, now lives in [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core) beside the core and is tagged with it. The offline level editor stays in `tools/level-editor`. `cargo build --release -p seihai` builds only the `seihai` launcher, which cannot play anything without `seihai-mae` beside it, so use the plain command.
+`cargo build --release -p seihai` builds `seihai`, the one program that ships: every client (Mae, Ato, Issho and G3D) is linked into it, so the code they share is in it once (about 14 MB, against 57 MB for the five separate programs before). A plain `cargo build --release` also builds each client's own development binary (`seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d`) and the level editor. `seihai-draw`, the window-less tile and gani painter that tools use, now lives in [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core) beside the core and is tagged with it. The offline level editor stays in `tools/level-editor`.
 
-`seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client), `seihai-ato` (the Torque line, 3.x to 5.x, which logs in and draws the level flat in 2D with a local walk, not in 3D yet; see `crates/seihai-ato/README.md`), `seihai-issho` (a 6.x profile; the quattro_lib shell, which does not draw yet; see `crates/seihai-issho/README.md`), or, for `--version graal3d`, `seihai-g3d` (the February 2000 Graal3D with its own server, with its own connect window; see `documentation/graal3d.md`), passing every argument through. A 7.x label is rejected. Issho is not started unless the version is 6.x. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. The start window's Version list shows the major versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22, 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7); "All versions" adds every other build and the offline-only ones. Picking a 3.x, 4.x or 5.x build there closes it and opens `seihai-ato`'s start window with the account and password filled in. A 6.x pick in that window stays in `seihai-mae` (the launcher, not the window, is what starts `seihai-issho` for 6.x). "Graal3D", at the end of the list, closes it and opens `seihai-g3d`'s connect window the same way. Keep the binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
+`seihai` with no arguments opens the start window: one window for every line. Its Version list shows the major versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22, 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7) grouped by client, then Graal3D; "All versions" adds every other build. Fill in the account and password, press "Server list", pick a server and Join: the version's client (Mae for 1.x and 2.x, Ato for 3.x to 5.x, which draws the level flat in 2D for now, see `crates/seihai-ato/README.md`; Issho for 6.x, see `crates/seihai-issho/README.md`; G3D for the February 2000 Graal3D, see `documentation/graal3d.md`) logs in at once. A `3 ` (3D) server joined with a 3.x to 5.x build is joined with `--graal3d`. A lost connection comes back to the start window. "Open seihai-…'s own window" starts the client with its own start window (offline play, the tutorial and the offline-only builds are in Mae's). The password is not saved; the rest of the form is, in `launcher.conf` next to `seihai.conf`.
+
+Each client also runs on its own: `seihai mae|ato|issho|g3d ARGS...`, or the program copied or linked under the name `seihai-mae` (and so on). `seihai --version V ARGS...` runs the client for that version with every argument passed through, as the separate binaries did: Mae with no `--version` and for 1.x and 2.x, Ato for 3.x to 5.x, Issho for 6.x, G3D for `graal3d`. A 7.x label is rejected. In Mae's own window, picking a 3.x, 4.x or 5.x build opens Ato's start window with the account and password filled in, and "Graal3D" opens G3D's connect window; a 6.x pick there stays in Mae.
 
 `cargo build` only builds. It does not start the program. To build and run in one step:
 
 ```bash
-cargo run --release -p seihai-mae
+cargo run --release -p seihai
 ```
 
 `cargo run` uses the same `target` folder. On Windows, if you do not see a `target` directory, check that you are in the `seihai` folder (not a parent folder) and that the build finished without errors.
@@ -94,9 +96,9 @@ On Windows:
 target\release\seihai.exe
 ```
 
-The launcher opens. Pick a version, enter your account, and click Connect. Offline play is also available from the launcher.
+The start window opens. Pick a version, enter your account, press "Server list" and Join a server. Offline play is in Mae's own window ("Open seihai-mae's own window", or `seihai mae`).
 
-To skip the launcher:
+To skip the start window:
 
 ```bash
 ./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14923 --account NAME --password PASS --version 2.05

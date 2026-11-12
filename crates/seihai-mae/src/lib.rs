@@ -1,5 +1,8 @@
 //! Seihai — open Graal Reborn-compatible client
 
+// `seihai::...` paths resolve inside the library too (`app` uses them).
+extern crate self as seihai;
+
 // The shared modules live in `seihai-core`. They are re-exported under
 // their old names so `seihai::protocol`, `crate::offline` and the rest
 // still resolve.
@@ -8,6 +11,7 @@ pub use seihai_core::{
     looks, net, npcart, offline, pose, protocol, scripting, servercache, throwing, viewer,
 };
 
+pub mod app;
 pub mod ato;
 pub mod gui;
 pub mod help;

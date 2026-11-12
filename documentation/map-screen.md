@@ -1,7 +1,7 @@
 # The M map
 
 User report (2026-10-31): pressing M in the real client opens the map; in Seihai it only closed a sign.
-Code: `crates/seihai-mae/src/mapscreen.rs`, wired in `crates/seihai-mae/src/bin/main.rs`; `setmap` in
+Code: `crates/seihai-mae/src/mapscreen.rs`, wired in `crates/seihai-mae/src/app.rs`; `setmap` in
 `seihai-core` `scripting/engine/host.rs`.
 
 ## Which builds have it
