@@ -3,7 +3,7 @@
 Build: `seihai-issho` from #449's branch `claude/project-thread-bc7wsy` at 3cb9387, built with
 `cargo build --release -p seihai-issho` (default features: audio, window). seihai-core v0.0.11 (d76d2bb).
 
-Where: the headless Debian 13 lab VM on Mirae (2 vCPUs), Xvfb with Mesa llvmpipe, no window manager.
+Where: the headless Debian 13 lab VM (2 vCPUs), Xvfb with Mesa llvmpipe, no window manager.
 Everything ran on 127.0.0.1, with no public servers. All rows ran from about 12:36 to 12:48 UTC.
 
 ## Lab server
