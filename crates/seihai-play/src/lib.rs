@@ -9,7 +9,12 @@
 //!
 //! `seihai-ato` (3.x to 5.x) and `seihai-issho` (6.x) both run it. Each
 //! keeps its own start, profile and window size.
+//!
+//! [`start`] is the one start window for every line, the `seihai`
+//! command's: pick the version and the server, and hand over to that
+//! line's client.
 
 pub mod game;
 pub mod render;
+pub mod start;
 pub mod view;

@@ -2,7 +2,7 @@
 
 What the real clients keep, what they ask the server for, and when a local
 file counts as "up to date". The code is `crates/seihai-core/src/filecache.rs`; the
-client binary uses it through `FileSession` (`crates/seihai-mae/src/bin/main.rs`).
+client binary uses it through `FileSession` (`crates/seihai-mae/src/app.rs`).
 
 Sources: the 2.00, 2.05 rev 2, 2.17.1, 2.22 and 2.31 clients (read, not run
 for this item), the lab captures of 2.17, 2.22 and 2.31 (2026-10-24, login and

@@ -9,5 +9,7 @@
 //! socket yet.
 
 pub mod bits;
+pub mod events;
 pub mod handshake;
 pub mod huffman;
+pub mod link;

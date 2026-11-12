@@ -20,6 +20,7 @@
 //! The product default follows the selected era: on for v3, v4 and v5,
 //! off for v6 and later. The stub era defaults to v3.
 
+pub mod app;
 pub mod args;
 pub mod fields;
 pub mod game;

@@ -12,6 +12,7 @@
 //! v7 is named on [`profile::EngineProfile`] and is not selectable. Unity is
 //! the expected engine for that era. There is no v7 profile and no Unity code.
 
+pub mod app;
 pub mod cli;
 #[cfg(feature = "window")]
 pub mod game;

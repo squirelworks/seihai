@@ -9,15 +9,40 @@ that part is one library and each client line is its own binary.
 | Crate                 | Kind             | Owns |
 |-----------------------|------------------|------|
 | `crates/seihai-core`  | library          | `protocol/` (gen-3/gen-5 codecs, LCG, zlib/bz2, login writers, props, id and layout tables, version profiles and the chain), `assets/` (level, board, gmap, GANI, tiletypes, object-set parsers, the resolver, built-in set), `filecache`, `servercache`, `scripting/` (GS1 lexer, parser, compiler, interpreter, command registry), `offline/` (`OfflineSession`, collision, command applicator) and the game rules it uses (`combat`, `life`, `items`, `throwing`, `bombs`, `arrows`, `pose`, `looks`, `npcart`, `chatlists`), `net/`, `client/` (the game-server session the client lines share: login, server warps, the level store and log, the walk, links and gmap sync), `sound` rules and `.wav` decoding, `difftest` and the capture `viewer`, `dev`, `config` (the settings folder). Nothing here draws, opens a window or opens a sound device. |
-| `crates/seihai-mae`   | binary `seihai-mae` | The 1.x and 2.x client (a 6.x pick in its start window also stays here): `bin/main.rs`, `gui.rs` (launcher and start window; a 3.x pick there hands over to `seihai-ato`, and a "Graal3D" pick to `seihai-g3d`, through `ato.rs`), `render/` (tiles, GANI, sprites, HUD, signs, chat), `ui`, `help`, `keys`, `inventory`, `weaponbar`, `stall`, `settings` (the settings file), the sound setup (the rodio backend itself is seihai-core's `audio` feature) and the `difftest` binary. Its library is still named `seihai` and re-exports the core modules, so `seihai::protocol` and the rest still resolve. |
+| `crates/seihai-mae`   | binary `seihai-mae` | The 1.x and 2.x client (joining with a 6.x pick in its start window runs Issho): `app.rs`, `gui.rs` (launcher and start window; a 3.x pick there hands over to `seihai-ato`, and a "Graal3D" pick to `seihai-g3d`, through `ato.rs`), `render/` (tiles, GANI, sprites, HUD, signs, chat), `ui`, `help`, `keys`, `inventory`, `weaponbar`, `stall`, `settings` (the settings file), the sound setup (the rodio backend itself is seihai-core's `audio` feature) and the `difftest` binary. Its library is still named `seihai` and re-exports the core modules, so `seihai::protocol` and the rest still resolve. |
 | `crates/seihai-ato`   | binary           | The Torque line, 3.x to 5.x: login, level receive, flat 2D drawing and a local walk (see its README), plus the Torque engine scaffold in `src/torque/engine`, which is off for era 6 and later (`--features era6`). Depends on `seihai-core`. |
 | `crates/seihai-issho` | library + binary | The v6 profile. Quattro-shaped shell (draw, sound slot, GS2 shell, `TSocket`, `TServer*` world objects); `--online` logs in with core's `client` session and logs the level. Depends only on `seihai-core`. The launcher starts it for a 6.x `--version`. v7 is an unselectable variant (Unity is the expected engine; no v7 profile). |
 | `tools/level-editor`  | library + binary | The level editor. Reads levels and gmaps through `seihai-core`; uses the mae renderer for its tile view. It stays the client's offline editor. |
 
-The `seihai` launcher (`crates/seihai-launcher`) starts `seihai-mae` when
-there is no `--version` and for 1.x and 2.x, `seihai-ato` for 3.x to 5.x,
-`seihai-g3d` for `graal3d`, and `seihai-issho` for 6.x. A 7.x label starts
-nothing. Issho is not on the play path unless v6 was selected.
+## One program
+
+`seihai` (`crates/seihai-launcher`) is the program that ships. It links
+Mae, Ato, Issho and G3D as libraries; each client's whole program is its
+library's `app::main`, and `seihai` calls the one it needs in the same
+process. The window, renderer, sound and core code they share is in the
+release once: about 14 MB for all of them, against 57 MB for the five
+separate programs it replaced (release profile: `strip`, `lto`, one
+codegen unit).
+
+- `seihai` with no arguments opens the start window
+  (`seihai-play::start`): every version of every line, the server list
+  and Join. The pick runs that line's client, logged in at once. A lost
+  connection comes back to this window. For a Mae version it also has
+  "Play offline" and "Play the tutorial" (`--offline`, `--tutorial`) and,
+  under "All versions", the offline-only builds. Mae's own settings
+  window is only the `seihai-mae` development binary's.
+- `seihai mae|ato|issho|g3d ARGS...`, or the program under the name
+  `seihai-mae` (and so on), runs that client on its own, with its own
+  start window.
+- `seihai --version V ARGS...` runs Mae with no `--version` and for 1.x
+  and 2.x, Ato for 3.x to 5.x, G3D for `graal3d`, and Issho for 6.x. A 7.x
+  label runs nothing.
+
+The crates' own binaries (`seihai-mae`, `seihai-ato`, `seihai-issho`,
+`seihai-g3d`) call the same `app::main`. They are for development and are
+not shipped. A client that hands over to another line (Mae's version box
+picking a 3.x build) starts `$SEIHAI_PROGRAM ato ...` inside `seihai`, and
+the sibling binary only when run on its own.
 
 ## Cut line between the client lines
 
