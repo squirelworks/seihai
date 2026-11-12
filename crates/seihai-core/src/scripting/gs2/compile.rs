@@ -15,9 +15,10 @@
 //! `format` needs a pattern and accepts additional values. This is Seihai's
 //! compile-time validation policy, not a claim about original-client errors.
 //! Script and host calls are not subject to those opcode-specific checks.
-//! Array literals use the documented reverse-push encoding. GS1 lowering is
-//! limited to scalar elements without calls: the GS1 interpreter evaluates
-//! elements left to right, so calls need a separate order-preserving lowering.
+//! Array literals use the documented reverse-push encoding. The GS1
+//! interpreter evaluates elements left to right, so GS1 lowering takes a
+//! literal only when that order cannot matter: no element calls script or
+//! host code or `random`, or exactly one does and the rest are constants.
 //!
 //! Indexed reads and writes (`a[i]`, `a[i, j]`, `a[i] = v`, `a[i, j] = v`)
 //! and `x in array` use the encodings in `tests/fixtures/gs2/lists.gs2bc`:
@@ -26,9 +27,13 @@
 //! `OP_ARRAY_MULTIDIM_ASSIGN` / `OP_IN_OBJ`. The fixture only has constant
 //! indexes; a computed index gets `OP_CONV_TO_FLOAT` like every other numeric
 //! operand here, which is Seihai's choice, not a fixture-checked encoding.
-//! Compound assignment and `++`/`--` on an element, a field after an index
-//! (`npcs[i].x`), three or more indexes and the `board`/`tiles` arrays have no
-//! fixture and stay compile errors.
+//! In GS1, compound assignment and `++`/`--` on an element are rewritten to
+//! `a[i] = a[i] op v`, and `x in {a, b}` to `x == a || x == b`, which is what
+//! the GS1 interpreter does; both are refused when the repeated expression
+//! calls a function. The GS2 front keeps them errors (no fixture for
+//! gs2-parser's own encoding). A field after an index (`npcs[i].x`), three or
+//! more indexes and the `board`/`tiles` arrays have no fixture and stay
+//! compile errors.
 
 use super::{Function, Instr, Op, Operand, Script};
 use crate::scripting::engine::ast::*;
@@ -850,6 +855,37 @@ impl Builder {
         }
     }
 
+    /// Why a GS1 array literal cannot be pushed in GS2's right-to-left
+    /// order, or `None` when it can. The GS1 interpreter evaluates the
+    /// elements left to right, so the order only matters for an element
+    /// whose evaluation can change something (a script or host call, or
+    /// `random`). The literal is lowered when no element is like that, or
+    /// when exactly one is and every other element is a constant.
+    fn gs1_list_problem(&self, values: &[Expr]) -> Option<&'static str> {
+        if values.iter().any(has_nested_list) {
+            return Some("GS1 array elements that are lists are not lowered");
+        }
+        let effects = values.iter().filter(|v| self.has_effect(v)).count();
+        let constants = values
+            .iter()
+            .filter(|v| matches!(v, Expr::Num(_) | Expr::Str(_)))
+            .count();
+        if effects == 0 || (effects == 1 && constants == values.len() - 1) {
+            None
+        } else {
+            Some(
+                "GS1 array elements with calls are lowered only when one element calls \
+                 and the others are constants (GS1 reads them left to right, GS2 pushes \
+                 them right to left); put the values in variables first",
+            )
+        }
+    }
+
+    /// The expression calls script or host code, or draws a random number.
+    fn has_effect(&self, e: &Expr) -> bool {
+        self.expr_has_call(e) || mentions_call(e, "random")
+    }
+
     fn expr_has_call(&self, e: &Expr) -> bool {
         match e {
             Expr::Call { name, args } => {
@@ -929,6 +965,17 @@ impl Builder {
             }
             Stmt::Assign { target, op, value } => self.assign(target, *op, value),
             Stmt::IncDec { target, delta } => {
+                if !target.index.is_empty() && self.gs1 {
+                    // GS1 `a[i]++` is `a[i] = a[i] + 1` (the same reads and
+                    // writes, the element read once and written once).
+                    let op = if *delta < 0.0 {
+                        AssignOp::Sub
+                    } else {
+                        AssignOp::Add
+                    };
+                    self.element_assign(target, op, &Expr::Num(1.0));
+                    return;
+                }
                 if !target.index.is_empty() {
                     self.err(format!(
                         "`{}` on an array element has no fixture-checked GS2 form; write `a[i] = a[i] {} 1`",
@@ -948,10 +995,7 @@ impl Builder {
                 }
             }
             Stmt::Command { name, args, line } => self.command(name, args, *line),
-            Stmt::With { line, .. } => {
-                self.line = *line;
-                self.err("`with` is not lowered by this temporary front end");
-            }
+            Stmt::With { target, body, line } => self.with_stmt(target, body, *line),
             Stmt::Unknown {
                 name, reason, line, ..
             } => {
@@ -1070,6 +1114,35 @@ impl Builder {
 
     /// `a[i] = v` and `a[i, j] = v`: object, indexes, value, assign op.
     fn element_assign(&mut self, target: &VarRef, op: AssignOp, value: &Expr) {
+        if op != AssignOp::Set && self.gs1 {
+            // GS1 `a[i] += v` is `a[i] = a[i] + v`: the GS1 interpreter
+            // reads the element, works the number out and stores it, and
+            // the lowered form does the same with the fixture-checked
+            // element read and write. The index is pushed twice, so it
+            // must not call anything.
+            if self.index_has_call(target) {
+                self.err(format!(
+                    "`{}` on an array element whose index calls a function is not lowered; \
+                     put the index in a variable first",
+                    op.symbol()
+                ));
+                return;
+            }
+            let bin = match op {
+                AssignOp::Add => BinOp::Add,
+                AssignOp::Sub => BinOp::Sub,
+                AssignOp::Mul => BinOp::Mul,
+                AssignOp::Div => BinOp::Div,
+                AssignOp::Set => unreachable!(),
+            };
+            let sum = Expr::Bin(
+                bin,
+                Box::new(Expr::Var(target.clone())),
+                Box::new(value.clone()),
+            );
+            self.element_assign(target, AssignOp::Set, &sum);
+            return;
+        }
         if op != AssignOp::Set {
             self.err(format!(
                 "`{}` on an array element has no fixture-checked GS2 form; write `a[i] = a[i] {} v`",
@@ -1106,6 +1179,76 @@ impl Builder {
             self.numeric(i);
         }
         Some(v.index.len())
+    }
+
+    /// `with (target) body` in the fixture's encoding (`rest.gs2bc`,
+    /// `objects.gs2bc`): the target, `OP_CONV_TO_OBJECT`, `OP_WITH` to just
+    /// past the block, the body, `OP_WITHEND`.
+    fn with_stmt(&mut self, target: &Expr, body: &Stmt, line: u32) {
+        self.line = line;
+        if let Some(problem) = with_escape(body, false) {
+            self.err(problem);
+            return;
+        }
+        if self.gs1 {
+            if let Some(problem) = self.gs1_with_problem(body) {
+                self.err(problem);
+                return;
+            }
+        }
+        self.value(target);
+        self.op(Op::ConvToObject);
+        let hole = self.hole(Op::With);
+        // A loop outside the block cannot be left from inside it (refused
+        // above), so the body starts with no enclosing loop.
+        let outer = std::mem::take(&mut self.loops);
+        self.stmt(body);
+        self.loops = outer;
+        self.op(Op::WithEnd);
+        let after = self.here();
+        self.patch(hole, after);
+    }
+
+    /// Why a GS1 `with` body cannot be lowered, if it cannot. The NPC
+    /// server's notes (`npcserverdoc.txt`, NW beta 1 and 2) say that inside
+    /// `with` the target's `this.` variables and properties are read and
+    /// written, plain script variables (`i`, `j`) keep working, and script
+    /// functions still run as the original NPC. GS2 resolves a plain name on
+    /// the `with` object first and runs a bare call against it, so a body
+    /// whose meaning would change is refused: calls and commands, a write to
+    /// a plain name that is not a built-in property, and the `player`,
+    /// `client.` and `level.` names (GS1 switches them with the object, GS2
+    /// does not).
+    fn gs1_with_problem(&self, body: &Stmt) -> Option<String> {
+        if self.stmt_has_call(body) || stmt_has_command(body) {
+            return Some(
+                "a GS1 `with` body that calls a function or runs a command is not lowered \
+                 (GS1 runs it as the original NPC, GS2 against the `with` object)"
+                    .into(),
+            );
+        }
+        let mut problem = None;
+        let era = self.era;
+        stmt_names(body, &mut |name, write| {
+            if problem.is_some() {
+                return;
+            }
+            let lower = name.to_ascii_lowercase();
+            if lower.starts_with("player")
+                || lower.starts_with("client.")
+                || lower.starts_with("level.")
+            {
+                problem = Some(format!(
+                    "`{name}` inside a GS1 `with` is not lowered (GS1 switches it with the object, GS2 does not)"
+                ));
+            } else if write && !name.contains('.') && vocab::builtin_var(name, era).is_none() {
+                problem = Some(format!(
+                    "writing the script variable `{name}` inside a GS1 `with` is not lowered \
+                     (GS2 would store it on the `with` object); use `this.{name}` outside the block"
+                ));
+            }
+        });
+        problem
     }
 
     fn command(&mut self, name: &str, args: &[Arg], line: u32) {
@@ -1410,10 +1553,32 @@ impl Builder {
                     Kind::Other
                 }
             }
-            Expr::InList { .. } => {
+            Expr::InList { .. } if !self.gs1 => {
                 self.err("`in {list}` is not lowered by this temporary front end");
                 self.emit_int(0);
                 Kind::Number
+            }
+            Expr::InList { e, list } => {
+                // GS1 `x in {a, b, c}` reads x, then each item left to right
+                // until one equals it (the interpreter's `==`). With no
+                // calls in x that is `x == a || x == b || x == c`.
+                if self.expr_has_call(e) {
+                    self.err(
+                        "`x in {list}` where x calls a function is not lowered; \
+                         put x in a variable first",
+                    );
+                    self.emit_int(0);
+                    return Kind::Number;
+                }
+                let Some(chain) = list
+                    .iter()
+                    .map(|item| Expr::Bin(BinOp::Eq, e.clone(), Box::new(item.clone())))
+                    .reduce(|acc, eq| Expr::Bin(BinOp::Or, Box::new(acc), Box::new(eq)))
+                else {
+                    self.emit_int(0);
+                    return Kind::Number;
+                };
+                self.value(&chain)
             }
             Expr::InArray { e, name } => {
                 self.value(e);
@@ -1423,10 +1588,12 @@ impl Builder {
                 Kind::Other
             }
             Expr::List(values) => {
-                if self.gs1 && !values.iter().all(gs1_array_element) {
-                    self.err("GS1 array elements with calls or nested lists are not lowered yet");
-                    self.emit_int(0);
-                    return Kind::Number;
+                if self.gs1 {
+                    if let Some(problem) = self.gs1_list_problem(values) {
+                        self.err(problem);
+                        self.emit_int(0);
+                        return Kind::Number;
+                    }
                 }
                 self.op(Op::TypeArray);
                 for value in values.iter().rev() {
@@ -1618,6 +1785,177 @@ impl Builder {
     }
 }
 
+/// Why a statement cannot sit inside a `with` block, if it cannot: a
+/// `return`, a `sleep` or `waitfor`, or a `break`/`continue` that would
+/// leave the block. The NPC server's notes say the old object is not
+/// restored then, and no fixture shows GS2 leaving a block early.
+fn with_escape(s: &Stmt, in_loop: bool) -> Option<&'static str> {
+    let blocked = "`return`, `sleep`, `waitfor`, or a `break`/`continue` that leaves a `with` block, is not lowered";
+    match s {
+        Stmt::Block(v) => v.iter().find_map(|s| with_escape(s, in_loop)),
+        Stmt::If { cond, then, els } => (expr_waits(cond))
+            .then_some(blocked)
+            .or_else(|| with_escape(then, in_loop))
+            .or_else(|| els.as_deref().and_then(|e| with_escape(e, in_loop))),
+        Stmt::While { cond, body } => expr_waits(cond)
+            .then_some(blocked)
+            .or_else(|| with_escape(body, true)),
+        Stmt::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            if cond.as_ref().is_some_and(expr_waits) {
+                return Some(blocked);
+            }
+            init.as_deref()
+                .and_then(|s| with_escape(s, in_loop))
+                .or_else(|| step.as_deref().and_then(|s| with_escape(s, true)))
+                .or_else(|| with_escape(body, true))
+        }
+        Stmt::With { body, .. } => with_escape(body, false),
+        Stmt::Return(_) => Some(blocked),
+        Stmt::Break | Stmt::Continue => (!in_loop).then_some(blocked),
+        Stmt::Command { name, args, .. } => (is_wait(name)
+            || args
+                .iter()
+                .any(|a| matches!(a, Arg::Num(e) if expr_waits(e))))
+        .then_some(blocked),
+        Stmt::Call { name, args } => {
+            (is_wait(name) || args.iter().any(expr_waits)).then_some(blocked)
+        }
+        Stmt::Assign { target, value, .. } => {
+            (target.index.iter().any(expr_waits) || expr_waits(value)).then_some(blocked)
+        }
+        Stmt::IncDec { target, .. } => target.index.iter().any(expr_waits).then_some(blocked),
+        Stmt::Function { .. } | Stmt::Unknown { .. } => None,
+    }
+}
+
+fn is_wait(name: &str) -> bool {
+    name.eq_ignore_ascii_case("sleep") || name.eq_ignore_ascii_case("waitfor")
+}
+
+fn expr_waits(e: &Expr) -> bool {
+    mentions_call(e, "sleep") || mentions_call(e, "waitfor")
+}
+
+/// The statement runs a GS1 command (other than `sleep`, which
+/// `with_escape` reports).
+fn stmt_has_command(s: &Stmt) -> bool {
+    match s {
+        Stmt::Block(v) => v.iter().any(stmt_has_command),
+        Stmt::If { then, els, .. } => {
+            stmt_has_command(then) || els.as_deref().is_some_and(stmt_has_command)
+        }
+        Stmt::While { body, .. } | Stmt::With { body, .. } => stmt_has_command(body),
+        Stmt::For {
+            init, step, body, ..
+        } => {
+            init.as_deref().is_some_and(stmt_has_command)
+                || step.as_deref().is_some_and(stmt_has_command)
+                || stmt_has_command(body)
+        }
+        Stmt::Command { .. } | Stmt::Call { .. } | Stmt::Unknown { .. } => true,
+        _ => false,
+    }
+}
+
+/// Every variable name in a statement, with `true` for a written one.
+fn stmt_names(s: &Stmt, f: &mut dyn FnMut(&str, bool)) {
+    match s {
+        Stmt::Block(v) => v.iter().for_each(|s| stmt_names(s, f)),
+        Stmt::If { cond, then, els } => {
+            expr_names(cond, f);
+            stmt_names(then, f);
+            if let Some(e) = els {
+                stmt_names(e, f);
+            }
+        }
+        Stmt::While { cond, body } => {
+            expr_names(cond, f);
+            stmt_names(body, f);
+        }
+        Stmt::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            if let Some(s) = init {
+                stmt_names(s, f);
+            }
+            if let Some(c) = cond {
+                expr_names(c, f);
+            }
+            if let Some(s) = step {
+                stmt_names(s, f);
+            }
+            stmt_names(body, f);
+        }
+        Stmt::With { target, body, .. } => {
+            expr_names(target, f);
+            stmt_names(body, f);
+        }
+        Stmt::Return(v) => {
+            if let Some(e) = v {
+                expr_names(e, f);
+            }
+        }
+        Stmt::Assign { target, value, .. } => {
+            f(&target.name, true);
+            target.index.iter().for_each(|e| expr_names(e, f));
+            expr_names(value, f);
+        }
+        Stmt::IncDec { target, .. } => {
+            f(&target.name, true);
+            target.index.iter().for_each(|e| expr_names(e, f));
+        }
+        Stmt::Call { args, .. } => args.iter().for_each(|e| expr_names(e, f)),
+        Stmt::Command { args, .. } => args.iter().for_each(|a| {
+            if let Arg::Num(e) = a {
+                expr_names(e, f);
+            }
+        }),
+        Stmt::Function { .. } | Stmt::Break | Stmt::Continue | Stmt::Unknown { .. } => {}
+    }
+}
+
+fn expr_names(e: &Expr, f: &mut dyn FnMut(&str, bool)) {
+    match e {
+        Expr::Num(_) | Expr::Str(_) => {}
+        Expr::Var(v) => {
+            f(&v.name, false);
+            v.index.iter().for_each(|e| expr_names(e, f));
+        }
+        Expr::Unary(_, a) => expr_names(a, f),
+        Expr::InArray { e, name } => {
+            expr_names(e, f);
+            f(name, false);
+        }
+        Expr::Bin(_, a, b) => {
+            expr_names(a, f);
+            expr_names(b, f);
+        }
+        Expr::Call { args, .. } | Expr::List(args) => args.iter().for_each(|e| expr_names(e, f)),
+        Expr::InRange { e, lo, hi } => {
+            expr_names(e, f);
+            expr_names(lo, f);
+            expr_names(hi, f);
+        }
+        Expr::InList { e, list } => {
+            expr_names(e, f);
+            list.iter().for_each(|e| expr_names(e, f));
+        }
+        Expr::Cond { cond, then, els } => {
+            expr_names(cond, f);
+            expr_names(then, f);
+            expr_names(els, f);
+        }
+    }
+}
+
 /// Why an indexed variable is not lowered, if it is not.
 fn element_problem(v: &VarRef) -> Option<String> {
     if v.field_after_index {
@@ -1642,20 +1980,38 @@ fn element_problem(v: &VarRef) -> Option<String> {
     None
 }
 
-/// Scalar expressions whose evaluation cannot call script or host code.
-fn gs1_array_element(expr: &Expr) -> bool {
-    match expr {
-        Expr::Num(_) | Expr::Str(_) => true,
-        Expr::Var(v) => v.index.iter().all(gs1_array_element),
-        Expr::Unary(_, value) => gs1_array_element(value),
-        Expr::Bin(_, left, right) => gs1_array_element(left) && gs1_array_element(right),
+/// The expression holds a list literal anywhere.
+fn has_nested_list(e: &Expr) -> bool {
+    match e {
+        Expr::List(_) => true,
+        Expr::Num(_) | Expr::Str(_) => false,
+        Expr::Var(v) => v.index.iter().any(has_nested_list),
+        Expr::Unary(_, a) | Expr::InArray { e: a, .. } => has_nested_list(a),
+        Expr::Bin(_, a, b) => has_nested_list(a) || has_nested_list(b),
+        Expr::Call { args, .. } => args.iter().any(has_nested_list),
         Expr::InRange { e, lo, hi } => {
-            gs1_array_element(e) && gs1_array_element(lo) && gs1_array_element(hi)
+            has_nested_list(e) || has_nested_list(lo) || has_nested_list(hi)
         }
+        Expr::InList { e, list } => has_nested_list(e) || list.iter().any(has_nested_list),
         Expr::Cond { cond, then, els } => {
-            gs1_array_element(cond) && gs1_array_element(then) && gs1_array_element(els)
+            has_nested_list(cond) || has_nested_list(then) || has_nested_list(els)
         }
-        Expr::Call { .. } | Expr::List(_) | Expr::InList { .. } | Expr::InArray { .. } => false,
+    }
+}
+
+/// The expression calls `name` anywhere.
+fn mentions_call(e: &Expr, name: &str) -> bool {
+    let m = |x: &Expr| mentions_call(x, name);
+    match e {
+        Expr::Call { name: n, args } => n.eq_ignore_ascii_case(name) || args.iter().any(m),
+        Expr::Num(_) | Expr::Str(_) => false,
+        Expr::Var(v) => v.index.iter().any(m),
+        Expr::Unary(_, a) | Expr::InArray { e: a, .. } => m(a),
+        Expr::Bin(_, a, b) => m(a) || m(b),
+        Expr::InRange { e, lo, hi } => m(e) || m(lo) || m(hi),
+        Expr::InList { e, list } => m(e) || list.iter().any(m),
+        Expr::Cond { cond, then, els } => m(cond) || m(then) || m(els),
+        Expr::List(v) => v.iter().any(m),
     }
 }
 
@@ -1832,11 +2188,15 @@ impl<'a> Gs2<'a> {
         if self.eat("{") {
             return Ok(Stmt::Block(self.block_body()?));
         }
-        if self.eat_id("switch")
-            || self.eat_id("with")
-            || self.eat_id("new")
-            || self.eat_id("public")
-        {
+        if self.eat_id("with") {
+            let line = self.line;
+            self.expect("(")?;
+            let target = self.expr()?;
+            self.expect(")")?;
+            let body = Box::new(self.stmt()?);
+            return Ok(Stmt::With { target, body, line });
+        }
+        if self.eat_id("switch") || self.eat_id("new") || self.eat_id("public") {
             return Err(CompileErrors::one(
                 self.line,
                 "that statement is not in this temporary GS2 compiler",

@@ -247,7 +247,7 @@ fn commands_and_functions_without_gs2_are_errors() {
     assert!(err.to_string().contains("playersays"), "{err}");
     let err =
         compile::compile_gs1("if (created) { with (player) { hide; } }\n", Era::V21).unwrap_err();
-    assert!(err.to_string().contains("with"), "{err}");
+    assert!(err.to_string().contains("`with` body"), "{err}");
     let err =
         compile::compile_gs1("if (created) hide;\nif (created) show;\n", Era::V205).unwrap_err();
     assert!(err.to_string().contains("duplicate"), "{err}");
@@ -474,12 +474,17 @@ fn malformed_and_unsupported_array_forms_fail_clearly() {
         let source = format!("function onCreated() {{ this.a = {literal}; }}");
         assert!(compile::compile_gs2(&source).is_err(), "{source}");
     }
-    for literal in ["{next(), 1}", "{1 + next(), 2}", "{{1}, 2}"] {
+    for (literal, want) in [
+        ("{next(), next()}", "one element calls"),
+        ("{next(), this.v}", "one element calls"),
+        ("{random(0, 1), random(0, 1)}", "one element calls"),
+        ("{{1}, 2}", "that are lists"),
+    ] {
         let source = format!("if (created) {{ this.a = {literal}; }}");
         let error = compile::compile_gs1(&source, Era::V21)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("calls or nested lists"), "{source}: {error}");
+        assert!(error.contains(want), "{source}: {error}");
     }
     assert!(compile::compile_gs1("if (created) { this.a = {1, 2}; }", Era::V205).is_err());
     assert!(compile::compile_gs2("function onCreated() { this.a[0] = {1}; }").is_ok());
@@ -625,8 +630,6 @@ fn a_call_in_an_index_marks_the_function_as_calling() {
 #[test]
 fn element_forms_without_a_fixture_stay_errors() {
     let cases = [
-        ("this.a[0] += 1;", "no fixture-checked GS2 form"),
-        ("this.a[0]++;", "no fixture-checked GS2 form"),
         ("this.a[0, 1, 2] = 1;", "GS2 array opcodes take one or two"),
         ("this.x = npcs[0].x;", "a field after an index"),
         ("this.x = board[5];", "`board[..]`"),
@@ -639,9 +642,14 @@ fn element_forms_without_a_fixture_stay_errors() {
             .to_string();
         assert!(error.contains(want), "{source}: {error}");
     }
+    // The GS2 front keeps them errors: its own encoding has no fixture.
     for stmt in ["this.a[0] += 1;", "this.a[0]++;"] {
         let source = format!("function onCreated() {{ {stmt} }}");
-        assert!(compile::compile_gs2(&source).is_err(), "{source}");
+        let error = compile::compile_gs2(&source).unwrap_err().to_string();
+        assert!(
+            error.contains("no fixture-checked GS2 form"),
+            "{source}: {error}"
+        );
     }
     for stmt in ["this.x = npcs[0].x;", "this.x = this.a[0][1];"] {
         let source = format!("function onCreated() {{ {stmt} }}");
@@ -676,4 +684,231 @@ fn joins_conditionals_ranges_and_player_position_lower_and_run() {
     let gs1 = compile::compile_gs1("if (created) { this.x = playerx; }", Era::V205).unwrap();
     let gs2 = compile::compile_gs2("function onCreated() { this.x = player.x; }").unwrap();
     assert_eq!(gs1.write(), gs2.write());
+}
+
+/// GS1 `a[i] op= v`, `a[i]++` and `a[i]--` lower to the element write of
+/// `a[i] = a[i] op v`, op for op (the element read and write are the
+/// `lists` fixture's), and run on the GS2 machine.
+#[test]
+fn compound_element_assignment_lowers_to_read_and_write() {
+    let pairs = [
+        ("this.a[0] += 5;", "this.a[0] = this.a[0] + 5;"),
+        ("this.a[1] -= 2;", "this.a[1] = this.a[1] - 2;"),
+        ("this.a[0] *= 3;", "this.a[0] = this.a[0] * 3;"),
+        ("this.a[1] /= 4;", "this.a[1] = this.a[1] / 4;"),
+        ("this.a[this.i]++;", "this.a[this.i] = this.a[this.i] + 1;"),
+        ("this.a[1]--;", "this.a[1] = this.a[1] - 1;"),
+        ("this.m[1, 2] += 1;", "this.m[1, 2] = this.m[1, 2] + 1;"),
+    ];
+    for (short, long) in pairs {
+        let a = compile::compile_gs1(&format!("if (created) {{ {short} }}"), Era::V21).unwrap();
+        let b = compile::compile_gs1(&format!("if (created) {{ {long} }}"), Era::V21).unwrap();
+        assert_eq!(a.write(), b.write(), "{short}");
+    }
+    let script = compile::compile_gs1(
+        "if (created) {
+  this.a = {10, 20};
+  this.a[0] += 5;
+  this.a[1]--;
+  this.a[1] *= 2;
+  this.p = this.a[0];
+  this.q = this.a[1];
+}
+",
+        Era::V21,
+    )
+    .unwrap();
+    let machine = run_created(script);
+    assert_eq!(machine.var(Root::This, "p"), Some(&Val::Num(15.0)));
+    assert_eq!(machine.var(Root::This, "q"), Some(&Val::Num(38.0)));
+    // The index is pushed twice: one that calls is refused.
+    let error = compile::compile_gs1(
+        "function pick() { return 0; }\nif (created) { this.a[pick()] += 1; }",
+        Era::V21,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("index calls a function"), "{error}");
+}
+
+/// GS1 `x in {a, b, c}` lowers to `x == a || x == b || x == c` (the GS1
+/// interpreter's equality, item by item, stopping at the first match) and
+/// runs on the GS2 machine; an empty list is 0.
+#[test]
+fn in_a_literal_list_lowers_to_equality_tests() {
+    let a =
+        compile::compile_gs1("if (created) { this.r = this.n in {1, 2, 3}; }", Era::V21).unwrap();
+    let b = compile::compile_gs1(
+        "if (created) { this.r = this.n == 1 || this.n == 2 || this.n == 3; }",
+        Era::V21,
+    )
+    .unwrap();
+    assert_eq!(a.write(), b.write());
+    let script = compile::compile_gs1(
+        "if (created) {
+  this.n = 2;
+  if (this.n in {1, 2, 3}) this.hit = 1;
+  if (this.n in {4, 5}) this.miss = 1;
+}
+",
+        Era::V21,
+    )
+    .unwrap();
+    let machine = run_created(script);
+    assert_eq!(machine.var(Root::This, "hit"), Some(&Val::Num(1.0)));
+    assert_eq!(machine.var(Root::This, "miss"), None);
+    assert!(compile::compile_gs1(
+        "function pick() { return 0; }\nif (created) { this.r = pick() in {1, 2}; }",
+        Era::V21,
+    )
+    .is_err());
+}
+
+/// A GS1 array literal whose element evaluation order cannot matter is
+/// lowered even with calls: one calling element among constants, or calls
+/// only to opcode built-ins that change nothing (`int`, `abs`, ...). The
+/// bytes are the GS2 front end's for the same literal.
+#[test]
+fn array_literals_whose_order_cannot_matter_lower_with_calls() {
+    for literal in [
+        "{next(), 1}",
+        "{1 + next(), 2, \"x\"}",
+        "{int(this.v), abs(this.w), 3}",
+        "{random(0, 1), 2}",
+    ] {
+        let gs1 = compile::compile_gs1(
+            &format!("function next() {{ return 4; }}\nif (created) {{ this.a = {literal}; }}"),
+            Era::V21,
+        )
+        .unwrap();
+        let gs2 = compile::compile_gs2(&format!(
+            "function next() {{ return 4; }}\nfunction onCreated() {{ this.a = {literal}; }}"
+        ))
+        .unwrap();
+        assert_eq!(gs1.write(), gs2.write(), "{literal}");
+    }
+    let script = compile::compile_gs1(
+        "function next() { return 4; }\nif (created) { this.v = 2.5; this.a = {int(this.v), 9}; this.b = {next(), 7}; }",
+        Era::V21,
+    )
+    .unwrap();
+    let machine = run_created(script);
+    assert_eq!(
+        machine.list(Root::This, "a"),
+        Some([Value::from(Val::Num(2.0)), Value::from(Val::Num(9.0))].as_slice())
+    );
+    assert_eq!(
+        machine.list(Root::This, "b"),
+        Some([Value::from(Val::Num(4.0)), Value::from(Val::Num(7.0))].as_slice())
+    );
+    // A call next to a variable read is refused: the call could change it.
+    assert!(compile::compile_gs1(
+        "function next() { return 4; }\nif (created) { this.a = {next(), int(this.v)}; }",
+        Era::V21,
+    )
+    .is_err());
+}
+
+/// Ops `from..=to` with every `OP_WITH` jump made relative to `from`, so a
+/// block can be compared wherever it sits in a script.
+fn with_block(script: &Script, from: usize, to: usize) -> Vec<String> {
+    use seihai_core::scripting::gs2::Operand;
+    let mut out = listing(script, from, to);
+    for (k, i) in script.code[from..=to].iter().enumerate() {
+        if i.op == Op::With {
+            if let Operand::Int(n) = i.operand {
+                out[k] = format!("OP_WITH +{}", n as usize - from);
+            }
+        }
+    }
+    out
+}
+
+/// `with` is lowered in the encoding of `rest.gs2bc` (`with (player)` and
+/// `with (null)`, ops 141..=161), by both front ends.
+#[test]
+fn with_matches_the_rest_fixture_in_both_front_ends() {
+    let reference = Script::parse(&fixture("rest.gs2bc")).unwrap();
+    let want = with_block(&reference, 141, 161);
+    assert_eq!(want[0], "OP_PLAYER");
+    assert_eq!(want[20], "OP_WITHEND");
+    let gs2 = compile::compile_gs2(
+        "function onCreated() {\n  with (player) {\n    x = 12;\n    this.inw = 1;\n  }\n  with (null) {\n    this.never = 1;\n  }\n}\n",
+    )
+    .unwrap();
+    let gs1 = compile::compile_gs1(
+        "if (created) {\n  with (player) {\n    x = 12;\n    this.inw = 1;\n  }\n  with (null) {\n    this.never = 1;\n  }\n}\n",
+        Era::V21,
+    )
+    .unwrap();
+    for got in [&gs2, &gs1] {
+        let start = ops(got).iter().position(|n| n == "OP_PLAYER").unwrap();
+        assert_eq!(with_block(got, start, start + 20), want);
+    }
+    assert_eq!(gs1.write(), gs2.write());
+}
+
+/// The NPC server's notes describe `with (players[i])` in a loop over the
+/// players; the target is an element read and the loop variable is read
+/// inside the block.
+#[test]
+fn gs1_with_over_an_element_lowers_and_reads_outer_variables() {
+    let script = compile::compile_gs1(
+        "if (created) {\n  for (i = 0; i < 3; i++) with (this.list[i]) {\n    if (this.hp < i) x = i;\n    while (this.hp > 0) { if (this.hp == 1) break; this.hp--; }\n  }\n}\n",
+        Era::V21,
+    )
+    .unwrap();
+    let names = ops(&script);
+    let w = names.iter().position(|n| n == "OP_WITH").unwrap();
+    assert_eq!(names[w - 1], "OP_CONV_TO_OBJECT");
+    assert_eq!(names[w - 2], "OP_ARRAY");
+    let end = names.iter().position(|n| n == "OP_WITHEND").unwrap();
+    assert_eq!(
+        listing(&script, w, w)[0],
+        format!("OP_WITH {}", end + 1),
+        "the jump lands just past OP_WITHEND"
+    );
+}
+
+/// Bodies whose GS1 meaning GS2 would change are refused, as are ways out
+/// of the block the NPC server's notes warn about.
+#[test]
+fn gs1_with_bodies_that_change_meaning_stay_errors() {
+    for (body, needle) in [
+        ("hide;", "runs a command"),
+        ("setlevel2 a.nw,30,30;", "runs a command"),
+        ("this.a = next();", "calls a function"),
+        ("sleep 1;", "`sleep`"),
+        ("return;", "`return`"),
+        ("i = 1;", "script variable `i`"),
+        ("i++;", "script variable `i`"),
+        ("this.a = playerx;", "`playerx`"),
+        ("player.chat = 1;", "`player.chat`"),
+        ("client.a = 1;", "`client.a`"),
+        ("this.a = level.b;", "`level.b`"),
+    ] {
+        let src = format!(
+            "function next() {{ return 1; }}\nif (created) {{ with (this.o) {{ {body} }} }}\n"
+        );
+        let err = compile::compile_gs1(&src, Era::V21)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(needle), "{body}: {err}");
+    }
+    let err = compile::compile_gs1(
+        "if (created) { while (1) { with (this.o) { break; } } }\n",
+        Era::V21,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("leaves a `with` block"), "{err}");
+    let err =
+        compile::compile_gs2("function onCreated() { while (1) { with (player) { break; } } }")
+            .unwrap_err()
+            .to_string();
+    assert!(err.contains("leaves a `with` block"), "{err}");
+    // Before 2.1 `with` is not GS1.
+    assert!(
+        compile::compile_gs1("if (created) { with (this.o) { x = 1; } }\n", Era::V205).is_err()
+    );
 }

@@ -34,6 +34,8 @@ change it. If a draft goes stale, delete it and run the workflow again.
 
 | Repo | Next release | What must be in | Status |
 |---|---|---|---|
+| `seihai` (client and `seihai-core`) | **v0.0.8** | The per-version script engines (`VersionProfile::scripts`, #430), so seihai-servertools can read which clients run GS2. | Not drafted. |
+| `seihai` (client and `seihai-core`) | v0.0.7 | `playerlogin`/`playerlogout` for the NPC-server's level-less NPCs (#416), the GS1→GS2 element and `in` forms (#414, #422), Ato's NPCs, offline levels and gmaps, and online gmaps (#417 to #420). | **Published 2026-11-12** (`2c57cf1`). seihai-npcserver moves to tag `v0.0.7` in seihai-npcserver#25; the other repos stay on `v0.0.6` until they need it. |
 | `seihai` (client and `seihai-core`) | **v0.0.6** | Everything on main as of the rebuilt draft: `seihai-draw` (#350), 3-OS CI with fmt and strict clippy (#354, #381, #382), the GS1→GS2 front end (#376, #383, #384), the Torque engine scaffold and `seihai-issho` (#378, #379), listserver.graal.in as the only host (#389), `playerleaves` for server scripts (#390). | **Published 2026-11-11** (`35fb728`). The listserver, NPC-server, RC, gserver and servertools now pin `seihai-core` by tag `v0.0.6` (rechecked 2026-11-12). |
 | `seihai` | v0.1.0 | Ato: server list and offline mode, and the post-login frame; Graal3D M1 (G3D-1, 2, 4, 6, 7, with #357). | Not reached (rechecked 2026-11-12): the server list (#393) and the post-login frame (#395) are in, and Ato now runs 4.x and 5.x (#394), walks online (#396), shows other players (#398, #405), follows level links (#399, #406) and plays sounds (#408 to #410). Offline mode is still under "Not in yet"; G3D-1 is open. |
 | `seihai-listserver` | v0.2.0 (proposed; Squirrel has not set its version or scope) | From its `docs/NEXT.md`: the RC list (id 5) over the secure handshake (SEI00001), which `seihai-rc` has sent since 2026-11-01 while the listserver answers SEI00001 only on id 7; NEXT 7, a `seihai-rc` test that logs in through the real listserver; a lab run where a real RC lists a hidden (HQ level 0) server. | Not started (rechecked 2026-11-11). v0.1.0 was published 2026-11-04 with all four archives; since then only docs and workflow changes (#14 `skip_macos`, #15, #16). CI green on all three platforms; pins `seihai-core` v0.0.5; no issues. The RC-list item is unblocked; the other two live mostly in `seihai-rc`. |
@@ -53,6 +55,7 @@ repo, and the `v0.0.x` tags here are its versions.
 
 - `seihai` v0.0.6 published: done, every server repo and `seihai-servertools`
   pins tag `v0.0.6`.
+- `seihai` v0.0.7 published: `seihai-npcserver` moves to tag `v0.0.7` and adds the `playerlogin` test; the other repos move when they need it.
 - `seihai-npcserver` v0.1.1 published: `seihai-gserver` moves its pin to v0.1.1 (seihai-gserver#61).
 - `seihai-rc` v0.1.0 published: pin it by tag in `seihai-servertools`.
 - Tick the row here and the roadmap item in #353.
