@@ -516,7 +516,7 @@ impl Game {
     /// The server's NPC updates since the level arrived (`PLO_NPCPROPS`),
     /// onto the NPCs of the level the view is on, as core links them (a
     /// record for an NPC the level does not have yet needs its image and
-    /// place). An update for a level the view has left is dropped: the
+    /// place), and its deletes (`PLO_NPCDEL2`), which take the NPC off. An update for a level the view has left is dropped: the
     /// server's NPCs come again with the level. The arrival's records hold
     /// every update up to it, so an update the arrival already had is
     /// applied twice in order and ends the same.
@@ -531,7 +531,14 @@ impl Game {
             .iter()
             .filter(|c| c.level.eq_ignore_ascii_case(here))
         {
-            self.session.take_server_npc(c.id, &c.props);
+            match &c.props {
+                Some(p) => {
+                    self.session.take_server_npc(c.id, p);
+                }
+                None => {
+                    self.session.drop_server_npc(c.id);
+                }
+            }
             applied = true;
         }
         if !applied {
@@ -1142,7 +1149,7 @@ mod tests {
 
     /// After the level is in, a server update moves and re-images an NPC
     /// it has, adds one it did not have, and one for another level is
-    /// dropped.
+    /// dropped. A delete takes an NPC off its own level only.
     #[test]
     fn npc_updates_after_the_level_change_what_is_drawn() {
         use seihai_core::protocol::npcprops::NpcProps;
@@ -1169,31 +1176,31 @@ mod tests {
             change(
                 "lab3x.nw",
                 300,
-                NpcProps {
+                Some(NpcProps {
                     image: Some("door-open.png".into()),
                     x: Some(22.0),
                     ..Default::default()
-                },
+                }),
             ),
             change(
                 "lab3x.nw",
                 301,
-                NpcProps {
+                Some(NpcProps {
                     image: Some("sign.png".into()),
                     x: Some(5.0),
                     y: Some(6.0),
                     ..Default::default()
-                },
+                }),
             ),
             change(
                 "elsewhere.nw",
                 302,
-                NpcProps {
+                Some(NpcProps {
                     image: Some("tree.png".into()),
                     x: Some(1.0),
                     y: Some(1.0),
                     ..Default::default()
-                },
+                }),
             ),
         ]);
         g.dirty = false;
@@ -1213,6 +1220,23 @@ mod tests {
             ]
         );
         assert_eq!(g.npc_images.get("door-open.png"), Some(&None));
+        // A delete for another level leaves this one alone; one for this
+        // level takes the NPC off.
+        g.npc_changes.lock().unwrap().extend([
+            change("elsewhere.nw", 300, None),
+            change("lab3x.nw", 301, None),
+        ]);
+        g.poll();
+        let ids: Vec<_> = g
+            .session
+            .current_level
+            .as_ref()
+            .unwrap()
+            .npcs
+            .iter()
+            .map(|n| n.server_id)
+            .collect();
+        assert_eq!(ids, [Some(300)]);
     }
 
     #[test]

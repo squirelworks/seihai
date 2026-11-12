@@ -13,4 +13,4 @@ license = "MIT OR Apache-2.0"
 # this repo and add a `[patch."https://github.com/squirelworks/seihai-core"]`
 # entry pointing at it in your local .cargo/config.toml.
 [workspace.dependencies]
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "0bfd6b3012f873111ec0497d97e8aadec3ed2ede", default-features = false }
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "ba68669d57ba5130b514587e89098ed75e985d4d", default-features = false }
