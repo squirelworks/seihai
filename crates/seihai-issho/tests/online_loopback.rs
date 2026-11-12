@@ -205,7 +205,7 @@ fn the_v6_game_loop_takes_the_level_and_walks_it() {
     assert!(g.status.starts_with("level lab3x.nw"), "{}", g.status);
     assert_eq!((g.session.player_x, g.session.player_y), (30.5, 31.0));
     let frame = g.draw((40, 30));
-    assert_eq!((frame.w, frame.h), (640, 480));
+    assert_eq!((frame.width, frame.height), (640, 480));
     // Walk right until a step lands (the session paces the steps).
     let start = Instant::now() + Duration::from_secs(1);
     for i in 0..10 {

@@ -633,7 +633,11 @@ impl StartScreen {
                 ui.heading("Servers");
                 ui.label(&self.list.status);
                 ui.separator();
-                if self.list.rows_ui(ui, ui.available_height() - 40.0).is_some() {
+                if self
+                    .list
+                    .rows_ui(ui, ui.available_height() - 40.0)
+                    .is_some()
+                {
                     out = self.join_selected();
                 }
                 ui.separator();

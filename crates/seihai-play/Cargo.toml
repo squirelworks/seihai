@@ -14,6 +14,8 @@ path = "src/lib.rs"
 
 [dependencies]
 seihai-core.workspace = true
+# Tiles, NPC images and players' gani frames are drawn through it (#443).
+seihai-draw.workspace = true
 # The view. Same version as seihai-ato and seihai-mae.
 egui = "0.29"
 # The windows (`window::run_native`): OpenGL first, then wgpu where a

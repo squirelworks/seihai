@@ -266,7 +266,9 @@ fn open_window(error: Option<String>) -> Option<Handoff> {
         viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 520.0]),
         ..Default::default()
     };
-    if let Err(e) = seihai_play::window::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app)))) {
+    if let Err(e) =
+        seihai_play::window::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app))))
+    {
         eprintln!("seihai: could not open the start window: {e}");
         eprintln!("seihai: neither OpenGL 2.0 nor wgpu (Direct3D 12, Vulkan or Metal) could draw a window here; install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe");
         eprintln!("seihai: run a client with --version and --online instead (see `seihai --help`)");
