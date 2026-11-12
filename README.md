@@ -227,3 +227,7 @@ The shared library, `seihai-core` (protocol, assets, scripting, the offline simu
 See `documentation/` for the implementation notes, roadmap, and version profiles.
 
 Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in `documentation/level-editor-expansion.md`.
+
+## macOS builds
+
+macOS is built and tested on the lab's Sequoia (macOS 15) VM with the same build and test commands the Linux job runs; GitHub CI covers Linux and Windows.

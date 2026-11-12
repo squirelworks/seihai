@@ -1,6 +1,6 @@
 name: CI
 
-# Pull request and main-branch checks on all three platforms.
+# Pull request and main-branch checks on Linux and Windows.
 # Releases stay in release.yml (tags and manual runs only).
 
 on:
@@ -13,7 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macOS is not built on GitHub runners: it is built and tested on the
+        # Sequoia VM in the lab (see README.md, "macOS builds").
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       # Every platform builds, tests and lints the default features, with
