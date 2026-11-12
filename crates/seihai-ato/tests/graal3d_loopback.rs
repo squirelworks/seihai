@@ -150,15 +150,20 @@ fn reaches_the_control_object_against_a_replaying_server() {
                 body.int(20).unwrap();
             }
         }
-        // The client's game section: first person, its position, maybe
-        // its object (no update of it), then the field-of-view flag.
+        // The client's game section: first person, its position, its
+        // object's index flag, the "controls it" flag (each always on the
+        // wire), then the field-of-view flag.
         assert!(body.flag().unwrap());
         for _ in 0..3 {
             body.f32().unwrap();
         }
+        let object = if body.flag().unwrap() {
+            Some(body.int(12).unwrap())
+        } else {
+            None
+        };
         if body.flag().unwrap() {
-            assert_eq!(body.int(12).unwrap(), 1, "its control object");
-            assert!(body.flag().unwrap(), "an update of its own object");
+            assert_eq!(object, Some(1), "an update of its control object");
             own_updates.push(GameObjectUpdate::read(body, None).unwrap());
         }
         assert!(!body.flag().unwrap());

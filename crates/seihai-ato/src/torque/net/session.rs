@@ -197,7 +197,6 @@ pub fn run_with_sequence(
                     game.update = Some(GameObjectUpdate::default());
                 }
                 events.write(&mut w, link.last_sent(), &classes, MAX_PACKET * 8 - 1);
-                w.flag(false); // no ghosts from the client
                 socket
                     .send_to(w.bytes(), server)
                     .map_err(|e| e.to_string())?;
