@@ -83,6 +83,8 @@ pub struct Game {
     pub crossings: Arc<Mutex<Vec<seihai_core::gmap::Crossing>>>,
     /// Where the network thread puts the server's board changes.
     pub board_mods: online::SharedBoardMods,
+    /// Where the network thread puts the server's NPC updates.
+    pub npc_changes: online::SharedNpcChanges,
     /// The network thread's gmap, as last taken.
     net_world: Option<online::WorldView>,
     /// Crossings handed to the network thread so far.
@@ -157,6 +159,7 @@ impl Game {
             world: Default::default(),
             crossings: Default::default(),
             board_mods: Default::default(),
+            npc_changes: Default::default(),
             net_world: None,
             crossings_sent: 0,
             level_here: None,
@@ -507,6 +510,40 @@ impl Game {
             );
             self.dirty = true;
         }
+        self.apply_npc_changes();
+    }
+
+    /// The server's NPC updates since the level arrived (`PLO_NPCPROPS`),
+    /// onto the NPCs of the level the view is on, as core links them (a
+    /// record for an NPC the level does not have yet needs its image and
+    /// place). An update for a level the view has left is dropped: the
+    /// server's NPCs come again with the level. The arrival's records hold
+    /// every update up to it, so an update the arrival already had is
+    /// applied twice in order and ends the same.
+    fn apply_npc_changes(&mut self) {
+        let changes =
+            std::mem::take(&mut *self.npc_changes.lock().unwrap_or_else(|e| e.into_inner()));
+        let Some(here) = self.level_here.as_deref() else {
+            return;
+        };
+        let mut applied = false;
+        for c in changes
+            .iter()
+            .filter(|c| c.level.eq_ignore_ascii_case(here))
+        {
+            self.session.take_server_npc(c.id, &c.props);
+            applied = true;
+        }
+        if !applied {
+            return;
+        }
+        if let Some(level) = &self.session.current_level {
+            for name in render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
+            {
+                eprintln!("npc image {name}: not in the asset folders; outlined");
+            }
+        }
+        self.dirty = true;
     }
 
     /// Hand the current pose to the network thread.
@@ -786,6 +823,7 @@ impl AtoApp {
                 g.world = live.world;
                 g.crossings = live.crossings;
                 g.board_mods = live.board_mods;
+                g.npc_changes = live.npc_changes;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
@@ -1100,6 +1138,81 @@ mod tests {
         assert_eq!(npcs[0].server_id, Some(300));
         // No asset folder: looked for once, kept as missing (outlined).
         assert_eq!(g.npc_images.get("door.png"), Some(&None));
+    }
+
+    /// After the level is in, a server update moves and re-images an NPC
+    /// it has, adds one it did not have, and one for another level is
+    /// dropped.
+    #[test]
+    fn npc_updates_after_the_level_change_what_is_drawn() {
+        use seihai_core::protocol::npcprops::NpcProps;
+        let (mut g, tx) = game();
+        let mut a = arrival(Some((30.0, 30.0)));
+        a.server_npc_props = vec![(
+            300,
+            NpcProps {
+                image: Some("door.png".into()),
+                x: Some(20.0),
+                y: Some(12.5),
+                ..Default::default()
+            },
+        )];
+        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), a))
+            .unwrap();
+        g.poll();
+        let change = |level: &str, id, props| online::NpcChange {
+            level: level.into(),
+            id,
+            props,
+        };
+        g.npc_changes.lock().unwrap().extend([
+            change(
+                "lab3x.nw",
+                300,
+                NpcProps {
+                    image: Some("door-open.png".into()),
+                    x: Some(22.0),
+                    ..Default::default()
+                },
+            ),
+            change(
+                "lab3x.nw",
+                301,
+                NpcProps {
+                    image: Some("sign.png".into()),
+                    x: Some(5.0),
+                    y: Some(6.0),
+                    ..Default::default()
+                },
+            ),
+            change(
+                "elsewhere.nw",
+                302,
+                NpcProps {
+                    image: Some("tree.png".into()),
+                    x: Some(1.0),
+                    y: Some(1.0),
+                    ..Default::default()
+                },
+            ),
+        ]);
+        g.dirty = false;
+        g.poll();
+        assert!(g.dirty);
+        assert!(g.npc_changes.lock().unwrap().is_empty());
+        let npcs = &g.session.current_level.as_ref().unwrap().npcs;
+        let got: Vec<_> = npcs
+            .iter()
+            .map(|n| (n.server_id, n.image.as_str(), n.x, n.y))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (Some(300), "door-open.png", 22.0, 12.5),
+                (Some(301), "sign.png", 5.0, 6.0),
+            ]
+        );
+        assert_eq!(g.npc_images.get("door-open.png"), Some(&None));
     }
 
     #[test]
