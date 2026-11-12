@@ -440,7 +440,8 @@ pub static EVENTS: &[(&str, Era)] = &[
     // 2.22 clients that were searched, so no client fires it; a client
     // script that tests it reads false, as an unknown flag does there.
     ("playerleaves", V21),
-    // Seihai extension for seihai-npcserver's level-less Control-NPC: a
+    // SEIHAI EXTENSION, not original Graal GS1 behaviour. For
+    // seihai-npcserver's level-less Control-NPC: a
     // player finished logging in to, or left, the game server. No GS1
     // source names these. The only sample is a later GS2 Control-NPC
     // (`onPlayerLogin(player)` / `onPlayerLogout(player)`, Graal_analysis
