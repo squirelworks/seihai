@@ -303,21 +303,37 @@ pub fn draw(
             LINK_OUTLINE,
         );
     }
-    // The level's visible NPCs (file and server), in level order, as their
-    // images. One whose image is not on disk is outlined instead; one with
-    // no image name draws nothing, as in the clients.
-    for npc in level.npcs.iter().filter(|n| n.visible) {
-        let name = npc.image.trim();
-        if name.is_empty() {
-            continue;
-        }
-        let (nx, ny) = (
-            (npc.x * t as f32) as i32 - cam_x,
-            (npc.y * t as f32) as i32 - cam_y,
-        );
-        match npc_images.get(name) {
-            Some(Some(img)) => f.blit_image(img, npc.image_part, nx, ny),
-            _ => f.stroke_rect(nx, ny, NPC_MISSING_PX, NPC_MISSING_PX, NPC_MISSING),
+    // The visible NPCs (file and server), in level order, as their
+    // images: the gmap neighbours' first, past the cell's edges, then the
+    // player's level over them. One whose image is not on disk is outlined
+    // instead; one with no image name draws nothing, as in the clients.
+    let mut levels: Vec<((i32, i32), &Level)> = Vec::new();
+    if let Some(w) = &s.gmap {
+        let mut near: Vec<_> = w
+            .levels
+            .iter()
+            .map(|(c, l)| ((c.0 - w.cell.0, c.1 - w.cell.1), l))
+            .filter(|(off, _)| *off != (0, 0))
+            .collect();
+        near.sort_by_key(|(off, _)| *off);
+        levels.extend(near);
+    }
+    levels.push(((0, 0), level));
+    for (off, from) in levels {
+        let (bx, by) = (off.0 * 64 * t - cam_x, off.1 * 64 * t - cam_y);
+        for npc in from.npcs.iter().filter(|n| n.visible) {
+            let name = npc.image.trim();
+            if name.is_empty() {
+                continue;
+            }
+            let (nx, ny) = (
+                (npc.x * t as f32) as i32 + bx,
+                (npc.y * t as f32) as i32 + by,
+            );
+            match npc_images.get(name) {
+                Some(Some(img)) => f.blit_image(img, npc.image_part, nx, ny),
+                _ => f.stroke_rect(nx, ny, NPC_MISSING_PX, NPC_MISSING_PX, NPC_MISSING),
+            }
         }
     }
     // Other players: the same marker as the player's, in their own colour.
@@ -573,5 +589,37 @@ mod tests {
         let (cx, cy) = camera_origin(&session(600), 40, 30);
         let (wx, wy) = ((30 * 16 - cx + 8) as u32, (30 * 16 - cy + 8) as u32);
         assert_eq!(px(&f, ex, ey), px(&want, wx, wy));
+    }
+
+    /// A gmap neighbour's NPCs are drawn past the cell's edge, where its
+    /// tiles are.
+    #[test]
+    fn a_gmap_neighbours_npc_is_drawn_past_the_edge() {
+        let sheet = Sheet::load(None).unwrap();
+        let mut s = session(0);
+        s.player_x = 60.0;
+        let grid = "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n";
+        s.enter_gmap(
+            "w.gmap".into(),
+            seihai_core::gmap::Gmap::parse(grid).unwrap(),
+            (0, 0),
+        );
+        let mut east = Level::from_board(&[0; 4096]);
+        east.npcs.push(seihai_core::assets::Npc::new(
+            "gone.png".into(),
+            2.0,
+            30.0,
+            String::new(),
+        ));
+        s.gmap.as_mut().unwrap().levels.insert((1, 0), east);
+        let images = NpcImages::from([("gone.png".to_string(), None)]);
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        // Tile (2, 30) of the east cell is tile (66, 30) from this one.
+        let (nx, ny) = ((66 * 16 - cam_x) as u32, (30 * 16 - cam_y) as u32);
+        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        assert_eq!(px(&f, nx, ny), NPC_MISSING);
+        s.gmap.as_mut().unwrap().levels.clear();
+        let f = draw(&s, &sheet, &images, &[], 40, 30);
+        assert_ne!(px(&f, nx, ny), NPC_MISSING);
     }
 }

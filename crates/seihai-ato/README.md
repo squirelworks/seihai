@@ -148,7 +148,7 @@ offline with core's gmap walk. Without a position the player starts at
 (30, 30) of the first cell that names a level; a link into a gmap gives a
 position on the whole map, which picks the cell (64 tiles each) and the
 place in it. The levels next to the player's cell are loaded from the same
-place, drawn past the cell's edges (tiles only, not their NPCs), and the
+place, drawn past the cell's edges (tiles and file NPCs), and the
 walk crosses into them; a neighbour that is not on disk leaves its edge a
 wall. A plain level link leaves the gmap.
 
@@ -158,7 +158,7 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-The NPCs of neighbouring gmap levels, NPC scripts and NPC animations, NPC changes after
+The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, NPC changes after
 the level arrives, other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
