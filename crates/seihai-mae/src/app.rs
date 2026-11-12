@@ -563,6 +563,8 @@ pub fn main(args: Vec<String>) {
     let mut i = 0;
     let mut launcher_error: Option<String> = None;
     let mut cli_mode = false;
+    // `--tutorial`: start offline in the built-in tutorial.
+    let mut cli_tutorial = false;
     let mut list_only = false;
     // `--secure-login` / `--server-key`: the Seihai secure login (SEI00001).
     let mut secure_login: Option<seihai::net::SecureLogin> = None;
@@ -638,6 +640,14 @@ pub fn main(args: Vec<String>) {
                 }
             }
             "--list-only" => list_only = true,
+            // Play offline, as the start window's "Play offline" does: no
+            // start window, no server.
+            "--offline" => cli_mode = true,
+            // As "Play the tutorial": offline, in the built-in tutorial.
+            "--tutorial" => {
+                cli_mode = true;
+                cli_tutorial = true;
+            }
             "--check-assets" => check_assets = true,
             "--level-info" => {
                 i += 1;
@@ -727,6 +737,8 @@ pub fn main(args: Vec<String>) {
             }
             "--help" | "-h" => {
                 println!("seihai [--assets <dir>] [--level <name.nw>]");
+                println!("         --offline           play offline, with no start window (\"Play offline\")");
+                println!("         --tutorial          play the built-in tutorial offline (\"Play the tutorial\")");
                 println!("         --assets <dir>      your own asset folder (optional). A file it lacks comes");
                 println!("                             from the built-in default set; with no folder the");
                 println!("                             built-in set is all there is, and offline starts in");
@@ -1051,13 +1063,22 @@ pub fn main(args: Vec<String>) {
     // to the GUI with the error, and a later Join tries again.
     let mut gui_error: Option<String> = launcher_error.take();
     // "Play the tutorial" in the start window: offline, in the tutorial.
-    let mut tutorial_picked = false;
+    let mut tutorial_picked = cli_tutorial;
+    // Run by the `seihai` program: its shared start window is the start
+    // window (Mae's own is for the `seihai-mae` development binary), and a
+    // lost connection goes back to it even after a `--online` start.
+    let in_program = in_seihai_program();
+    let windowed = !cli_mode || in_program;
     if let Some(b) = offline_build {
         if online.take().is_some() {
             eprintln!("{} is offline-only: {}", b.label, b.reason());
         }
     }
     loop {
+        if !cli_mode && in_program {
+            let why = relaunch_to_server_list(gui_error.as_deref());
+            eprintln!("start window: could not open it ({why}); opening Mae's own");
+        }
         if !cli_mode {
             let pick = match gui_error.take() {
                 Some(e) => seihai::gui::run_with_error(e),
@@ -1236,6 +1257,10 @@ pub fn main(args: Vec<String>) {
                     if !cli_mode {
                         gui_error = Some(e.to_string());
                         continue;
+                    }
+                    if in_program {
+                        let why = relaunch_to_server_list(Some(&e.to_string()));
+                        eprintln!("start window: could not open it ({why})");
                     }
                 }
             }
@@ -2511,7 +2536,7 @@ pub fn main(args: Vec<String>) {
                             None => format!("connection closed: {e}"),
                         };
                         eprintln!("{why}");
-                        if !cli_mode {
+                        if windowed {
                             // The error window opens once the game loop
                             // has ended, so the stall watch does not count
                             // the time it is open.
@@ -4715,7 +4740,7 @@ pub fn main(args: Vec<String>) {
                     }
                     Err(why) => {
                         eprintln!("{why}");
-                        if !cli_mode {
+                        if windowed {
                             // The error window opens once the game loop
                             // has ended, so the stall watch does not count
                             // the time it is open.
@@ -5655,7 +5680,7 @@ pub fn main(args: Vec<String>) {
         let _ = c.shutdown();
     }
     close_window(window);
-    if back_to_list || (exit_error.is_some() && !cli_mode) {
+    if back_to_list || (exit_error.is_some() && windowed) {
         // A fresh start of this program with the server list: nothing of
         // this game (connection, window, level, scripts) is carried over.
         let why = relaunch_to_server_list(exit_error.as_deref());
@@ -5666,6 +5691,21 @@ pub fn main(args: Vec<String>) {
     } else if let Some(why) = exit_error {
         let _ = seihai::gui::run_with_error(why);
     }
+}
+
+/// The `seihai` program Mae runs inside, if it does: the start window's
+/// (`SEIHAI_LAUNCHER`) or the program's own path (`SEIHAI_PROGRAM`).
+fn seihai_program() -> Option<PathBuf> {
+    ["SEIHAI_LAUNCHER", "SEIHAI_PROGRAM"]
+        .into_iter()
+        .filter_map(env::var_os)
+        .map(PathBuf::from)
+        .find(|p| p.is_file())
+}
+
+/// True when Mae runs inside the `seihai` program.
+fn in_seihai_program() -> bool {
+    seihai_program().is_some()
 }
 
 /// The arguments that start this program at the server list, with `error`
@@ -5682,22 +5722,17 @@ fn server_list_args(error: Option<&str>) -> Vec<String> {
 /// on Windows the new one is started and this one leaves. Returns only on
 /// failure, with the reason.
 ///
-/// Started from the `seihai` start window, which sets `SEIHAI_LAUNCHER` to
-/// its own path, it goes back to that window. Run as `seihai mae` (the
-/// `seihai` program sets `SEIHAI_PROGRAM`), it is `seihai mae` again, with
-/// Mae's own window.
+/// Inside the `seihai` program (`SEIHAI_LAUNCHER` or `SEIHAI_PROGRAM` set)
+/// that is the program's shared start window, not Mae's own.
 fn relaunch_to_server_list(error: Option<&str>) -> std::io::Error {
-    let file = |var: &str| env::var_os(var).map(PathBuf::from).filter(|p| p.is_file());
-    let (exe, sub) = match (file("SEIHAI_LAUNCHER"), file("SEIHAI_PROGRAM")) {
-        (Some(launcher), _) => (launcher, None),
-        (None, Some(program)) => (program, Some("mae")),
-        (None, None) => match env::current_exe() {
-            Ok(p) => (p, None),
+    let exe = match seihai_program() {
+        Some(p) => p,
+        None => match env::current_exe() {
+            Ok(p) => p,
             Err(e) => return e,
         },
     };
     let mut cmd = std::process::Command::new(exe);
-    cmd.args(sub);
     cmd.args(server_list_args(error));
     #[cfg(unix)]
     {

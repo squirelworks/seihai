@@ -27,7 +27,10 @@ codegen unit).
 - `seihai` with no arguments opens the start window
   (`seihai-play::start`): every version of every line, the server list
   and Join. The pick runs that line's client, logged in at once. A lost
-  connection comes back to this window.
+  connection comes back to this window. For a Mae version it also has
+  "Play offline" and "Play the tutorial" (`--offline`, `--tutorial`) and,
+  under "All versions", the offline-only builds. Mae's own settings
+  window is only the `seihai-mae` development binary's.
 - `seihai mae|ato|issho|g3d ARGS...`, or the program under the name
   `seihai-mae` (and so on), runs that client on its own, with its own
   start window.
