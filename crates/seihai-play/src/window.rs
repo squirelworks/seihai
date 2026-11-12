@@ -66,17 +66,83 @@ fn name(r: eframe::Renderer) -> &'static str {
     }
 }
 
+/// Why no window opened: each renderer tried and what it said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowError {
+    /// `(renderer, what it said)`, in the order tried.
+    pub tried: Vec<(&'static str, String)>,
+}
+
+impl std::fmt::Display for WindowError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let parts: Vec<String> = self
+            .tried
+            .iter()
+            .map(|(r, why)| format!("{r}: {why}"))
+            .collect();
+        write!(f, "{}", parts.join("; "))
+    }
+}
+
+impl std::error::Error for WindowError {}
+
+/// One renderer's attempt. wgpu 22 reports a surface it cannot configure
+/// (no display, a session with no desktop) by panicking inside eframe, not
+/// as an error, so the attempt is run under `catch_unwind` and a panic
+/// becomes this renderer's error. The panic message is kept for the error
+/// and not printed as a crash.
+fn attempt(
+    title: &str,
+    options: eframe::NativeOptions,
+    create: eframe::AppCreator<'_>,
+) -> Result<(), String> {
+    caught(|| eframe::run_native(title, options, create).map_err(|e| e.to_string()))
+}
+
+/// Run `f`; a panic in it is returned as its message instead.
+fn caught(f: impl FnOnce() -> Result<(), String>) -> Result<(), String> {
+    let caught: std::sync::Arc<std::sync::Mutex<Option<String>>> = Default::default();
+    let hook = std::panic::take_hook();
+    {
+        let caught = caught.clone();
+        std::panic::set_hook(Box::new(move |info| {
+            let msg = info
+                .payload()
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| info.payload().downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "panicked".into());
+            let at = info
+                .location()
+                .map(|l| format!(" ({}:{})", l.file(), l.line()))
+                .unwrap_or_default();
+            *caught.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{msg}{at}"));
+        }));
+    }
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    std::panic::set_hook(hook);
+    match r {
+        Ok(r) => r,
+        Err(_) => Err(caught
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .unwrap_or_else(|| "panicked".into())),
+    }
+}
+
 /// `eframe::run_native`, with the wgpu fallback. The creator is kept
-/// until a renderer has made the window, so a second one can use it. `options.renderer` is
-/// overwritten. Blocks until the window closes. If OpenGL fails after the
-/// app was made, it cannot be made again and the error is returned.
+/// until a renderer has made the window, so a second one can use it.
+/// `options.renderer` is overwritten. Blocks until the window closes. If a
+/// renderer fails after the app was made, the app cannot be made again and
+/// the error is returned.
 pub fn run_native<'a>(
     title: &str,
     options: eframe::NativeOptions,
     create: eframe::AppCreator<'a>,
-) -> eframe::Result<()> {
+) -> Result<(), WindowError> {
     let slot: Rc<RefCell<Option<eframe::AppCreator<'a>>>> = Rc::new(RefCell::new(Some(create)));
-    let mut last = None;
+    let mut tried = Vec::new();
     for &renderer in order(Wanted::from_env(), GLOW_FAILED.load(Ordering::Relaxed)) {
         let Some(_) = slot.borrow().as_ref() else {
             break;
@@ -86,7 +152,7 @@ pub fn run_native<'a>(
             ..clone_options(&options)
         };
         let s = slot.clone();
-        let r = eframe::run_native(
+        let r = attempt(
             title,
             options,
             Box::new(move |cc| {
@@ -103,15 +169,11 @@ pub fn run_native<'a>(
                 if renderer == eframe::Renderer::Glow && slot.borrow().is_some() {
                     GLOW_FAILED.store(true, Ordering::Relaxed);
                 }
-                last = Some(e);
+                tried.push((name(renderer), e));
             }
         }
     }
-    match last {
-        Some(e) => Err(e),
-        // Unreachable: the order is never empty and the slot starts full.
-        None => Ok(()),
-    }
+    Err(WindowError { tried })
 }
 
 /// `NativeOptions` is not `Clone`; the fields Seihai sets are copied and
@@ -155,6 +217,30 @@ mod tests {
         // A named renderer has no fallback.
         assert_eq!(order(Wanted::Glow, true), &[Glow]);
         assert_eq!(order(Wanted::Wgpu, false), &[Wgpu]);
+    }
+
+    #[test]
+    fn a_panic_is_an_error_with_its_message() {
+        assert_eq!(caught(|| Ok(())), Ok(()));
+        assert_eq!(caught(|| Err("no".into())), Err("no".into()));
+        let e = caught(|| panic!("Error in Surface::configure: Invalid surface")).unwrap_err();
+        assert!(
+            e.starts_with("Error in Surface::configure: Invalid surface ("),
+            "{e}"
+        );
+        // The usual hook is back afterwards.
+        assert_eq!(caught(|| Ok(())), Ok(()));
+    }
+
+    #[test]
+    fn the_error_names_each_renderer_tried() {
+        let e = WindowError {
+            tried: vec![
+                ("OpenGL", "needs 2.0".into()),
+                ("wgpu", "no surface".into()),
+            ],
+        };
+        assert_eq!(e.to_string(), "OpenGL: needs 2.0; wgpu: no surface");
     }
 
     #[test]

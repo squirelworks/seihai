@@ -271,7 +271,7 @@ fn open_window(error: Option<String>) -> Option<Handoff> {
         seihai_play::window::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app))))
     {
         eprintln!("seihai: could not open the start window: {e}");
-        eprintln!("seihai: neither OpenGL 2.0 nor wgpu (Direct3D 12, Vulkan or Metal) could draw a window here; install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe");
+        eprintln!("seihai: no renderer could draw a window here (tried {}); install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe", e.tried.iter().map(|(r, _)| *r).collect::<Vec<_>>().join(", then "));
         eprintln!("seihai: run a client with --version and --online instead (see `seihai --help`)");
         std::process::exit(1);
     }
