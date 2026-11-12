@@ -63,6 +63,9 @@ pub struct Game {
     /// feature). Silent with no sounds folder, no device, or `--no-sound`.
     sound: SoundEngine,
     sound_clock: Instant,
+    /// The 50 ms pose clock (the swim stroke and its splashes, the lift):
+    /// when it last ran.
+    pose_clock: Instant,
     /// The level the looped sounds belong to; a new one stops them.
     sound_serial: u64,
     /// Where missing sounds go for the network thread to ask for.
@@ -147,6 +150,7 @@ impl Game {
             link_to: None,
             sound: sound_engine(resolver, sound_on),
             sound_clock: Instant::now(),
+            pose_clock: Instant::now(),
             sound_serial: 0,
             wanted_sounds: Default::default(),
             resolver: resolver.cloned(),
@@ -568,6 +572,20 @@ impl Game {
         ))
     }
 
+    /// Runs core's pose clock up to `now`: the swim stroke goes on in the
+    /// water, moving or not, and queues its `PLAYSOUND` cues (the splash
+    /// of `swim.gani`) as each step is entered, as `seihai-mae` does.
+    pub fn tick_poses(&mut self, now: Instant) {
+        let ms = now.saturating_duration_since(self.pose_clock).as_millis() as u64;
+        if ms == 0 {
+            return;
+        }
+        self.pose_clock += std::time::Duration::from_millis(ms);
+        if self.session.tick_poses(ms) {
+            self.dirty = true;
+        }
+    }
+
     /// One walk step for the arrows held, at the session's pace. `(dx, dy)`
     /// are -1, 0 or 1 per axis.
     pub fn walk(&mut self, dx: i8, dy: i8, now: Instant) {
@@ -646,6 +664,7 @@ impl Game {
     pub fn tick(&mut self, dx: i8, dy: i8, now: Instant) -> bool {
         self.poll();
         self.walk(dx, dy, now);
+        self.tick_poses(now);
         self.play_sounds();
         let others = self
             .others
@@ -891,6 +910,39 @@ mod tests {
         let (mut g, _tx) = game();
         g.walk(1, 0, Instant::now() + Duration::from_secs(1));
         assert_eq!(g.session.player_x, OfflineSession::default().player_x);
+    }
+
+    #[test]
+    fn the_swim_stroke_splashes_on_every_loop_in_the_water() {
+        let (mut g, tx) = game();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        // The stock swim.gani's shape: a splash on the first of eight
+        // two-tick steps, looped (one splash every 0.8 s).
+        let mut text =
+            String::from("SINGLEDIRECTION\nLOOP\nANI\n1 0 0\nPLAYSOUND water.wav 0 0\nWAIT 1\n\n");
+        text.push_str(&"1 0 0\nWAIT 1\n\n".repeat(7));
+        text.push_str("ANIEND\n");
+        g.session
+            .set_swim_gani(GaniPlayer::new(Gani::parse(&text).unwrap()));
+        g.session.in_water = true;
+        let t0 = g.pose_clock;
+        let mut splashes = 0;
+        for i in 1..=100u64 {
+            // 5 s of floating still, one frame every 50 ms.
+            g.tick_poses(t0 + Duration::from_millis(50 * i));
+            splashes += g
+                .session
+                .take_sound_events()
+                .iter()
+                .filter(|e| e.file == "water.wav")
+                .count();
+        }
+        assert!((6..=7).contains(&splashes), "{splashes} splashes in 5 s");
     }
 
     #[test]
