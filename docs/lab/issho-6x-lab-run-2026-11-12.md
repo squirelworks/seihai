@@ -103,6 +103,36 @@ Fix: seihai-core passes each sound the server sends to the view through `Live::a
   - Next: a guest with a hosts entry or lab DNS, with no injection.
 - So the real 6.x window is 1024x768 on both Windows 6.00r2 and Linux 6.03r7. Issho's 640x480 is the 3.x size.
 
+### Through a login server: the real 6.03r7 HUD
+
+A 6.x client expects a login server where it dials, not a game server. With a "login" gserver on :14900 whose
+start level serverwarps to the lab world on :14901, both registered with a private listserver, the real
+6.03r7 Linux client logged in as guest (G3D0511C), was warped to the world, printed
+`Welcome to Issho real 603.` and `Initialized OpenGL.`, and the game drew. Arrow keys walk, and the client
+asked the server for `walk.gani` and `steps2.wav` (WANTFILE).
+
+HUD at 1024x768, window pixels (x0–x1, y0–y1), default HUD with no server GUI scripts:
+
+| Element | Where | Notes |
+|---|---|---|
+| Item slots ×3 | 15–36, 80–101, 145–166; y 30–59 | Red rounded tabs, 22x30, 65 px apart |
+| Current weapon | 105–128, 31–58 | Sword icon, just right of slot 2 |
+| AP/magic bar | 15–144, 65–86 | 130x22, red frame, yin-yang icon on the left, red-to-white fill |
+| Gralats | icon 274–289, 30–45; count 275–285, 48–61 | "0" |
+| Bombs | icon 330–345, 31–45; count 327–348, 48–62 | "05", zero-padded |
+| Arrows | icon 384–388, 30–44; count 377–397, 48–61 | "10" |
+| Hearts | 826–865, 871–910, 916–955; y 24–67 | 40x44 spirals, 45 px apart, top right |
+
+- Counters: white italic digits with a dark outline, about 14 px tall, centred under each icon.
+- The playfield fills the window. There is no default chat bar or status bar: Tab, Q, M and F2 open nothing,
+  because on 6.x those are GUI scripts the server sends, and this world sends none.
+- The window title is the server's name.
+
+Windows 6.00r2 with the same login-server layout still exits about 4 s after `Welcome to Issho Login Win.`
+and an NPC-server PM, before the warp. The guest's display is the Microsoft Basic Render Driver (no 3D), so
+the likely cause is that it cannot start its OpenGL view; not proven. It fetched no signed config before
+connecting: only `gethostbyname(loginserver.graalonline.com)` and the :14900 connect.
+
 ## Re-run with the fixes (#474, seihai-core #12)
 
 The 6.03r7 and 6.00r2 rows were re-run against the same world, with `steps2.wav` on the server only.
