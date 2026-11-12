@@ -16,7 +16,7 @@ name = "seihai-issho"
 path = "src/main.rs"
 
 [dependencies]
-seihai-core = { path = "../seihai-core", default-features = false }
+seihai-core.workspace = true
 
 [features]
 default = ["audio"]

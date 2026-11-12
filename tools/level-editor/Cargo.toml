@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 # No sound in the editor: core without its `audio` feature.
-seihai-core = { path = "../../crates/seihai-core", default-features = false, features = ["dev"] }
+seihai-core = { workspace = true, features = ["dev"] }
 # The tile renderer (`seihai::render`) belongs to the client, not the core.
 seihai = { package = "seihai-mae", path = "../../crates/seihai-mae", default-features = false, features = ["dev"] }
 # The window (`level-editor gui`). The same versions as the client, so
