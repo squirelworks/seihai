@@ -98,8 +98,11 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
   PNG or GIF image from the asset folder, with `setimgpart` parts and the
   clear pixels left out. An image not in the asset folder is drawn as a
   purple outline and named once on stderr; an NPC with no image draws
-  nothing. NPC props that come after the level (moves, new images) are
-  not applied yet, and missing images are not asked for from the server.
+  nothing. NPC props that come after the level (moves, new images, a new
+  NPC) are applied as they arrive, through core's `Live::npc_changes`, to
+  the level the view is on; missing images are not asked for from the
+  server. A `PLO_NPCDEL2` delete takes the NPC off the level it names;
+  `PLO_NPCDEL` (29) and `PLO_HIDENPCS` (151) are not applied yet.
 
 The walk is sent: the view hands its pose to the network thread, which
 sends it once a 50 ms tick after the post-login frame. 3.04 and 4.04r2
@@ -128,6 +131,11 @@ server's copy of the new cell replaces the view's without moving the
 player; a level of the gmap at another cell moves the view there, and a
 level off the gmap leaves it.
 
+Board changes the server sends (`PLO_BOARDMODIFY`, 7, and the 186
+blocks) are passed to the view, which puts them on the level it is on and
+on the gmap neighbours it holds (core's `gmap::apply_board_mods_to`). A
+change for a level the view does not hold is dropped.
+
 ## Offline
 
 `--level NAME` (`-l`, as in `seihai-mae`) with no `--online` plays level
@@ -143,7 +151,7 @@ offline with core's gmap walk. Without a position the player starts at
 (30, 30) of the first cell that names a level; a link into a gmap gives a
 position on the whole map, which picks the cell (64 tiles each) and the
 place in it. The levels next to the player's cell are loaded from the same
-place, drawn past the cell's edges (tiles only, not their NPCs), and the
+place, drawn past the cell's edges (tiles and file NPCs), and the
 walk crosses into them; a neighbour that is not on disk leaves its edge a
 wall. A plain level link leaves the gmap.
 
@@ -153,8 +161,7 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-The NPCs of neighbouring gmap levels, board changes (`PLO_BOARDMODIFY`)
-in the view, NPC scripts and NPC animations, NPC changes after
-the level arrives, other players' looks (they show as plain markers),
+The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
+other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

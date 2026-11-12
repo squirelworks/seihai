@@ -18,7 +18,7 @@ name = "seihai-g3d"
 path = "src/main.rs"
 
 [dependencies]
-seihai-core = { path = "../seihai-core", default-features = false }
+seihai-core.workspace = true
 # The window. Same version as seihai-mae.
 minifb = "0.27"
 # The start window (the connect form). Same versions as seihai-mae.

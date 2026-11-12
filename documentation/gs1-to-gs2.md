@@ -24,13 +24,14 @@ this output, so this list is not a compatibility claim for any client.
 | `@`, `SPC`, `NL`, `TAB` | `OP_JOIN` | runs on Seihai's GS2 machine |
 | `c ? a : b` | same | runs on Seihai's GS2 machine |
 | `x in \|lo, hi\|` | `OP_IN_RANGE` | runs on Seihai's GS2 machine |
-| `{a, b, c}` with scalar elements (2.1 and later) | array literal | `lists.gs2bc` |
+| `{a, b, c}` (2.1 and later), where the element order cannot matter (see below) | array literal | `lists.gs2bc`; with calls, same bytes as the GS2 source |
 | `a[i]`, `a[i, j]` read | `OP_ARRAY`, `OP_ARRAY_MULTIDIM` | `lists.gs2bc` |
 | `a[i] = v`, `a[i, j] = v` | `OP_ARRAY_ASSIGN`, `OP_ARRAY_MULTIDIM_ASSIGN` | `lists.gs2bc` |
 | `x in this.list` (2.1 and later) | `OP_IN_OBJ` | `lists.gs2bc` |
 | `a[i] += v`, `-=`, `*=`, `/=`, `a[i]++`, `a[i]--` (and with `a[i, j]`) | the bytes of `a[i] = a[i] + v` | element read and write from `lists.gs2bc`; same bytes as the long form; runs on Seihai's GS2 machine |
 | `x in {a, b, c}` | the bytes of `x == a \|\| x == b \|\| x == c`; `in {}` is 0 | same bytes as the long form; runs on Seihai's GS2 machine |
 | `playerx`, `playery` | `player.x`, `player.y` | same bytes as the GS2 source |
+| `with (target) body` (2.1 and later), with the limits below | target, `OP_CONV_TO_OBJECT`, `OP_WITH`, body, `OP_WITHEND` | `rest.gs2bc` (`with (player)`, `with (null)`), both front ends |
 | `sleep`, `setarray`, `sin`, `cos`, `arctan`, `abs`, `random`, `int`, `exp`, `log`, `min`, `max`, `pow`, `char`, `getangle`, `getdir`, `vecx`, `vecy`, `waitfor`, `format`, `makevar`, `arraylen`, `sarraylen` | their opcodes, with Seihai's argument-count check | `gs2-opcodes.md`, argument tests |
 | `strlen(s)`, `startswith(s, t)`, `indexof(s, t)` | `OP_OBJ_LENGTH`, `OP_OBJ_STARTS`, `OP_OBJ_POS` | `gs2-opcodes.md` only |
 | a GS1 command that GS2 also has | a call by name | `shared.gs2bc` (`showimg`, `hideimg`, `set`) |
@@ -47,6 +48,43 @@ A computed array index (`a[this.i + 1]`) is converted with
 `OP_CONV_TO_FLOAT` like any numeric operand. The fixture only has constant
 indexes, so that conversion is Seihai's choice.
 
+## `with`
+
+No script in the client archives (1.x to 2.x, the NW betas) or the NPC
+library uses `with`. It appears only in the NPC server's notes
+(`NPCControl/npcserverdoc.txt` in the NW beta 1 and 2 archives), so the
+lowering follows those notes and the fixture's encoding. The notes say that
+inside `with (players[i])` or `with (npcs[i])` the target's properties and
+`this.` variables are used, plain script variables (`i`, `j`) still work,
+script functions still run as the original NPC, the block is skipped when
+the target does not exist, and `sleep`, `break` and `continue` inside the
+block leave the old object switched.
+
+In Seihai's GS2 machine a plain name resolves on the `with` object first and
+`player` stays the script's player; no fixture shows how the client runs a
+bare call inside `with`. So a GS1 body is lowered only when its meaning
+cannot change: no calls or commands, no write to
+a plain name that is not a built-in property (`x`, `y`, `timeout`, `chat`),
+and no `player…`, `client.` or `level.` name. Reading a plain script
+variable is allowed; it would read the target's variable of the same name
+first if the target had one. `getplayer` and `getnpc` are still refused, so
+the target is an expression such as `players[i]`, `npcs[i]` or `player`.
+Seihai's GS2 machine runs `with` only on `player`, `this` and the other root
+objects; it logs and skips any other target.
+
+## Seen in the archives, still refused
+
+- `players[i].x`, `.y` and `.dir` are common in level scripts (about 1,350
+  occurrences across the client archives and the NPC library, many of them
+  the same script in several versions). The parser records
+  them as a field after an index, and no fixture shows a member read on an
+  array element, so they stay errors until one does.
+- `board[...]` is read and written in level scripts, followed by
+  `updateboard`. GS2 has neither `board` nor `updateboard` in the fixtures,
+  so both stay errors. `tiles[x, y]` appears only in the 2.1 feature notes.
+- `npcs[i].x` and lists inside array literals: no script in the archives
+  uses them.
+
 ## Rejected with a compile error
 
 - A top-level statement that is not an event test or a function, an event
@@ -58,12 +96,19 @@ indexes, so that conversion is Seihai's choice.
 - GS1 functions with no GS2 form: `playersays`, `playersays2`, `ascii`,
   `strcontains`, `lindexof`, `onmapx`, `onmapy`, `strtofloat`, `hasweapon`,
   `getnpc`, `getplayer`.
-- `with`, and a function inside another function.
+- A function inside another function.
+- A `with` body that GS2 would run differently (see `with` above), and a
+  `return`, `sleep`, `waitfor` or a `break`/`continue` that leaves a `with`
+  block (in either front end).
 - `x in {a, b, c}`, `a[i] += v` and `a[i]++` when `x` or the index calls a
   function (the rewrite above would call it more than once).
-- Array literals whose elements contain calls or nested lists: the GS1
-  interpreter evaluates them left to right and the GS2 encoding pushes them
-  right to left, so they need an order-preserving lowering first.
+- Array literals with nested lists, and array literals where the order of
+  the elements could matter: the GS1 interpreter evaluates them left to
+  right and the GS2 encoding pushes them right to left. A literal is
+  lowered when no element calls script or host code or `random`, or when
+  exactly one does and the others are constants (`{next(), 1}`); any other
+  mix (`{next(), next()}`, `{next(), this.v}`) needs the values in
+  variables first.
 - A list stored into an array element (`a[0] = {1}`).
 - A field after an index (`npcs[i].x`), and three or more indexes.
 - `board[...]` and `tiles[...]`: no fixture shows how GS2 encodes them.

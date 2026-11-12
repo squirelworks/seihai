@@ -57,7 +57,7 @@ This creates the binary at:
 - Linux / macOS: `target/release/seihai`
 - Windows: `target\release\seihai.exe`
 
-A plain `cargo build --release` builds every package: `seihai`, `seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d`, `seihai-draw` and the level editor. `seihai-draw` is a library with no window: it paints a level's tiles and one gani frame into an RGBA buffer, for a tool that should not link the game client. The offline level editor stays in `tools/level-editor`. `cargo build --release -p seihai` builds only the `seihai` launcher, which cannot play anything without `seihai-mae` beside it, so use the plain command.
+A plain `cargo build --release` builds every package: `seihai`, `seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d` and the level editor. `seihai-draw`, the window-less tile and gani painter that tools use, now lives in [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core) beside the core and is tagged with it. The offline level editor stays in `tools/level-editor`. `cargo build --release -p seihai` builds only the `seihai` launcher, which cannot play anything without `seihai-mae` beside it, so use the plain command.
 
 `seihai` is the launcher. It reads `--version` and starts `seihai-mae` (the 1.x and 2.x client), `seihai-ato` (the Torque line, 3.x to 5.x, which logs in and draws the level flat in 2D with a local walk, not in 3D yet; see `crates/seihai-ato/README.md`), `seihai-issho` (a 6.x profile; the quattro_lib shell, which does not draw yet; see `crates/seihai-issho/README.md`), or, for `--version graal3d`, `seihai-g3d` (the February 2000 Graal3D with its own server, with its own connect window; see `documentation/graal3d.md`), passing every argument through. A 7.x label is rejected. Issho is not started unless the version is 6.x. With no `--version`, and with no arguments at all (the start window), it starts `seihai-mae`. The start window's Version list shows the major versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22, 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7); "All versions" adds every other build and the offline-only ones. Picking a 3.x, 4.x or 5.x build there closes it and opens `seihai-ato`'s start window with the account and password filled in. A 6.x pick in that window stays in `seihai-mae` (the launcher, not the window, is what starts `seihai-issho` for 6.x). "Graal3D", at the end of the list, closes it and opens `seihai-g3d`'s connect window the same way. Keep the binaries in the same folder. `seihai-mae` also runs on its own with the same arguments.
 
@@ -71,7 +71,7 @@ cargo run --release -p seihai-mae
 
 ## Assets
 
-Seihai ships a small set of its own default art, sounds, two starter levels and a short tutorial (`assets/default/`, compiled into the program), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline", and you start in the tutorial. "Play the tutorial" in the start window opens it with any Assets folder; the tutorial always uses its own art. See `documentation/tutorial-levels.md`. To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
+Seihai ships a small set of its own default art, sounds, two starter levels and a short tutorial (`assets/default/`, compiled into the program through seihai-core, which keeps its own copy of the folder: after `tools/gen_default_assets.py` regenerates it here, copy the change to [seihai-core](https://github.com/squirelworks/seihai-core) too), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline", and you start in the tutorial. "Play the tutorial" in the start window opens it with any Assets folder; the tutorial always uses its own art. See `documentation/tutorial-levels.md`. To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
 
 - `levels/` — `.nw`, `.graal`, or `.zelda` levels
 - `bodies/body.png` and `heads/head0.png` — player sprites
@@ -221,6 +221,8 @@ For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.tx
 - Some packet ids are decoded but not yet applied to gameplay
 
 ## Documentation
+
+The shared library, `seihai-core` (protocol, assets, scripting, the offline simulation, the version profiles and the connection code), lives in its own repo, [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core). The workspace pins it once in the root `Cargo.toml`.
 
 See `documentation/` for the implementation notes, roadmap, and version profiles.
 

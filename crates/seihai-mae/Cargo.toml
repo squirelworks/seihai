@@ -11,7 +11,7 @@ name = "seihai"
 path = "src/lib.rs"
 
 [dependencies]
-seihai-core = { path = "../seihai-core", default-features = false }
+seihai-core.workspace = true
 # Chat text over heads (TrueType). Already in the tree through egui.
 ab_glyph = "0.2"
 minifb = "0.27"

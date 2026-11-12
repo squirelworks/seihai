@@ -19,9 +19,10 @@ PRs; never merge, never push to `main`/`seihai`, never create a tag or release.
   functions, not tables, not comments. Reading the fork to learn behaviour is fine;
   packet ids and wire formats are facts and may be used. Write Rust from Seihai's
   protocol docs, lab captures and tests.
-- The Rust repos depend on `seihai-core` (`squirelworks/seihai`) **by git tag only**
-  (current: `v0.0.5`). When core lacks something, add it in `seihai` in its own PR,
-  ask for a tag, then bump the tag in its own PR. Never fork core code into a server repo.
+- `seihai-core` lives in its own repo, `squirelworks/seihai-core`. Every Rust repo,
+  this one included, depends on it by git tag or rev (this workspace pins it once in
+  `[workspace.dependencies]`). When core lacks something, add it in `seihai-core` in its
+  own PR, then bump the pin in its own PR. Never fork core code into another repo.
 - Fork duties: keep `LICENSE.md` and upstream credits; every changed file gets
   `// Modified by the Seihai project, YYYY-MM-DD: see CHANGES-SEIHAI.md.` at the top;
   every change gets a row in `CHANGES-SEIHAI.md`.

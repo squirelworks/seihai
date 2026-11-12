@@ -12,7 +12,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 pub use seihai_core::client::{
-    LinkAsk, Live, Login, Other, Pose, SharedOthers, SharedPose, WorldView,
+    LinkAsk, Live, Login, NpcChange, Other, Pose, SharedBoardMods, SharedNpcChanges, SharedOthers,
+    SharedPose, WorldView,
 };
 
 /// Log in at `addr` and log every level the server sends to `out`, with

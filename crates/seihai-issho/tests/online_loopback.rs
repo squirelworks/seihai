@@ -35,8 +35,9 @@ fn board(fill: u16) -> Vec<u8> {
     out
 }
 
-/// A script built with gs2-parser (see the fixtures' README).
-const SCRIPT: &[u8] = include_bytes!("../../seihai-core/tests/fixtures/gs2/shared.gs2bc");
+/// A script built with gs2-parser (copied from seihai-core's
+/// `tests/fixtures/gs2`; see the README there).
+const SCRIPT: &[u8] = include_bytes!("fixtures/gs2/shared.gs2bc");
 
 fn serve(version: ClientVersion, listener: TcpListener) {
     serve_with(version, listener, None);
