@@ -19,6 +19,11 @@ use seihai_core::protocol::ClientVersion;
 #[cfg(not(feature = "era6"))]
 pub mod engine;
 
+/// The Torque UDP link a Graal3D session runs beside its TCP login.
+/// Left out of an `era6` build with the engine.
+#[cfg(not(feature = "era6"))]
+pub mod net;
+
 /// One Torque connect profile, keyed by the protocol number the client
 /// sends twice (current and minimum) and wants back exactly in the accept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
