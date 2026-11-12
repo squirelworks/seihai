@@ -28,10 +28,12 @@
 
 use crate::level::{Arrival, LevelStore};
 use seihai_core::assets::{AssetResolver, AssetRoot, Level};
-use seihai_core::filecache::FileSession;
+use seihai_core::filecache::{DownloadStore, FileSession};
+use seihai_core::gmap::{sync_world, Crossing, Gmap, GmapRules, WorldLoader};
 use seihai_core::net::{
     link_request_frame, login_gserver_with, random_key, walk_message_for, wantfile_message,
 };
+use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::lobby::LobbyBurst;
 use seihai_core::protocol::login::LoginBurst;
 use seihai_core::protocol::walkcadence::WalkCadence;
@@ -135,6 +137,75 @@ pub struct Live {
     /// the server for each (WANTFILE), as 2.05 does, and the sound plays
     /// on a later cue once it is saved.
     pub wanted_sounds: Arc<Mutex<Vec<String>>>,
+    /// The gmap the server has the player on, as the network thread last
+    /// saw it changed; the view takes it.
+    pub world: Arc<Mutex<Option<WorldView>>>,
+    /// Gmap edges the view's walk crossed, in order; the network thread
+    /// takes them and sends each crossing.
+    pub crossings: Arc<Mutex<Vec<Crossing>>>,
+}
+
+/// [`WorldView::key`]: the gmap, the cell, the neighbours' cells and the
+/// crossings sent.
+type WorldKey = (String, (i32, i32), Vec<(i32, i32)>, u64);
+
+/// The gmap the server has the player on, for the view: the grid, the
+/// player's cell, and the neighbouring levels the network thread has (the
+/// server's boards, or local files the file rules allow), from core's
+/// `gmap::sync_world`.
+#[derive(Debug, Clone)]
+pub struct WorldView {
+    pub name: String,
+    pub map: Gmap,
+    pub cell: (i32, i32),
+    pub levels: Vec<((i32, i32), Level)>,
+    /// How many of the view's crossings the network thread had sent when
+    /// it took this snapshot. While the view has sent more, `cell` is
+    /// behind the view's and says nothing about a server move.
+    pub crossings: u64,
+}
+
+impl WorldView {
+    /// The world `sync_world` keeps in `ws`, or `None` off a gmap.
+    pub fn of(ws: &OfflineSession, crossings: u64) -> Option<WorldView> {
+        let w = ws.gmap.as_ref()?;
+        let mut levels: Vec<((i32, i32), Level)> =
+            w.levels.iter().map(|(c, l)| (*c, l.clone())).collect();
+        levels.sort_by_key(|(c, _)| *c);
+        Some(WorldView {
+            name: w.name.clone(),
+            map: w.map.clone(),
+            cell: w.cell,
+            levels,
+            crossings,
+        })
+    }
+
+    /// What tells two snapshots apart without comparing every board: the
+    /// gmap, the cell, which neighbours are in, and the crossings sent.
+    fn key(&self) -> WorldKey {
+        (
+            self.name.to_ascii_lowercase(),
+            self.cell,
+            self.levels.iter().map(|(c, _)| *c).collect(),
+            self.crossings,
+        )
+    }
+}
+
+/// Level and gmap files for `sync_world`: the `.gmap` from the download
+/// store (a server's copy is kept in memory, a local one is read from the
+/// asset folders), levels from the asset folders as `seihai-mae` does.
+struct Loader<'a>(&'a DownloadStore);
+
+impl WorldLoader for Loader<'_> {
+    fn gmap_text(&self, name: &str) -> Option<String> {
+        String::from_utf8(self.0.read(name)?).ok()
+    }
+
+    fn level(&self, name: &str, server_mod_time: Option<u32>) -> Option<Level> {
+        Level::load(self.0.resolver().level_at_mod_time(name, server_mod_time)?).ok()
+    }
 }
 
 /// The file messages for the sounds the view is missing: each name taken
@@ -200,6 +271,9 @@ struct WalkSender {
     cadence: Option<WalkCadence>,
     last: Option<Pose>,
     ganis: bool,
+    /// A crossing's lead (46, where the build sends it), held for the next
+    /// tick's frame.
+    held: Vec<Vec<u8>>,
 }
 
 impl WalkSender {
@@ -209,11 +283,38 @@ impl WalkSender {
             cadence: WalkCadence::for_version(version),
             last: None,
             ganis: version.profile().ui.ganis,
+            held: Vec::new(),
         }
     }
 
-    /// The message for this tick, if any.
-    fn tick(&mut self, pose: Pose) -> Option<Vec<u8>> {
+    /// The view's walk crossed a gmap edge. With a walk cadence (3.04, the
+    /// captured 4.x builds) the crossing's lead is held for the next tick's
+    /// frame and the cell props ride the cadence's next props message, as
+    /// `seihai-mae` does; the result is whether the lead has a 46. `None`
+    /// means the build has no cadence and the caller sends core's whole
+    /// crossing frame.
+    fn cross(&mut self, c: &Crossing) -> Option<bool> {
+        // The next pose is in the new cell: not a step to report as such.
+        self.last = None;
+        let wc = self.cadence.as_mut()?;
+        wc.cross(c);
+        let lead = seihai_core::gmap::crossing_lead(self.version, None);
+        let sent46 = lead
+            .iter()
+            .any(|m| m.first() == Some(&(seihai_core::net::PLI_ENTERLEVEL + 0x20)));
+        self.held.extend(lead);
+        Some(sent46)
+    }
+
+    /// The frame for this tick: a held crossing lead, then the walk
+    /// message, if any. Empty when there is nothing to send.
+    fn tick(&mut self, pose: Pose) -> Vec<Vec<u8>> {
+        let mut frame = std::mem::take(&mut self.held);
+        frame.extend(self.walk(pose));
+        frame
+    }
+
+    fn walk(&mut self, pose: Pose) -> Option<Vec<u8>> {
         if let Some(wc) = self.cadence.as_mut() {
             let gani = self
                 .ganis
@@ -251,6 +352,11 @@ pub fn run_with_pose(
     let others = live.as_ref().map(|l| l.others.clone());
     let link = live.as_ref().map(|l| l.link.clone());
     let wanted_sounds = live.as_ref().map(|l| l.wanted_sounds.clone());
+    let world = live.as_ref().map(|l| l.world.clone());
+    let crossings = live.as_ref().map(|l| l.crossings.clone());
+    // Crossings sent, over every connection: the view counts the same.
+    let mut crossings_sent: u64 = 0;
+    let gmap_rules = GmapRules::for_version(version);
     let resolver = assets.map(|d| AssetResolver::new(AssetRoot::new(d), version.profile()));
     let local = |file: &str, mod_time: Option<u32>| -> Option<Level> {
         Level::load(resolver.as_ref()?.level_at_mod_time(file, mod_time)?).ok()
@@ -291,6 +397,11 @@ pub fn run_with_pose(
         let title = version.profile().window_title(server_name.as_deref());
         let mut st = SessionState::for_version(version);
         let mut walker = WalkSender::new(version);
+        // The gmap side of core's walk, kept here where the server's state
+        // is: `sync_world` fills its world, and the view gets a copy.
+        let mut ws = OfflineSession::default();
+        let mut gmap_asked = std::collections::HashSet::new();
+        let mut world_key = None;
         // The last link asked for: where the player arrives in its level.
         let mut last_link: Option<LinkAsk> = None;
         let mut walk_clock = Instant::now();
@@ -369,6 +480,34 @@ pub fn run_with_pose(
                     if !got.send.is_empty() {
                         let _ = s.conn.send_messages(&got.send);
                     }
+                    // The gmap: the grid, the cell, the neighbours, and a
+                    // request for what the server still has to send.
+                    if world.is_some() {
+                        let req = sync_world(
+                            &mut ws,
+                            &mut st,
+                            &gmap_rules,
+                            &Loader(&files.store),
+                            &mut gmap_asked,
+                        );
+                        if let Some(f) = req.gmap_file.as_ref().or(req.gmap_local.as_ref()) {
+                            let msgs = files.need(f);
+                            if !msgs.is_empty() && s.conn.send_messages(&msgs).is_ok() {
+                                let _ = writeln!(out, "requesting {f}");
+                            }
+                        }
+                        if !req.messages.is_empty() {
+                            let _ = s.conn.send_messages(&req.messages);
+                        }
+                    }
+                    if let Some(w) = world.as_ref() {
+                        let view = WorldView::of(&ws, crossings_sent);
+                        let key = view.as_ref().map(WorldView::key);
+                        if key != world_key {
+                            world_key = key;
+                            *w.lock().unwrap_or_else(|e| e.into_inner()) = view;
+                        }
+                    }
                 }
                 Ok(Err(e)) => {
                     if owed {
@@ -402,8 +541,9 @@ pub fn run_with_pose(
                 if !burst_owed && walk_clock.elapsed() >= WALK_TICK {
                     walk_clock = Instant::now();
                     let current = *p.lock().unwrap_or_else(|e| e.into_inner());
-                    if let Some(m) = current.and_then(|c| walker.tick(c)) {
-                        let _ = s.conn.send_messages(&[m]);
+                    let frame = current.map(|c| walker.tick(c)).unwrap_or_default();
+                    if !frame.is_empty() {
+                        let _ = s.conn.send_messages(&frame);
                     }
                 }
             }
@@ -423,6 +563,29 @@ pub fn run_with_pose(
                     .map(|a| vec![walk_message_for(version, a.x, a.y, a.dir)])
                     .unwrap_or_default();
                 let _ = s.enter_level.send_pending(&mut s.conn, &then);
+            }
+            // A gmap edge the view's walk crossed: the player is in the next
+            // cell already. The frame carries the cell prop and the wrapped
+            // position, and the server follows with the new cell's level.
+            let crossed = crossings
+                .as_ref()
+                .map(|c| std::mem::take(&mut *c.lock().unwrap_or_else(|e| e.into_inner())))
+                .unwrap_or_default();
+            for c in crossed {
+                crossings_sent += 1;
+                st.set_gmap_cell(c.to);
+                let sent46 = match walker.cross(&c) {
+                    Some(sent46) => Ok(sent46),
+                    None => s.conn.send_gmap_crossing(version, &c, None),
+                };
+                if let (Ok(sent46), Some(n)) = (sent46, st.current_level_name()) {
+                    s.enter_level.crossing(&n, sent46);
+                }
+                let _ = writeln!(
+                    out,
+                    "gmap crossing {:?} -> {:?} at {} {}",
+                    c.from, c.to, c.local_x, c.local_y
+                );
             }
             // A level link the player walked into: the request the build
             // sends (core's `link_request_frame`: `PLI_LEVELWARP`, or the
@@ -542,11 +705,14 @@ mod tests {
     fn a_build_without_a_cadence_sends_its_walk_message_on_change() {
         let mut w = WalkSender::new(ClientVersion::V3153);
         assert!(w.cadence.is_none());
-        assert_eq!(w.tick(pose(30.0, 2, false)), None);
-        assert_eq!(w.tick(pose(30.0, 2, false)), None);
-        let m = w.tick(pose(30.5, 3, true)).unwrap();
-        assert_eq!(m, walk_message_for(ClientVersion::V3153, 30.5, 30.0, 3));
-        assert_eq!(w.tick(pose(30.5, 3, true)), None);
+        assert!(w.tick(pose(30.0, 2, false)).is_empty());
+        assert!(w.tick(pose(30.0, 2, false)).is_empty());
+        let m = w.tick(pose(30.5, 3, true));
+        assert_eq!(
+            m,
+            vec![walk_message_for(ClientVersion::V3153, 30.5, 30.0, 3)]
+        );
+        assert!(w.tick(pose(30.5, 3, true)).is_empty());
     }
 
     /// 3.04 and 4.04r2 walk on core's cadence: nothing on the first tick,
@@ -556,12 +722,75 @@ mod tests {
         for v in [ClientVersion::V304, ClientVersion::V404R2] {
             let mut w = WalkSender::new(v);
             assert!(w.cadence.is_some(), "{}", v.label());
-            assert_eq!(w.tick(pose(30.0, 2, false)), None, "{}", v.label());
+            assert!(w.tick(pose(30.0, 2, false)).is_empty(), "{}", v.label());
             let mut sent = 0;
             for i in 1..=4 {
-                sent += w.tick(pose(30.0 + 0.5 * i as f32, 3, true)).is_some() as u32;
+                sent += !w.tick(pose(30.0 + 0.5 * i as f32, 3, true)).is_empty() as u32;
             }
             assert!(sent >= 1, "{}", v.label());
+        }
+    }
+
+    /// A `.gmap` the server sent is kept in memory (and on disk where there
+    /// is a download folder, which this test has not); the loader finds it, and `WorldView` carries the world `sync_world`
+    /// built, neighbours in cell order.
+    #[test]
+    fn the_server_gmap_is_read_from_memory_and_shown_to_the_view() {
+        let v = ClientVersion::V304;
+        let mut store = DownloadStore::new(AssetResolver::empty(v.profile()), false);
+        let text = "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n";
+        // No download folder: the disk write fails, the memory copy stays.
+        let _ = store.store("w.gmap", text.as_bytes(), Some(1));
+        let loader = Loader(&store);
+        assert_eq!(loader.gmap_text("w.gmap").as_deref(), Some(text));
+        assert!(loader.level("a.nw", None).is_none());
+        let mut ws = OfflineSession::default();
+        assert!(WorldView::of(&ws, 0).is_none());
+        ws.enter_gmap("w.gmap".into(), Gmap::parse(text).unwrap(), (1, 0));
+        let w = ws.gmap.as_mut().unwrap();
+        w.levels.insert((0, 0), Level::from_board(&[0; 4096]));
+        let view = WorldView::of(&ws, 3).unwrap();
+        assert_eq!((view.cell, view.crossings), ((1, 0), 3));
+        assert_eq!(view.levels.len(), 1);
+        assert_eq!(view.key().2, vec![(0, 0)]);
+    }
+
+    fn crossing() -> Crossing {
+        Crossing {
+            from: (0, 0),
+            to: (1, 0),
+            local_x: 0.5,
+            local_y: 30.0,
+        }
+    }
+
+    /// A build without a cadence leaves the crossing frame to the caller,
+    /// and the next pose (in the new cell) is not reported as a step.
+    #[test]
+    fn a_crossing_without_a_cadence_is_the_callers() {
+        let mut w = WalkSender::new(ClientVersion::V3153);
+        w.tick(pose(30.0, 2, false));
+        assert_eq!(w.cross(&crossing()), None);
+        assert!(w.tick(pose(0.5, 3, true)).is_empty());
+    }
+
+    /// With a cadence the crossing's lead opens the next tick's frame, once.
+    #[test]
+    fn a_crossing_lead_rides_the_next_tick() {
+        for v in [ClientVersion::V304, ClientVersion::V404R2] {
+            let mut w = WalkSender::new(v);
+            w.tick(pose(30.0, 2, false));
+            let lead = seihai_core::gmap::crossing_lead(v, None);
+            let sent46 = w.cross(&crossing()).expect("cadence");
+            assert_eq!(sent46, v.sends_enter_level(), "{}", v.label());
+            let frame = w.tick(pose(0.5, 3, true));
+            assert!(frame.starts_with(&lead), "{}", v.label());
+            let again = w.tick(pose(0.5, 3, true));
+            assert!(
+                lead.is_empty() || !again.starts_with(&lead),
+                "{}",
+                v.label()
+            );
         }
     }
 }
