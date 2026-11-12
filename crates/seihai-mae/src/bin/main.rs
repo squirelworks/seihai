@@ -91,6 +91,30 @@ impl WorldLoader for RootLoader<'_> {
 /// The SPRITE (17) the player's walk updates carry. A 2.00 to 2.05 build
 /// sends its swing as a name in prop 10, not as a sprite
 /// (`combat::swing_in_bow_slot`).
+/// A server delete (`PLO_NPCDEL2`) for the level the player is on: the NPC
+/// with that server id leaves the level, and its script object with it (the
+/// script runner keys NPCs by their place in the level's list, so both go
+/// together). True if one left.
+fn drop_deleted_npc(
+    session: &mut OfflineSession,
+    scripts: &mut SessionScripts,
+    here: Option<&str>,
+    d: &seihai::protocol::NpcDelete,
+) -> bool {
+    if !here.is_some_and(|h| h.eq_ignore_ascii_case(&d.level)) {
+        return false;
+    }
+    let Some(index) = session
+        .current_level
+        .as_ref()
+        .and_then(|l| l.npcs.iter().position(|n| n.server_id == Some(d.id)))
+    else {
+        return false;
+    };
+    scripts.remove_npc(index);
+    session.drop_server_npc(d.id)
+}
+
 fn sent_sprite(session: &OfflineSession, version: ClientVersion, ganis: bool) -> u8 {
     if seihai::combat::swing_in_bow_slot(version) {
         session.bow_slot_sprite(ganis)
@@ -3976,13 +4000,14 @@ fn main() {
         // the level file has takes the server's id, any other is added.
         {
             let changes = std::mem::take(&mut net_state.npc_changes);
-            // `PLO_NPCDEL2` deletes are not applied here yet: taking an NPC
-            // off the level would shift the indices the script runner keeps
-            // for the level's NPCs. Taken so they do not pile up.
-            net_state.npc_deletes.clear();
+            // `PLO_NPCDEL2` deletes, in their place among the updates.
+            let mut deletes = std::mem::take(&mut net_state.npc_deletes);
             if conn.is_some() && session.current_level.is_some() {
                 let mut todo: Vec<(u32, seihai::protocol::npcprops::NpcProps)> = Vec::new();
                 if session.level_serial != npc_link_serial {
+                    // A new level is linked from the server's records,
+                    // which a delete has already taken out.
+                    deletes.clear();
                     npc_link_serial = session.level_serial;
                     // On a gmap the step that crossed already moved the
                     // session into the new cell; the network side learns it
@@ -4016,7 +4041,12 @@ fn main() {
                 } else {
                     todo = changes;
                 }
-                for (id, p) in todo {
+                let here = net_state.current_level_name();
+                let mut deletes = deletes.into_iter().peekable();
+                for (i, (id, p)) in todo.into_iter().enumerate() {
+                    while let Some(d) = deletes.next_if(|d| d.after <= i) {
+                        dirty |= drop_deleted_npc(&mut session, &mut scripts, here.as_deref(), &d);
+                    }
                     let linked = session.take_server_npc(id, &p);
                     let index = match linked {
                         seihai::offline::Linked::Known(i) => i,
@@ -4055,6 +4085,9 @@ fn main() {
                         }
                     }
                     dirty = true;
+                }
+                for d in deletes {
+                    dirty |= drop_deleted_npc(&mut session, &mut scripts, here.as_deref(), &d);
                 }
             }
         }
@@ -5994,5 +6027,61 @@ mod relaunch_tests {
             server_list_args(Some("disconnected: bye")),
             ["--launcher-error", "disconnected: bye"]
         );
+    }
+}
+
+#[cfg(test)]
+mod npc_delete_tests {
+    use super::drop_deleted_npc;
+    use seihai::assets::Level;
+    use seihai::offline::OfflineSession;
+    use seihai::protocol::{ClientVersion, NpcDelete};
+    use seihai::scripting::engine::host::SessionScripts;
+
+    /// A delete for the player's level takes the NPC and its script; one
+    /// for another level, or an id the level does not have, does nothing.
+    #[test]
+    fn a_server_delete_takes_the_npc_and_its_script() {
+        let mut s = OfflineSession::new();
+        s.current_level =
+            Some(Level::parse("GLEVNW01\nNPC a.png 1 1\nNPCEND\nNPC b.png 2 2\nNPCEND\n").unwrap());
+        s.current_level.as_mut().unwrap().npcs[0].server_id = Some(300);
+        s.current_level.as_mut().unwrap().npcs[1].server_id = Some(301);
+        let mut sc = SessionScripts::new(ClientVersion::V222);
+        sc.load_level(&mut s, "start.nw");
+        let del = |level: &str, id| NpcDelete {
+            level: level.into(),
+            id,
+            after: 0,
+        };
+        assert!(!drop_deleted_npc(
+            &mut s,
+            &mut sc,
+            Some("start.nw"),
+            &del("other.nw", 300)
+        ));
+        assert!(!drop_deleted_npc(
+            &mut s,
+            &mut sc,
+            Some("start.nw"),
+            &del("start.nw", 9)
+        ));
+        assert!(drop_deleted_npc(
+            &mut s,
+            &mut sc,
+            Some("Start.nw"),
+            &del("start.nw", 300)
+        ));
+        let npcs = &s.current_level.as_ref().unwrap().npcs;
+        assert_eq!(npcs.len(), 1);
+        assert_eq!(npcs[0].image, "b.png");
+        let tags: Vec<_> = sc
+            .world
+            .ids()
+            .into_iter()
+            .filter_map(|id| sc.world.obj(id))
+            .map(|o| (o.tag, o.image.clone()))
+            .collect();
+        assert_eq!(tags, [(0, "b.png".to_string())]);
     }
 }

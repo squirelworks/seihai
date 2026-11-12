@@ -82,6 +82,10 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
 
 ## Stage 3
 
+The loop and the renderer below live in the `seihai-play` crate, shared
+with `seihai-issho` (6.x). Ato keeps the start window, the server list,
+the 3.x window size and its Torque field lines.
+
 - `render`: the flat 2D fallback. It draws the level's tiles as
   `seihai-mae` does (16-pixel tiles from `pics1.png`, from the asset
   folder or the built-in sheet; the camera centred on the player's box;

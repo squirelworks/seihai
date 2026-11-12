@@ -3,9 +3,11 @@
 //!
 //! `--online host:port` (`-o`, `--server`) logs in to that game server as
 //! the 6.x build with core's client session (`seihai_core::client`, the
-//! loop `seihai-ato` runs) and logs each level it sends, as
-//! `seihai-ato --no-window` does. The password is read from the variable
-//! `--password-env` names, never from the command line.
+//! loop `seihai-ato` runs), opens the game window and logs each level it
+//! sends. With `--no-window` it only logs, as `seihai-ato --no-window`
+//! does. `--level NAME` plays level files offline in the window. The
+//! password is read from the variable `--password-env` names, never from
+//! the command line.
 
 use crate::profile::{select_label, EngineProfile, SelectError};
 use crate::shell::Session;
@@ -23,7 +25,8 @@ pub struct Outcome {
 pub fn run(args: &[String]) -> Outcome {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         return ok("seihai-issho --version <6.x profile> [--online host:port \
---account NAME --password-env VAR [--assets DIR] [--first-level]]\n\
+--account NAME --password-env VAR [--assets DIR] [--no-window] [--first-level] [--no-sound]]\n\
+seihai-issho --version <6.x profile> --level NAME [--assets DIR] [--no-sound]\n\
 v6 profiles: 6.00r2, 6.015, 6.034, 6.03r7, 6.03r7 Linux\n\
 v7 is not a supported profile.\n");
     }
@@ -81,6 +84,45 @@ fn value<'a>(args: &'a [String], flags: &[&str]) -> Option<&'a str> {
         .map(String::as_str)
 }
 
+/// True when `flag` is on the command line.
+pub fn has(args: &[String], flag: &str) -> bool {
+    args.iter().any(|a| a == flag)
+}
+
+/// The v6 build `args` name, for a mode that needs one.
+fn v6_version(args: &[String]) -> Result<seihai_core::protocol::ClientVersion, String> {
+    let label = version_arg(args)
+        .ok_or("pass --version with a v6 profile. Issho does not default to v6.")?;
+    match select_label(label) {
+        Ok(EngineProfile::V6) => Ok(seihai_core::protocol::ClientVersion::from_label(label)
+            .expect("v6 label has a profile")),
+        Ok(EngineProfile::V7(_)) => Err(SelectError::UnsupportedV7.to_string()),
+        Err(error) => Err(format!("{label}: {error}")),
+    }
+}
+
+/// A level played with no server (`--level`, `-l`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Offline {
+    pub version: seihai_core::protocol::ClientVersion,
+    pub level: String,
+    pub assets: Option<std::path::PathBuf>,
+}
+
+/// The offline level `args` ask for: `None` without `--level` or with
+/// `--online` (a server wins), an error when the version is not v6.
+pub fn offline(args: &[String]) -> Option<Result<Offline, String>> {
+    if value(args, &["--online", "-o", "--server"]).is_some() {
+        return None;
+    }
+    let level = value(args, &["--level", "-l"])?;
+    Some(v6_version(args).map(|version| Offline {
+        version,
+        level: level.to_string(),
+        assets: value(args, &["--assets"]).map(std::path::PathBuf::from),
+    }))
+}
+
 /// A login asked for on the command line (`--online`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Online {
@@ -107,15 +149,7 @@ fn online_login(
     addr: &str,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Online, String> {
-    let label = version_arg(args)
-        .ok_or("pass --version with a v6 profile. Issho does not default to v6.")?;
-    let version = match select_label(label) {
-        Ok(EngineProfile::V6) => {
-            seihai_core::protocol::ClientVersion::from_label(label).expect("v6 label has a profile")
-        }
-        Ok(EngineProfile::V7(_)) => return Err(SelectError::UnsupportedV7.to_string()),
-        Err(error) => return Err(format!("{label}: {error}")),
-    };
+    let version = v6_version(args)?;
     let account = value(args, &["--account"]).ok_or("--online needs --account")?;
     let var = value(args, &["--password-env"]).ok_or(
         "--online needs --password-env VAR (the password is never taken on the command line)",
@@ -245,6 +279,28 @@ mod tests {
         let mut a = args(&base);
         a.extend(args(&["--version", "3.04", "--password-env", "PW"]));
         assert!(online(&a, env).unwrap().is_err());
+    }
+
+    #[test]
+    fn level_plays_offline_unless_a_server_is_named() {
+        let a = args(&[
+            "--version",
+            "6.03r7",
+            "--level",
+            "start.nw",
+            "--assets",
+            "d",
+        ]);
+        let o = offline(&a).unwrap().unwrap();
+        assert_eq!(o.level, "start.nw");
+        assert_eq!(o.assets, Some(std::path::PathBuf::from("d")));
+        assert!(offline(&args(&["--version", "6.03r7"])).is_none());
+        let mut a = a;
+        a.extend(args(&["--online", "127.0.0.1:14900"]));
+        assert!(offline(&a).is_none());
+        assert!(offline(&args(&["--version", "5.12", "-l", "a.nw"]))
+            .unwrap()
+            .is_err());
     }
 
     #[test]

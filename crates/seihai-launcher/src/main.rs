@@ -157,7 +157,7 @@ fn main() {
     }
     if line == Line::Issho {
         let label = profile.map_or("6.x", |p| p.label);
-        eprintln!("seihai: {label} is a v6 build; seihai-issho is the quattro_lib profile (no playfield yet)");
+        eprintln!("seihai: {label} is a v6 build; seihai-issho draws it with the flat 2D fallback (no 6.x playfield yet)");
     }
     let bin = find_binary(line);
     if dry_run {

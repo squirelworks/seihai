@@ -162,3 +162,60 @@ fn v6_builds_log_in_follow_the_warp_and_log_the_level() {
         assert_eq!(out.matches("level lab3x.nw").count(), 1, "{out}");
     }
 }
+
+/// The game loop (`seihai-play`, the one Ato runs) on a 6.x login: the
+/// level from the server's board arrives in the game with the player at
+/// the server's start, and the arrows walk it and hand the pose to the
+/// network thread.
+#[cfg(feature = "window")]
+#[test]
+fn the_v6_game_loop_takes_the_level_and_walks_it() {
+    use seihai_play::game::{self, Game};
+    use std::time::Instant;
+
+    let v = ClientVersion::V603R7;
+    let game_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let game_port = game_listener.local_addr().unwrap().port();
+    let lobby = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = lobby.local_addr().unwrap().to_string();
+    let a = std::thread::spawn(move || serve_with(v, lobby, Some(game_port)));
+    let b = std::thread::spawn(move || serve(v, game_listener));
+    let argv = args(&[
+        "--version",
+        v.label(),
+        "--online",
+        &addr,
+        "--account",
+        "lab",
+        "--password-env",
+        "LAB_PW",
+    ]);
+    let o = online(&argv, |n| (n == "LAB_PW").then(|| "pw".to_string()))
+        .unwrap()
+        .unwrap();
+    let (rx, live) = game::spawn_online(o.addr, o.version, o.login, None, game::no_lines, || {});
+    let pose = live.pose.clone();
+    let mut g = Game::new(rx, None, false).unwrap();
+    g.attach(live);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while g.session.current_level.is_none() && Instant::now() < deadline {
+        g.tick(0, 0, Instant::now());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(g.status.starts_with("level lab3x.nw"), "{}", g.status);
+    assert_eq!((g.session.player_x, g.session.player_y), (30.5, 31.0));
+    let frame = g.draw((40, 30));
+    assert_eq!((frame.w, frame.h), (640, 480));
+    // Walk right until a step lands (the session paces the steps).
+    let start = Instant::now() + Duration::from_secs(1);
+    for i in 0..10 {
+        g.tick(1, 0, start + g.session.step_interval() * i);
+    }
+    assert!(g.session.player_x > 30.5, "{}", g.session.player_x);
+    let sent = (*pose.lock().unwrap()).expect("the pose is shared");
+    assert_eq!(sent.x, g.session.player_x);
+    assert!(sent.walking);
+    drop(g);
+    a.join().unwrap();
+    b.join().unwrap();
+}
