@@ -18,6 +18,7 @@ use crate::start_window::{Next, StartWindow, CANVAS};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
 };
+use seihai_core::gmap::Gmap;
 use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::ClientVersion;
 use seihai_core::sound::{self, SoundEngine};
@@ -160,13 +161,108 @@ impl Game {
         Ok(g)
     }
 
-    /// Load level `name` offline and stand at `at` (the link's arrival), or
-    /// at the default start.
-    fn enter_offline(&mut self, name: &str, at: Option<(f32, f32)>) -> Result<(), String> {
-        let path = match &self.resolver {
+    /// Find level or gmap `name` offline: in the asset folder, or as a path
+    /// when there is none.
+    fn offline_file(&self, name: &str) -> Option<PathBuf> {
+        match &self.resolver {
             Some(r) => r.level(name),
             None => Some(PathBuf::from(name)).filter(|p| p.is_file()),
+        }
+    }
+
+    /// Open gmap `name` offline. `at` is a position on the whole map in
+    /// tiles (a link into the gmap); without it the player starts at the
+    /// default start of the first cell that has a level.
+    fn enter_offline_gmap(&mut self, name: &str, at: Option<(f32, f32)>) -> Result<(), String> {
+        let path = self
+            .offline_file(name)
+            .ok_or_else(|| "not in the asset folder".to_string())?;
+        let text = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let map = Gmap::parse(&String::from_utf8_lossy(&text))
+            .ok_or_else(|| format!("{}: not a gmap", path.display()))?;
+        let (cell, local) = match at {
+            Some((x, y)) => {
+                let cell = ((x / 64.0).floor() as i32, (y / 64.0).floor() as i32);
+                (cell, (x - cell.0 as f32 * 64.0, y - cell.1 as f32 * 64.0))
+            }
+            None => {
+                let first = (0..map.height as i32)
+                    .flat_map(|cy| (0..map.width as i32).map(move |cx| (cx, cy)))
+                    .find(|&(cx, cy)| map.level_at(cx, cy).is_some())
+                    .ok_or_else(|| format!("{name}: the gmap names no level"))?;
+                (first, NO_START)
+            }
         };
+        let level = map
+            .level_at(cell.0, cell.1)
+            .ok_or_else(|| format!("{name}: no level at cell {}, {}", cell.0, cell.1))?
+            .to_string();
+        let path = self
+            .offline_file(&level)
+            .ok_or_else(|| format!("{level}: not in the asset folder"))?;
+        self.session
+            .load_level(&path)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        self.session.enter_gmap(name.to_string(), map, cell);
+        self.session.note_entry(name);
+        self.session.arrive(local.0, local.1);
+        self.load_gmap_neighbours();
+        self.level_entered();
+        Ok(())
+    }
+
+    /// On a gmap, keep only the levels next to the player's cell and load
+    /// the missing ones from the asset folder, so the view draws them past
+    /// the edges and core's walk can cross into them. A neighbour that is
+    /// not on disk stays missing, and its edge stays a wall.
+    fn load_gmap_neighbours(&mut self) {
+        let Some(w) = self.session.gmap.as_ref() else {
+            return;
+        };
+        let around = w.map.neighbours(w.cell);
+        let wanted: Vec<((i32, i32), String)> = w
+            .missing()
+            .into_iter()
+            .filter_map(|c| Some((c, w.map.level_at(c.0, c.1)?.to_string())))
+            .collect();
+        let loaded: Vec<((i32, i32), Level)> = wanted
+            .into_iter()
+            .filter_map(|(c, n)| Some((c, Level::load(self.offline_file(&n)?).ok()?)))
+            .collect();
+        let w = self.session.gmap.as_mut().expect("checked above");
+        w.levels.retain(|c, _| around.contains(c));
+        w.levels.extend(loaded);
+        let neighbours: Vec<Level> = w.levels.values().cloned().collect();
+        for level in &neighbours {
+            render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
+        }
+    }
+
+    /// After a level (or gmap cell) became the current one offline: its
+    /// NPC images, and the status line.
+    fn level_entered(&mut self) {
+        if let Some(level) = &self.session.current_level {
+            for missing in
+                render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
+            {
+                eprintln!("npc image {missing}: not in the asset folders; outlined");
+            }
+        }
+        let here = self.session.level_name().unwrap_or_default();
+        self.status = match &self.session.gmap {
+            Some(w) => format!("{here} on {} (offline)", w.name),
+            None => format!("{here} (offline)"),
+        };
+        self.dirty = true;
+    }
+
+    /// Load level `name` offline and stand at `at` (the link's arrival), or
+    /// at the default start. A `.gmap` name opens the gmap.
+    fn enter_offline(&mut self, name: &str, at: Option<(f32, f32)>) -> Result<(), String> {
+        if name.to_ascii_lowercase().ends_with(".gmap") {
+            return self.enter_offline_gmap(name, at);
+        }
+        let path = self.offline_file(name);
         // Checked first: core's `load_level` names the session after the
         // file before reading it, so a failed read would rename the level
         // the player is still on.
@@ -176,18 +272,11 @@ impl Game {
         self.session
             .load_level(&path)
             .map_err(|e| format!("{}: {e}", path.display()))?;
+        self.session.leave_gmap();
         self.session.note_entry(name);
         let at = at.unwrap_or(NO_START);
         self.session.arrive(at.0, at.1);
-        if let Some(level) = &self.session.current_level {
-            for missing in
-                render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
-            {
-                eprintln!("npc image {missing}: not in the asset folders; outlined");
-            }
-        }
-        self.status = format!("{name} (offline)");
-        self.dirty = true;
+        self.level_entered();
         Ok(())
     }
 
@@ -299,6 +388,12 @@ impl Game {
         }
         self.last_step = now;
         self.session.try_move(dx as f32 * 0.5, dy as f32 * 0.5);
+        // Offline on a gmap: core already moved the player into the next
+        // cell; its neighbours change with it.
+        if self.offline && self.session.take_gmap_crossing().is_some() {
+            self.load_gmap_neighbours();
+            self.level_entered();
+        }
         self.set_pose(true);
         // A link the feet are now in: ask the server once and wait for the
         // level (no walking meanwhile, core's warp-pending state).
@@ -918,6 +1013,90 @@ mod tests {
         }
         assert!(g.status.starts_with("Link to gone.nw:"), "{}", g.status);
         assert_eq!(g.session.level_name().as_deref(), Some("a.nw"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// `levels/w.gmap` (two cells, `a.nw` and `b.nw`) and `levels/c.nw`,
+    /// whose link leads into the gmap's east cell.
+    fn offline_gmap(tag: &str) -> PathBuf {
+        let dir = offline_levels(tag);
+        let levels = dir.join("levels");
+        std::fs::write(
+            levels.join("w.gmap"),
+            "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n",
+        )
+        .unwrap();
+        std::fs::write(levels.join("a.nw"), "GLEVNW01\n").unwrap();
+        std::fs::write(
+            levels.join("c.nw"),
+            "GLEVNW01\nLINK w.gmap 34 28 2 4 70 10\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn offline_a_gmap_opens_on_its_first_cell_and_the_walk_crosses_the_edge() {
+        let dir = offline_gmap("gmap-cross");
+        let r = resolver(&dir);
+        let mut g = Game::open_offline(Some(&r), "w.gmap", false).unwrap();
+        assert_eq!(g.session.level_name().as_deref(), Some("a.nw"));
+        assert_eq!(g.status, "a.nw on w.gmap (offline)");
+        let w = g.session.gmap.as_ref().unwrap();
+        assert_eq!(w.cell, (0, 0));
+        assert!(
+            w.levels.contains_key(&(1, 0)),
+            "the east neighbour is loaded"
+        );
+        g.session.player_x = 60.0;
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..40 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+            if g.session.gmap.as_ref().unwrap().cell == (1, 0) {
+                break;
+            }
+        }
+        let w = g.session.gmap.as_ref().unwrap();
+        assert_eq!(w.cell, (1, 0));
+        assert!(
+            w.levels.contains_key(&(0, 0)),
+            "the level left is kept beside"
+        );
+        assert!(
+            g.session.player_x < 4.0,
+            "local to the new cell: {}",
+            g.session.player_x
+        );
+        assert_eq!(g.status, "b.nw on w.gmap (offline)");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn offline_a_link_into_a_gmap_lands_in_the_cell_its_position_names() {
+        let dir = offline_gmap("gmap-link");
+        let r = resolver(&dir);
+        let mut g = Game::open_offline(Some(&r), "c.nw", false).unwrap();
+        assert!(g.session.gmap.is_none());
+        let mut t = g.last_step + Duration::from_secs(1);
+        for _ in 0..20 {
+            g.walk(1, 0, t);
+            t += g.session.step_interval();
+            if g.session.gmap.is_some() {
+                break;
+            }
+        }
+        let w = g
+            .session
+            .gmap
+            .as_ref()
+            .unwrap_or_else(|| panic!("on the gmap: {}", g.status));
+        assert_eq!(w.cell, (1, 0));
+        assert_eq!(g.session.level_name().as_deref(), Some("b.nw"));
+        assert_eq!((g.session.player_x, g.session.player_y), (6.0, 10.0));
+        // A plain level link from the gmap leaves it.
+        g.enter_offline("c.nw", Some((30.0, 30.0))).unwrap();
+        assert!(g.session.gmap.is_none());
         std::fs::remove_dir_all(dir).ok();
     }
 }

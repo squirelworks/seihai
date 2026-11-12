@@ -2,7 +2,8 @@
 //! way `seihai-mae` does (`render::tiles::render_view`): 16-pixel tiles from
 //! a `pics1.png` sheet, the camera centred on the player's 48x48 box,
 //! chest records over the board, each link as an outline of its rectangle,
-//! the level's NPCs as their images (or an outline where the image is not
+//! the neighbouring levels of a gmap cell past its edges, the level's NPCs
+//! as their images (or an outline where the image is not
 //! on disk), other players and the player as plain markers. No GANI art
 //! or HUD.
 //!
@@ -255,10 +256,22 @@ pub fn draw(
     for ty in 0..=view_h as i32 {
         for tx in 0..=view_w as i32 {
             let (lx, ly) = (ox + tx, oy + ty);
-            if !(0..64).contains(&lx) || !(0..64).contains(&ly) {
+            // Past an edge of a gmap cell: the neighbour's tile, when that
+            // level is loaded; otherwise black, as off a plain level.
+            let (from, lx, ly) = if (0..64).contains(&lx) && (0..64).contains(&ly) {
+                (Some(level), lx, ly)
+            } else {
+                let off = (lx.div_euclid(64), ly.div_euclid(64));
+                let near = s
+                    .gmap
+                    .as_ref()
+                    .and_then(|w| w.levels.get(&(w.cell.0 + off.0, w.cell.1 + off.1)));
+                (near, lx.rem_euclid(64), ly.rem_euclid(64))
+            };
+            let Some(from) = from else {
                 continue;
-            }
-            if let Some(id) = tile_at(level, lx, ly) {
+            };
+            if let Some(id) = tile_at(from, lx, ly) {
                 f.blit_tile(sheet, id, tx * t - sub_x, ty * t - sub_y);
             }
         }
@@ -531,5 +544,34 @@ mod tests {
         assert_eq!(load_npc_images(level, None, &mut images), ["nowhere.png"]);
         assert_eq!(images.get("nowhere.png"), Some(&None));
         assert!(load_npc_images(level, None, &mut images).is_empty());
+    }
+
+    #[test]
+    fn a_gmap_neighbour_is_drawn_past_the_edge() {
+        let sheet = Sheet::load(None).unwrap();
+        let mut s = session(0);
+        s.player_x = 60.0;
+        let grid = "GRMAP001\nWIDTH 2\nHEIGHT 1\nLEVELNAMES\n\"a.nw\",\"b.nw\"\nLEVELNAMESEND\n";
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        // The middle of tile (64, 30): one tile past the east edge.
+        let (ex, ey) = ((64 * 16 - cam_x + 8) as u32, (30 * 16 - cam_y + 8) as u32);
+        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        assert_eq!(px(&f, ex, ey), [0, 0, 0], "no gmap: black past the edge");
+        s.enter_gmap(
+            "w.gmap".into(),
+            seihai_core::gmap::Gmap::parse(grid).unwrap(),
+            (0, 0),
+        );
+        s.gmap
+            .as_mut()
+            .unwrap()
+            .levels
+            .insert((1, 0), Level::from_board(&[600; 4096]));
+        let f = draw(&s, &sheet, &NpcImages::new(), &[], 40, 30);
+        let want = draw(&session(600), &sheet, &NpcImages::new(), &[], 40, 30);
+        // Tile 600's middle pixel, wherever it is drawn.
+        let (cx, cy) = camera_origin(&session(600), 40, 30);
+        let (wx, wy) = ((30 * 16 - cx + 8) as u32, (30 * 16 - cy + 8) as u32);
+        assert_eq!(px(&f, ex, ey), px(&want, wx, wy));
     }
 }
