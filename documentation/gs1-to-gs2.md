@@ -28,10 +28,20 @@ this output, so this list is not a compatibility claim for any client.
 | `a[i]`, `a[i, j]` read | `OP_ARRAY`, `OP_ARRAY_MULTIDIM` | `lists.gs2bc` |
 | `a[i] = v`, `a[i, j] = v` | `OP_ARRAY_ASSIGN`, `OP_ARRAY_MULTIDIM_ASSIGN` | `lists.gs2bc` |
 | `x in this.list` (2.1 and later) | `OP_IN_OBJ` | `lists.gs2bc` |
+| `a[i] += v`, `-=`, `*=`, `/=`, `a[i]++`, `a[i]--` (and with `a[i, j]`) | the bytes of `a[i] = a[i] + v` | element read and write from `lists.gs2bc`; same bytes as the long form; runs on Seihai's GS2 machine |
+| `x in {a, b, c}` | the bytes of `x == a \|\| x == b \|\| x == c`; `in {}` is 0 | same bytes as the long form; runs on Seihai's GS2 machine |
 | `playerx`, `playery` | `player.x`, `player.y` | same bytes as the GS2 source |
 | `sleep`, `setarray`, `sin`, `cos`, `arctan`, `abs`, `random`, `int`, `exp`, `log`, `min`, `max`, `pow`, `char`, `getangle`, `getdir`, `vecx`, `vecy`, `waitfor`, `format`, `makevar`, `arraylen`, `sarraylen` | their opcodes, with Seihai's argument-count check | `gs2-opcodes.md`, argument tests |
 | `strlen(s)`, `startswith(s, t)`, `indexof(s, t)` | `OP_OBJ_LENGTH`, `OP_OBJ_STARTS`, `OP_OBJ_POS` | `gs2-opcodes.md` only |
 | a GS1 command that GS2 also has | a call by name | `shared.gs2bc` (`showimg`, `hideimg`, `set`) |
+
+The compound element forms and `in {list}` are rewritten before lowering,
+to what the GS1 interpreter does: it reads the element (or `x`) once and
+stores once, and it compares `x` with each item left to right with its
+`==`, stopping at the first match. The rewrite pushes the index (or `x`)
+more than once, so it is refused when that expression calls a function;
+put it in a variable first. The GS2 front end (`compile_gs2`) still
+refuses these forms: gs2-parser's own encoding of them has no fixture.
 
 A computed array index (`a[this.i + 1]`) is converted with
 `OP_CONV_TO_FLOAT` like any numeric operand. The fixture only has constant
@@ -49,12 +59,11 @@ indexes, so that conversion is Seihai's choice.
   `strcontains`, `lindexof`, `onmapx`, `onmapy`, `strtofloat`, `hasweapon`,
   `getnpc`, `getplayer`.
 - `with`, and a function inside another function.
-- `x in {a, b, c}`.
+- `x in {a, b, c}`, `a[i] += v` and `a[i]++` when `x` or the index calls a
+  function (the rewrite above would call it more than once).
 - Array literals whose elements contain calls or nested lists: the GS1
   interpreter evaluates them left to right and the GS2 encoding pushes them
   right to left, so they need an order-preserving lowering first.
 - A list stored into an array element (`a[0] = {1}`).
-- `a[i] += v` and the other compound assignments, and `a[i]++` / `a[i]--`.
-  There is no fixture for their encoding. Write `a[i] = a[i] + v`.
 - A field after an index (`npcs[i].x`), and three or more indexes.
 - `board[...]` and `tiles[...]`: no fixture shows how GS2 encodes them.
