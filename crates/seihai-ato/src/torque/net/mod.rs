@@ -9,4 +9,5 @@
 //! socket yet.
 
 pub mod bits;
+pub mod handshake;
 pub mod huffman;
