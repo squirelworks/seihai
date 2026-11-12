@@ -231,7 +231,8 @@ fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
         if let Some((var, value)) = h.env() {
             std::env::set_var(var, value);
         }
-        run_line(h.line(), h.args());
+        // The start window comes back whatever the game's exit code.
+        let _ = run_line(h.line(), h.args());
     }
 }
 
