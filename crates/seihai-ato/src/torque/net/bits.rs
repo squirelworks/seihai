@@ -132,6 +132,21 @@ impl BitWriter {
         }
     }
 
+    /// A string inside a data packet that never shares a prefix (flag
+    /// 0). Readers take it whatever their previous string was, so a
+    /// payload written on its own can be copied into any packet.
+    pub fn pstring_alone(&mut self, text: &[u8]) {
+        self.flag(false);
+        self.string(text);
+    }
+
+    /// Copies every bit `other` holds onto the end of this packet.
+    pub fn append(&mut self, other: &BitWriter) {
+        for i in 0..other.bits {
+            self.flag(other.bytes[i / 8] >> (i % 8) & 1 == 1);
+        }
+    }
+
     /// A string inside a data packet. Shares a prefix with the previous
     /// one when more than two characters match, as Torque does.
     pub fn pstring(&mut self, text: &[u8]) {
@@ -390,6 +405,22 @@ mod tests {
         let mut r = BitReader::new(&bytes);
         assert_eq!(r.pstring().unwrap(), b"G3DPlayer_alice");
         assert_eq!(r.pstring().unwrap(), b"G3DPlayer_bob");
+    }
+
+    #[test]
+    fn appended_bits_land_unaligned() {
+        let mut inner = BitWriter::new();
+        inner.int(0b101, 3);
+        inner.pstring_alone(b"hi");
+        let mut w = BitWriter::new();
+        w.flag(true);
+        w.append(&inner);
+        assert_eq!(w.bit_len(), 1 + inner.bit_len());
+        let bytes = w.into_bytes();
+        let mut r = BitReader::new(&bytes);
+        assert!(r.flag().unwrap());
+        assert_eq!(r.int(3).unwrap(), 0b101);
+        assert_eq!(r.pstring().unwrap(), b"hi");
     }
 
     #[test]
