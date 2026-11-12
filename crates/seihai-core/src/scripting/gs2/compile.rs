@@ -2392,6 +2392,8 @@ mod tests {
         assert_eq!(gs2_event_function("playertouchsme"), "onPlayerTouchsMe");
         assert_eq!(gs2_event_function("weaponfired"), "onWeaponFired");
         assert_eq!(gs2_event_function("playerleaves"), "onPlayerLeaves");
+        assert_eq!(gs2_event_function("playerlogin"), "onPlayerLogin");
+        assert_eq!(gs2_event_function("playerlogout"), "onPlayerLogout");
     }
 
     #[test]

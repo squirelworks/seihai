@@ -12,7 +12,7 @@
 
 use crate::level::Arrival;
 use crate::online::{self, Login};
-use crate::render::{self, Sheet};
+use crate::render::{self, NpcImages, Sheet};
 use crate::server_list::{Pick, ServerList};
 use crate::start_window::{Next, StartWindow, CANVAS};
 use seihai_core::assets::{
@@ -69,6 +69,10 @@ pub struct Game {
     sound_serial: u64,
     /// Where missing sounds go for the network thread to ask for.
     pub wanted_sounds: Arc<Mutex<Vec<String>>>,
+    /// The asset folders, for NPC images.
+    resolver: Option<AssetResolver>,
+    /// NPC images read so far, by name.
+    npc_images: NpcImages,
 }
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
@@ -131,6 +135,8 @@ impl Game {
             sound_clock: Instant::now(),
             sound_serial: 0,
             wanted_sounds: Default::default(),
+            resolver: resolver.cloned(),
+            npc_images: NpcImages::new(),
         })
     }
 
@@ -180,6 +186,21 @@ impl Game {
                         .or(self.link_to.take().map(|l| (l.x, l.y)))
                         .unwrap_or(NO_START);
                     self.session.arrive(at.0, at.1);
+                    // The server's NPCs for this level join the file's,
+                    // through core's linking (a file NPC with the same
+                    // image and place is the same NPC).
+                    for (id, p) in &a.server_npc_props {
+                        self.session.take_server_npc(*id, p);
+                    }
+                    if let Some(level) = &self.session.current_level {
+                        for name in render::load_npc_images(
+                            level,
+                            self.resolver.as_ref(),
+                            &mut self.npc_images,
+                        ) {
+                            eprintln!("npc image {name}: not in the asset folders; outlined");
+                        }
+                    }
                     self.status = a.line();
                     self.set_pose(false);
                 }
@@ -265,7 +286,14 @@ impl Game {
         }
         if self.dirty || self.texture.is_none() {
             let at: Vec<(f32, f32)> = self.drawn_others.iter().map(|o| (o.x, o.y)).collect();
-            let f = render::draw(&self.session, &self.sheet, &at, VIEW_TILES.0, VIEW_TILES.1);
+            let f = render::draw(
+                &self.session,
+                &self.sheet,
+                &self.npc_images,
+                &at,
+                VIEW_TILES.0,
+                VIEW_TILES.1,
+            );
             let image = egui::ColorImage::from_rgb([f.w as usize, f.h as usize], &f.rgb);
             match &mut self.texture {
                 Some(t) => t.set(image, egui::TextureOptions::NEAREST),
@@ -300,6 +328,19 @@ impl Game {
                             .size(12.0),
                     ),
                 );
+                // Other players' names under their markers, as the clients
+                // write a nickname under the player.
+                let (cam_x, cam_y) =
+                    render::camera_origin(&self.session, VIEW_TILES.0, VIEW_TILES.1);
+                for (nick, x, y) in name_tags(&self.drawn_others, cam_x, cam_y) {
+                    ui.painter().text(
+                        origin + egui::vec2(x, y),
+                        egui::Align2::CENTER_TOP,
+                        nick,
+                        egui::FontId::proportional(11.0),
+                        egui::Color32::WHITE,
+                    );
+                }
                 if let Some(pos) = self.position() {
                     let at = egui::Rect::from_min_size(
                         origin + egui::vec2(0.0, 18.0),
@@ -322,6 +363,25 @@ impl Game {
             100
         }));
     }
+}
+
+/// Where each named other player's name goes, in view pixels: centred
+/// under the 48x48 box. Players with no nickname get no tag.
+fn name_tags(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    let t = render::TILE_PX as f32;
+    others
+        .iter()
+        .filter_map(|o| {
+            let nick = o.nick.as_deref()?.trim();
+            (!nick.is_empty()).then(|| {
+                (
+                    nick.to_string(),
+                    (o.x + 1.5) * t - cam_x as f32,
+                    (o.y + 3.0) * t - cam_y as f32,
+                )
+            })
+        })
+        .collect()
 }
 
 /// The start window, then the game view once Start logs in.
@@ -513,6 +573,7 @@ mod tests {
             source: crate::level::Source::Board,
             start,
             server_npcs: 0,
+            server_npc_props: Vec::new(),
             file_npcs: 0,
             scripts: Vec::new(),
         }
@@ -664,5 +725,52 @@ mod tests {
         g.play_sounds();
         assert!(g.session.sound_events.is_empty());
         assert!(g.session.sound_stops.is_empty());
+    }
+
+    #[test]
+    fn the_servers_npcs_join_the_level() {
+        use seihai_core::protocol::npcprops::NpcProps;
+        let (mut g, tx) = game();
+        let mut a = arrival(Some((30.0, 30.0)));
+        let p = NpcProps {
+            image: Some("door.png".into()),
+            x: Some(20.0),
+            y: Some(12.5),
+            ..Default::default()
+        };
+        a.server_npc_props = vec![(300, p)];
+        a.server_npcs = 1;
+        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), a))
+            .unwrap();
+        g.poll();
+        let npcs = &g.session.current_level.as_ref().unwrap().npcs;
+        assert_eq!(npcs.len(), 1);
+        assert_eq!(
+            (npcs[0].image.as_str(), npcs[0].x, npcs[0].y),
+            ("door.png", 20.0, 12.5)
+        );
+        assert_eq!(npcs[0].server_id, Some(300));
+        // No asset folder: looked for once, kept as missing (outlined).
+        assert_eq!(g.npc_images.get("door.png"), Some(&None));
+    }
+
+    #[test]
+    fn names_go_under_named_players_only() {
+        let other = |id, nick: Option<&str>| online::Other {
+            id,
+            x: 10.0,
+            y: 20.0,
+            dir: 2,
+            nick: nick.map(Into::into),
+        };
+        let tags = name_tags(
+            &[other(1, Some("Ann")), other(2, None), other(3, Some(" "))],
+            100,
+            200,
+        );
+        assert_eq!(
+            tags,
+            vec![("Ann".to_string(), 11.5 * 16.0 - 100.0, 23.0 * 16.0 - 200.0)]
+        );
     }
 }
