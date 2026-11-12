@@ -350,7 +350,7 @@ fn a_weapon_image_belongs_to_the_level_it_was_put_up_on() {
 /// `tests/fixtures/npc-scripts`, by the name on its `// =====` line.
 fn fixture_npc(pack: &str, name: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../seihai-core/tests/fixtures/npc-scripts")
+        .join("tests/fixtures/npc-scripts")
         .join(pack);
     let text = String::from_utf8_lossy(&std::fs::read(path).expect("read the pack")).into_owned();
     let start = text
