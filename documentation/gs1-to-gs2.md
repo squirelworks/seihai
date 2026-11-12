@@ -24,7 +24,7 @@ this output, so this list is not a compatibility claim for any client.
 | `@`, `SPC`, `NL`, `TAB` | `OP_JOIN` | runs on Seihai's GS2 machine |
 | `c ? a : b` | same | runs on Seihai's GS2 machine |
 | `x in \|lo, hi\|` | `OP_IN_RANGE` | runs on Seihai's GS2 machine |
-| `{a, b, c}` with scalar elements (2.1 and later) | array literal | `lists.gs2bc` |
+| `{a, b, c}` (2.1 and later), where the element order cannot matter (see below) | array literal | `lists.gs2bc`; with calls, same bytes as the GS2 source |
 | `a[i]`, `a[i, j]` read | `OP_ARRAY`, `OP_ARRAY_MULTIDIM` | `lists.gs2bc` |
 | `a[i] = v`, `a[i, j] = v` | `OP_ARRAY_ASSIGN`, `OP_ARRAY_MULTIDIM_ASSIGN` | `lists.gs2bc` |
 | `x in this.list` (2.1 and later) | `OP_IN_OBJ` | `lists.gs2bc` |
@@ -61,9 +61,13 @@ indexes, so that conversion is Seihai's choice.
 - `with`, and a function inside another function.
 - `x in {a, b, c}`, `a[i] += v` and `a[i]++` when `x` or the index calls a
   function (the rewrite above would call it more than once).
-- Array literals whose elements contain calls or nested lists: the GS1
-  interpreter evaluates them left to right and the GS2 encoding pushes them
-  right to left, so they need an order-preserving lowering first.
+- Array literals with nested lists, and array literals where the order of
+  the elements could matter: the GS1 interpreter evaluates them left to
+  right and the GS2 encoding pushes them right to left. A literal is
+  lowered when no element calls script or host code or `random`, or when
+  exactly one does and the others are constants (`{next(), 1}`); any other
+  mix (`{next(), next()}`, `{next(), this.v}`) needs the values in
+  variables first.
 - A list stored into an array element (`a[0] = {1}`).
 - A field after an index (`npcs[i].x`), and three or more indexes.
 - `board[...]` and `tiles[...]`: no fixture shows how GS2 encodes them.
