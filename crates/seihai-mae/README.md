@@ -26,16 +26,15 @@ should not depend on the full playable client.
 ## Boundaries and current routing
 
 [`seihai-launcher`](../seihai-launcher/src/main.rs) starts Mae by default.
-It routes 3.x profiles to [`seihai-ato`](../seihai-ato/README.md), 6.x profiles
-to [`seihai-issho`](../seihai-issho/README.md), and the separate February 2000
-Graal3D mode to [`seihai-g3d`](../seihai-g3d). The 4.x/5.x profiles currently
-remain on Mae's flat path; Ato's ownership of the Torque-era engine surface
-does not mean that surface is already a playable replacement.
+It routes 3.x to 5.x profiles to [`seihai-ato`](../seihai-ato/README.md), 6.x
+profiles to [`seihai-issho`](../seihai-issho/README.md), and the separate
+February 2000 Graal3D mode to [`seihai-g3d`](../seihai-g3d). Ato draws 4.x
+and 5.x with its flat 2D fallback; Ato's ownership of the Torque-era engine
+surface does not mean that surface is already a playable replacement.
 
-Mae can also run directly. Its settings window hands 3.x selections to
-Ato and Graal3D selections to the separate Graal3D client. A 4.x/5.x/6.x
-selection inside that window currently stays in Mae, including the 6.x
-flat fallback. The launcher's 6.x routing and Mae's in-window routing are
+Mae can also run directly. Its settings window hands 3.x to 5.x selections
+to Ato and Graal3D selections to the separate Graal3D client. A 6.x
+selection inside that window stays in Mae as a flat fallback. The launcher's 6.x routing and Mae's in-window routing are
 therefore different. Issho is currently a shell, and v7 remains unsupported.
 
 These are the implemented boundaries, not conclusions that all builds in
