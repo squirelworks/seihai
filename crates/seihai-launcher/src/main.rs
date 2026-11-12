@@ -1,56 +1,47 @@
-//! The `seihai` command: start the client for the chosen version.
+//! The `seihai` program: every Seihai client in one program, with one
+//! start window.
 //!
-//! The classic builds (1.x and 2.x) run in `seihai-mae`; the Torque / 3.x
-//! to 5.x builds run in `seihai-ato`; a 6.x profile runs in `seihai-issho`.
-//! This program reads `--version` against the
-//! profile table in `seihai-core`, then hands every argument, unchanged, to
-//! the client binary for that line. With no `--version` (and with no
-//! arguments at all, which opens the start window) it is `seihai-mae`, as
-//! `seihai` was before the launcher. A 7.x label is not a profile and starts
-//! nothing.
+//! Mae (1.x and 2.x), Ato (3.x to 5.x), Issho (6.x) and G3D (Graal3D,
+//! February 2000) are linked in as libraries, so the window, renderer,
+//! sound and core code they share is in the program once. Each client's
+//! whole program is its library's `app::main`; this one calls it in the
+//! same process.
 //!
-//! The client binary is looked for next to this one first, then on `PATH`.
-//! `--launcher-dry-run` prints what would be started and exits.
+//! With no arguments (or only `--launcher-error TEXT`) it opens the start
+//! window (`seihai_play::start`): pick any version of any line, fetch the
+//! server list and join. The pick runs that line's client, which logs in
+//! at once. A lost connection comes back to this window
+//! (`SEIHAI_LAUNCHER`), not the client's own.
+//!
+//! Each client also runs on its own, with its own start window:
+//! `seihai mae|ato|issho|g3d ARGS...`, or this program under the name
+//! `seihai-mae`, `seihai-ato`, `seihai-issho` or `seihai-g3d` (a copy or a
+//! link). The crates' own binaries do the same for development; they are
+//! not shipped.
+//!
+//! With other arguments it reads `--version` against the profile table in
+//! `seihai-core` and runs that line's client with every argument,
+//! unchanged. Arguments with no `--version` are Mae's. A 7.x label is not
+//! a profile and runs nothing. `--launcher-dry-run` prints what would run.
 //!
 //! Usage:
-//!   seihai [ARGS...]                      seihai-mae ARGS...
-//!   seihai --version 2.22 [ARGS...]       seihai-mae --version 2.22 ARGS...
-//!   seihai --version 3.153 [ARGS...]      seihai-ato --version 3.153 ARGS...
-//!   seihai --version 6.03r7 [ARGS...]     seihai-issho --version 6.03r7 ARGS...
-//!   seihai --version graal3d [ARGS...]    seihai-g3d --version graal3d ARGS...
+//!   seihai                                the start window
+//!   seihai mae|ato|issho|g3d [ARGS...]    that client, on its own
+//!   seihai [ARGS...]                      Mae ARGS...
+//!   seihai --version 2.22 [ARGS...]       Mae --version 2.22 ARGS...
+//!   seihai --version 3.153 [ARGS...]      Ato --version 3.153 ARGS...
+//!   seihai --version 6.03r7 [ARGS...]     Issho --version 6.03r7 ARGS...
+//!   seihai --version graal3d [ARGS...]    G3D --version graal3d ARGS...
 
 use seihai_core::protocol::{ClientVersion, VersionProfile};
 use seihai_issho::{is_v6, is_v7_label};
-use std::path::PathBuf;
-use std::process::Command;
-
-/// The client binary a version runs in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Line {
-    /// 1.x and 2.x: `seihai-mae`.
-    Mae,
-    /// Torque / 3.x to 5.x: `seihai-ato`.
-    Ato,
-    /// v6 quattro_lib: `seihai-issho`. Not started unless the profile is 6.x.
-    Issho,
-    /// Graal3D (February 2000), the standalone 3D client: `seihai-g3d`.
-    G3d,
-}
-
-impl Line {
-    fn binary(self) -> &'static str {
-        match self {
-            Line::Mae => "seihai-mae",
-            Line::Ato => "seihai-ato",
-            Line::Issho => "seihai-issho",
-            Line::G3d => "seihai-g3d",
-        }
-    }
-}
+use seihai_play::start::{Handoff, Line, Saved, StartScreen, LAUNCHER_ENV, PROGRAM_ENV};
+use std::process::ExitCode;
 
 /// Which line a profile belongs to. v6 is Issho. The token says the rest:
 /// `GNW` for the 2D builds, `G3D` for the 3.x to 5.x ones, which run in
-/// `seihai-ato` (4.x and 5.x with their Login lobby).
+/// `seihai-ato` (4.x and 5.x with their Login lobby). The start window
+/// uses the same rule (`seihai_play::start::line_of`).
 fn line_for(p: &VersionProfile) -> Line {
     if is_v6(p.version) {
         Line::Issho
@@ -118,16 +109,6 @@ fn pick(args: &[String]) -> Pick {
     }
 }
 
-/// The client binary next to this one, or the bare name for a `PATH` lookup.
-fn find_binary(line: Line) -> PathBuf {
-    let file = format!("{}{}", line.binary(), std::env::consts::EXE_SUFFIX);
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|d| d.join(&file)))
-        .filter(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from(file))
-}
-
 /// The arguments for a printout, with any `--password` value hidden.
 fn shown(args: &[String]) -> String {
     let mut out = Vec::with_capacity(args.len());
@@ -139,56 +120,147 @@ fn shown(args: &[String]) -> String {
     out.join(" ")
 }
 
-fn main() {
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
+/// The start window is opened for no arguments, or only the error a
+/// client came back with (`--launcher-error TEXT`). Returns that error.
+fn window_args(args: &[String]) -> Option<Option<String>> {
+    match args {
+        [] => Some(None),
+        [flag, text] if flag == "--launcher-error" => Some(Some(text.clone())),
+        _ => None,
+    }
+}
+
+/// What the program name or the first argument asks for: a client run on
+/// its own, with the arguments left for it.
+fn named_line(argv0: &str, args: &[String]) -> Option<(Line, usize)> {
+    let name = argv0.rsplit(['/', '\\']).next().unwrap_or("");
+    if let Some(l) = Line::from_name(name) {
+        return Some((l, 0));
+    }
+    // `seihai capture ...` stays Mae's capture viewer, not a line.
+    let first = args.first()?;
+    if first.starts_with("seihai-") {
+        return None;
+    }
+    Line::from_name(first).map(|l| (l, 1))
+}
+
+/// Run a client in this process. Returns its exit code.
+fn run_line(line: Line, args: Vec<String>) -> ExitCode {
+    match line {
+        Line::Mae => {
+            seihai::app::main(args);
+            ExitCode::SUCCESS
+        }
+        Line::Ato => seihai_ato::app::main(args),
+        Line::Issho => seihai_issho::app::main(args),
+        Line::G3d => seihai_g3d::app::main(args),
+    }
+}
+
+fn main() -> ExitCode {
+    let mut argv = std::env::args();
+    let argv0 = argv.next().unwrap_or_default();
+    let mut args: Vec<String> = argv.collect();
     let dry_run = args.iter().any(|a| a == "--launcher-dry-run");
     args.retain(|a| a != "--launcher-dry-run");
+    // Every client run from here can start another line in this program.
+    if let Ok(me) = std::env::current_exe() {
+        std::env::set_var(PROGRAM_ENV, me);
+    }
+
+    // `seihai ato ARGS` or a copy named `seihai-ato`: that client, its own
+    // start window and all, as its development binary runs it.
+    if let Some((line, skip)) = named_line(&argv0, &args) {
+        let args = args.split_off(skip);
+        if dry_run {
+            println!("would run: {} {}", line.subcommand(), shown(&args));
+            return ExitCode::SUCCESS;
+        }
+        return run_line(line, args);
+    }
+
+    if let Some(error) = window_args(&args) {
+        return start_window(error, dry_run);
+    }
 
     let (line, profile) = match pick(&args) {
         Pick::UnsupportedV7 => {
             eprintln!("seihai: v7 is not a supported profile. Unity is the expected engine; Issho does not select it.");
-            std::process::exit(2);
+            return ExitCode::from(2);
         }
         Pick::Start(line, profile) => (line, profile),
     };
     if line == Line::Ato {
         let label = profile.map_or("3.x", |p| p.label);
-        eprintln!("seihai: {label} is a Torque (3.x to 5.x) build; seihai-ato draws it with the flat 2D fallback (no Torque 3D yet)");
+        eprintln!("seihai: {label} is a Torque (3.x to 5.x) build; Ato draws it with the flat 2D fallback (no Torque 3D yet)");
     }
     if line == Line::Issho {
         let label = profile.map_or("6.x", |p| p.label);
-        eprintln!("seihai: {label} is a v6 build; seihai-issho draws it with the flat 2D fallback (no 6.x playfield yet)");
+        eprintln!("seihai: {label} is a v6 build; Issho draws it with the flat 2D fallback (no 6.x playfield yet)");
     }
-    let bin = find_binary(line);
     if dry_run {
-        println!("would start: {} {}", bin.display(), shown(&args));
-        return;
+        println!("would run: {} {}", line.subcommand(), shown(&args));
+        return ExitCode::SUCCESS;
     }
-    let mut cmd = Command::new(&bin);
-    cmd.args(&args);
-    let err = run(cmd);
-    eprintln!("seihai: cannot start {}: {err}", bin.display());
-    eprintln!(
-        "seihai: build {} with `cargo build --release` from the seihai folder; it builds seihai, seihai-mae, seihai-ato, seihai-issho and seihai-g3d together",
-        line.binary()
-    );
-    std::process::exit(1);
+    run_line(line, args)
 }
 
-/// Replace this process with the client. Returns only if that failed.
-#[cfg(unix)]
-fn run(mut cmd: Command) -> std::io::Error {
-    use std::os::unix::process::CommandExt;
-    cmd.exec()
+/// The start window, then the client it hands over to, in this process.
+fn start_window(error: Option<String>, dry_run: bool) -> ExitCode {
+    let Some(h) = open_window(error) else {
+        return ExitCode::SUCCESS;
+    };
+    if dry_run {
+        println!(
+            "would run: {} {}",
+            h.line().subcommand(),
+            h.args().join(" ")
+        );
+        return ExitCode::SUCCESS;
+    }
+    if let Some((var, value)) = h.env() {
+        std::env::set_var(var, value);
+    }
+    // A lost connection comes back to this window, not the client's own.
+    if let Ok(me) = std::env::current_exe() {
+        std::env::set_var(LAUNCHER_ENV, me);
+    }
+    run_line(h.line(), h.args())
 }
 
-/// Windows has no `exec`: run the client and leave with its exit code.
-#[cfg(not(unix))]
-fn run(mut cmd: Command) -> std::io::Error {
-    match cmd.status() {
-        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
-        Err(e) => e,
+/// Open the window and block until it closes. The hand-over, if the
+/// player joined a server or opened a client's own window.
+fn open_window(error: Option<String>) -> Option<Handoff> {
+    struct App {
+        screen: StartScreen,
+        out: std::rc::Rc<std::cell::RefCell<Option<Handoff>>>,
     }
+    impl eframe::App for App {
+        fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+            if let Some(h) = self.screen.show(ctx) {
+                self.screen.saved().save();
+                *self.out.borrow_mut() = Some(h);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+    let out = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let app = App {
+        screen: StartScreen::new(Saved::load(), error),
+        out: out.clone(),
+    };
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 520.0]),
+        ..Default::default()
+    };
+    if let Err(e) = eframe::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app)))) {
+        eprintln!("seihai: could not open the start window: {e}");
+        eprintln!("seihai: run a client with --version and --online instead (see `seihai --help`)");
+        std::process::exit(1);
+    }
+    let h = out.borrow_mut().take();
+    h
 }
 
 #[cfg(test)]
@@ -291,6 +363,50 @@ mod tests {
             };
             assert_eq!(line_for(p), want, "{}", p.label);
         }
+    }
+
+    #[test]
+    fn no_arguments_open_the_start_window() {
+        assert_eq!(window_args(&[]), Some(None));
+        assert_eq!(
+            window_args(&args("--launcher-error lost")),
+            Some(Some("lost".into()))
+        );
+        assert_eq!(window_args(&args("--version 2.22")), None);
+        assert_eq!(
+            window_args(&args("--launcher-error a --version 2.22")),
+            None
+        );
+    }
+
+    /// The router and the start window put every row in the same client.
+    #[test]
+    fn router_and_window_agree() {
+        for p in seihai_core::protocol::PROFILES {
+            assert_eq!(
+                line_for(p),
+                seihai_play::start::line_of(p.version),
+                "{}",
+                p.label
+            );
+        }
+    }
+
+    #[test]
+    fn a_subcommand_or_program_name_runs_that_client() {
+        assert_eq!(
+            named_line("/usr/bin/seihai", &args("ato --version 3.04")),
+            Some((Line::Ato, 1))
+        );
+        assert_eq!(named_line("seihai", &args("g3d")), Some((Line::G3d, 1)));
+        assert_eq!(
+            named_line("C:\\x\\seihai-issho.exe", &args("--version 6.03r7")),
+            Some((Line::Issho, 0))
+        );
+        assert_eq!(named_line("seihai-mae", &[]), Some((Line::Mae, 0)));
+        assert_eq!(named_line("seihai", &args("--version 3.04")), None);
+        assert_eq!(named_line("seihai", &args("capture show f")), None);
+        assert_eq!(named_line("seihai", &[]), None);
     }
 
     #[test]

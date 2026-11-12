@@ -21,7 +21,7 @@ documents, the timings from the decompile.
   sent. `ClientVersion::sends_claim()` also needs id 14 in the build's send set.
 - `OfflineSession`: `life`, `alignment` (AP), `entry` (the saved entry point),
   `damage_half`, `tick_life`, `respawn`, `note_entry` (the save rule), `no_pk`. The game loop in
-  `bin/main.rs` ticks it, reads the keys and sends the messages.
+  `app.rs` ticks it, reads the keys and sends the messages.
 
 ## The sequence (tick = 50 ms)
 
@@ -104,7 +104,7 @@ out for a hit and never echoes the client's CURPOWER. A client that keeps
 hearts to itself leaves the server holding full hearts. Seihai now sends,
 in `PLI_PLAYERPROPS` (2), CURPOWER (2), GANI (10, a GSTRING) and SPRITE (17)
 in that order, each only when it changed (`life::PowerReporter`,
-`OfflineSession::take_power_report`, `send_power_report` in `bin/main.rs`):
+`OfflineSession::take_power_report`, `send_power_report` in `app.rs`):
 
 | When | Sent | Source |
 |---|---|---|
