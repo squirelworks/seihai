@@ -171,6 +171,22 @@ impl Launcher {
         s.version = Some(self.version.clone());
         s.assets = Some(self.assets.clone().into());
         s.set_assets_for(self.version_enum().label(), &self.version_assets);
+        let v = self.version_enum();
+        if crate::ato::runs_in_issho(v) {
+            // 6.x is Issho's: it logs in at this server, not Mae.
+            s.last_server = None;
+            s.offline = None;
+            s.save();
+            *self.ato.lock().unwrap() = Some(crate::ato::Handoff {
+                target: Target::Issho(v),
+                server: Some(addr),
+                account: self.account.clone(),
+                password: self.password.clone(),
+                assets: Some(self.version_assets.clone()),
+            });
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
         s.last_server = Some(addr);
         s.last_server_name = Some(name.to_string());
         s.offline = None;
@@ -192,6 +208,7 @@ impl Launcher {
         s.save();
         *self.ato.lock().unwrap() = Some(crate::ato::Handoff {
             target,
+            server: None,
             account: self.account.clone(),
             password: self.password.clone(),
             assets: Some(self.version_assets.clone()),

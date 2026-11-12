@@ -46,7 +46,8 @@ Single code path. Versions are profile rows, not branches.
 - [x] Shared start window (`seihai-play::start`): every version grouped by client, then Graal3D; the server list; Join runs that client, logged in at once. A `3 ` server joined with a 3.x to 5.x build gets `--graal3d`. A lost connection comes back to the window.
 - [x] Each client's whole program is its library's `app::main`; `seihai` runs it in-process. `seihai mae|ato|issho|g3d`, or the program named `seihai-ato` (and so on), runs a client on its own. The crates' binaries are for development and are not shipped.
 - [x] Release profile: strip, LTO, one codegen unit. release.yml ships only `seihai`.
-- [ ] Mae's own window hands 6.x to Issho; then its version picker folds into the shared window (#470).
+- [x] Mae's own window hands a 6.x Join to Issho.
+- [ ] Mae's version picker folds into the shared window (#470).
 - [ ] Lab run on Windows 10, Linux and macOS (#471).
 - [ ] Ato's start window and server list reuse `seihai-play::start`.
 
