@@ -20,8 +20,8 @@ examples and tests. The `seihai` executable is the separate launcher.
 
 Shared profiles, framing/login, resource formats, simulation and scripting
 belong to [`seihai-core`](../seihai-core), rather than a second copy here.
-The standalone [`seihai-draw`](../seihai-draw) compositor serves tools that
-should not depend on the full playable client.
+The standalone `seihai-draw` compositor (in the seihai-core repo) serves
+tools that should not depend on the full playable client.
 
 ## Boundaries and current routing
 
