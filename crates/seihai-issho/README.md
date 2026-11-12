@@ -7,8 +7,22 @@ The `seihai` launcher starts this binary when `--version` is a 6.x row
 `--version` the launcher still starts `seihai-mae`. v3–v5 are not Issho.
 A 7.x label is rejected and nothing is started.
 
-This pass is the shell boundary. The binary prints the profile and exits.
-It does not draw, log in, or open a sound device. `seihai-mae --version`
+The binary prints the profile and exits. With `--online host:port`
+(`-o`, `--server`), `--account NAME` and `--password-env VAR` it logs in
+to that game server as the 6.x build and logs each level it sends, with
+core's client session (`seihai_core::client`, the same loop `seihai-ato`
+runs): the build's login line, the Login server's warp to the game
+server, the post-login frames where the build has recorded ones, the
+level from its board (or a local copy at the server's mod time with
+`--assets DIR`), and the server NPCs' GS2 scripts listed, not run.
+`--first-level` hangs up once the first level is logged. The password
+is read from the variable, never from the command line.
+
+```
+LAB_PW=… seihai-issho --version 6.03r7 --online 127.0.0.1:14900 --account guest --password-env LAB_PW
+```
+
+It does not draw or open a sound device, and it does not walk yet. `seihai-mae --version`
 with a 6.x label still runs mae's flat client; mae does not link this
 crate, and the start window inside mae does not hand a 6.x pick here yet.
 
