@@ -90,7 +90,16 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
 - `game`: after Start, the 640x480 window shows the level the server sent.
   The arrow keys walk it with core's `OfflineSession::try_move`, which
   gives the same pace, walls and water as mae. Other players the server
-  places in the level (`PLO_OTHERPLPROPS`) show as yellow markers.
+  places in the level (`PLO_OTHERPLPROPS`) show as yellow markers, with
+  their nickname under the marker when the server sent one.
+- NPCs: the level file's NPCs and the ones the server sent for the level
+  (`PLO_NPCPROPS`, joined through core's `take_server_npc`, so a file NPC
+  at the same place with the same image is one NPC) are drawn as their
+  PNG or GIF image from the asset folder, with `setimgpart` parts and the
+  clear pixels left out. An image not in the asset folder is drawn as a
+  purple outline and named once on stderr; an NPC with no image draws
+  nothing. NPC props that come after the level (moves, new images) are
+  not applied yet, and missing images are not asked for from the server.
 
 The walk is sent: the view hands its pose to the network thread, which
 sends it once a 50 ms tick after the post-login frame. 3.04 and 4.04r2
@@ -107,6 +116,7 @@ otherwise. A new level owes the builds that send it a 46
 
 ## Not in yet
 
-Offline mode, gmaps, NPCs, other players' looks and names
-(they show as plain markers), GANI art, and the Torque UDP side. The clients' background images are not shipped,
+Offline mode, gmaps, NPC scripts and NPC animations, NPC changes after
+the level arrives, other players' looks (they show as plain markers),
+GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
