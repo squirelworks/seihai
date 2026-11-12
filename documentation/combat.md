@@ -26,7 +26,7 @@ derived in item 7; `damage-respawn.md` has what is known and open.
 - `SessionState` notes each other player's SPRITE, STATUS, ALIGNMENT and
   SWORDPOWER (`OtherPlayer.sprite/status/ap/sword_power`), lists players
   whose props showed a swing (`swings`), and decodes ids 40 and 46 (`hits`).
-- `bin/main.rs`: judges what arrived each frame, runs the swing and hurt
+- `app.rs`: judges what arrived each frame, runs the swing and hurt
   clock, and sends the sprite.
 
 ## Who decides

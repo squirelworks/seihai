@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/seihai-mae", "crates/seihai-ato", "crates/seihai-issho", "crates/seihai-g3d", "crates/seihai-launcher", "tools/level-editor"]
+members = ["crates/seihai-mae", "crates/seihai-ato", "crates/seihai-play", "crates/seihai-issho", "crates/seihai-g3d", "crates/seihai-launcher", "tools/level-editor"]
 resolver = "2"
 
 [workspace.package]
@@ -13,4 +13,11 @@ license = "MIT OR Apache-2.0"
 # this repo and add a `[patch."https://github.com/squirelworks/seihai-core"]`
 # entry pointing at it in your local .cargo/config.toml.
 [workspace.dependencies]
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.0.11", default-features = false }
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.0.13", default-features = false }
+
+# Release builds ship one program (`seihai`), so it is built small: no
+# debug symbols, and link-time optimisation across all the crates.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

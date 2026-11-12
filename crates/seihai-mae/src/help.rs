@@ -1,6 +1,6 @@
 //! The key list shown by F1, and the on-screen hints.
 //!
-//! [`BINDINGS`] lists every key the game loop in `bin/main.rs` reads:
+//! [`BINDINGS`] lists every key the game loop in `app.rs` reads:
 //! its `minifb::Key::X` names, and the default keys of each
 //! [`crate::keys::Action`] it uses. A test reads that file and checks the
 //! two agree in both directions: a key in the table that main.rs never
@@ -150,7 +150,7 @@ mod tests {
     fn keys_in_main() -> BTreeSet<String> {
         let signs = include_str!("render/signs.rs");
         let signs = signs.split("#[cfg(test)]").next().unwrap_or(signs);
-        let src = [include_str!("bin/main.rs"), signs].concat();
+        let src = [include_str!("app.rs"), signs].concat();
         let src = src.as_str();
         let mut out = BTreeSet::new();
         let mut rest = src;
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn question_mark_opens_help_too() {
-        assert!(include_str!("bin/main.rs").contains("'?'"));
+        assert!(include_str!("app.rs").contains("'?'"));
         assert!(BINDINGS[0].label.contains('?'));
     }
 

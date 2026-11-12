@@ -1,6 +1,6 @@
 # Game keys
 
-`crates/seihai-mae/src/keys.rs`, read by the game loop in `crates/seihai-mae/src/bin/main.rs`.
+`crates/seihai-mae/src/keys.rs`, read by the game loop in `crates/seihai-mae/src/app.rs`.
 
 ## Defaults: the readme key map
 

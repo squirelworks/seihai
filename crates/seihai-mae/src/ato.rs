@@ -1,4 +1,5 @@
-//! Hand a 3.x pick over to `seihai-ato`, and a Graal3D pick to `seihai-g3d`.
+//! Hand a 3.x pick over to `seihai-ato`, a Graal3D pick to `seihai-g3d`,
+//! and a 6.x Join to `seihai-issho`.
 //!
 //! The Torque / 3.x builds run in `seihai-ato`, which has the 3.x start
 //! window. Picking 3.04 or 3.153 in the settings window closes it and starts
@@ -13,8 +14,9 @@
 //! account and password.
 //!
 //! The password goes over in an environment variable, never on the
-//! command line. The binary is looked for the way `seihai-launcher` looks
-//! for it: next to this one first, then on `PATH`.
+//! command line. Inside the `seihai` program the client is started as
+//! `seihai ato|g3d ...`; run on its own, the binary is looked for next to
+//! this one first, then on `PATH`.
 
 use crate::protocol::ClientVersion;
 use std::path::PathBuf;
@@ -31,6 +33,15 @@ pub const PASSWORD_ENV: &str = "SEIHAI_ATO_PASSWORD";
 pub const G3D_BINARY: &str = "seihai-g3d";
 pub const G3D_PASSWORD_ENV: &str = "SEIHAI_G3D_PASSWORD";
 
+/// The binary 6.x builds run in, and its password variable.
+pub const ISSHO_BINARY: &str = "seihai-issho";
+pub const ISSHO_PASSWORD_ENV: &str = "SEIHAI_ISSHO_PASSWORD";
+
+/// True for a 6.x row: `seihai-issho`'s.
+pub fn runs_in_issho(v: ClientVersion) -> bool {
+    v.label().starts_with('6') && !v.label().as_bytes().get(1).is_some_and(u8::is_ascii_digit)
+}
+
 /// The version-list label for Graal3D. Not a [`ClientVersion`]: it is
 /// shown after them, and only ever hands over to `seihai-g3d`.
 pub const GRAAL3D_LABEL: &str = "Graal3D";
@@ -42,6 +53,9 @@ pub enum Target {
     Ato(ClientVersion),
     /// Graal3D (February 2000), in `seihai-g3d`.
     Graal3D,
+    /// A 6.x build, in `seihai-issho`. Handed over on Join, with the server:
+    /// Issho has no start window of its own.
+    Issho(ClientVersion),
 }
 
 impl Target {
@@ -49,6 +63,7 @@ impl Target {
         match self {
             Target::Ato(_) => BINARY,
             Target::Graal3D => G3D_BINARY,
+            Target::Issho(_) => ISSHO_BINARY,
         }
     }
 
@@ -56,6 +71,16 @@ impl Target {
         match self {
             Target::Ato(_) => PASSWORD_ENV,
             Target::Graal3D => G3D_PASSWORD_ENV,
+            Target::Issho(_) => ISSHO_PASSWORD_ENV,
+        }
+    }
+
+    /// The `seihai` subcommand for the client.
+    fn subcommand(self) -> &'static str {
+        match self {
+            Target::Ato(_) => "ato",
+            Target::Graal3D => "g3d",
+            Target::Issho(_) => "issho",
         }
     }
 
@@ -63,7 +88,7 @@ impl Target {
     /// `graal3d`.
     fn version_arg(self) -> &'static str {
         match self {
-            Target::Ato(v) => v.label(),
+            Target::Ato(v) | Target::Issho(v) => v.label(),
             Target::Graal3D => "graal3d",
         }
     }
@@ -81,6 +106,8 @@ pub fn runs_in_ato(v: ClientVersion) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handoff {
     pub target: Target,
+    /// The game server (`--online`). `None` opens the client\'s start window.
+    pub server: Option<String>,
     pub account: String,
     pub password: String,
     /// The asset folder set for this build only, if any.
@@ -95,6 +122,14 @@ impl Handoff {
             "--version".to_string(),
             self.target.version_arg().to_string(),
         ];
+        if let Some(server) = self
+            .server
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            out.extend(["--online".to_string(), server.to_string()]);
+        }
         if !self.account.is_empty() {
             out.extend(["--account".to_string(), self.account.clone()]);
         }
@@ -115,9 +150,23 @@ impl Handoff {
         out
     }
 
-    /// The command that starts the client.
+    /// The command that starts the client. Inside the `seihai` program
+    /// (which sets `SEIHAI_PROGRAM` to its path) that is
+    /// `seihai ato|g3d ARGS...`, since only `seihai` is shipped; on its own,
+    /// the client's binary.
     pub fn command(&self) -> Command {
-        let mut cmd = Command::new(find_binary(self.target.binary()));
+        self.command_in(program())
+    }
+
+    fn command_in(&self, program: Option<PathBuf>) -> Command {
+        let mut cmd = match program {
+            Some(p) => {
+                let mut c = Command::new(p);
+                c.arg(self.target.subcommand());
+                c
+            }
+            None => Command::new(find_binary(self.target.binary())),
+        };
         cmd.args(self.args());
         if !self.password.is_empty() {
             cmd.env(self.target.password_env(), &self.password);
@@ -129,13 +178,20 @@ impl Handoff {
     /// failed, with the text to show.
     pub fn start(&self) -> String {
         let name = self.target.binary();
-        let bin = find_binary(name);
+        let bin = program().unwrap_or_else(|| find_binary(name));
         let err = run(self.command());
         format!(
             "cannot start {}: {err}. Build it with `cargo build --release -p {name}`.",
             bin.display()
         )
     }
+}
+
+/// The `seihai` program this runs inside, if it does (`SEIHAI_PROGRAM`).
+pub fn program() -> Option<PathBuf> {
+    std::env::var_os("SEIHAI_PROGRAM")
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
 }
 
 /// The binary next to this one, or the bare name for a `PATH` lookup.
@@ -185,6 +241,7 @@ mod tests {
     #[test]
     fn the_form_fills_the_start_window_without_skipping_it() {
         let h = Handoff {
+            server: None,
             target: Target::Ato(ClientVersion::V3153),
             account: "guest".into(),
             password: "secret".into(),
@@ -215,8 +272,67 @@ mod tests {
     }
 
     #[test]
+    fn inside_the_seihai_program_the_client_is_a_subcommand() {
+        let h = Handoff {
+            server: None,
+            target: Target::Ato(ClientVersion::V304),
+            account: String::new(),
+            password: String::new(),
+            assets: None,
+        };
+        let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
+        assert_eq!(cmd.get_program(), "/opt/seihai");
+        let args: Vec<_> = cmd.get_args().collect();
+        assert_eq!(args, ["ato", "--version", "3.04"]);
+        let h = Handoff {
+            server: None,
+            target: Target::Graal3D,
+            ..h
+        };
+        let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
+        assert_eq!(cmd.get_args().next().unwrap(), "g3d");
+    }
+
+    #[test]
+    fn a_6x_join_runs_issho_logged_in() {
+        assert!(runs_in_issho(ClientVersion::V603R7));
+        assert!(runs_in_issho(ClientVersion::V603R7Linux));
+        for v in ClientVersion::all_versions() {
+            assert_eq!(
+                runs_in_issho(*v),
+                v.label().starts_with("6."),
+                "{}",
+                v.label()
+            );
+        }
+        let h = Handoff {
+            target: Target::Issho(ClientVersion::V603R7),
+            server: Some("h:14900".into()),
+            account: "a".into(),
+            password: "p".into(),
+            assets: None,
+        };
+        assert_eq!(
+            h.args(),
+            [
+                "--version",
+                "6.03r7",
+                "--online",
+                "h:14900",
+                "--account",
+                "a",
+                "--password-env",
+                ISSHO_PASSWORD_ENV
+            ]
+        );
+        let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
+        assert_eq!(cmd.get_args().next().unwrap(), "issho");
+    }
+
+    #[test]
     fn empty_fields_are_left_out() {
         let h = Handoff {
+            server: None,
             target: Target::Ato(ClientVersion::V304),
             account: String::new(),
             password: String::new(),
@@ -229,6 +345,7 @@ mod tests {
     #[test]
     fn graal3d_starts_g3d_with_its_own_password_variable() {
         let h = Handoff {
+            server: None,
             target: Target::Graal3D,
             account: "lab".into(),
             password: "secret".into(),
