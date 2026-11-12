@@ -16,11 +16,12 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # Linux builds without audio (the documented no-audio build: every
-      # client's `audio` feature off, so seihai-core's is too), so the job needs no ALSA
-      # development files and no apt step, and a Ubuntu mirror outage
-      # cannot fail it. Windows and macOS build the default, with audio.
-      FEATURES: ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features seihai-mae/dev,seihai-core/dev' || '' }}
+      # Every platform builds and tests without audio (each client's
+      # `audio` feature off, so seihai-core's is too): rodio/cpal and the
+      # platform sound libraries are not compiled, which keeps the jobs
+      # short, and Linux needs no ALSA development files or apt step. The
+      # audio build is compiled by release.yml, which builds the defaults.
+      FEATURES: --no-default-features --features seihai-mae/dev,seihai-core/dev
     defaults:
       run:
         shell: bash
