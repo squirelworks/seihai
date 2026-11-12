@@ -17,9 +17,16 @@ path = "src/main.rs"
 
 [dependencies]
 seihai-core.workspace = true
+# The game loop (shared with seihai-ato) and the window, for `window`.
+seihai-play = { path = "../seihai-play", optional = true }
+eframe = { version = "0.29", optional = true }
+egui = { version = "0.29", optional = true }
 
 [features]
-default = ["audio"]
+default = ["audio", "window"]
 # Sound through seihai-core's device output. On by default; on Linux it
 # needs the ALSA development files. `--no-default-features` leaves it out.
-audio = ["seihai-core/audio"]
+audio = ["seihai-core/audio", "seihai-play?/audio"]
+# The game window (`--online` without `--no-window`, and `--level`). The
+# launcher links this crate only for its version checks, without it.
+window = ["dep:seihai-play", "dep:eframe", "dep:egui"]

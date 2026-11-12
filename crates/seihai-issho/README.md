@@ -7,24 +7,39 @@ The `seihai` launcher starts this binary when `--version` is a 6.x row
 `--version` the launcher still starts `seihai-mae`. v3–v5 are not Issho.
 A 7.x label is rejected and nothing is started.
 
-The binary prints the profile and exits. With `--online host:port`
-(`-o`, `--server`), `--account NAME` and `--password-env VAR` it logs in
-to that game server as the 6.x build and logs each level it sends, with
-core's client session (`seihai_core::client`, the same loop `seihai-ato`
-runs): the build's login line, the Login server's warp to the game
-server, the post-login frames where the build has recorded ones, the
-level from its board (or a local copy at the server's mod time with
-`--assets DIR`), and the server NPCs' GS2 scripts listed, not run.
-`--first-level` hangs up once the first level is logged. The password
-is read from the variable, never from the command line.
+With only `--version` the binary prints the profile and exits.
+
+With `--online host:port` (`-o`, `--server`), `--account NAME` and
+`--password-env VAR` it logs in to that game server as the 6.x build and
+opens the game window. The loop is `seihai-play`'s, the one `seihai-ato`
+runs (Issho does not depend on Ato): core's client session logs in (the
+build's login line, the Login server's warp to the game server, the
+post-login frames where the build has recorded ones), the level from its
+board (or a local copy at the server's mod time with `--assets DIR`) is
+drawn flat, the arrow keys walk it, links and gmap edges are crossed, the
+other players and the server's board and NPC changes are shown, and the
+walk's sounds play through core's sound engine; a sound not on disk is
+asked of the server with `WANTFILE`. `--no-sound` keeps it quiet. The
+server NPCs' GS2 scripts are listed, not run. The password is read from
+the variable, never from the command line.
+
+`--no-window` only logs each level, as before (`--first-level` hangs up
+once the first level is logged). `--level NAME` plays level files
+offline in the window, looked up in `--assets`.
 
 ```
 LAB_PW=… seihai-issho --version 6.03r7 --online 127.0.0.1:14900 --account guest --password-env LAB_PW
+seihai-issho --version 6.03r7 --level start.nw --assets DIR
 ```
 
-It does not draw or open a sound device, and it does not walk yet. `seihai-mae --version`
-with a 6.x label still runs mae's flat client; mae does not link this
-crate, and the start window inside mae does not hand a 6.x pick here yet.
+The window is the shared flat stand-in, not the 6.x playfield: 640 x 480,
+markers for the players, no HUD, no chat, no start window. The roadmap
+is in `documentation/roadmap.md`, "Issho (6.x)", and issue 440.
+`seihai-mae --version` with a 6.x label still runs mae's flat client;
+mae does not link this crate.
+
+The `window` feature (default) brings the window and `seihai-play`. The
+launcher links this crate without it, for the version checks only.
 
 ## What Issho owns
 
@@ -34,8 +49,10 @@ Torque. Issho owns that shape:
 - **Draw.** OpenGL presents the frame. Direct3D 9 is a capability check
   before that, not the presenter. `GuiGraalCtrl` and `GuiGraal3DCtrl`
   are both playfields. `GuiTilesCtrl` and `horizSizing` are absent in
-  6.00. Nothing here issues a GL call yet.
-- **Sound.** The slot is FMOD. The device stays closed.
+  6.00. The window is egui's, through `seihai-play`; nothing
+  here is the 6.x OpenGL presenter yet.
+- **Sound.** The slot is FMOD. Seihai plays through core's sound engine
+  (the `audio` feature), as Ato does, not FMOD.
 - **GS2 shell.** Startup scripts, including `StartScript_GraalGui` and
   the dialogs. The bytecode VM is not ported. Graal_analysis pull
   requests [276](https://github.com/squirelworks/Graal_analysis/pull/276)
@@ -67,6 +84,7 @@ Facts are the behaviour notes in Graal_analysis:
 | `seihai-core` | Shared protocol facts and formats: framing, profiles, levels, gmaps, ganis, GS1. Issho reads the version row from here and does not restate it. |
 | `seihai-mae` | 1.x and 2.x, and the flat play path still used for 4.x and 5.x. Not linked from Issho. |
 | `seihai-ato` | v3–v5 Torque. Issho does not depend on Ato and does not call it. |
+| `seihai-play` | The game loop and flat renderer Ato and Issho share. |
 | `seihai-g3d` | February 2000 Graal3D. A different program. |
 | `seihai-launcher` | Reads `--version` and starts one of the lines. v6 starts Issho. |
 
@@ -85,5 +103,5 @@ This crate does not do that. 7.x is not a supported version profile.
 
 ## Not in this pass
 
-Login, the playfield, FMOD output, the GS2 VM, `resolveHost` as a real
+The 6.x playfield and HUD, FMOD, the GS2 VM, `resolveHost` as a real
 lookup, HTTP, CyaSSL, Torque, and Unity.

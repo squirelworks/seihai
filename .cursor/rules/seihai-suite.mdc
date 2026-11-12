@@ -1,0 +1,52 @@
+---
+description: Seihai suite rules and hand-off. Applies to every request in every Seihai suite repo.
+alwaysApply: true
+---
+
+# Seihai suite: read this first
+
+You are picking up work on the Seihai suite for its owner, Squirrel (GitHub
+`squirelworks`). Other agents (Claude, Codex, Chiaki) worked here before you
+and may still be working in parallel, so keep the shared records current.
+
+1. Read the suite hand-off: `docs/handoff/README.md` in `squirelworks/seihai`
+   (https://github.com/squirelworks/seihai/blob/main/docs/handoff/README.md).
+2. If this machine has the private lab kit, read it too:
+   `~/Claude/HANDOFF/START-HERE.md` (Windows: `%USERPROFILE%\Claude\HANDOFF\START-HERE.md`).
+   It covers the lab machines, VMs and private research. Never copy anything
+   from it into a repo, an issue or a PR.
+3. Then read this repo's own `AGENTS.md` (if any), `docs/ARCHITECTURE.md` and
+   `docs/NEXT.md` (or `PLAN.md`) before changing code.
+
+## Hard rules (the full list is in the hand-off and each repo's AGENTS.md)
+
+- **No GPL code in the MIT/Apache repos.** Never copy, port or translate code,
+  tables or comments from GServer-v2, gs2lib or gs2-parser into seihai,
+  seihai-core, seihai-gserver, seihai-listserver, seihai-npcserver, seihai-rc,
+  seihai-servertools or graal-client-repro. Packet ids and wire formats are facts
+  and may be used. The GPL forks (seihai-gserver-v2, seihai-gs2lib) stay GPL.
+- **No decompiled code, binary offsets or addresses** (`0x…`, `FUN_…`) in any
+  repo. Write findings up as plain behaviour.
+- **No real Graal server or listserver hostnames, IPs or ports.** Use
+  `127.0.0.1`, the lab ports and placeholders like `<listserver-host>`.
+- **Labs run on the owner's own machines** (headless lab VMs preferred), on
+  loopback servers you start yourself. Never against public servers or real
+  accounts.
+- **workingpapers and private lab notes never go in a repo.**
+- **No tags or releases** without Squirrel's go-ahead.
+- **Every repo builds and tests on Linux, Windows and macOS.**
+
+## Pull requests
+
+- One properly sized PR per piece of work, not one per behaviour. Batch small
+  fixes. Use the repo's PR template if it has one.
+- Link the issue (`Fixes #n`) so it closes on merge.
+
+## When a piece of work finishes (keep GitHub and the local copy in step)
+
+1. Close or update the issue on GitHub (the PR's `Fixes #n` does this on merge).
+2. Tick its line in the repo's roadmap issue (see `docs/handoff/TRACKING.md`)
+   and in the umbrella roadmap squirelworks/seihai#353 if it is listed there.
+3. Update the repo's `docs/NEXT.md` in the same PR.
+4. Refresh the local snapshot: `python3 tools/handoff/tracker.py -o ~/Claude/HANDOFF/TRACKER.md`
+   (run from a seihai clone), and add a dated line to `~/Claude/HANDOFF/LOG.md`.

@@ -35,7 +35,7 @@ the laundry specs `10-right-click-menu.md` and `14-friends-ignore.md`, and the
   (`tick_bubbles`).
 - `ui::player_list_rows`: the Tab list marks `[buddy]`, `[ignored]` and
   `[muted]`.
-- `bin/main.rs`: loads the lists on each connection, runs the commands,
+- `app.rs`: loads the lists on each connection, runs the commands,
   sends the mute message, ticks the bubbles.
 
 ## Files
