@@ -225,3 +225,11 @@ For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.tx
 See `documentation/` for the implementation notes, roadmap, and version profiles.
 
 Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in `documentation/level-editor-expansion.md`.
+
+## macOS builds
+
+macOS is not built on GitHub's macOS runners. It is built and tested on the
+lab's Sequoia (macOS 15) VM on GwenTea2 (`start-macos.sh`, then `ssh builder@`),
+with the same build and test commands the Linux job runs. GitHub CI covers
+Linux and Windows. Each VM run's log is kept as `~/Claude/sequoia-ci/<repo>.log`
+on GwenTea2.

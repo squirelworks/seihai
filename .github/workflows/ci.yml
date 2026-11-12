@@ -1,6 +1,6 @@
 name: CI
 
-# Pull request and main-branch checks on all three platforms.
+# Pull request and main-branch checks on Linux and Windows.
 # Releases stay in release.yml (tags and manual runs only).
 
 on:
@@ -13,13 +13,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macOS is not built on GitHub runners: it is built and tested on the
+        # Sequoia VM in the lab (see README.md, "macOS builds").
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       # Linux builds without audio (the documented no-audio build: every
       # client's `audio` feature off, so seihai-core's is too), so the job needs no ALSA
       # development files and no apt step, and a Ubuntu mirror outage
-      # cannot fail it. Windows and macOS build the default, with audio.
+      # cannot fail it. Windows builds the default, with audio.
       FEATURES: ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features seihai-mae/dev,seihai-core/dev' || '' }}
     defaults:
       run:
