@@ -30,6 +30,8 @@ const PING_AFTER: Duration = Duration::from_millis(4600);
 const SILENCE: Duration = Duration::from_secs(30);
 /// The largest packet the client sends.
 const MAX_PACKET: usize = 450;
+/// How long to wait when no datagram is queued.
+const IDLE_NAP: Duration = Duration::from_millis(5);
 
 /// Who the client says it is on the UDP link.
 #[derive(Debug, Clone)]
@@ -93,9 +95,10 @@ pub fn run_with_sequence(
             profile.builds, profile.protocol
         ));
     }
-    socket
-        .set_read_timeout(Some(Duration::from_millis(50)))
-        .map_err(|e| e.to_string())?;
+    // Non-blocking, not a read timeout: on Windows a timed-out
+    // recv_from can drop a datagram that arrives as it gives up (lab 13b
+    // lost 52 of 129 that way).
+    socket.set_nonblocking(true).map_err(|e| e.to_string())?;
     let mut buf = [0u8; 2048];
 
     // Challenge, then connect request, each repeated until answered.
@@ -354,13 +357,17 @@ fn describe(ghosts: &Ghosts, i: u32) -> String {
     }
 }
 
-/// One packet from `server`, or `None` on a read timeout. Packets from
-/// any other address are ignored.
+/// One packet from `server`, or `None` when none is queued (after a short
+/// nap, so the loop does not spin). Packets from any other address are
+/// ignored.
 fn recv(socket: &UdpSocket, server: SocketAddr, buf: &mut [u8]) -> Result<Option<usize>, String> {
     match socket.recv_from(buf) {
         Ok((n, from)) if from == server => Ok(Some(n)),
         Ok(_) => Ok(None),
-        Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(None),
+        Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            std::thread::sleep(IDLE_NAP);
+            Ok(None)
+        }
         // A refused send (no server yet) shows up here on some systems.
         Err(e)
             if e.kind() == ErrorKind::ConnectionReset
