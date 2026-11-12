@@ -45,6 +45,16 @@ fn main() -> ExitCode {
     };
     let account = a.account.unwrap_or_default();
     let nick = a.nick.unwrap_or_else(|| account.clone());
+    // `--level` with no server: play the level files offline.
+    if let (Some(level), None) = (a.level.as_deref(), a.online.as_deref()) {
+        return match game::run_offline(version, level, a.assets.map(Into::into), !a.no_sound) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("seihai-ato: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     if !a.no_window {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
