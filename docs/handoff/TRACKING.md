@@ -11,7 +11,7 @@ A local Markdown snapshot of all of it is generated, never hand-edited.
 |---|---|
 | suite (umbrella) | [seihai#353](https://github.com/squirelworks/seihai/issues/353) |
 | seihai: Issho (6.x) | [seihai#440](https://github.com/squirelworks/seihai/issues/440) (sub-issues #441 to #448) |
-| seihai: Ato (3.x to 5.x) | no roadmap issue yet; the plan is in [#380](https://github.com/squirelworks/seihai/issues/380), the lab run in [#400](https://github.com/squirelworks/seihai/issues/400), and `crates/seihai-ato/README.md` |
+| seihai: Ato (3.x to 5.x) | [seihai#457](https://github.com/squirelworks/seihai/issues/457) (sub-issues #458 to #466); background in [#380](https://github.com/squirelworks/seihai/issues/380) and `crates/seihai-ato/README.md` |
 | seihai: Graal3D | `documentation/plannedmilestones.md` and the Graal3D part of #353 |
 | seihai-core | [seihai-core#7](https://github.com/squirelworks/seihai-core/issues/7) |
 | seihai-gserver | [seihai-gserver#56](https://github.com/squirelworks/seihai-gserver/issues/56) |

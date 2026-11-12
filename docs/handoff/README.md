@@ -29,7 +29,7 @@ All under `github.com/squirelworks`.
 
 | Repo | What it is | Licence | Roadmap |
 |---|---|---|---|
-| `seihai` | The client. Crates: `seihai-launcher` (the `seihai` binary), `seihai-mae` (1.x/2.x), `seihai-ato` (Torque 3.x to 5.x, and the Torque engine rebuild), `seihai-issho` (6.x), `seihai-g3d` (Graal3D, Feb 2000), and the shared play loop. `documentation/` holds the client's protocol and format notes. | MIT OR Apache-2.0 | [#353](https://github.com/squirelworks/seihai/issues/353), Issho [#440](https://github.com/squirelworks/seihai/issues/440), Ato [#380](https://github.com/squirelworks/seihai/issues/380) / [#400](https://github.com/squirelworks/seihai/issues/400) |
+| `seihai` | The client. Crates: `seihai-launcher` (the `seihai` binary), `seihai-mae` (1.x/2.x), `seihai-ato` (Torque 3.x to 5.x, and the Torque engine rebuild), `seihai-issho` (6.x), `seihai-g3d` (Graal3D, Feb 2000), and the shared play loop. `documentation/` holds the client's protocol and format notes. | MIT OR Apache-2.0 | [#353](https://github.com/squirelworks/seihai/issues/353), Issho [#440](https://github.com/squirelworks/seihai/issues/440), Ato [#457](https://github.com/squirelworks/seihai/issues/457) |
 | `seihai-core` | Shared library: protocol, assets, GS1/GS2, version profiles, client session; plus `seihai-draw`. Every other Rust repo pins it by tag. | MIT OR Apache-2.0 | [#7](https://github.com/squirelworks/seihai-core/issues/7) |
 | `seihai-gserver` | The clean-room Rust game server (stages 1 to 7 in `docs/PLAN.md`). | MIT OR Apache-2.0 | [#56](https://github.com/squirelworks/seihai-gserver/issues/56) |
 | `seihai-listserver` | Rust listserver. | MIT OR Apache-2.0 | [#20](https://github.com/squirelworks/seihai-listserver/issues/20) |
