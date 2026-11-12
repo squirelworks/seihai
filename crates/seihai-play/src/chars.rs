@@ -456,8 +456,14 @@ mod tests {
         };
         let a = draw(&plain);
         let b = draw(&blue);
-        let painted =
-            |buf: &PixelBuffer| buf.rgba.chunks(4).filter(|p| p[..3] != [0, 0, 0]).count();
+        let painted = |buf: &PixelBuffer| {
+            buf.rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[..3] != [0, 0, 0])
+                .count()
+        };
         assert!(painted(&a) > 200, "the figure is drawn: {}", painted(&a));
         assert_ne!(a.rgba, b.rgba, "other colours draw another body");
     }

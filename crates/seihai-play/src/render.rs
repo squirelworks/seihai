@@ -150,10 +150,8 @@ impl Image {
 
 /// `f` as RGB bytes, for a texture (the frame is opaque).
 pub fn rgb_of(f: &Frame) -> Vec<u8> {
-    f.rgba
-        .chunks_exact(4)
-        .flat_map(|p| [p[0], p[1], p[2]])
-        .collect()
+    let (pixels, _) = f.rgba.as_chunks::<4>();
+    pixels.iter().flat_map(|&[r, g, b, _]| [r, g, b]).collect()
 }
 
 /// Top-left of the view in level pixels: centred on the middle of the
