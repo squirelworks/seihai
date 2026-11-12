@@ -16,11 +16,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # Linux builds without audio (the documented no-audio build: every
-      # client's `audio` feature off, so seihai-core's is too), so the job needs no ALSA
-      # development files and no apt step, and a Ubuntu mirror outage
-      # cannot fail it. Windows and macOS build the default, with audio.
-      FEATURES: ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features seihai-mae/dev,seihai-core/dev' || '' }}
+      # Every platform builds, tests and lints the default features, with
+      # audio, as release.yml builds them, so audio-only breakage shows on
+      # the PR.
+      FEATURES: ''
     defaults:
       run:
         shell: bash
@@ -29,6 +28,9 @@ jobs:
       - name: No line-ending conversion
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+      - name: ALSA development files (Linux audio)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
