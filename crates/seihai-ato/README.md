@@ -128,6 +128,11 @@ server's copy of the new cell replaces the view's without moving the
 player; a level of the gmap at another cell moves the view there, and a
 level off the gmap leaves it.
 
+Board changes the server sends (`PLO_BOARDMODIFY`, 7, and the 186
+blocks) are passed to the view, which puts them on the level it is on and
+on the gmap neighbours it holds (core's `gmap::apply_board_mods_to`). A
+change for a level the view does not hold is dropped.
+
 ## Offline
 
 `--level NAME` (`-l`, as in `seihai-mae`) with no `--online` plays level
@@ -153,8 +158,7 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-The NPCs of neighbouring gmap levels, board changes (`PLO_BOARDMODIFY`)
-in the view, NPC scripts and NPC animations, NPC changes after
+The NPCs of neighbouring gmap levels, NPC scripts and NPC animations, NPC changes after
 the level arrives, other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

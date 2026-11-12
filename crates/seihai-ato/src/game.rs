@@ -81,6 +81,8 @@ pub struct Game {
     pub world: Arc<Mutex<Option<online::WorldView>>>,
     /// Where the walk's gmap crossings go for the network thread to send.
     pub crossings: Arc<Mutex<Vec<seihai_core::gmap::Crossing>>>,
+    /// Where the network thread puts the server's board changes.
+    pub board_mods: online::SharedBoardMods,
     /// The network thread's gmap, as last taken.
     net_world: Option<online::WorldView>,
     /// Crossings handed to the network thread so far.
@@ -154,6 +156,7 @@ impl Game {
             offline: false,
             world: Default::default(),
             crossings: Default::default(),
+            board_mods: Default::default(),
             net_world: None,
             crossings_sent: 0,
             level_here: None,
@@ -492,6 +495,18 @@ impl Game {
             }
             self.dirty = true;
         }
+        // The server's board changes, after the levels they may belong to.
+        // A change is a plain write, so one the level already had is
+        // harmless.
+        let mods = std::mem::take(&mut *self.board_mods.lock().unwrap_or_else(|e| e.into_inner()));
+        if !mods.is_empty() {
+            seihai_core::gmap::apply_board_mods_to(
+                &mut self.session,
+                self.level_here.as_deref(),
+                &mods,
+            );
+            self.dirty = true;
+        }
     }
 
     /// Hand the current pose to the network thread.
@@ -770,6 +785,7 @@ impl AtoApp {
                 g.wanted_sounds = live.wanted_sounds;
                 g.world = live.world;
                 g.crossings = live.crossings;
+                g.board_mods = live.board_mods;
                 self.game = Some(g);
             }
             Err(e) => self.start.status = e,
@@ -1374,5 +1390,40 @@ mod tests {
         assert_eq!(w.cell, (1, 0));
         assert!(w.levels.contains_key(&(0, 0)));
         assert_eq!(g.session.player_x, 20.0);
+    }
+
+    fn tile_change(x: u8, y: u8, tile: u16) -> seihai_core::protocol::layouts::BoardModify2 {
+        seihai_core::protocol::layouts::BoardModify2 {
+            map_x: 0,
+            map_y: 0,
+            x,
+            y,
+            width: 1,
+            height: 1,
+            tiles: vec![tile],
+            trailer: Vec::new(),
+        }
+    }
+
+    /// The server's board changes land on the level the view is on and on
+    /// a gmap neighbour it holds; one for a level it does not hold is
+    /// dropped.
+    #[test]
+    fn online_board_changes_reach_the_levels_in_view() {
+        let (mut g, tx) = game();
+        tx.send(level_named("a.nw", Some((30.0, 30.0)))).unwrap();
+        *g.world.lock().unwrap() = Some(world((0, 0), &[(1, 0)], 0));
+        g.poll();
+        g.board_mods.lock().unwrap().extend([
+            ("a.nw".to_string(), tile_change(3, 4, 0x1FF)),
+            ("b.nw".to_string(), tile_change(5, 6, 0x22)),
+            ("elsewhere.nw".to_string(), tile_change(1, 1, 0x33)),
+        ]);
+        g.poll();
+        let here = g.session.current_level.as_ref().unwrap();
+        assert_eq!(here.tile_id_at(3, 4), Some(0x1FF));
+        let east = &g.session.gmap.as_ref().unwrap().levels[&(1, 0)];
+        assert_eq!(east.tile_id_at(5, 6), Some(0x22));
+        assert!(g.board_mods.lock().unwrap().is_empty());
     }
 }
