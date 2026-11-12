@@ -92,7 +92,35 @@ Fix: seihai-core passes each sound the server sends to the view through `Live::a
     `MESA_GL_VERSION_OVERRIDE=3.3` / GLSL 330, and the xfwm4 window manager with focus and a click.
     `glxgears` in the same namespace draws and screenshots fine. The 2026-11-09 lab got the same black window.
 - **Windows 6.00r2 under Wine: blocked.** The VM has no 32-bit Wine, and installing `wine32` needs root.
-- **Next for the HUD:** run the packed 6.00r2 build natively in the Win10 lab VM.
+- **Windows 6.00r2, natively in the Win10 lab VM:**
+  - **Client area: 1024x768** (`game_config.txt` has `windowmode=1024x768`). At the guest's 200 % scaling the
+    client area measures 2048x1536 physical pixels; the outer frame is the standard Windows 10 title bar and borders.
+  - The first screen is a black playfield with a centred blue rounded panel, "Connecting to the login server…".
+  - With the date set back (RunAsDate) it gets past the beta check. It always dials
+    `loginserver.graalonline.com:14900` and ignores `-connect`. Redirected by injection it logs in (`New login:
+    guest … [G3D26090]`, "Welcome to Issho 6x Lab Win."), then exits cleanly about 4 s later, likely the
+    packer reacting to the injection. So there is still no in-game HUD capture.
+  - Next: a guest with a hosts entry or lab DNS, with no injection.
+- So the real 6.x window is 1024x768 on both Windows 6.00r2 and Linux 6.03r7. Issho's 640x480 is the 3.x size.
+
+## Re-run with the fixes (#474, seihai-core #12)
+
+The 6.03r7 and 6.00r2 rows were re-run against the same world, with `steps2.wav` on the server only.
+
+| Row | Fetched sound plays | Nickname seen by the observer |
+|---|---|---|
+| 6.03r7 | PASS | PASS |
+| 6.00r2 | PASS | PASS |
+
+- **Sound:** `requesting steps2.wav`, then `sound: steps2.wav arrived`. The recording turns loud right after the
+  first steps: 74 and 39 loud quarter-seconds, against 0 before.
+- **Nickname:** `sent the nickname "isshofix603r7"`. The observer's tag shows the account (with gserver-v2's `*`
+  prefix) instead of "default", and the saved account has `NICK *isshofix…`.
+- Links and the gmap crossing still pass.
+- **Watch item, not proven:** with the original key holds the player walked about half as far (6.00r2 reached x 34
+  after a 1.2 s Right, against x 39 before), so the holds were doubled to reach the links. The VM's load average
+  was 9–10 on 2 cores during these runs, against about 6 for the first run, and the walk advances per frame. The
+  build also includes the pose clock (#468), and the old binary was not re-run under the same load.
 
 Evidence (screenshots, actor and observer logs, server logs, account files, audio RMS, xwininfo) is kept
 on the lab machine, outside the repo.
