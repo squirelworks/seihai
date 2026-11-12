@@ -1,0 +1,24 @@
+[package]
+name = "seihai-play"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The game loop the windowed clients share: the level the server sent,
+# drawn flat, walked with the arrows, with core's sound engine. Ato
+# (3.x to 5.x) and Issho (6.x) both run it; neither depends on the other.
+# Everything here comes from seihai-core; this crate holds no protocol facts.
+[lib]
+name = "seihai_play"
+path = "src/lib.rs"
+
+[dependencies]
+seihai-core.workspace = true
+# The view. Same version as seihai-ato and seihai-mae.
+egui = "0.29"
+
+[features]
+default = []
+# Sound through seihai-core's device output. The clients turn it on with
+# their own `audio` feature; on Linux it needs the ALSA development files.
+audio = ["seihai-core/audio"]

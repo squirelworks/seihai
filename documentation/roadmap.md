@@ -39,6 +39,32 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Public-server checks. Approved for read-only checks, then chat, warps and file transfer, with a few normal lines and no uploads. The build box cannot reach the listserver ports, so the user ran the list checks on their own machine on 2026-10-25: 14921 refused, 14923 answers a classic login with the legacy list, 14922 answers the gen-5 login; the game-server checks are still to do. Results, open points and the checklist are in `documentation/public-checks.md`.
 - [x] Tooling. A capture viewer and a layout explorer fed by the .tsv tables: `seihai capture show|layout|tables`, with `documentation/packet-layouts.tsv` as the field-layout table (`documentation/capture-viewer.md`). Not done: a GUI, live capture, and layouts for the ids the tables do not list yet.
 
+## One program, one start window
+
+`seihai` is the one program that ships: Mae, Ato, Issho and G3D are linked into it as libraries, so the code they share ships once (13.8 MB, against 57 MB for the five separate programs). With no arguments it opens one start window for every line. Tracking issue: #469.
+
+- [x] Shared start window (`seihai-play::start`): every version grouped by client, then Graal3D; the server list; Join runs that client, logged in at once. A `3 ` server joined with a 3.x to 5.x build gets `--graal3d`. A lost connection comes back to the window.
+- [x] Each client's whole program is its library's `app::main`; `seihai` runs it in-process. `seihai mae|ato|issho|g3d`, or the program named `seihai-ato` (and so on), runs a client on its own. The crates' binaries are for development and are not shipped.
+- [x] Release profile: strip, LTO, one codegen unit. release.yml ships only `seihai`.
+- [x] Mae's own window hands a 6.x Join to Issho.
+- [ ] Mae's version picker folds into the shared window (#470).
+- [ ] Lab run on Windows 10, Linux and macOS (#471).
+- [ ] Ato's start window and server list reuse `seihai-play::start`.
+
+## Issho (6.x)
+
+`seihai-issho` is the 6.x client line (the `quattro_lib` builds). It runs the game loop Ato runs, from `seihai-play`, and does not depend on Ato. Tracking issue: #440.
+
+- [x] Game loop. Log in with core's client session, draw the level the server sends flat, walk it with the arrows, cross links and gmap edges, show the other players and the server's board and NPC changes, and play the walk's sounds through core's `SoundEngine`, asking the server for missing ones with `WANTFILE` (`--no-sound` turns it off). `--level` plays level files offline; `--no-window` only logs. Ato's `game` and `render` moved to `seihai-play` so both lines share them.
+- [ ] Lab run against the lab server stack, every 6.x row, in a headless VM (#441).
+- [ ] Start window and server list; the launcher and mae hand 6.x picks to Issho (#442).
+- [ ] Characters from ganis, and the renderer moved to `seihai-draw` (#443).
+- [ ] The 6.x window size and HUD (#444).
+- [ ] Chat, sword, items and the rest of mae's flat play, in the shared loop (#445).
+- [ ] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
+- [ ] GS2 client scripts, clean-room in seihai-core (#447).
+- [ ] The 6.00r4 profile row and `resolveHost` (#448).
+
 ## Remaining
 
 - Differential-testing divergences (item 15): rectangle links, login props, 2.22 flags, early 46, walk speed. Running in the private lab.

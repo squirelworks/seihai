@@ -26,7 +26,7 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
 - `crates/seihai-core/src/assets/gani.rs`: the parser now reads steps and `PLAYSOUND`.
 - `OfflineSession`: steps the walk or swim GANI on every successful move and
   queues a `SoundEvent` for each cue in the frame entered
-  (`take_sound_events`). `bin/main.rs` plays them.
+  (`take_sound_events`). `app.rs` plays them.
 
 ## What plays
 
@@ -48,7 +48,7 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
   stops it. `play2 file,x,y,volume` (2.1 and later) plays at `x,y`; the volume
   is ignored. A weapon's script has no place of its own, so its sound is at the
   player. `SessionScripts::apply` queues these with the GANI cues
-  (`sound_events`, `sound_stops`), and `bin/main.rs` plays them. The NPC's size
+  (`sound_events`, `sound_stops`), and `app.rs` plays them. The NPC's size
   is its `setimgpart` part or its `setshape` shape; the image's own size is not
   known to the script host, so with neither a 32-pixel image is assumed. Only x
   sets the pan, so a wrong guess moves it a little.

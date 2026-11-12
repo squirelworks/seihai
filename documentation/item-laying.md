@@ -3,7 +3,7 @@
 Hold the attack key (S) and press the action key (A) to pick an item, then
 press A alone to put it down in front of the player. Code:
 `crates/seihai-core/src/offline/laying.rs`, the keys in
-`crates/seihai-mae/src/bin/main.rs`, the held item in
+`crates/seihai-mae/src/app.rs`, the held item in
 `render::draw_throw_layer`.
 
 The 1.21 readme names it ("Laying Items: Select Item: hold Attack Button (S)

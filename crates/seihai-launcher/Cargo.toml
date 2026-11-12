@@ -4,17 +4,33 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The `seihai` command. The package is named `seihai` too, so
-# `cargo build --release -p seihai` names it; a plain
-# `cargo build --release` builds it together with the clients. It reads the version-profile table and starts
-# `seihai-mae` (1.x, 2.x, and the 4.x/5.x flat path), `seihai-ato` (the Torque / 3.x
-# builds), or `seihai-issho` (v6). It has no window, no renderer and no Torque code of its own, and
-# neither client depends on it. A 7.x label is rejected.
+# The `seihai` program: every client in one program, with one start
+# window. The package is named `seihai` too, so `cargo build --release -p
+# seihai` names it. It links Mae, Ato, Issho and G3D as libraries and runs
+# the one a version or the start window picks, so the code they share ships
+# once. `seihai mae|ato|issho|g3d` runs a client on its own; the crates'
+# own binaries are for development and are not shipped.
 [[bin]]
 name = "seihai"
 path = "src/main.rs"
 
 [dependencies]
 seihai-core.workspace = true
-# The launcher plays no sound: issho without its `audio` feature.
-seihai-issho = { path = "../seihai-issho", default-features = false }
+# The clients, without their default features: `audio` and `dev` below
+# turn them on, so `--no-default-features` builds the program without sound.
+seihai-mae = { path = "../seihai-mae", default-features = false }
+seihai-ato = { path = "../seihai-ato", default-features = false }
+seihai-issho = { path = "../seihai-issho", default-features = false, features = ["window"] }
+seihai-g3d = { path = "../seihai-g3d", default-features = false }
+# The start window: seihai-play's `start`, in an eframe window. Same
+# versions as the clients.
+seihai-play = { path = "../seihai-play" }
+eframe = "0.29"
+egui = "0.29"
+
+[features]
+default = ["audio", "dev"]
+# Sound in every client. On Linux it needs the ALSA development files.
+audio = ["seihai-mae/audio", "seihai-ato/audio", "seihai-issho/audio", "seihai-g3d/audio"]
+# Mae's developer mode (F9 wallhack), as in `seihai-mae`'s default build.
+dev = ["seihai-mae/dev"]
