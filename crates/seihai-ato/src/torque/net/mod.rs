@@ -4,9 +4,10 @@
 //! ghost" (Graal_analysis `torque/udp-session.md`) and the open Torque net
 //! layer (MIT). No decompiler output and no binary addresses are used.
 //!
-//! So far this is the bit stream every UDP packet is written in
-//! ([`bits`]) and its string coding ([`huffman`]). Nothing here opens a
-//! socket yet.
+//! [`bits`] and [`huffman`] are the bit stream and string coding every
+//! packet uses, [`handshake`] opens the link, [`link`] numbers and acks
+//! data packets, [`events`] and [`ghosts`] read and write their contents,
+//! and [`session`] runs it all over a UDP socket (Ato's `--graal3d`).
 
 pub mod bits;
 pub mod events;
@@ -14,3 +15,4 @@ pub mod ghosts;
 pub mod handshake;
 pub mod huffman;
 pub mod link;
+pub mod session;

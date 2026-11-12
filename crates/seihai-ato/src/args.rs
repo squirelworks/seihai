@@ -38,6 +38,9 @@ pub struct Args {
     /// `seihai-mae --level` does. The name is looked up in `--assets`, or
     /// read as a path when there is no asset folder.
     pub level: Option<String>,
+    /// `--graal3d`: the `--online` server is a Graal3D server; also open
+    /// the Torque UDP link to its port + 1 (5.x builds; `--no-window`).
+    pub graal3d: bool,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
@@ -60,6 +63,7 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--no-window" => a.no_window = true,
             "--first-level" => a.first_level = true,
             "--no-sound" => a.no_sound = true,
+            "--graal3d" => a.graal3d = true,
             "--listserver" => a.listserver = it.next().or(a.listserver),
             "--level" | "-l" => a.level = it.next().or(a.level),
             f if VALUE_FLAGS.contains(&f) => {
@@ -172,6 +176,12 @@ mod tests {
         let a = p("--version 3.04 --listserver 127.0.0.1:14922 --account a");
         assert_eq!(a.listserver.as_deref(), Some("127.0.0.1:14922"));
         assert_eq!(a.account.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn graal3d_is_a_switch() {
+        assert!(!p("--version 5.12").graal3d);
+        assert!(p("--version 5.12 --graal3d --online h:1").graal3d);
     }
 
     #[test]

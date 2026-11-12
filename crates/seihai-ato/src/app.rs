@@ -5,6 +5,7 @@
 //!   seihai-ato --version 3.04 [--listserver host:port] --account A --password-env VAR
 //!   seihai-ato --version 3.04 --online host:port --account A --password-env VAR
 //!              [--assets DIR] [--no-window] [--first-level]
+//!   seihai-ato --version 5.12 --online host:port --graal3d --no-window ...
 //!
 //! Start asks the version's listserver (`listserver.graal.in`, or
 //! `--listserver host:port`) for its servers and logs in at the one picked.
@@ -12,12 +13,14 @@
 //! server sends (its name, the start position and the NPC count) and draws
 //! it flat; the arrow keys walk it. With both `--online` and `--account`
 //! the start window is skipped and the login starts at once. `--no-window`
-//! only logs.
+//! only logs. `--graal3d` (with `--no-window`) also opens the Torque UDP
+//! link of a Graal3D server at the same moment, to its port + 1, and logs
+//! its progress with a `3d:` prefix.
 //!
 //! `seihai-launcher` starts this binary for a 3.x `--version` and passes the
 //! user's arguments through; flags meant for `seihai-mae` are ignored.
 
-use crate::{args, game, online, start_window, torque, wire::Wire};
+use crate::{args, game, graal3d, online, start_window, torque, wire::Wire};
 use std::process::ExitCode;
 
 /// Run Ato with these arguments (the program name left out). The
@@ -81,7 +84,18 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         nick,
         language: "English".into(),
     };
-    match online::run(
+    let udp = if a.graal3d {
+        match graal3d::start(&addr, version, &login) {
+            Ok(u) => Some(u),
+            Err(e) => {
+                eprintln!("seihai-ato: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        None
+    };
+    let tcp = online::run(
         &addr,
         version,
         &login,
@@ -89,7 +103,11 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         a.first_level,
         &mut std::io::stdout(),
         &mut |_, _| {},
-    ) {
+    );
+    if let Some(u) = udp {
+        let _ = u.stop();
+    }
+    match tcp {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("seihai-ato: {e}");

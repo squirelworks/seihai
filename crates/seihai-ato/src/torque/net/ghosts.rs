@@ -606,17 +606,23 @@ impl ClientGame {
     pub fn write(&self, w: &mut BitWriter) {
         w.flag(self.first_person);
         write_vec3(w, self.position);
+        // The ghost index and the "client controls it" flag are two
+        // separate flags: both are on the wire even with no object (the
+        // real 5.12 writes 100 bits here before it has one).
         if let Some(i) = self.control {
             w.flag(true);
             w.int(i, 12);
-            if let Some(u) = &self.update {
-                w.flag(true);
-                u.write(w);
-            } else {
-                w.flag(false);
-            }
         } else {
             w.flag(false);
+        }
+        match (&self.update, self.control) {
+            (Some(u), Some(_)) => {
+                w.flag(true);
+                u.write(w);
+            }
+            _ => {
+                w.flag(false);
+            }
         }
         if let Some(f) = self.field_of_view {
             w.flag(true);
@@ -935,7 +941,6 @@ mod tests {
         let mut w = link.data(None, Some(Rate::CLIENT_512_MAX)).unwrap();
         ClientGame::before_control().write(&mut w);
         events.write(&mut w, link.last_sent(), &t, 450 * 8);
-        w.flag(false);
         let mut answered = Vec::new();
         let mut controls = Vec::new();
         for (i, hexed) in server_packets.iter().enumerate() {
@@ -968,7 +973,6 @@ mod tests {
             let mut w = link.data(None, None).unwrap();
             ClientGame::before_control().write(&mut w);
             events.write(&mut w, link.last_sent(), &t, 450 * 8);
-            w.flag(false);
         }
         assert_eq!(
             answered,
@@ -996,7 +1000,7 @@ mod tests {
         ClientGame::before_control().write(&mut w);
         let real = hex("0900000800000000000000000000000000");
         let n = w.bit_len();
-        assert_eq!(n, 25 + 2 + 1 + 96 + 1 + 1);
+        assert_eq!(n, 25 + 2 + 100, "the real client writes 100 game bits");
         assert_eq!(&w.bytes()[..n / 8], &real[..n / 8]);
     }
 }
