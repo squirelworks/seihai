@@ -70,6 +70,9 @@ pub struct Game {
     sound_serial: u64,
     /// Where missing sounds go for the network thread to ask for.
     pub wanted_sounds: Arc<Mutex<Vec<String>>>,
+    /// Sounds the server sent (kept in memory by the network thread), for
+    /// the engine to take.
+    arrived_sounds: online::SharedSounds,
     /// The asset folders, for NPC images.
     resolver: Option<AssetResolver>,
     /// NPC images read so far, by name.
@@ -153,6 +156,7 @@ impl Game {
             pose_clock: Instant::now(),
             sound_serial: 0,
             wanted_sounds: Default::default(),
+            arrived_sounds: Default::default(),
             resolver: resolver.cloned(),
             npc_images: NpcImages::new(),
             offline: false,
@@ -415,9 +419,22 @@ impl Game {
 
     /// Play the sounds the session queued: the GANI cues of the steps just
     /// taken. A new level stops the looped ones. A sound not on disk is
-    /// handed to the network thread to ask the server for, and plays on a
-    /// later cue once it has arrived.
+    /// handed to the network thread to ask the server for. The file comes
+    /// back through [`Live::arrived_sounds`] (kept in memory, not saved),
+    /// goes into the engine, and plays on the next cue.
     pub fn play_sounds(&mut self) {
+        let arrived = std::mem::take(
+            &mut *self
+                .arrived_sounds
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+        );
+        let on = self.sound.is_enabled();
+        for (name, bytes) in arrived.into_iter().filter(|_| on) {
+            if self.sound.add(&name, &bytes).is_ok() {
+                eprintln!("sound: {name} arrived");
+            }
+        }
         if !self.sound.is_enabled() {
             self.session.sound_events.clear();
             self.session.sound_stops.clear();
@@ -651,6 +668,7 @@ impl Game {
         self.others = live.others;
         self.link = live.link;
         self.wanted_sounds = live.wanted_sounds;
+        self.arrived_sounds = live.arrived_sounds;
         self.world = live.world;
         self.crossings = live.crossings;
         self.board_mods = live.board_mods;
@@ -958,6 +976,52 @@ mod tests {
         g.play_sounds();
         assert!(g.session.sound_events.is_empty());
         assert!(g.session.sound_stops.is_empty());
+    }
+
+    /// Lab #441: a sound asked for with WANTFILE arrives in memory, goes
+    /// into the engine, and the next cue for it plays.
+    #[test]
+    fn a_sound_from_the_server_plays_on_the_next_cue() {
+        use seihai_core::sound::{Call, RecordingSound, SoundEngine, SoundEvent};
+        let (mut g, _tx) = game();
+        let rec = RecordingSound::default();
+        g.sound = SoundEngine::with_dirs(Box::new(rec.clone()), Vec::new(), true);
+        let cue = |g: &mut Game| {
+            g.session.sound_events.push(SoundEvent {
+                file: "steps2.wav".into(),
+                x: 1.0,
+                y: 1.0,
+            })
+        };
+        cue(&mut g);
+        g.play_sounds();
+        assert_eq!(
+            g.wanted_sounds.lock().unwrap().as_slice(),
+            ["steps2.wav".to_string()]
+        );
+        // 8-bit mono 8 kHz PCM, 100 samples.
+        let mut wav = Vec::new();
+        wav.extend(b"RIFF");
+        wav.extend(136u32.to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend(100u32.to_le_bytes());
+        wav.extend([128u8; 100]);
+        g.arrived_sounds
+            .lock()
+            .unwrap()
+            .push(("steps2.wav".into(), wav));
+        cue(&mut g);
+        g.play_sounds();
+        assert!(g.arrived_sounds.lock().unwrap().is_empty());
+        assert!(matches!(rec.log().as_slice(), [Call::Play { name, .. }] if name == "steps2.wav"));
     }
 
     #[test]
