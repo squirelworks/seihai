@@ -10,6 +10,7 @@
 
 pub mod bits;
 pub mod events;
+pub mod ghosts;
 pub mod handshake;
 pub mod huffman;
 pub mod link;
