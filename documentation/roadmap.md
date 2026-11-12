@@ -47,7 +47,7 @@ Single code path. Versions are profile rows, not branches.
 - [x] Each client's whole program is its library's `app::main`; `seihai` runs it in-process. `seihai mae|ato|issho|g3d`, or the program named `seihai-ato` (and so on), runs a client on its own. The crates' binaries are for development and are not shipped.
 - [x] Release profile: strip, LTO, one codegen unit. release.yml ships only `seihai`.
 - [x] Mae's own window hands a 6.x Join to Issho.
-- [ ] Mae's version picker folds into the shared window (#470).
+- [x] Mae's version picker folds into the shared window (#470): offline play, the tutorial, the offline-only builds and per-version asset folders are in the shared window; inside `seihai`, Mae with no arguments and a lost connection (also after `--online`) come back to it. Mae's own window stays for the `seihai-mae` development binary.
 - [ ] Lab run on Windows 10, Linux and macOS (#471).
 - [ ] Ato's start window and server list reuse `seihai-play::start`.
 

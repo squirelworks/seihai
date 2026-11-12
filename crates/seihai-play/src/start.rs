@@ -7,9 +7,18 @@
 //! program runs in the same process: Mae for 1.x and 2.x, Ato for 3.x to
 //! 5.x, Issho for 6.x and G3D for Graal3D (February 2000). The client is started with
 //! `--online` and `--account`, so it logs in at once and its own start
-//! window stays closed. Each client still opens its own window when it is
-//! run on its own, and "Open the client's own window" here starts it that
-//! way (offline play, the tutorial, the offline-only builds).
+//! window stays closed. For a Mae version, "Play offline" and "Play the
+//! tutorial" start Mae offline (`--offline`, `--tutorial`), and "All
+//! versions" lists the offline-only builds with Mae's rows. Ato and G3D
+//! keep their own start windows, the original clients' screens, and "Open
+//! seihai-ato's own window" starts one. Mae's settings window is only the
+//! `seihai-mae` development binary's: inside the `seihai` program Mae
+//! comes back here instead.
+//!
+//! The form is saved in `launcher.conf`. Before the first save it starts
+//! from the form Mae's window saved in `seihai.conf`, without the
+//! password; the per-version asset folders (`assets.<label>`) are the same
+//! keys.
 //!
 //! A server listed with the `3 ` prefix is a 3D server. A 3.x to 5.x build
 //! joins it with `--graal3d`, so Ato opens the Torque UDP link next to the
@@ -23,7 +32,9 @@
 //! login is core's (`Connection::fetch_server_list`).
 
 use seihai_core::net::{list_failure_text, Connection};
+use seihai_core::protocol::offline_builds::{self, OfflineBuild};
 use seihai_core::protocol::{ClientVersion, ListReply, ServerEntry, ServerList};
+use std::collections::BTreeMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -121,6 +132,10 @@ pub fn line_of(v: ClientVersion) -> Line {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
     Version(ClientVersion),
+    /// An offline-only build (a beta or a test release with no server):
+    /// Mae plays it offline with the rules of its `plays_as` row. Listed
+    /// under "All versions".
+    Offline(&'static str),
     /// Graal3D (February 2000): its own server and wire, not a profile row.
     Graal3D,
 }
@@ -133,13 +148,28 @@ impl Choice {
     pub fn line(self) -> Line {
         match self {
             Choice::Version(v) => line_of(v),
+            Choice::Offline(_) => Line::Mae,
             Choice::Graal3D => Line::G3d,
         }
+    }
+
+    /// The offline-only build, if this is one.
+    pub fn offline_build(self) -> Option<&'static OfflineBuild> {
+        match self {
+            Choice::Offline(label) => offline_builds::by_label(label),
+            _ => None,
+        }
+    }
+
+    /// True when the version only plays offline.
+    pub fn offline_only(self) -> bool {
+        matches!(self, Choice::Offline(_))
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Choice::Version(v) => v.label(),
+            Choice::Offline(label) => label,
             Choice::Graal3D => GRAAL3D_LABEL,
         }
     }
@@ -148,6 +178,7 @@ impl Choice {
     pub fn version_arg(self) -> &'static str {
         match self {
             Choice::Version(v) => v.label(),
+            Choice::Offline(label) => label,
             Choice::Graal3D => GRAAL3D_ARG,
         }
     }
@@ -160,7 +191,9 @@ impl Choice {
         ) {
             return Some(Choice::Graal3D);
         }
-        ClientVersion::from_label(label.trim()).map(Choice::Version)
+        ClientVersion::from_label(label.trim())
+            .map(Choice::Version)
+            .or_else(|| offline_builds::by_label(label.trim()).map(|b| Choice::Offline(b.label)))
     }
 
     /// True when there is no listserver to ask: Graal3D connects to one
@@ -176,23 +209,49 @@ impl Choice {
         match self {
             Choice::Graal3D => true,
             Choice::Version(v) => v.profile().ui.server_list == ServerList::Direct,
+            Choice::Offline(_) => false,
         }
     }
 }
 
 /// The versions the box lists: every line's, in profile order, then
-/// Graal3D. Without `all`, only the default list (`reborn_versions`).
+/// Graal3D. Without `all`, only the default list (`reborn_versions`); with
+/// it, every profile row and, after Mae's rows, the offline-only builds.
 pub fn choices(all: bool) -> Vec<Choice> {
     let rows = if all {
         ClientVersion::all_versions()
     } else {
         ClientVersion::reborn_versions()
     };
-    rows.iter()
+    let rows: Vec<Choice> = rows.iter().copied().map(Choice::Version).collect();
+    let mae_end = rows.iter().take_while(|c| c.line() == Line::Mae).count();
+    let offline = if all {
+        offline_builds::OFFLINE_BUILDS
+    } else {
+        &[]
+    }
+    .iter()
+    .map(|b| Choice::Offline(b.label));
+    rows[..mae_end]
+        .iter()
         .copied()
-        .map(Choice::Version)
+        .chain(offline)
+        .chain(rows[mae_end..].iter().copied())
         .chain([Choice::Graal3D])
         .collect()
+}
+
+/// How the client starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Start {
+    /// Online at the hand-over's server; with no server, the client's own
+    /// start window.
+    #[default]
+    Online,
+    /// Mae offline, with no start window (`--offline`).
+    Offline,
+    /// Mae offline in the built-in tutorial (`--tutorial`).
+    Tutorial,
 }
 
 /// What the client is started with.
@@ -207,6 +266,8 @@ pub struct Handoff {
     pub assets: Option<String>,
     /// The server is a 3D one (`3 ` in the list): Ato opens the UDP link.
     pub graal3d: bool,
+    /// Online, or Mae offline.
+    pub start: Start,
 }
 
 impl Handoff {
@@ -221,15 +282,20 @@ impl Handoff {
             "--version".to_string(),
             self.choice.version_arg().to_string(),
         ];
+        match (self.start, &self.server) {
+            (Start::Online, Some(s)) if !s.trim().is_empty() => {
+                out.extend(["--online".to_string(), s.trim().to_string()]);
+            }
+            (Start::Online, _) => {}
+            (Start::Offline, _) => out.push("--offline".to_string()),
+            (Start::Tutorial, _) => out.push("--tutorial".to_string()),
+        }
         let mut push = |flag: &str, value: &str| {
             if !value.trim().is_empty() {
                 out.push(flag.to_string());
                 out.push(value.trim().to_string());
             }
         };
-        if let Some(s) = &self.server {
-            push("--online", s);
-        }
         push("--account", &self.account);
         if !self.password.is_empty() {
             push("--password-env", PASSWORD_ENV);
@@ -238,7 +304,11 @@ impl Handoff {
         if let Some(a) = &self.assets {
             push("--assets", a);
         }
-        if self.graal3d && self.server.is_some() && self.line() == Line::Ato {
+        if self.graal3d
+            && self.start == Start::Online
+            && self.server.is_some()
+            && self.line() == Line::Ato
+        {
             out.push("--graal3d".to_string());
         }
         out
@@ -265,6 +335,9 @@ pub struct Saved {
     pub listserver: Option<String>,
     pub direct: Option<String>,
     pub assets: Option<String>,
+    /// The asset folder of one version only (`assets.<label>`), as
+    /// `seihai-mae` saves it: that build's own install.
+    pub assets_for: BTreeMap<String, String>,
     pub all_versions: bool,
 }
 
@@ -288,7 +361,11 @@ impl Saved {
                 "direct" => s.direct = v,
                 "assets" => s.assets = v,
                 "all_versions" => s.all_versions = v.as_deref() == Some("1"),
-                _ => {}
+                k => {
+                    if let (Some(label), Some(v)) = (k.strip_prefix("assets."), v) {
+                        s.assets_for.insert(label.to_string(), v);
+                    }
+                }
             }
         }
         s
@@ -308,16 +385,56 @@ impl Saved {
                 out.push_str(&format!("{k}={v}\n"));
             }
         }
+        for (label, dir) in &self.assets_for {
+            out.push_str(&format!("assets.{label}={dir}\n"));
+        }
         if self.all_versions {
             out.push_str("all_versions=1\n");
         }
         out
     }
 
+    /// `launcher.conf`; before the first save, the form `seihai-mae`'s
+    /// own window last saved in `seihai.conf` (account, version, listserver,
+    /// game server and asset folders; never its password).
     pub fn load() -> Saved {
-        std::fs::read_to_string(Self::path())
-            .map(|t| Saved::parse(&t))
-            .unwrap_or_default()
+        match std::fs::read_to_string(Self::path()) {
+            Ok(t) => Saved::parse(&t),
+            Err(_) => std::fs::read_to_string(seihai_core::config::config_path())
+                .map(|t| Saved::from_mae(&t))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The fields of `seihai.conf` this window shares with Mae's.
+    pub fn from_mae(text: &str) -> Saved {
+        let mut s = Saved::parse(text);
+        s.nick = None;
+        s.direct = None;
+        for line in text.lines() {
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
+            let v = v.trim();
+            match k.trim() {
+                "nickname" if !v.is_empty() => s.nick = Some(v.to_string()),
+                "direct_server" if !v.is_empty() => s.direct = Some(v.to_string()),
+                _ => {}
+            }
+        }
+        // Mae saves `listserver=host` with no port for "follow the version".
+        if s.listserver.as_deref().is_some_and(|l| !l.contains(':')) {
+            s.listserver = None;
+        }
+        s.all_versions = s
+            .version
+            .as_deref()
+            .and_then(Choice::from_label)
+            .is_some_and(|c| match c {
+                Choice::Version(v) => !v.listed_by_default(),
+                _ => c.offline_only(),
+            });
+        s
     }
 
     pub fn save(&self) {
@@ -335,7 +452,11 @@ pub struct StartScreen {
     pub account: String,
     pub password: String,
     pub nick: String,
+    /// The asset folder box: the folder for every version (`assets`).
     pub assets: String,
+    /// The folder for the picked version only, which wins over `assets`.
+    pub version_assets: String,
+    assets_for: BTreeMap<String, String>,
     /// The listserver box. Follows the version's default until typed in.
     pub listserver: String,
     pub listserver_typed: bool,
@@ -353,7 +474,7 @@ pub struct StartScreen {
 fn default_listserver(c: Choice) -> String {
     match c {
         Choice::Version(v) => format!("{}:{}", v.listserver_host(), v.listserver_port()),
-        Choice::Graal3D => String::new(),
+        Choice::Offline(_) | Choice::Graal3D => String::new(),
     }
 }
 
@@ -361,7 +482,7 @@ fn default_listserver(c: Choice) -> String {
 fn default_direct(c: Choice) -> String {
     match c {
         Choice::Graal3D => "127.0.0.1:14901".into(),
-        Choice::Version(_) => "localhost:14900".into(),
+        Choice::Version(_) | Choice::Offline(_) => "localhost:14900".into(),
     }
 }
 
@@ -379,13 +500,20 @@ impl StartScreen {
             password: String::new(),
             nick: saved.nick.unwrap_or_default(),
             assets: saved.assets.unwrap_or_default(),
+            version_assets: saved
+                .assets_for
+                .get(choice.label())
+                .cloned()
+                .unwrap_or_default(),
+            assets_for: saved.assets_for,
             listserver: saved
                 .listserver
                 .unwrap_or_else(|| default_listserver(choice)),
             listserver_typed,
             direct: saved.direct.unwrap_or_else(|| default_direct(choice)),
             all_versions: saved.all_versions
-                || matches!(choice, Choice::Version(v) if !v.listed_by_default()),
+                || matches!(choice, Choice::Version(v) if !v.listed_by_default())
+                || choice.offline_only(),
             status: "Ready.".into(),
             error,
             servers: Vec::new(),
@@ -407,8 +535,19 @@ impl StartScreen {
                 .flatten(),
             direct: some(&self.direct),
             assets: some(&self.assets),
+            assets_for: self.assets_for_saved(),
             all_versions: self.all_versions,
         }
+    }
+
+    /// The per-version folders, with the box's for the picked version.
+    fn assets_for_saved(&self) -> BTreeMap<String, String> {
+        let mut m = self.assets_for.clone();
+        match self.version_assets.trim() {
+            "" => m.remove(self.choice.label()),
+            d => m.insert(self.choice.label().to_string(), d.to_string()),
+        };
+        m
     }
 
     /// The version box changed.
@@ -417,6 +556,8 @@ impl StartScreen {
             return;
         }
         let old_direct = default_direct(self.choice);
+        self.assets_for = self.assets_for_saved();
+        self.version_assets = self.assets_for.get(c.label()).cloned().unwrap_or_default();
         self.choice = c;
         if !self.listserver_typed {
             self.listserver = default_listserver(c);
@@ -439,8 +580,17 @@ impl StartScreen {
             account: self.account.trim().to_string(),
             password: self.password.clone(),
             nick: self.nick.trim().to_string(),
-            assets: some(&self.assets),
+            assets: some(&self.version_assets).or_else(|| some(&self.assets)),
             graal3d,
+            start: Start::Online,
+        }
+    }
+
+    /// Mae offline (`Start::Offline` or `Start::Tutorial`).
+    pub fn offline(&self, start: Start) -> Handoff {
+        Handoff {
+            start,
+            ..self.handoff(None, false)
         }
     }
 
@@ -597,9 +747,14 @@ impl StartScreen {
             ui.add(egui::TextEdit::singleline(&mut self.nick).hint_text(self.account.as_str()));
             ui.label("Assets folder (optional)");
             ui.text_edit_singleline(&mut self.assets);
+            ui.label(format!("Assets for {} only (optional; its own install)", self.choice.label()));
+            ui.text_edit_singleline(&mut self.version_assets);
             ui.separator();
 
-            if self.choice.direct_only() {
+            if let Some(b) = self.choice.offline_build() {
+                ui.label(b.reason());
+                ui.small(format!("Reads {}; plays offline with the {} rules.", b.levels, b.plays_as.label()));
+            } else if self.choice.direct_only() {
                 ui.label("Game server (host:port)");
                 ui.text_edit_singleline(&mut self.direct);
                 if ui.button("Connect").clicked() {
@@ -632,12 +787,34 @@ impl StartScreen {
                 });
             }
             ui.separator();
-            if ui
-                .button(format!("Open {}'s own window", self.choice.line().binary()))
-                .on_hover_text("Starts the client with no server: its own start window, offline play and the tutorial.")
-                .clicked()
-            {
-                out = Some(self.handoff(None, false));
+            match self.choice.line() {
+                // Mae's offline play and tutorial; its own window is the
+                // development binary's.
+                Line::Mae => {
+                    ui.horizontal(|ui| {
+                        if ui.button("Play offline").clicked() {
+                            out = Some(self.offline(Start::Offline));
+                        }
+                        if ui
+                            .button("Play the tutorial")
+                            .on_hover_text("Seihai's own short tutorial levels, offline. They use their own art, whatever assets are set.")
+                            .clicked()
+                        {
+                            out = Some(self.offline(Start::Tutorial));
+                        }
+                    });
+                }
+                // Issho has no start window of its own.
+                Line::Issho => {}
+                line => {
+                    if ui
+                        .button(format!("Open {}'s own window", line.binary()))
+                        .on_hover_text("Starts the client with no server: its own start window, as the original client's.")
+                        .clicked()
+                    {
+                        out = Some(self.handoff(None, false));
+                    }
+                }
             }
         });
         if self.waiting() {
@@ -774,6 +951,78 @@ mod tests {
         s.listserver_typed = true;
         s.pick(Choice::Version(ClientVersion::V304));
         assert_eq!(s.listserver, "lab:14922");
+    }
+
+    #[test]
+    fn offline_builds_are_mae_rows_under_all_versions_only() {
+        let short = choices(false);
+        assert!(!short.iter().any(|c| c.offline_only()));
+        let all = choices(true);
+        let first = all.iter().position(|c| c.offline_only()).unwrap();
+        assert!(all[..first].iter().all(|c| c.line() == Line::Mae));
+        assert_eq!(all[first - 1].line(), Line::Mae);
+        for b in offline_builds::OFFLINE_BUILDS {
+            let c = Choice::from_label(b.label).unwrap();
+            assert_eq!(c, Choice::Offline(b.label));
+            assert!(all.contains(&c), "{}", b.label);
+            assert_eq!(c.line(), Line::Mae);
+        }
+    }
+
+    #[test]
+    fn play_offline_and_the_tutorial_start_mae_with_no_server() {
+        let mut s = screen();
+        s.pick(Choice::Version(ClientVersion::V222));
+        s.account = "a".into();
+        let h = s.offline(Start::Offline);
+        assert_eq!(h.line(), Line::Mae);
+        assert_eq!(
+            h.args(),
+            ["--version", "2.22", "--offline", "--account", "a"]
+        );
+        let h = s.offline(Start::Tutorial);
+        assert_eq!(h.args()[2], "--tutorial");
+        assert!(!h.args().contains(&"--online".to_string()));
+        let b = &offline_builds::OFFLINE_BUILDS[0];
+        s.pick(Choice::Offline(b.label));
+        assert!(s.choice.offline_only());
+        assert_eq!(
+            s.offline(Start::Offline).args()[..3],
+            ["--version", b.label, "--offline"]
+        );
+    }
+
+    #[test]
+    fn the_version_folder_follows_the_pick_and_wins_over_the_shared_one() {
+        let mut s = screen();
+        s.assets = "/all".into();
+        s.pick(Choice::Version(ClientVersion::V222));
+        s.version_assets = "/g222".into();
+        assert_eq!(s.handoff(None, false).assets.as_deref(), Some("/g222"));
+        s.pick(Choice::Version(ClientVersion::V139));
+        assert_eq!(s.version_assets, "");
+        assert_eq!(s.handoff(None, false).assets.as_deref(), Some("/all"));
+        s.pick(Choice::Version(ClientVersion::V222));
+        assert_eq!(s.version_assets, "/g222");
+        let text = s.saved().text();
+        assert!(text.contains("assets.2.22=/g222"), "{text}");
+        assert_eq!(Saved::parse(&text).assets_for["2.22"], "/g222");
+    }
+
+    #[test]
+    fn the_first_start_takes_mae_s_saved_form_but_not_its_password() {
+        let mae = "account=acc\npassword=pw\nversion=1.39\nlistserver=listserver.graal.in\nnickname=Nick\ndirect_server=h:1\nassets.2.22=/g\n";
+        let s = Saved::from_mae(mae);
+        assert_eq!(s.account.as_deref(), Some("acc"));
+        assert_eq!(s.version.as_deref(), Some("1.39"));
+        assert_eq!(s.listserver, None, "a host alone follows the version");
+        assert_eq!(s.nick.as_deref(), Some("Nick"));
+        assert_eq!(s.direct.as_deref(), Some("h:1"));
+        assert_eq!(s.assets_for["2.22"], "/g");
+        assert!(!s.text().contains("pw"));
+        let w = StartScreen::new(s, None);
+        assert_eq!(w.password, "");
+        assert_eq!(w.choice, Choice::Version(ClientVersion::V139));
     }
 
     #[test]
