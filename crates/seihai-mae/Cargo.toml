@@ -12,6 +12,9 @@ path = "src/lib.rs"
 
 [dependencies]
 seihai-core.workspace = true
+# `window::run_native`: its eframe windows open with wgpu where OpenGL 2.0
+# is missing (#475).
+seihai-play = { path = "../seihai-play" }
 # Chat text over heads (TrueType). Already in the tree through egui.
 ab_glyph = "0.2"
 minifb = "0.27"

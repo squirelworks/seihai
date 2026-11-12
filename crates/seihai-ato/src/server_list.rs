@@ -1,20 +1,17 @@
 //! The server list: what Start opens when no game server was given.
 //!
-//! The listserver login is core's (`Connection::fetch_server_list`), with
-//! the 3.x row's listserver: `listserver.graal.in` on port 14923, the
-//! `G3D30123` token and login shape D (id 7 and id 1 in one plain zlib
-//! frame, as the real 3.04 and 3.153 sent it in the lab). `--listserver
-//! host:port` points it at a lab listserver instead.
-//!
-//! The fetch runs on its own thread so the window keeps drawing; its
-//! result is also printed to stdout. Picking a server and pressing Connect
-//! hands back its `host:port`; the login at that game server is the same
-//! as with `--online`.
+//! The list and its fetch are `seihai-play`'s ([`ServerList`]), the same
+//! the `seihai` start window shows (#469); this screen is Ato's own
+//! layout around it, with Back and Connect. The listserver is the 3.x
+//! row's: `listserver.graal.in` on port 14923, the `G3D30123` token and
+//! login shape D (id 7 and id 1 in one plain zlib frame, as the real 3.04
+//! and 3.153 sent it in the lab). `--listserver host:port` points it at a
+//! lab listserver instead. Picking a server and pressing Connect hands
+//! back its `host:port`; the login at that game server is the same as
+//! with `--online`.
 
-use seihai_core::net::{list_failure_text, Connection};
-use seihai_core::protocol::{ClientVersion, ListReply, ServerEntry};
-use std::io;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use seihai_core::protocol::ClientVersion;
+pub use seihai_play::servers::{borrowed_list_note, ServerList};
 
 /// The listserver Start asks by default for `version`: the row's host and
 /// port.
@@ -26,24 +23,6 @@ pub fn default_listserver(version: ClientVersion) -> String {
     )
 }
 
-/// For a build with no listserver of its own (4.x and 5.x, which reach a
-/// game server named `Login` instead): how its list is fetched. Core falls
-/// back to an older build's listserver login (`ClientVersion::list_version`,
-/// as `seihai-mae` does); the picked server is then logged in to with the
-/// build's own game login, as if the Login server had warped there. The
-/// real 4.x and 5.x clients show the list as scripted GUI on the Login
-/// server, so this is Seihai's choice, not theirs.
-pub fn borrowed_list_note(version: ClientVersion) -> Option<String> {
-    let list = version.list_version();
-    (list != version).then(|| {
-        format!(
-            "{} has no listserver; the list comes with the {} login.",
-            version.label(),
-            list.label()
-        )
-    })
-}
-
 /// What the list screen asks the app to do.
 #[derive(Debug, PartialEq)]
 pub enum Pick {
@@ -53,191 +32,37 @@ pub enum Pick {
     Back,
 }
 
-/// The server list screen and its fetch.
-pub struct ServerList {
-    pub listserver: String,
-    pub servers: Vec<ServerEntry>,
-    pub selected: Option<usize>,
-    pub status: String,
-    pending: Option<Receiver<io::Result<ListReply>>>,
-}
-
-impl ServerList {
-    /// Start fetching the list from `listserver` for `version`. `repaint`
-    /// is called once the reply is in.
-    pub fn fetch(
-        listserver: String,
-        version: ClientVersion,
-        account: String,
-        password: String,
-        repaint: impl FnOnce() + Send + 'static,
-    ) -> ServerList {
-        let (tx, rx) = mpsc::channel();
-        let addr = listserver.clone();
-        std::thread::spawn(move || {
-            let r = Connection::fetch_server_list(&addr, version, &account, &password);
-            let _ = tx.send(r);
-            repaint();
+/// Draw the list and take its input.
+pub fn show(list: &mut ServerList, ctx: &egui::Context) -> Option<Pick> {
+    list.poll();
+    let mut pick = None;
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.heading("Servers");
+        ui.label(&list.status);
+        ui.separator();
+        if list.rows_ui(ui, ui.available_height() - 40.0).is_some() {
+            pick = list.chosen().map(Pick::Connect);
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
+            if ui.button("Back").clicked() {
+                pick = Some(Pick::Back);
+            }
+            let connect = ui.add_enabled(list.chosen().is_some(), egui::Button::new("Connect"));
+            if connect.clicked() {
+                pick = list.chosen().map(Pick::Connect);
+            }
         });
-        let mut status = format!("Asking {listserver} for the server list.");
-        if let Some(note) = borrowed_list_note(version) {
-            status = format!("{note} {status}");
-        }
-        ServerList {
-            status,
-            listserver,
-            servers: Vec::new(),
-            selected: None,
-            pending: Some(rx),
-        }
+    });
+    if list.waiting() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(200));
     }
-
-    /// A list already in hand (tests, and a reply read elsewhere).
-    pub fn from_reply(listserver: String, reply: io::Result<ListReply>) -> ServerList {
-        let mut l = ServerList {
-            listserver,
-            servers: Vec::new(),
-            selected: None,
-            status: String::new(),
-            pending: None,
-        };
-        l.take(reply);
-        l
-    }
-
-    /// True while the reply has not come in.
-    pub fn waiting(&self) -> bool {
-        self.pending.is_some()
-    }
-
-    /// Take the reply if it has come in.
-    pub fn poll(&mut self) {
-        let Some(rx) = &self.pending else { return };
-        match rx.try_recv() {
-            Ok(r) => {
-                self.pending = None;
-                self.take(r);
-            }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => {
-                self.pending = None;
-                self.status = format!("{}: the list fetch stopped.", self.listserver);
-                self.print();
-            }
-        }
-    }
-
-    fn take(&mut self, reply: io::Result<ListReply>) {
-        match reply {
-            Ok(reply) => {
-                self.servers = reply.servers;
-                self.selected = None;
-                self.status = match (reply.error, self.servers.len()) {
-                    (Some(err), _) => format!("listserver: {err}"),
-                    (None, 0) => format!("{}: no servers in the reply.", self.listserver),
-                    (None, n) => {
-                        let s = if n == 1 { "" } else { "s" };
-                        match reply.status {
-                            Some(st) if !st.trim().is_empty() => {
-                                format!("{n} server{s}. {}", st.trim())
-                            }
-                            _ => format!("{n} server{s}."),
-                        }
-                    }
-                };
-            }
-            Err(e) => self.status = list_failure_text(&self.listserver, &e),
-        }
-        self.print();
-    }
-
-    /// The reply on stdout, as the game login's lines are, so a run with
-    /// the window open can be read without a screenshot: the status, then
-    /// one line per server.
-    fn print(&self) {
-        println!("server list from {}: {}", self.listserver, self.status);
-        for s in &self.servers {
-            println!("  {}  {}:{}", Self::row(s), s.host, s.port);
-        }
-    }
-
-    /// The picked server's `host:port`, if one is picked.
-    pub fn chosen(&self) -> Option<String> {
-        let s = self.servers.get(self.selected?)?;
-        Some(format!("{}:{}", s.host, s.port))
-    }
-
-    /// One row's text: kind, name, players and language.
-    pub fn row(s: &ServerEntry) -> String {
-        let kind = match s.kind.as_str() {
-            "" => String::new(),
-            k => format!("[{k}] "),
-        };
-        let players = s.players.map_or_else(|| "?".into(), |n| n.to_string());
-        let lang = if s.language.is_empty() {
-            String::new()
-        } else {
-            format!("  ({})", s.language)
-        };
-        format!("{kind}{}  {players} players{lang}", s.name)
-    }
-
-    /// Draw the list and take its input.
-    pub fn show(&mut self, ctx: &egui::Context) -> Option<Pick> {
-        self.poll();
-        let mut pick = None;
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Servers");
-            ui.label(&self.status);
-            ui.separator();
-            egui::ScrollArea::vertical()
-                .max_height(ui.available_height() - 40.0)
-                .show(ui, |ui| {
-                    for (i, s) in self.servers.iter().enumerate() {
-                        let r = ui.selectable_label(self.selected == Some(i), Self::row(s));
-                        if r.clicked() {
-                            self.selected = Some(i);
-                        }
-                        if r.double_clicked() {
-                            pick = Some(Pick::Connect(format!("{}:{}", s.host, s.port)));
-                        }
-                    }
-                });
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui.button("Back").clicked() {
-                    pick = Some(Pick::Back);
-                }
-                let connect = ui.add_enabled(self.chosen().is_some(), egui::Button::new("Connect"));
-                if connect.clicked() {
-                    pick = self.chosen().map(Pick::Connect);
-                }
-            });
-        });
-        if self.waiting() {
-            ctx.request_repaint_after(std::time::Duration::from_millis(200));
-        }
-        pick
-    }
+    pick
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn entry(kind: &str, name: &str, port: u16) -> ServerEntry {
-        ServerEntry {
-            kind: kind.into(),
-            name: name.into(),
-            language: "English".into(),
-            description: String::new(),
-            url: String::new(),
-            version: String::new(),
-            host: "127.0.0.1".into(),
-            port,
-            players: Some(3),
-        }
-    }
 
     #[test]
     fn the_3x_rows_ask_listserver_graal_in() {
@@ -248,52 +73,6 @@ mod tests {
             // login, and only the account error on 14922.
             assert_eq!(d, "listserver.graal.in:14923");
         }
-    }
-
-    #[test]
-    fn the_lobby_builds_say_whose_list_login_they_borrow() {
-        assert_eq!(borrowed_list_note(ClientVersion::V304), None);
-        assert_eq!(borrowed_list_note(ClientVersion::V3153), None);
-        for v in [
-            ClientVersion::V420R8,
-            ClientVersion::V500R7,
-            ClientVersion::V512,
-        ] {
-            let n = borrowed_list_note(v).unwrap();
-            assert!(
-                n.starts_with(&format!("{} has no listserver", v.label())),
-                "{n}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_reply_fills_the_list_and_a_pick_gives_its_address() {
-        let reply = ListReply {
-            servers: vec![entry("", "Lab", 14900), entry("3", "Lab 3D", 14910)],
-            status: Some("Welcome\n".into()),
-            ..Default::default()
-        };
-        let mut l = ServerList::from_reply("127.0.0.1:14922".into(), Ok(reply));
-        assert_eq!(l.status, "2 servers. Welcome");
-        assert_eq!(l.chosen(), None);
-        l.selected = Some(1);
-        assert_eq!(l.chosen().as_deref(), Some("127.0.0.1:14910"));
-        assert_eq!(
-            ServerList::row(&l.servers[1]),
-            "[3] Lab 3D  3 players  (English)"
-        );
-    }
-
-    #[test]
-    fn an_error_text_is_shown() {
-        let reply = ListReply {
-            error: Some("Account not found".into()),
-            ..Default::default()
-        };
-        let l = ServerList::from_reply("127.0.0.1:14922".into(), Ok(reply));
-        assert_eq!(l.status, "listserver: Account not found");
-        assert!(l.servers.is_empty());
     }
 
     /// The whole path on loopback: a stand-in listserver reads the 3.04

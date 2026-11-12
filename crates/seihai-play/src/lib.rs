@@ -13,8 +13,13 @@
 //! [`start`] is the one start window for every line, the `seihai`
 //! command's: pick the version and the server, and hand over to that
 //! line's client.
+//!
+//! [`window::run_native`] opens every Seihai window: OpenGL, else wgpu
+//! (Direct3D 12 and its software WARP on Windows).
 
 pub mod game;
 pub mod render;
+pub mod servers;
 pub mod start;
 pub mod view;
+pub mod window;

@@ -148,7 +148,7 @@ pub fn run(form: ConnectForm) -> Result<Option<ConnectForm>, String> {
             .with_resizable(false),
         ..Default::default()
     };
-    eframe::run_native("Graal3D", options, Box::new(move |_cc| Ok(Box::new(app))))
+    seihai_play::window::run_native("Graal3D", options, Box::new(move |_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())?;
     let out = chosen.lock().unwrap_or_else(|e| e.into_inner()).take();
     Ok(out)

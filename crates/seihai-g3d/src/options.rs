@@ -236,7 +236,7 @@ pub fn run(
             .with_resizable(false),
         ..Default::default()
     };
-    eframe::run_native(
+    seihai_play::window::run_native(
         page.title(),
         options,
         Box::new(move |_cc| Ok(Box::new(app))),

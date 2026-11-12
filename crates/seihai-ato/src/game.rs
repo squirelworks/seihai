@@ -8,7 +8,7 @@
 //! field lines under each level.
 
 use crate::online::Login;
-use crate::server_list::{Pick, ServerList};
+use crate::server_list::{self, Pick, ServerList};
 use crate::start_window::{Next, StartWindow, CANVAS};
 use seihai_core::protocol::ClientVersion;
 use seihai_play::game;
@@ -129,7 +129,7 @@ impl eframe::App for AtoApp {
             return;
         }
         if let Some(list) = &mut self.list {
-            match list.show(ctx) {
+            match server_list::show(list, ctx) {
                 Some(Pick::Connect(addr)) => self.login_at(addr, ctx),
                 Some(Pick::Back) => {
                     self.list = None;
@@ -165,7 +165,7 @@ pub fn run_offline(
     let mut app = AtoApp::new(start, assets);
     app.sound_on = sound_on;
     app.game = Some(View::new(game, CANVAS));
-    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
+    seihai_play::window::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
 }
 
@@ -192,7 +192,7 @@ pub fn run(
     };
     let mut app = AtoApp::new_skipping_start(start, assets);
     app.sound_on = sound_on;
-    eframe::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
+    seihai_play::window::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
 }
 
