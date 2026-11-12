@@ -11,7 +11,7 @@
 //! tutorial" start Mae offline (`--offline`, `--tutorial`), and "All
 //! versions" lists the offline-only builds with Mae's rows. Ato and G3D
 //! keep their own start windows, the original clients' screens, and "Open
-//! seihai-ato's own window" starts one. Mae's settings window is only the
+//! Ato's own window" starts one. Mae's settings window is only the
 //! `seihai-mae` development binary's: inside the `seihai` program Mae
 //! comes back here instead.
 //!
@@ -97,6 +97,16 @@ impl Line {
         [Line::Mae, Line::Ato, Line::Issho, Line::G3d]
             .into_iter()
             .find(|l| l.subcommand() == n)
+    }
+
+    /// The client's name, as the window says it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Line::Mae => "Mae",
+            Line::Ato => "Ato",
+            Line::Issho => "Issho",
+            Line::G3d => "G3D",
+        }
     }
 
     /// The heading the window lists this line's versions under.
@@ -734,8 +744,7 @@ impl StartScreen {
             }
             self.pick(picked);
             ui.small(format!(
-                "Runs in {} ({}).",
-                self.choice.line().binary(),
+                "Plays in {}.",
                 self.choice.line().heading()
             ));
 
@@ -808,7 +817,7 @@ impl StartScreen {
                 Line::Issho => {}
                 line => {
                     if ui
-                        .button(format!("Open {}'s own window", line.binary()))
+                        .button(format!("Open {}'s own window", line.name()))
                         .on_hover_text("Starts the client with no server: its own start window, as the original client's.")
                         .clicked()
                     {
