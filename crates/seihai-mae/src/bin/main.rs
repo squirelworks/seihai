@@ -3976,6 +3976,10 @@ fn main() {
         // the level file has takes the server's id, any other is added.
         {
             let changes = std::mem::take(&mut net_state.npc_changes);
+            // `PLO_NPCDEL2` deletes are not applied here yet: taking an NPC
+            // off the level would shift the indices the script runner keeps
+            // for the level's NPCs. Taken so they do not pile up.
+            net_state.npc_deletes.clear();
             if conn.is_some() && session.current_level.is_some() {
                 let mut todo: Vec<(u32, seihai::protocol::npcprops::NpcProps)> = Vec::new();
                 if session.level_serial != npc_link_serial {

@@ -101,7 +101,8 @@ level lab3x.nw: from the server's board, start (30.5, 31), 1 NPCs (1 from the se
   nothing. NPC props that come after the level (moves, new images, a new
   NPC) are applied as they arrive, through core's `Live::npc_changes`, to
   the level the view is on; missing images are not asked for from the
-  server. NPC deletes (`PLO_NPCDEL`, `PLO_NPCDEL2`) are not applied yet.
+  server. A `PLO_NPCDEL2` delete takes the NPC off the level it names;
+  `PLO_NPCDEL` (29) and `PLO_HIDENPCS` (151) are not applied yet.
 
 The walk is sent: the view hands its pose to the network thread, which
 sends it once a 50 ms tick after the post-login frame. 3.04 and 4.04r2
@@ -160,7 +161,7 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 ## Not in yet
 
-The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, NPC deletes,
+The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
 other players' looks (they show as plain markers),
 GANI art, and the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.
