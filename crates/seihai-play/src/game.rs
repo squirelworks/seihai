@@ -16,7 +16,9 @@
 
 mod actions;
 mod life;
+mod signs;
 pub use actions::{ItemList, ListKey, HAS_SPIN};
+pub use signs::SignKey;
 
 use crate::chars::{self, Characters, Figure};
 use crate::effects::EffectSheets;
@@ -142,6 +144,10 @@ pub struct Game {
     pub hits: online::SharedHits,
     /// Health and death ([`life`]).
     life: life::LifeState,
+    /// The first line of the sign page on screen ([`signs`]).
+    sign_first: usize,
+    /// A sign was open last frame.
+    sign_was_open: bool,
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
@@ -303,6 +309,8 @@ impl Game {
             script_clock: Instant::now(),
             hits: Default::default(),
             life: Default::default(),
+            sign_first: 0,
+            sign_was_open: false,
             hud: None,
             boards_hidden: Default::default(),
             hidden_drawn: false,
@@ -834,6 +842,16 @@ impl Game {
         if self.session.tick_poses(ms) {
             self.dirty = true;
         }
+        // A ledge jump in the air, a pull that brought a block along, or a
+        // hit's knockback: the new position goes out like a step.
+        let moved = self.session.tick_pushpull(ms);
+        if (moved | self.session.take_knock_moved()) && self.session.current_level.is_some() {
+            self.set_pose(self.session.walking);
+            self.dirty = true;
+        }
+        if self.session.jumping() || self.session.pushpull.pull_pose() {
+            self.dirty = true;
+        }
         // The bombs, arrows, floor items and weapon scripts too.
         if self.session.current_level.is_some() && self.tick_actions(ms) {
             self.dirty = true;
@@ -1121,6 +1139,7 @@ impl Game {
             self.dirty = true;
         }
         self.tick_life(now);
+        self.notice_sign();
         self.play_sounds();
         if self.take_chat_and_counters(now) {
             self.dirty = true;
