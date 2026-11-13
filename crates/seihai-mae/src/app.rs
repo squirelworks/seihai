@@ -2116,6 +2116,13 @@ pub fn main(args: Vec<String>) {
         Ok(w) => w,
         Err(e) => {
             eprintln!("failed to open window: {e}");
+            // Inside the `seihai` start window, say so there too: a
+            // machine with no Metal device (a macOS VM) has no window.
+            if seihai_play::start::under_launcher() {
+                seihai_play::start::report_ended(&format!(
+                    "Mae could not open the game window: {e}"
+                ));
+            }
             return;
         }
     };
