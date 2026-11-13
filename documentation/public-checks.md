@@ -312,8 +312,9 @@ machine fields empty, `lobby.rs`):
 - That server checks the version first and accepts the 5.12 to 6.03r7
   tokens, so their login reaches the account check. 4.x and 5.00r7 are
   turned away by version.
-- Both accounts work on the public listserver but "do not exist" at this
-  Login server, which suggests it checks accounts against a different service than the
-  listserver. That would account for the rejection; nothing here shows the login
-  line itself is malformed. A run with an account of that service would
-  settle it.
+- Both accounts are community accounts: they work on the public listserver
+  but "do not exist" at this Login server, which is not the community's.
+  So the rejection is about the account service, not the login line. The
+  next check is the same builds at the community Login server (the `Login`
+  entry of the server list; `list_probe` option C), and the real clients
+  against it in the lab.
