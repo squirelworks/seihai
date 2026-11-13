@@ -26,11 +26,12 @@ pub const STEP_MS: u64 = 50;
 pub const STATUS_DEAD: u8 = 0x08;
 
 /// The poses drawn, by the GANI file's stem.
-const POSES: [&str; 10] = [
+const POSES: [&str; 11] = [
     "idle",
     "walk",
     "swim",
     "sword",
+    "spin",
     "hurt",
     "sit",
     "sleep",

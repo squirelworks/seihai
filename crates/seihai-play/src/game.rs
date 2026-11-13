@@ -14,8 +14,12 @@
 //! This was `seihai-ato`'s `game` module. It moved here unchanged, less
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
+mod actions;
+pub use actions::{ItemList, ListKey, HAS_SPIN};
+
 use crate::chars::{self, Characters, Figure};
-use crate::hud::{self, HudArt, HudValues};
+use crate::effects::EffectSheets;
+use crate::hud::{self, HudArt};
 use crate::render::{self, Frame, NpcImages, Players, Sheet};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
@@ -136,6 +140,17 @@ pub struct Game {
     /// Takes what the player says while [`Game::boards_hidden`] is set, in
     /// place of the TCP chat (Ato's Graal3D chat section).
     pub say3d: Option<Say3d>,
+    /// Where the network thread puts the player's weapons.
+    pub weapons: online::SharedWeapons,
+    /// Where the network thread puts other players' bombs and arrows.
+    pub level_objects: online::SharedLevelObjects,
+    /// Where the network thread puts other players' throws.
+    pub throws: online::SharedThrows,
+    /// The spin, the weapon key, the lay mode and the item list
+    /// ([`actions`]).
+    actions: actions::Actions,
+    /// The sheets bombs, arrows and floor items are cut from.
+    effect_sheets: EffectSheets,
 }
 
 /// [`Game::keys3d`].
@@ -279,6 +294,11 @@ impl Game {
             view3d: None,
             keys3d: None,
             say3d: None,
+            weapons: Default::default(),
+            level_objects: Default::default(),
+            throws: Default::default(),
+            actions: actions::Actions::new(),
+            effect_sheets: EffectSheets::load(resolver),
         })
     }
 
@@ -685,14 +705,15 @@ impl Game {
     /// Hand the current pose to the network thread.
     fn set_pose(&self, walking: bool) {
         let s = &self.session;
-        let swinging = s.combat.is_swinging() || s.combat.spin_elapsed_ms().is_some();
+        // The GANI the others see: the swing or spin, the lift, carrying.
+        let anim = s.bow_slot_anim();
         *self.pose.lock().unwrap_or_else(|e| e.into_inner()) = Some(online::Pose {
             x: s.player_x,
             y: s.player_y,
             dir: s.player_dir % 4,
             walking,
             sprite: Some(s.sprite_value()),
-            gani: swinging.then(|| s.bow_slot_anim()),
+            gani: (anim != "idle").then_some(anim),
         });
     }
 
@@ -707,6 +728,7 @@ impl Game {
         self.session.walk_sprite = !p.ui.ganis;
         self.session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304)
             || seihai_core::protocol::lobby::LobbyBurst::for_version(version).is_some();
+        self.set_action_version(version);
     }
 
     /// Swing the sword (the sword key). The swing cuts what is in front of
@@ -715,6 +737,19 @@ impl Game {
     /// sprite. False when no swing started: no combat rules for the build,
     /// no sword, in water, or already swinging.
     pub fn swing(&mut self) -> bool {
+        if self.list_open() {
+            return false;
+        }
+        // S while carrying throws what is carried (2.05).
+        if self.session.carried.is_some() && self.session.current_level.is_some() {
+            self.interact();
+            return false;
+        }
+        // S in the lay mode leaves it.
+        if self.session.stop_laying() {
+            self.dirty = true;
+            return false;
+        }
         if self.session.current_level.is_none() || !self.session.start_swing() {
             return false;
         }
@@ -771,9 +806,19 @@ impl Game {
         if self.session.tick_poses(ms) {
             self.dirty = true;
         }
-        // The swing runs on the same clock; its end goes to the server.
-        let swinging = self.session.combat.is_swinging();
-        if self.session.tick_combat(ms) || swinging != self.session.combat.is_swinging() {
+        // The bombs, arrows, floor items and weapon scripts too.
+        if self.session.current_level.is_some() && self.tick_actions(ms) {
+            self.dirty = true;
+        }
+        // The swing and the spin run on the same clock; their end goes to
+        // the server.
+        let swinging =
+            self.session.combat.is_swinging() || self.session.combat.spin_elapsed_ms().is_some();
+        if self.session.tick_combat(ms)
+            || swinging
+                != (self.session.combat.is_swinging()
+                    || self.session.combat.spin_elapsed_ms().is_some())
+        {
             self.dirty = true;
             if self.session.current_level.is_some() {
                 self.set_pose(self.session.walking);
@@ -784,6 +829,13 @@ impl Game {
     /// One walk step for the arrows held, at the session's pace. `(dx, dy)`
     /// are -1, 0 or 1 per axis.
     pub fn walk(&mut self, dx: i8, dy: i8, now: Instant) {
+        // The open item list takes the arrows.
+        let (dx, dy) = if self.list_open() { (0, 0) } else { (dx, dy) };
+        // An arrow in the lay mode leaves it without a step.
+        if (dx, dy) != (0, 0) && self.session.stop_laying() {
+            self.dirty = true;
+            return;
+        }
         if (dx, dy) == (0, 0) {
             if self.session.stop_walking() {
                 self.dirty = true;
@@ -856,6 +908,9 @@ impl Game {
         self.say = live.say;
         self.send = live.send;
         self.chat_in = live.chat;
+        self.weapons = live.weapons;
+        self.level_objects = live.level_objects;
+        self.throws = live.throws;
     }
 
     /// Draw the status display over the level (hearts, gralats, bombs,
@@ -914,9 +969,13 @@ impl Game {
         }
         let own = *self.own.lock().unwrap_or_else(|e| e.into_inner());
         if own != self.drawn_own {
+            let was = self.drawn_own;
+            self.take_own_counters(&was, &own);
             self.drawn_own = own;
             changed |= self.hud.is_some();
         }
+        changed |= self.take_weapons();
+        changed |= self.take_others_actions();
         changed
     }
 
@@ -992,6 +1051,7 @@ impl Game {
             chars: &self.chars,
             others: &others,
             clock_ms: self.started.elapsed().as_millis() as u64,
+            effects: Some(&self.effect_sheets),
         };
         let mut f = render::draw(
             &self.session,
@@ -1002,7 +1062,7 @@ impl Game {
             view.1,
         );
         if let Some(art) = &self.hud {
-            hud::draw(&mut f, art, &HudValues::of(&self.drawn_own));
+            hud::draw(&mut f, art, &self.hud_values());
         }
         f
     }

@@ -183,6 +183,8 @@ pub struct Players<'a> {
     pub chars: &'a Characters,
     pub others: &'a [Figure],
     pub clock_ms: u64,
+    /// The sheets for bombs, arrows and floor items; `None` draws none.
+    pub effects: Option<&'a crate::effects::EffectSheets>,
 }
 
 impl Players<'_> {
@@ -193,6 +195,7 @@ impl Players<'_> {
             chars: NONE.get_or_init(Characters::default),
             others,
             clock_ms: 0,
+            effects: None,
         }
     }
 }
@@ -209,10 +212,27 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         s.walking,
         s.walk_gani.as_ref().map(|g| g.frame),
     );
-    // A sword swing wins over the walk (core's pose order).
+    // Lifting and carrying hold the object up (the lift shows as the
+    // still carry, as `lift.gani` is not among the poses drawn).
+    if s.carried.is_some() && !s.in_water {
+        f.pose = if s.walking { "carry" } else { "carrystill" };
+        f.step = chars::Step::Clock;
+    }
+    // A sword swing wins over the walk (core's pose order), and the spin
+    // over both.
     if let Some(step) = s.combat.swing_frame().filter(|_| !s.in_water) {
         f.pose = "sword";
         f.step = chars::Step::At(step);
+    }
+    if let Some(ms) = s.combat.spin_elapsed_ms() {
+        f.pose = "spin";
+        let tick = (ms / seihai_core::life::TICK_MS) as usize;
+        f.step = chars::Step::At(
+            s.poses
+                .spin
+                .as_ref()
+                .map_or(0, |g| g.frame_at_tick(tick, false)),
+        );
     }
     f
 }
@@ -328,6 +348,10 @@ pub fn draw(
             }
         }
     }
+    // The items on the floor, under the players.
+    if let Some(sheets) = players.effects {
+        crate::effects::draw_floor_items(&mut f, s, sheets, (cam_x, cam_y));
+    }
     // Other players, then the player over them: their GANI's frame, or a
     // marker where the pose GANI is missing.
     let figure = |f: &mut Frame, fig: &Figure, marker: [u8; 3]| {
@@ -345,8 +369,17 @@ pub fn draw(
     for o in players.others {
         figure(&mut f, o, MARKER_OTHER);
     }
-    let own = own_figure(s);
+    let mut own = own_figure(s);
+    // Without `spin.gani` (it is not built in) the spin shows as the swing.
+    if own.pose == "spin" && players.chars.gani("spin").is_none() {
+        own.pose = "sword";
+        own.step = chars::Step::Clock;
+    }
     figure(&mut f, &own, if s.in_water { MARKER_WATER } else { MARKER });
+    // Bombs, blasts and arrows over them.
+    if let Some(sheets) = players.effects {
+        crate::effects::draw_effects(&mut f, s, sheets, (cam_x, cam_y));
+    }
     f
 }
 
@@ -490,6 +523,7 @@ mod tests {
             chars: &chars,
             others: &others,
             clock_ms: 0,
+            effects: None,
         };
         let f = draw(&s, &sheet, &NpcImages::new(), players, 40, 30);
         // The player's box is 320-24 .. 320+24 across; the other's 64 px
