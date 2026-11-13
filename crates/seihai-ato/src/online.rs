@@ -12,8 +12,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 pub use seihai_core::client::{
-    LinkAsk, Live, Login, NpcChange, Other, Pose, SharedBoardMods, SharedNpcChanges, SharedOthers,
-    SharedPose, WorldView,
+    FileAnswer, FileAsks, Hooks, LinkAsk, Live, Login, NpcChange, Other, Pose, ServerJoin,
+    SharedBoardMods, SharedNpcChanges, SharedOthers, SharedPose, WorldView,
 };
 
 /// Log in at `addr` and log every level the server sends to `out`, with
@@ -38,6 +38,33 @@ pub fn run(
         out,
         shown,
         None,
+    )
+}
+
+/// As [`run`], with the session [`Hooks`]: the Graal3D side is told of
+/// each server before its login and fetches its files through the session.
+#[allow(clippy::too_many_arguments)]
+pub fn run_hooked(
+    addr: &str,
+    version: ClientVersion,
+    login: &Login,
+    assets: Option<PathBuf>,
+    first_level_only: bool,
+    out: &mut impl Write,
+    shown: &mut dyn FnMut(&Level, &Arrival),
+    hooks: &Hooks,
+) -> Result<(), String> {
+    seihai_core::client::run_hooked(
+        addr,
+        version,
+        login,
+        assets,
+        first_level_only,
+        out,
+        shown,
+        None,
+        &|level, name, st| crate::fields::lines(version, level, name, st),
+        hooks,
     )
 }
 

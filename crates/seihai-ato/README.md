@@ -45,10 +45,16 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   Torque UDP link to the listed port + 1, for 4.20r6 and 5.x (protocols
   21 and 24): bit stream and strings, handshake, data packet numbering
   and acks, events (the mission start is answered), ghosts and the
-  control object. `--graal3d` with `--online host:port --no-window` opens
-  it beside the TCP login and logs its progress with a `3d:` prefix
-  (login steps, ghosts created, the control object). Nothing is drawn in
-  3D yet, and the start window does not open it yet. 3.153 and 4.04r2
+  control object. `--graal3d` with `--online host:port` opens it beside
+  the TCP login, with or without the window, and logs its progress with a
+  `3d:` prefix (login steps, ghosts created, the control object). The
+  single launcher passes `--graal3d` for a `3 ` server, and a server warp
+  (`PLO_SERVERWARP`) to a `3 ` server opens it too; a warp elsewhere or the
+  end of the TCP session closes it. While it is up the window leaves out
+  the TCP level boards, as the real clients do. The shapes and Sky textures
+  the ghosts name are asked for over TCP through core's session, and
+  login step 6 is logged once every request is answered. Nothing is drawn
+  in 3D yet. 3.153 and 4.04r2
   (protocol 19, the Torque game layer) are not run. Source: Graal_analysis
   `torque/udp-session.md` and the open (MIT) Torque net layer.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
@@ -177,5 +183,5 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
 other players' looks (they show as plain markers),
-GANI art, and the Torque UDP side. The clients' background images are not shipped,
+GANI art, and the 3D drawing, walking and chat of the Torque UDP side. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

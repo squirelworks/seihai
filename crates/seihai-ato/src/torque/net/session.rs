@@ -9,10 +9,14 @@
 //! case it sends a disconnect first.
 
 use super::events::{mission_start_answer, ClassTable, Events};
-use super::ghosts::{ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Transform};
+use super::ghosts::{
+    ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Sky, Transform,
+};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use crate::torque::TorqueProfile;
+use seihai_core::client::FileAsks;
+use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -64,6 +68,8 @@ pub enum Step {
     Phase2 = 3,
     Lit = 4,
     Control = 5,
+    /// Every TCP file request the 3D world caused is answered.
+    Attached = 6,
 }
 
 /// Runs the link from `socket` (already bound) to `server` until it
@@ -74,18 +80,30 @@ pub fn run(
     profile: TorqueProfile,
     who: &Identity,
     stop: &AtomicBool,
+    files: Option<&FileAsks>,
     out: &mut impl Write,
 ) -> Result<Ended, String> {
-    run_with_sequence(socket, server, profile, who, stop, out, connect_sequence())
+    run_with_sequence(
+        socket,
+        server,
+        profile,
+        who,
+        stop,
+        files,
+        out,
+        connect_sequence(),
+    )
 }
 
 /// As [`run`], with the connect sequence given (for tests and replays).
+#[allow(clippy::too_many_arguments)]
 pub fn run_with_sequence(
     socket: &UdpSocket,
     server: SocketAddr,
     profile: TorqueProfile,
     who: &Identity,
     stop: &AtomicBool,
+    files: Option<&FileAsks>,
     out: &mut impl Write,
     sequence: u32,
 ) -> Result<Ended, String> {
@@ -182,7 +200,20 @@ pub fn run_with_sequence(
     let mut last_heard = Instant::now();
     let mut last_acked = Instant::now();
     let mut step = Step::Established;
+    let mut fetch = Fetch::default();
     loop {
+        if let Some(f) = files {
+            fetch.take_answers(f, out);
+        }
+        if files.is_some() && step == Step::Control && fetch.all_answered() {
+            step = Step::Attached;
+            let _ = writeln!(
+                out,
+                "3d: login step 6: every file request answered (files: {}, not on the server: {})",
+                fetch.files.len(),
+                fetch.files.values().filter(|d| d.is_none()).count()
+            );
+        }
         if stop.load(Ordering::Relaxed) {
             let _ = socket.send_to(&handshake::disconnect(sequence, b""), server);
             return Ok(Ended::Stopped);
@@ -287,8 +318,29 @@ pub fn run_with_sequence(
         match ghosts.read_ghosts(&mut data.body, &classes) {
             Ok(changes) => {
                 for c in changes {
-                    if let GhostChange::Created(i) = c {
-                        let _ = writeln!(out, "3d: ghost {i} {}", describe(&ghosts, i));
+                    let i = match c {
+                        GhostChange::Created(i) => {
+                            let _ = writeln!(out, "3d: ghost {i} {}", describe(&ghosts, i));
+                            i
+                        }
+                        GhostChange::Updated(i) => i,
+                        GhostChange::Deleted(_) => continue,
+                    };
+                    let Some(g) = ghosts.ghosts.get(&i) else {
+                        continue;
+                    };
+                    if let GhostState::Sky(_) = g {
+                        if fetch.sky_textures_in && matches!(c, GhostChange::Updated(_)) {
+                            let _ = writeln!(out, "3d: Sky read again with its textures");
+                        }
+                    }
+                    if let Some(f) = files {
+                        for name in files_named(g) {
+                            fetch.want(&name, f, out);
+                        }
+                    }
+                    if let GhostState::Sky(sky) = g {
+                        fetch.sky = sky_textures(sky);
                     }
                 }
             }
@@ -315,6 +367,100 @@ pub fn run_with_sequence(
                 }
             }
         }
+    }
+}
+
+/// The TCP files the 3D world asked for (through core's file session), and
+/// what came back.
+#[derive(Debug, Default)]
+struct Fetch {
+    /// Asked for and not answered yet, as asked.
+    pending: Vec<String>,
+    /// Answered, by lower-case name: the bytes, or `None` when the server
+    /// had no such file.
+    files: HashMap<String, Option<Vec<u8>>>,
+    /// The Sky's textures, as last named.
+    sky: Vec<String>,
+    /// Every Sky texture is answered; a later Sky update is the re-read.
+    sky_textures_in: bool,
+}
+
+impl Fetch {
+    /// Ask for `name` unless it was asked for already.
+    fn want(&mut self, name: &str, asks: &FileAsks, out: &mut impl Write) {
+        let key = name.to_ascii_lowercase();
+        if self.files.contains_key(&key)
+            || self.pending.iter().any(|p| p.eq_ignore_ascii_case(name))
+        {
+            return;
+        }
+        self.pending.push(name.to_string());
+        asks.wanted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(name.to_string());
+        let _ = writeln!(out, "3d: requesting {name} over TCP");
+    }
+
+    /// Take the answers core's session has put in.
+    fn take_answers(&mut self, asks: &FileAsks, out: &mut impl Write) {
+        let got = std::mem::take(&mut *asks.answers.lock().unwrap_or_else(|e| e.into_inner()));
+        for a in got {
+            match &a.data {
+                Some(d) => {
+                    let _ = writeln!(out, "3d: got {} ({} bytes)", a.name, d.len());
+                }
+                None => {
+                    let _ = writeln!(out, "3d: {} is not on the server", a.name);
+                }
+            }
+            self.pending.retain(|p| !p.eq_ignore_ascii_case(&a.name));
+            self.files.insert(a.name.to_ascii_lowercase(), a.data);
+        }
+        if !self.sky_textures_in
+            && !self.sky.is_empty()
+            && self
+                .sky
+                .iter()
+                .all(|t| self.files.contains_key(&t.to_ascii_lowercase()))
+        {
+            self.sky_textures_in = true;
+            let _ = writeln!(out, "3d: the Sky's {} textures are in", self.sky.len());
+        }
+    }
+
+    fn all_answered(&self) -> bool {
+        self.pending.is_empty()
+    }
+}
+
+/// The Sky's six textures, as its material list names them.
+fn sky_textures(sky: &Sky) -> Vec<String> {
+    let Some(list) = sky.textures.as_deref() else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(list)
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// The files a ghost names that the client fetches over TCP: a GameObject's
+/// or Camera's shape, and the Sky's textures (asked for without an
+/// extension, as the material list gives them).
+fn files_named(g: &GhostState) -> Vec<String> {
+    match g {
+        GhostState::GameObject(u) | GhostState::Camera(u) => u
+            .shape
+            .as_deref()
+            .map(|s| String::from_utf8_lossy(s).trim().to_string())
+            .filter(|s| !s.is_empty())
+            .into_iter()
+            .collect(),
+        GhostState::Sky(sky) => sky_textures(sky),
+        _ => Vec::new(),
     }
 }
 

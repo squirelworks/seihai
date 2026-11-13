@@ -140,6 +140,9 @@ pub struct StartWindow {
     /// The game server Start logs in to (`--online`). Without it, Start
     /// opens the server list.
     pub online: Option<String>,
+    /// The `--online` server is a Graal3D server (`--graal3d`: a `3 ` server
+    /// picked in the single launcher): open the UDP link beside its login.
+    pub graal3d: bool,
     /// The listserver the server list comes from (`host:port`).
     pub listserver: String,
     /// Set by Start when there is a server: the form, taken before 3.153
@@ -158,6 +161,7 @@ impl StartWindow {
             password,
             status: String::new(),
             online: None,
+            graal3d: false,
             listserver: crate::server_list::default_listserver(version),
             started: Arc::default(),
         }
