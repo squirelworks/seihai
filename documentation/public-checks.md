@@ -230,3 +230,44 @@ Read-only list requests, one per version and port, as before. What each outcome 
 | 2.17 on 14923 | no reply | The new header broke something that worked with `78 9C`; revert it for classic frames. |
 
 The 2.05 row is the first real classic-2.05 data point: the matrix of 2026-10-25 ran the 2.05 profile as a saved gen-5 profile. Until the run, no port is `confirmed` for shape A, and the other classic profiles stay `confirmed` for the older login with the `78 9C` header.
+
+## Ato on the public listserver (2026-11-13)
+
+Issue #400, step 5. Ato's listserver login sent to `listserver.graal.in`
+from a headless lab VM: one read-only list login per run, no retries, a
+made-up account and a dummy password, no game server contacted. The tool is
+`crates/seihai-ato/examples/list_probe.rs`, which sends exactly what Ato's
+Start sends (core `v0.1.5`, `Connection::fetch_server_list`).
+
+| Build | Login sent | Port | Reply |
+|---|---|---|---|
+| 3.04 | `G3D30123`, shape D (gen-5, one frame) | 14922 | within a second: id 4 error "No account exists by that name", no list |
+| 3.04 | same | 14923 | the same error, no list |
+| 4.20r8 | 2.05's list login (id 0 `newmain` only) | 14923 | about 2 s: a list of 4 servers, no status, no error |
+
+3.153 sends the same listserver login as 3.04 (same row token and shape), so
+it would get the same reply. 4.04r2 to 5.x borrow the 2.05 list login
+(`ClientVersion::list_version`), so the 4.20r8 run stands for them.
+
+What is new:
+
+- **The 3.x list login is parsed and the account is checked, on both
+  ports.** A made-up account gets id 4 "No account exists by that name" on
+  14922 and on 14923; no list is sent. So a 3.x server list from the public
+  service needs a real account, which this run did not try. Ato shows the
+  error on its Servers screen.
+- **Ato's 4.x/5.x path gets the public list** through the borrowed 2.05
+  login with no account: four servers (community and test servers, each
+  with a version string and a player count). One entry's host came with a
+  leading dot, which core keeps as received (`protocol/list.rs`).
+
+**With a real account** (the owner's, typed into the double-click mode of
+`list_probe` on their own machine; nothing kept): the same 3.04 login was
+accepted on both ports, and each sent a list of 8 servers, twice the 4 the
+borrowed 2.05 login got. So the 3.x login is a working login on both 14922
+and 14923, and the public service shows a logged-in 3.x client more servers
+than an account-less 2.05-style request.
+
+The 2.05 list login answering on 14923 was already known from earlier runs;
+this run only matches it. 14922 was not tried with that login, and no real
+3.x, 4.x or 5.x client was captured against the public service.
