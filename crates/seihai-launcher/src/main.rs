@@ -231,7 +231,12 @@ fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
         // client that refused the pick (a 6.x join with no password, say)
         // says so there as well as on the console.
         let line = h.line();
-        if run_line(line, h.args()) != ExitCode::SUCCESS {
+        seihai_play::start::take_ended();
+        let code = run_line(line, h.args());
+        // A lost connection in Ato or Issho closes the game with its reason.
+        if let Some(why) = seihai_play::start::take_ended() {
+            error = Some(why);
+        } else if code != ExitCode::SUCCESS {
             error = Some(format!(
                 "{} stopped with an error (the console has the details).",
                 line.name()

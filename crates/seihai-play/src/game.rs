@@ -54,6 +54,8 @@ pub struct Game {
     sheet: Sheet,
     rx: Receiver<Event>,
     pub status: String,
+    /// Why the connection ended, once it has.
+    pub ended: Option<String>,
     last_step: Instant,
     /// The frame needs drawing again.
     dirty: bool,
@@ -266,6 +268,7 @@ impl Game {
             sheet: Sheet::load(resolver)?,
             rx,
             status: "Waiting for the level.".into(),
+            ended: None,
             last_step: Instant::now(),
             dirty: true,
             pose: online::SharedPose::default(),
@@ -664,7 +667,10 @@ impl Game {
                     self.set_pose(false);
                     self.apply_world();
                 }
-                Event::Ended(why) => self.status = why,
+                Event::Ended(why) => {
+                    self.status = why.clone();
+                    self.ended = Some(why);
+                }
             }
             self.dirty = true;
         }
