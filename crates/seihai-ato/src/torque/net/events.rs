@@ -30,6 +30,8 @@ const LENGTH_BITS: u32 = 14;
 #[derive(Debug, Clone, Default)]
 pub struct ClassTable {
     objects: HashMap<u32, String>,
+    /// Datablock classes (protocol 19 only).
+    datablocks: HashMap<u32, String>,
     events: HashMap<u32, String>,
     event_ids: HashMap<String, u32>,
 }
@@ -46,6 +48,8 @@ impl ClassTable {
             } else if e.class_type == event_type {
                 t.event_ids.insert(name.clone(), e.server_id);
                 t.events.insert(e.server_id, name);
+            } else if event_type == 2 && e.class_type == 1 {
+                t.datablocks.insert(e.server_id, name);
             }
         }
         t
@@ -61,6 +65,11 @@ impl ClassTable {
 
     pub fn object_name(&self, id: u32) -> Option<&str> {
         self.objects.get(&id).map(String::as_str)
+    }
+
+    /// A datablock class by its id (protocol 19).
+    pub fn datablock_name(&self, id: u32) -> Option<&str> {
+        self.datablocks.get(&id).map(String::as_str)
     }
 }
 
@@ -102,6 +111,16 @@ pub enum Event {
         message: u32,
         ghost_count: u32,
     },
+    /// One datablock of the mission's datablock phase (protocol 19). The
+    /// datablock's own fields follow and are skipped by the event length.
+    SimDataBlock {
+        /// The datablock's object id (sent as id - 3 in 12 bits).
+        id: u32,
+        /// Its datablock class, in the server's numbering.
+        class_id: u32,
+        index: u32,
+        total: u32,
+    },
     /// A class this client does not read, skipped by its length.
     Other {
         class_id: u32,
@@ -118,6 +137,7 @@ impl Event {
             Event::BigDataStart { .. } => "BigDataStartEvent",
             Event::BigDataChunk { .. } => "BigDataChunkEvent",
             Event::ConnectionMessage { .. } => "ConnectionMessageEvent",
+            Event::SimDataBlock { .. } => "SimDataBlockEvent",
             Event::Other { name, .. } => return name.as_deref(),
         })
     }
@@ -171,6 +191,12 @@ impl Event {
                 sequence: r.u32()?,
                 message: r.int(3)?,
                 ghost_count: r.int(11)?,
+            },
+            Some("SimDataBlockEvent") => Event::SimDataBlock {
+                id: r.int(12)? + 3,
+                class_id: r.int(12)?,
+                index: r.int(12)?,
+                total: r.int(13)?,
             },
             _ => Event::Other {
                 class_id,
@@ -242,6 +268,17 @@ impl Event {
                 w.u32(*sequence);
                 w.int(*message, 3);
                 w.int(*ghost_count, 11);
+            }
+            Event::SimDataBlock {
+                id,
+                class_id,
+                index,
+                total,
+            } => {
+                w.int(id.saturating_sub(3), 12);
+                w.int(*class_id, 12);
+                w.int(*index, 12);
+                w.int(*total, 13);
             }
             Event::Other { .. } => {}
         }

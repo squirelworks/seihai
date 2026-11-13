@@ -65,11 +65,11 @@ pub struct GameObjectUpdate {
     pub flags: Option<u16>,
 }
 
-fn read_vec3(r: &mut BitReader<'_>) -> Result<Vec3, OutOfBits> {
+pub(super) fn read_vec3(r: &mut BitReader<'_>) -> Result<Vec3, OutOfBits> {
     Ok([r.f32()?, r.f32()?, r.f32()?])
 }
 
-fn write_vec3(w: &mut BitWriter, v: Vec3) {
+pub(super) fn write_vec3(w: &mut BitWriter, v: Vec3) {
     for x in v {
         w.f32(x);
     }
@@ -339,11 +339,23 @@ pub struct Ghosts {
     pub ghosts: HashMap<u32, GhostState>,
     pub control: Option<u32>,
     pub camera: Option<u32>,
+    /// Keep every ghost by class name only and skip its update by its
+    /// length (protocol 19, whose stock Torque classes are not read yet).
+    opaque: bool,
 }
 
 impl Ghosts {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A table that reads no update payloads: each ghost is kept as
+    /// [`GhostState::Other`] with its class name (protocol 19).
+    pub fn opaque() -> Self {
+        Ghosts {
+            opaque: true,
+            ..Self::default()
+        }
     }
 
     fn movetype_of(&self, index: u32) -> Option<Vec<u8>> {
@@ -426,7 +438,8 @@ impl Ghosts {
             let end = r.position() + len;
             let created = !self.ghosts.contains_key(&index);
             let name = classes.object_name(class_id);
-            match name {
+            let read_as = if self.opaque { None } else { name };
+            match read_as {
                 Some("GameObject") | Some("Camera") => {
                     let u = GameObjectUpdate::read(r, self.movetype_of(index))?;
                     if name == Some("Camera") {
@@ -467,10 +480,10 @@ impl Ghosts {
                         }
                     }
                 }
-                other => {
+                _ => {
                     self.ghosts
                         .entry(index)
-                        .or_insert_with(|| GhostState::Other(other.map(str::to_owned)));
+                        .or_insert_with(|| GhostState::Other(name.map(str::to_owned)));
                 }
             }
             if r.position() > end {
