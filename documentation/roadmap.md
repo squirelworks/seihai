@@ -67,6 +67,9 @@ Single code path. Versions are profile rows, not branches.
   - [ ] Being hit, health and death, pickups, signs, sitting, ledges.
 - [x] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
 - [ ] GS2 client scripts, clean-room in seihai-core (#447).
+  - [x] The VM in seihai-core, one profile per build (`scripting::gs2::exec::Machine::for_version`).
+  - [x] The client runtime in `seihai-play::scripts`: the server NPCs' scripts start when their level arrives (top level, `onCreated`, `onPlayerEnters`), tick on the 50 ms frame (`onTimeout`, `scheduleevent`, `sleep`, `waitfor`), and run `onPlayerTouchsMe` and `onPlayerChats`. Their effects land through core's `SessionScripts` (NPC image, visibility, place, `message` drawn as a bubble, `setlevel`, player props), and player flags go to the server as `PLI_FLAGSET` / `PLI_FLAGDEL`. Issho turns it on through `Game::set_version`; Ato gets it once it calls that too.
+  - [ ] Weapon scripts, scripts sent after the level (an NPC that comes online later), gmap neighbours' scripts kept across crossings, `player.chat` rewrites, and the rest of the events. A lab run with #441.
 - [x] The 6.00r4 profile row and `resolveHost` (#448).
 
 ## Remaining
