@@ -73,12 +73,23 @@ cargo run --release -p seihai
 
 ## Assets
 
-Seihai ships a small set of its own default art, sounds, two starter levels and a short tutorial (`assets/default/`, compiled into the program through seihai-core, which keeps its own copy of the folder: after `tools/gen_default_assets.py` regenerates it here, copy the change to [seihai-core](https://github.com/squirelworks/seihai-core) too), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline", and you start in the tutorial. "Play the tutorial" in the start window opens it with any Assets folder; the tutorial always uses its own art. See `documentation/tutorial-levels.md`. To use your own files, put them in a folder of your choice and type its path into the Assets box. A file your folder lacks comes from the built-in set, file by file. Your folder may hold:
+Seihai ships a small set of its own default art, sounds, two starter levels and a short tutorial (`assets/default/`, compiled into the program through seihai-core, which keeps its own copy of the folder: after `tools/gen_default_assets.py` regenerates it here, copy the change to [seihai-core](https://github.com/squirelworks/seihai-core) too), so a fresh download opens a level and walks with no data folder at all: leave the Assets box empty and use "Play offline", and you start in the tutorial. "Play the tutorial" in the start window opens it with any Assets folder; the tutorial always uses its own art. See `documentation/tutorial-levels.md`. The built-in player is a squirrel (Seihai's mascot) with an acorn for the money icon; the tiles, hearts and sounds are Seihai's own simple art.
 
-- `levels/` — `.nw`, `.graal`, or `.zelda` levels
-- `bodies/body.png` and `heads/head0.png` — player sprites
-- `tiledefs.txt` or `arrays.dat` — collision data
-- `pics1.png` — a 2048×512 tile sheet
+**Using your Graal files instead.** Point Seihai at a Graal data folder and its files replace the squirrel defaults automatically, file by file: type the folder's path into the Assets box (or pass `--assets`, or put `assets=PATH` in the settings file). Nothing is copied or converted. A Graal install folder (for example "Graal Reborn 2.22.0") already has the right layout; for a hand-made folder, put each file at one of these places:
+
+| Graal file | Where in your folder | Replaces |
+|--|--|--|
+| `pics1.png` | the folder itself | the tile sheet |
+| `body.png` (or `.gif`) | `bodies/` or `levels/bodies/` | the squirrel body and tail |
+| `head0.png` (or `.gif`) | `heads/` or `levels/heads/` | the squirrel head |
+| `sword1.png`, `shield1.png` | `swords/`, `shields/` (or under `levels/`) | the sword and acorn shield |
+| `state.png`, `sprites.png` | the folder itself | the HUD (hearts, acorn) and shadows, splashes, carried objects |
+| `*.gani` | `gani/` or `levels/ganis/` | the animations |
+| `*.wav` | `sounds/` or `levels/sounds/` | the sounds |
+| `arrays.dat` or `tiledefs.txt` | the folder itself | the tile types (walls, water) |
+| `.nw`, `.graal`, `.zelda` levels | `levels/` or the folder itself | the starter levels |
+
+Names are matched without regard to case. A file you have not placed keeps the squirrel default, so a folder with only `pics1.png` gives Graal tiles and the squirrel player. Builds up to 2.05 read player art as `.gif` only: if your folder has a `bodies` or `heads` folder, those builds use only your GIFs there. `--check-assets --assets PATH` lists which files were found where. The tutorial levels always use their own art.
 
 Files a server sends are saved in a per-server cache folder (`~/.config/seihai/cache/<host>_<port>~<name>/`), searched before your folder and before the built-in set. They are never written into your folder or the built-in set. See `documentation/file-cache.md`.
 
