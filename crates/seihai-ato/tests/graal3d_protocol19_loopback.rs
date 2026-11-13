@@ -1,12 +1,12 @@
 //! Ato's protocol 19 game layer (3.153, 4.04r2) against a synthetic
 //! loopback server.
 //!
-//! No real protocol 19 server or client has been traced past the
-//! handshake, so this server is written from the static reads (§10 of
-//! Graal_analysis `torque/udp-session.md`) and the stock Torque mission
-//! download: phase 1 and its ack, the datablocks and `DataBlocksDone`,
+//! No real protocol 19 client has been traced past the handshake, so
+//! this server is written from the static reads (§10 of Graal_analysis
+//! `torque/udp-session.md` and `torque/protocol19-server.md`) and
+//! follows the order of the protocol 19 lab server: phase 1 and its ack, the datablocks and `DataBlocksDone`,
 //! phase 2 with the ghost-always objects, phase 3 (lighting) and its ack,
-//! then the control object. The client must answer every step in order,
+//! then a `Camera` as the control object, whose moves the server takes. The client must answer every step in order,
 //! with 3.153's acks echoing the phase sequence.
 
 #![cfg(not(feature = "era6"))]
@@ -16,7 +16,7 @@ use seihai_ato::torque::net::events::{Arg, ClassTable, Event, Events};
 use seihai_ato::torque::net::handshake::{self, ClassEntry};
 use seihai_ato::torque::net::link::Link;
 use seihai_ato::torque::net::session::{self, Ended, Identity};
-use seihai_ato::torque::net::tge::{self, message, ClientGame19, Control19};
+use seihai_ato::torque::net::tge::{self, message, CameraPacket, ClientGame19, Control19, Move};
 use seihai_ato::torque::GRAAL3D_19;
 use seihai_core::protocol::ClientVersion;
 use std::net::UdpSocket;
@@ -31,13 +31,23 @@ const SEQ: u32 = 0x400;
 type Seen = (Vec<(Vec<u8>, Vec<Arg>)>, Vec<Event>, String);
 const MISSION: i32 = 7;
 
+/// The control camera's packet data.
+const CAMERA: CameraPacket = CameraPacket {
+    position: [10.0, 20.0, 5.0],
+    pitch: 0.0,
+    yaw: 1.5,
+    mode: 2,
+};
+
 /// Object, datablock and event classes, in the server's numbering.
 const CLASSES: &[(u32, u32, &str)] = &[
     (0, 0, "Player"),
     (0, 1, "Item"),
     (0, 2, "Sky"),
+    (0, 3, "Camera"),
     (1, 0, "PlayerData"),
     (1, 1, "ItemData"),
+    (1, 2, "CameraData"),
     (2, 0, "NetStringEvent"),
     (2, 1, "RemoteCommandEvent"),
     (2, 2, "ConnectionMessageEvent"),
@@ -113,6 +123,10 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
     let addr = server.local_addr().unwrap();
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
+    // The window holds the up arrow from the start; it waits for the
+    // control object.
+    let keys = seihai_ato::view3d::SharedInput3d::default();
+    keys.lock().unwrap().forward = 1;
     let client = std::thread::spawn(move || {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let who = Identity {
@@ -128,7 +142,10 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
             GRAAL3D_19,
             &who,
             &flag,
-            session::Shared::default(),
+            session::Shared {
+                input: Some(&keys),
+                ..Default::default()
+            },
             &mut out,
             SEQ,
         );
@@ -171,8 +188,10 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
     let mut messages = Vec::new();
     let mut stage = 0;
     let mut control_sent = false;
-    let mut moves_seen = Vec::new();
-    while !control_sent {
+    let mut moves_seen: Vec<(u32, Vec<Move>)> = Vec::new();
+    let mut move_ack = 0u32;
+    let mut after_control = 0;
+    while after_control < 6 {
         assert!(Instant::now() < deadline, "stuck at stage {stage}");
         let Ok((n, _)) = server.recv_from(&mut buf) else {
             continue;
@@ -187,8 +206,13 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
             events.notify(*note);
         }
         let Some(mut data) = got.data else { continue };
-        let (game, moves) = ClientGame19::read(&mut data.body).unwrap();
-        moves_seen.push((game.first_move, moves));
+        let game = ClientGame19::read(&mut data.body).unwrap().unwrap();
+        if !game.moves.is_empty() {
+            assert_eq!(game.control, Some(3), "moves only for the control object");
+            // Take them all: the ack is the index after the last one.
+            move_ack = game.first_move + game.moves.len() as u32;
+        }
+        moves_seen.push((game.first_move, game.moves));
         for ev in events.read(&mut data.body, &classes).unwrap() {
             if let Some(c) = events.command(&ev) {
                 commands.push((c.name.clone(), c.args.clone()));
@@ -204,6 +228,9 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
         };
         let mut ghosts = Vec::new();
         let mut control = Control19::Unchanged;
+        if control_sent {
+            after_control += 1;
+        }
         match stage {
             0 => {
                 command(0, "MissionStartPhase1", &mut events);
@@ -232,7 +259,7 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
                     message: message::GHOST_ALWAYS_STARTING,
                     ghost_count: 3,
                 });
-                ghosts = vec![(0, 2, 40), (1, 0, 300), (2, 1, 17)];
+                ghosts = vec![(0, 2, 40), (1, 0, 300), (2, 1, 17), (3, 3, 60)];
                 events.send(Event::ConnectionMessage {
                     sequence: MISSION as u32,
                     message: message::GHOST_ALWAYS_DONE,
@@ -245,22 +272,20 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
                 stage = 4;
             }
             4 if has(b"MissionStartPhase3Ack") => {
-                // Player ghost 1 becomes the control object. Its packet
-                // data would follow; this client stops there.
+                // Camera ghost 3 becomes the control object.
                 control = Control19::Object {
                     server_time: 5000,
-                    index: 1,
+                    index: 3,
                 };
                 control_sent = true;
+                stage = 5;
             }
             _ => {}
         }
         let mut w = link.data(None, None).unwrap();
-        tge::write_server_game(&mut w, 0, control);
-        if !control_sent {
-            events.write(&mut w, link.last_sent(), &classes, 3200);
-            write_ghosts(&mut w, &ghosts);
-        }
+        tge::write_server_game(&mut w, move_ack, control, Some(&CAMERA));
+        events.write(&mut w, link.last_sent(), &classes, 3200);
+        write_ghosts(&mut w, &ghosts);
         server.send_to(w.bytes(), peer).unwrap();
     }
     // Let the client take the control object, then stop it.
@@ -268,9 +293,25 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
     stop.store(true, Ordering::Relaxed);
     let (ended, log) = client.join().unwrap();
     assert_eq!(ended, Ok(Ended::Stopped), "{log}");
+    // No moves before the control object; then walking moves (y = 32),
+    // numbered on from the server's ack, the first numbered 0.
+    let first_with = moves_seen
+        .iter()
+        .position(|(_, m)| !m.is_empty())
+        .unwrap_or_else(|| panic!("no moves: {moves_seen:?}\n{log}"));
+    assert!(moves_seen[..first_with].iter().all(|(f, _)| *f == 0));
+    assert_eq!(moves_seen[first_with].0, 0, "{moves_seen:?}");
+    let mut expect = 0;
+    for (first, moves) in &moves_seen[first_with..] {
+        assert!(*first <= expect, "{moves_seen:?}");
+        expect = first + moves.len() as u32;
+        for m in moves {
+            assert_eq!((m.x, m.y, m.z, m.yaw), (16, 32, 16, None), "a walk forward");
+        }
+    }
     assert!(
-        moves_seen.iter().all(|&(first, n)| first == 0 && n == 0),
-        "no moves: {moves_seen:?}"
+        log.contains("3d: control object is ghost 3 Camera"),
+        "{log}"
     );
     (commands, messages, log)
 }
@@ -305,11 +346,11 @@ fn a_3153_client_runs_the_mission_start_and_echoes_the_phase_sequence() {
         "{log}"
     );
     for line in [
-        "3d: Connection established (9 classes)",
+        "3d: Connection established (11 classes)",
         "3d: MissionStartPhase1: Phase 1: Download Datablocks & Targets",
         "3d: datablock 1/2: PlayerData id 33",
         "3d: datablock 2/2: ItemData id 34",
-        "3d: connection message 6 (sequence 7), answered 7",
+        "3d: connection message 5 (sequence 7), answered 6",
         "3d: MissionStartPhase2: Phase 2: Download Ghost Objects",
         "3d: ghost 0 Sky",
         "3d: ghost 1 Player",
@@ -317,7 +358,8 @@ fn a_3153_client_runs_the_mission_start_and_echoes_the_phase_sequence() {
         "3d: connection message 0 (sequence 7), answered 1",
         "3d: MissionStartPhase3: Phase 3: Mission Lighting",
         "3d: Mission lighting done (2 datablocks)",
-        "3d: control object is ghost 1 Player",
+        "3d: ghost 3 Camera",
+        "3d: control object is ghost 3 Camera",
     ] {
         assert!(
             log.lines().any(|l| l == line),
@@ -341,7 +383,7 @@ fn a_404r2_client_acks_the_phases_bare() {
     );
     assert!(commands.iter().all(|(_, args)| args.is_empty()), "{log}");
     assert!(
-        log.contains("3d: control object is ghost 1 Player"),
+        log.contains("3d: control object is ghost 3 Camera"),
         "{log}"
     );
 }
