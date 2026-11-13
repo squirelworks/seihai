@@ -1,0 +1,78 @@
+Determining the server to start... success! (command line)
+[02:09 AM] :: ------------------------------ START ------------------------------
+[02:09 AM] :: Preagonal GS2Emu version 4.0.0-beta (2026-11-13 16:19)
+[02:09 AM] :: Programmed by Joey, Nalin, Codr, and Cadavre.
+[02:09 AM] 
+[02:09 AM] :: Starting server: modern.
+[02:09 AM]      (command line): /home/graalrunner/lab465/w/servers/modern
+[02:09 AM] :: Loading server configuration.
+[02:09 AM]      Loading settings...
+[02:09 AM]        Server generation: modern
+[02:09 AM]      Loading admin settings.
+[02:09 AM]      Loading allowed client versions.
+[02:09 AM]      Folder config: ENABLED
+[02:09 AM]      Loading file system...
+[02:09 AM]        adding heads/ [*] to head
+[02:09 AM]        adding bodies/ [*.png] to body
+[02:09 AM]        adding swords/ [*] to sword
+[02:09 AM]        adding shields/ [*] to shield
+[02:09 AM]        adding ganis/ [*.gani] to file
+[02:09 AM]        adding hats/ [*.png] to file
+[02:09 AM]        adding images/ [*.png] to file
+[02:09 AM]        adding images/ [*.gif] to file
+[02:09 AM]        adding images/ [*.mng] to file
+[02:09 AM]        adding sounds/ [*.mid] to file
+[02:09 AM]        adding sounds/ [*.mp3] to file
+[02:09 AM]        adding sounds/ [*.wav] to file
+[02:09 AM]        adding / [*.gani] to file
+[02:09 AM]        adding / [*.gif] to file
+[02:09 AM]        adding / [*.mng] to file
+[02:09 AM]        adding / [*.png] to file
+[02:09 AM]        adding / [*.mid] to file
+[02:09 AM]        adding / [*.mp3] to file
+[02:09 AM]        adding / [*.wav] to file
+[02:09 AM]        adding / [*.txt] to file
+[02:09 AM]        adding / [*.gmap] to file
+[02:09 AM]        adding / [*.graal] to level
+[02:09 AM]        adding / [*.nw] to level
+[02:09 AM]        adding / [*.gmap] to level
+[02:09 AM]        adding levels/ [*.gmap] to file
+[02:09 AM]        adding levels/ [*.nw] to level
+[02:09 AM]        adding levels/ [*.graal] to level
+[02:09 AM]        adding levels/ [*.gmap] to level
+[02:09 AM]        adding global/ [*] to file
+[02:09 AM]        adding global/heads/ [*] to head
+[02:09 AM]        adding global/bodies/ [*.png] to body
+[02:09 AM]        adding global/swords/ [*] to sword
+[02:09 AM]        adding global/shields/ [*] to shield
+[02:09 AM]        adding gpaks/ [*.gpak] to file
+[02:09 AM]        adding gpaks/ [*.gpake] to file
+[02:09 AM]      Loading config/servermessage.html.
+[02:09 AM]      Loading config/ipbans.txt.
+[02:09 AM]      Loading translations: modern style.
+[02:09 AM]      Loading word filter.
+[02:09 AM]      Loading serverflags.txt.
+[02:09 AM]      Loading guilds...
+[02:09 AM]        Example
+[02:09 AM]      Loading maps...
+[02:09 AM] :: Secure login (SEI00001): loaded key config/seihai-login.key
+[02:09 AM]      Public key: A/ZqinBYCQdeai0Glgzb+ycWGoGE2JaLcu8AzMVtw2E
+[02:09 AM]      Fingerprint: SHA256:cwboURDnONfNOmxLSMhuOHPSMCUDJHwSIfZCvji1Lvg
+[02:09 AM] :: Loading server objects.
+[02:09 AM]      Loading weapons...
+[02:09 AM]        -gr_movement (0.186735 ms)
+[02:09 AM]        (Completed in 0.225628 ms)
+[02:09 AM]      Pre-loading map levels.
+[02:09 AM]        (Completed in 0.000184 ms)
+[02:09 AM] :: Initializing player listen socket.
+[02:09 AM]      Listening on: 127.0.0.1:14805.
+[02:09 AM] :: Started server modern (Lab Modern)
+[02:11 AM] :: New login: lab465a [New Client (2.22+)] [G3D17026 (4.042)]
+[02:11 AM] :: [Login] Localhost mode: accepting 'lab465a' without listserver verification.
+[02:12 AM] :: Client disconnected: [3] lab465a
+[02:12 AM] :: New login: lab465a [New Client (2.22+)] [G3D17026 (4.042)]
+[02:12 AM] :: [Login] Localhost mode: accepting 'lab465a' without listserver verification.
+[02:12 AM] :: Client disconnected: [3] lab465a
+[02:12 AM] :: New login: lab465b [New Client (2.22+)] [G3D20126 (4.208)]
+[02:12 AM] :: [Login] Localhost mode: accepting 'lab465b' without listserver verification.
+[02:13 AM] :: Client disconnected: [3] lab465b
