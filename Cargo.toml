@@ -13,13 +13,10 @@ license = "MIT OR Apache-2.0"
 # this repo and add a `[patch."https://github.com/squirelworks/seihai-core"]`
 # entry pointing at it in your local .cargo/config.toml.
 [workspace.dependencies]
-# Pinned by rev to seihai-core main at the merge of #40 (0.0.29: the client session
-# shares the player's counters and the chat) until v0.0.29 is tagged; then
-# this goes back to `tag = "v0.0.29"`.
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "823233165ee8e9c8ebafaa6cbe57140b2a464146", default-features = false }
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.0.29", default-features = false }
 # The drawing shared with tools: tiles, sprites and gani frames into an
 # RGBA buffer. From the same seihai-core tag.
-seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "823233165ee8e9c8ebafaa6cbe57140b2a464146" }
+seihai-draw = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.0.29" }
 
 # Release builds ship one program (`seihai`), so it is built small: no
 # debug symbols, and link-time optimisation across all the crates.
