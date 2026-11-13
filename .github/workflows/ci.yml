@@ -29,9 +29,10 @@ jobs:
       - name: No line-ending conversion
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+      # ALSA for audio; libxkbcommon-x11 for the start-window smoke on Xvfb.
       - name: ALSA development files (Linux audio)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config libxkbcommon-x11-0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
