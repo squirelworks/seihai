@@ -158,7 +158,7 @@ Each stretch of consecutive versions with the same state is one line. The state
 is whether the build's profile handles the id (`plo` for server packets, `pli`
 for client packets: `protocol/profile.rs`) and which layout rows apply. The
 `profiles:` lines are the steps where the id enters or leaves those sets. The `chain:` lines are the rows
-of the version chain (`documentation/version-chain.tsv`) whose `plo` or `pli`
+of the version chain (seihai-core `documentation/version-chain.tsv`) whose `plo` or `pli`
 change names the id, so the two can be compared by eye.
 
 A handled id with no layout row is printed as such. The viewer does not guess a
