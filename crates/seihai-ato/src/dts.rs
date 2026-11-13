@@ -185,7 +185,7 @@ fn primitive(
             }
         }
         _ => {
-            for t in el.chunks_exact(3) {
+            for t in el.as_chunks::<3>().0 {
                 out.push(([t[0], t[1], t[2]], material));
             }
         }
@@ -194,7 +194,7 @@ fn primitive(
 }
 
 fn vec3s(f: Vec<f32>) -> Vec<[f32; 3]> {
-    f.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect()
+    f.as_chunks::<3>().0.to_vec()
 }
 
 /// One mesh's data, its own or (for a mesh with a parent) its parent's.
@@ -450,7 +450,7 @@ pub fn read_with_info(data: &[u8]) -> Result<(Model, Info), Error> {
     p.skip32(1 + 1 + 3 + 6, "bounds")?;
     p.guard("bounds")?;
     let node_words = p.i32s(5 * nodes, "nodes")?;
-    let parents: Vec<i32> = node_words.chunks_exact(5).map(|n| n[1]).collect();
+    let parents: Vec<i32> = node_words.as_chunks::<5>().0.iter().map(|n| n[1]).collect();
     p.guard("nodes")?;
     let object_words = p.i32s(6 * objects, "objects")?;
     p.guard("objects")?;
@@ -516,7 +516,9 @@ pub fn read_with_info(data: &[u8]) -> Result<(Model, Info), Error> {
 
     // The first detail level that is not a billboard.
     let detail = detail_words
-        .chunks_exact(7)
+        .as_chunks::<7>()
+        .0
+        .iter()
         .find(|d| d[1] >= 0)
         .map(|d| (d[1] as usize, d[2]));
     let mut model = Model::default();
