@@ -1,0 +1,361 @@
+[2026-11-13 22:14:07] > Login Packet from 127.0.0.1 (58 bytes)
+[2026-11-13 22:14:07] %‚G3D14097&labato*****************************************
+[2026-11-13 22:14:07] 25 82 47 33 44 31 34 30 39 37 26 6c 61 62 61 74 6f xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [25] PLO_SIGNATURE (2 bytes)
+[2026-11-13 22:14:08] 9i
+[2026-11-13 22:14:08] 39 69 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [168] PLO_ONLINEMODE (1 bytes)
+[2026-11-13 22:14:08] È
+[2026-11-13 22:14:08] c8 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [190] PLO_SERVERLISTCONNECTED (1 bytes)
+[2026-11-13 22:14:08] Þ
+[2026-11-13 22:14:08] de 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [194] PLO_RESETCLIENT (1 bytes)
+[2026-11-13 22:14:08] â
+[2026-11-13 22:14:08] e2 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [179] PLO_RPGWINDOW (86 bytes)
+[2026-11-13 22:14:08] Ó"Welcome to Lab 3D.","Preagonal GS2Emu programmed by Joey, Nalin, Codr, and Cadavre."
+[2026-11-13 22:14:08] d3 22 57 65 6c 63 6f 6d 65 20 74 6f 20 4c 61 62 20 33 44 2e 22 2c 22 50 72 65 61 67 6f 6e 61 6c 20 47 53 32 45 6d 75 20 70 72 6f 67 72 61 6d 6d 65 64 20 62 79 20 4a 6f 65 79 2c 20 4e 61 6c 69 6e 2c 20 43 6f 64 72 2c 20 61 6e 64 20 43 61 64 61 76 72 65 2e 22 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [41] PLO_STARTMESSAGE (1047 bytes)
+[2026-11-13 22:14:08] I<!-- Modified by the Seihai project, 2026-10-31: see CHANGES-SEIHAI.md. --> <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN"> <html> <head> <title>My Server</title> <style type="text/css"> p.welcome { padding: 0px 10px 0px 10px; margin-top: 10px; font-weight: bold; font-size: x-large; } #entry { margin: 10px; border: 1px solid black; } p.date { margin-top: 10px; margin-bottom: 0px; margin-left: 10px; color: blue; font-weight: bold; } #changes { margin-top: 0px; margin-bottom: 10px; } </style> </head> <body bgcolor="#146c20"> <div style="background-color: #ffffef; height: 100%; margin-bottom: 1em; padding: 0px 0px 0px 0px; border: darkred outset 3px;"> 	<p class="welcome">Welcome to <span style="color: red;">my server!</span></p>  <!-- This is an HTML comment --> <!-- Copy this block of text to add another change entry --> 	<div id="entry"> 		<p class="date">01/01/01</p> 		<ul id="changes"> 			<li>I installed my server!</li> 		</ul> 	</div> <!-- Copy this block of text to add another change entry -->  </div> </body> </html>
+[2026-11-13 22:14:08] 49 3c 21 2d 2d 20 4d 6f 64 69 66 69 65 64 20 62 79 20 74 68 65 20 53 65 69 68 61 69 20 70 72 6f 6a 65 63 74 2c 20 32 30 32 36 2d 31 30 2d 33 31 3a 20 73 65 65 20 43 48 41 4e 47 45 53 2d 53 45 49 48 41 49 2e 6d 64 2e 20 2d 2d 3e 20 3c 21 44 4f 43 54 59 50 45 20 48 54 4d 4c 20 50 55 42 4c 49 43 20 22 2d 2f 2f 57 33 43 2f 2f 44 54 44 20 48 54 4d 4c 20 34 2e 30 31 20 53 74 72 69 63 74 2f 2f 45 4e 22 3e 20 3c 68 74 6d 6c 3e 20 3c 68 65 61 64 3e 20 3c 74 69 74 6c 65 3e 4d 79 20 53 65 72 76 65 72 3c 2f 74 69 74 6c 65 3e 20 3c 73 74 79 6c 65 20 74 79 70 65 3d 22 74 65 78 74 2f 63 73 73 22 3e 20 70 2e 77 65 6c 63 6f 6d 65 20 7b 20 70 61 64 64 69 6e 67 3a 20 30 70 78 20 31 30 70 78 20 30 70 78 20 31 30 70 78 3b 20 6d 61 72 67 69 6e 2d 74 6f 70 3a 20 31 30 70 78 3b 20 66 6f 6e 74 2d 77 65 69 67 68 74 3a 20 62 6f 6c 64 3b 20 66 6f 6e 74 2d 73 69 7a 65 3a 20 78 2d 6c 61 72 67 65 3b 20 7d 20 23 65 6e 74 72 79 20 7b 20 6d 61 72 67 69 6e 3a 20 31 30 70 78 3b 20 62 6f 72 64 65 72 3a 20 31 70 78 20 73 6f 6c 69 64 20 62 6c 61 63 6b 3b 20 7d 20 70 2e 64 61 74 65 20 7b 20 6d 61 72 67 69 6e 2d 74 6f 70 3a 20 31 30 70 78 3b 20 6d 61 72 67 69 6e 2d 62 6f 74 74 6f 6d 3a 20 30 70 78 3b 20 6d 61 72 67 69 6e 2d 6c 65 66 74 3a 20 31 30 70 78 3b 20 63 6f 6c 6f 72 3a 20 62 6c 75 65 3b 20 66 6f 6e 74 2d 77 65 69 67 68 74 3a 20 62 6f 6c 64 3b 20 7d 20 23 63 68 61 6e 67 65 73 20 7b 20 6d 61 72 67 69 6e 2d 74 6f 70 3a 20 30 70 78 3b 20 6d 61 72 67 69 6e 2d 62 6f 74 74 6f 6d 3a 20 31 30 70 78 3b 20 7d 20 3c 2f 73 74 79 6c 65 3e 20 3c 2f 68 65 61 64 3e 20 3c 62 6f 64 79 20 62 67 63 6f 6c 6f 72 3d 22 23 31 34 36 63 32 30 22 3e 20 3c 64 69 76 20 73 74 79 6c 65 3d 22 62 61 63 6b 67 72 6f 75 6e 64 2d 63 6f 6c 6f 72 3a 20 23 66 66 66 66 65 66 3b 20 68 65 69 67 68 74 3a 20 31 30 30 25 3b 20 6d 61 72 67 69 6e 2d 62 6f 74 74 6f 6d 3a 20 31 65 6d 3b 20 70 61 64 64 69 6e 67 3a 20 30 70 78 20 30 70 78 20 30 70 78 20 30 70 78 3b 20 62 6f 72 64 65 72 3a 20 64 61 72 6b 72 65 64 20 6f 75 74 73 65 74 20 33 70 78 3b 22 3e 20 09 3c 70 20 63 6c 61 73 73 3d 22 77 65 6c 63 6f 6d 65 22 3e 57 65 6c 63 6f 6d 65 20 74 6f 20 3c 73 70 61 6e 20 73 74 79 6c 65 3d 22 63 6f 6c 6f 72 3a 20 72 65 64 3b 22 3e 6d 79 20 73 65 72 76 65 72 21 3c 2f 73 70 61 6e 3e 3c 2f 70 3e 20 20 3c 21 2d 2d 20 54 68 69 73 20 69 73 20 61 6e 20 48 54 4d 4c 20 63 6f 6d 6d 65 6e 74 20 2d 2d 3e 20 3c 21 2d 2d 20 43 6f 70 79 20 74 68 69 73 20 62 6c 6f 63 6b 20 6f 66 20 74 65 78 74 20 74 6f 20 61 64 64 20 61 6e 6f 74 68 65 72 20 63 68 61 6e 67 65 20 65 6e 74 72 79 20 2d 2d 3e 20 09 3c 64 69 76 20 69 64 3d 22 65 6e 74 72 79 22 3e 20 09 09 3c 70 20 63 6c 61 73 73 3d 22 64 61 74 65 22 3e 30 31 2f 30 31 2f 30 31 3c 2f 70 3e 20 09 09 3c 75 6c 20 69 64 3d 22 63 68 61 6e 67 65 73 22 3e 20 09 09 09 3c 6c 69 3e 49 20 69 6e 73 74 61 6c 6c 65 64 20 6d 79 20 73 65 72 76 65 72 21 3c 2f 6c 69 3e 20 09 09 3c 2f 75 6c 3e 20 09 3c 2f 64 69 76 3e 20 3c 21 2d 2d 20 43 6f 70 79 20 74 68 69 73 20 62 6c 6f 63 6b 20 6f 66 20 74 65 78 74 20 74 6f 20 61 64 64 20 61 6e 6f 74 68 65 72 20 63 68 61 6e 67 65 20 65 6e 74 72 79 20 2d 2d 3e 20 20 3c 2f 64 69 76 3e 20 3c 2f 62 6f 64 79 3e 20 3c 2f 68 74 6d 6c 3e 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [82] PLO_SERVERTEXT (1 bytes)
+[2026-11-13 22:14:08] r
+[2026-11-13 22:14:08] 72 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [47] PLO_STAFFGUILDS (133 bytes)
+[2026-11-13 22:14:08] OServer,Manager,Owner,Admin,FAQ,LAT,NAT,GAT,GP,GP Chief,Bugs Admin,NPC Admin,Gani Team,GFX Admin,Events Team,Events Admin,Guild Admin
+[2026-11-13 22:14:08] 4f 53 65 72 76 65 72 2c 4d 61 6e 61 67 65 72 2c 4f 77 6e 65 72 2c 41 64 6d 69 6e 2c 46 41 51 2c 4c 41 54 2c 4e 41 54 2c 47 41 54 2c 47 50 2c 47 50 20 43 68 69 65 66 2c 42 75 67 73 20 41 64 6d 69 6e 2c 4e 50 43 20 41 64 6d 69 6e 2c 47 61 6e 69 20 54 65 61 6d 2c 47 46 58 20 41 64 6d 69 6e 2c 45 76 65 6e 74 73 20 54 65 61 6d 2c 45 76 65 6e 74 73 20 41 64 6d 69 6e 2c 47 75 69 6c 64 20 41 64 6d 69 6e 
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [180] PLO_STATUSLIST (58 bytes)
+[2026-11-13 22:14:08] ÔOnline,Away,DND,Eating,Hiding,No PMs,RPing,Sparring,PKing
+[2026-11-13 22:14:08] d4 4f 6e 6c 69 6e 65 2c 41 77 61 79 2c 44 4e 44 2c 45 61 74 69 6e 67 2c 48 69 64 69 6e 67 2c 4e 6f 20 50 4d 73 2c 52 50 69 6e 67 2c 53 70 61 72 72 69 6e 67 2c 50 4b 69 6e 67 
+
+[2026-11-13 22:14:08] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::FULLHEARTS: value: 3 | 23
+  PlayerProp::HALFHEARTS: value: 6 | 26
+  PlayerProp::GRALATS: value: 0 | 20 20 20
+  PlayerProp::ARROWS: value: 10 | 2a
+  PlayerProp::BOMBS: value: 5 | 25
+  PlayerProp::GLOVEPOWER: value: 1 | 21
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+  PlayerProp::HEADIMAGE: head: head0.png | 8d 68 65 61 64 30 2e 70 6e 67
+  PlayerProp::COLORS: values: [2, 0, 10, 4, 18] | 22 20 2a 24 32
+  PlayerProp::SPRITE: sprite: 0, direction: 2 | 22
+  PlayerProp::STATUS: value: 20 | 34
+  PlayerProp::HORSEIMAGE: value: (empty) | 20
+  PlayerProp::HORSEBUSHES: value: 0 | 20
+  PlayerProp::EFFECTCOLORS: values: [0] | 20
+  PlayerProp::APCOUNTER: value: 60 | 20 5c
+  PlayerProp::MAGICPOINTS: value: 0 | 20
+  PlayerProp::ALIGNMENT: value: 50 | 52
+  PlayerProp::ACCOUNTNAME: value: labato | 26 6c 61 62 61 74 6f
+  PlayerProp::BODYIMAGE: value: body.png | 28 62 6f 64 79 2e 70 6e 67
+  PlayerProp::RATING: rating: 1500.00, deviation: 350.00 | 4e 92 7e
+  PlayerProp::GATTRIB1: value: (empty) | 20
+  PlayerProp::GATTRIB2: value: (empty) | 20
+  PlayerProp::GATTRIB3: value: (empty) | 20
+  PlayerProp::GATTRIB4: value: (empty) | 20
+  PlayerProp::GATTRIB5: value: (empty) | 20
+  PlayerProp::Z: tile: 0.00 (pixel: 0) | 52
+  PlayerProp::GATTRIB6: value: (empty) | 20
+  PlayerProp::GATTRIB7: value: (empty) | 20
+  PlayerProp::GATTRIB8: value: (empty) | 20
+  PlayerProp::GATTRIB9: value: (empty) | 20
+  PlayerProp::GATTRIB10: value: (empty) | 20
+  PlayerProp::GATTRIB11: value: (empty) | 20
+  PlayerProp::GATTRIB12: value: (empty) | 20
+  PlayerProp::GATTRIB13: value: (empty) | 20
+  PlayerProp::GATTRIB14: value: (empty) | 20
+  PlayerProp::GATTRIB15: value: (empty) | 20
+  PlayerProp::GATTRIB16: value: (empty) | 20
+  PlayerProp::GATTRIB17: value: (empty) | 20
+  PlayerProp::GATTRIB18: value: (empty) | 20
+  PlayerProp::GATTRIB19: value: (empty) | 20
+  PlayerProp::GATTRIB20: value: (empty) | 20
+  PlayerProp::GATTRIB21: value: (empty) | 20
+  PlayerProp::GATTRIB22: value: (empty) | 20
+  PlayerProp::GATTRIB23: value: (empty) | 20
+  PlayerProp::GATTRIB24: value: (empty) | 20
+  PlayerProp::GATTRIB25: value: (empty) | 20
+  PlayerProp::GATTRIB26: value: (empty) | 20
+  PlayerProp::GATTRIB27: value: (empty) | 20
+  PlayerProp::GATTRIB28: value: (empty) | 20
+  PlayerProp::GATTRIB29: value: (empty) | 20
+  PlayerProp::GATTRIB30: value: (empty) | 20
+  PlayerProp::X2: pixel: 480 (tile: 30.00) | 27 60
+  PlayerProp::Y2: pixel: 488 (tile: 30.50) | 27 70
+  PlayerProp::Z2: pixel: 0 (tile: 0.00) | 20 20
+  PlayerProp::COMMUNITYNAME: value: labato | 26 6c 61 62 61 74 6f
+
+[2026-11-13 22:14:08] < Out Packet to labato [ID 3]: [9] PLO_PLAYERPROPS (183 bytes)
+[2026-11-13 22:14:08] )!#"&#   $*%%&!(?*sword1.png)++shield1.png*$idle+head0.png-" *$21"245 6 7 9 \: @RB&labatoC(body.pngDN’~E F G H I MRN O P Q V W X Y Z [ \ ] ^ _ ` a b c d e f g h i j n'`o'pp  r&labato
+[2026-11-13 22:14:08] 29 21 23 22 26 23 20 20 20 24 2a 25 25 26 21 28 3f 2a 73 77 6f 72 64 31 2e 70 6e 67 29 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67 2a 24 69 64 6c 65 2b 8d 68 65 61 64 30 2e 70 6e 67 2d 22 20 2a 24 32 31 22 32 34 35 20 36 20 37 20 39 20 5c 3a 20 40 52 42 26 6c 61 62 61 74 6f 43 28 62 6f 64 79 2e 70 6e 67 44 4e 92 7e 45 20 46 20 47 20 48 20 49 20 4d 52 4e 20 4f 20 50 20 51 20 56 20 57 20 58 20 59 20 5a 20 5b 20 5c 20 5d 20 5e 20 5f 20 60 20 61 20 62 20 63 20 64 20 65 20 66 20 67 20 68 20 69 20 6a 20 6e 27 60 6f 27 70 70 20 20 72 26 6c 61 62 61 74 6f 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [34] PLO_NPCWEAPONDEL (5 bytes)
+[2026-11-13 22:14:09] BBomb
+[2026-11-13 22:14:09] 42 42 6f 6d 62 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [34] PLO_NPCWEAPONDEL (4 bytes)
+[2026-11-13 22:14:09] BBow
+[2026-11-13 22:14:09] 42 42 6f 77 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [43] PLO_DEFAULTWEAPON (2 bytes)
+[2026-11-13 22:14:09] K(
+[2026-11-13 22:14:09] 4b 28 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [43] PLO_DEFAULTWEAPON (2 bytes)
+[2026-11-13 22:14:09] K'
+[2026-11-13 22:14:09] 4b 27 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [33] PLO_NPCWEAPONADD (26 bytes)
+[2026-11-13 22:14:09] A,-gr_movement *wbomb1.png
+[2026-11-13 22:14:09] 41 2c 2d 67 72 5f 6d 6f 76 65 6d 65 6e 74 20 2a 77 62 6f 6d 62 31 2e 70 6e 67 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [33] PLO_NPCWEAPONADD (21 bytes)
+[2026-11-13 22:14:09] A'-g3dgui *wbomb1.png
+[2026-11-13 22:14:09] 41 27 2d 67 33 64 67 75 69 20 2a 77 62 6f 6d 62 31 2e 70 6e 67 
+
+[2026-11-13 22:14:09] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: default | 27 64 65 66 61 75 6c 74
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+  PlayerProp::HEADIMAGE: head: head0.png | 8d 68 65 61 64 30 2e 70 6e 67
+  PlayerProp::MESSAGE: value: (empty) | 20
+  PlayerProp::COLORS: values: [2, 0, 10, 4, 18] | 22 20 2a 24 32
+  PlayerProp::X: tile: 30.00 (pixel: 480) | 5c
+  PlayerProp::Y: tile: 30.50 (pixel: 488) | 5d
+  PlayerProp::SPRITE: sprite: 0, direction: 2 | 22
+  PlayerProp::STATUS: value: 20 | 34
+  PlayerProp::CARRYSPRITE: value: 255 | 1f
+  PlayerProp::LEVEL: value: onlinestartlocal.nw | 33 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77
+  PlayerProp::HORSEIMAGE: value: (empty) | 20
+  PlayerProp::CARRYNPCID: value: 0 | 20 20 20
+  PlayerProp::IPADDR: value: 16777343 | 20 28 20 20 9f
+  PlayerProp::UDPPORT: value: 0 | 20 20 20
+  PlayerProp::ALIGNMENT: value: 50 | 52
+  PlayerProp::ACCOUNTNAME: value: labato | 26 6c 61 62 61 74 6f
+  PlayerProp::BODYIMAGE: value: body.png | 28 62 6f 64 79 2e 70 6e 67
+  PlayerProp::RATING: rating: 1500.00, deviation: 350.00 | 4e 92 7e
+  PlayerProp::GATTRIB1: value: (empty) | 20
+  PlayerProp::GATTRIB2: value: (empty) | 20
+  PlayerProp::GATTRIB3: value: (empty) | 20
+  PlayerProp::GATTRIB4: value: (empty) | 20
+  PlayerProp::GATTRIB5: value: (empty) | 20
+  PlayerProp::GMAPLEVELX: value: 0 | 20
+  PlayerProp::GMAPLEVELY: value: 0 | 20
+  PlayerProp::Z: tile: 0.00 (pixel: 0) | 52
+  PlayerProp::GATTRIB6: value: (empty) | 20
+  PlayerProp::GATTRIB7: value: (empty) | 20
+  PlayerProp::GATTRIB8: value: (empty) | 20
+  PlayerProp::GATTRIB9: value: (empty) | 20
+  PlayerProp::PLAYERLISTSTATUS: value: 0 | 20
+  PlayerProp::GATTRIB10: value: (empty) | 20
+  PlayerProp::GATTRIB11: value: (empty) | 20
+  PlayerProp::GATTRIB12: value: (empty) | 20
+  PlayerProp::GATTRIB13: value: (empty) | 20
+  PlayerProp::GATTRIB14: value: (empty) | 20
+  PlayerProp::GATTRIB15: value: (empty) | 20
+  PlayerProp::GATTRIB16: value: (empty) | 20
+  PlayerProp::GATTRIB17: value: (empty) | 20
+  PlayerProp::GATTRIB18: value: (empty) | 20
+  PlayerProp::GATTRIB19: value: (empty) | 20
+  PlayerProp::GATTRIB20: value: (empty) | 20
+  PlayerProp::GATTRIB21: value: (empty) | 20
+  PlayerProp::GATTRIB22: value: (empty) | 20
+  PlayerProp::GATTRIB23: value: (empty) | 20
+  PlayerProp::GATTRIB24: value: (empty) | 20
+  PlayerProp::GATTRIB25: value: (empty) | 20
+  PlayerProp::GATTRIB26: value: (empty) | 20
+  PlayerProp::GATTRIB27: value: (empty) | 20
+  PlayerProp::GATTRIB28: value: (empty) | 20
+  PlayerProp::GATTRIB29: value: (empty) | 20
+  PlayerProp::GATTRIB30: value: (empty) | 20
+  PlayerProp::X2: pixel: 480 (tile: 30.00) | 27 60
+  PlayerProp::Y2: pixel: 488 (tile: 30.50) | 27 70
+  PlayerProp::Z2: pixel: 0 (tile: 0.00) | 20 20
+  PlayerProp::COMMUNITYNAME: value: labato | 26 6c 61 62 61 74 6f
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [14] PLO_PLAYERWARP (22 bytes)
+[2026-11-13 22:14:09] .\]onlinestartlocal.nw
+[2026-11-13 22:14:09] 2e 5c 5d 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [6] PLO_LEVELNAME (20 bytes)
+[2026-11-13 22:14:09] &onlinestartlocal.nw
+[2026-11-13 22:14:09] 26 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [0] PLO_LEVELBOARD (1 bytes)
+[2026-11-13 22:14:09]  
+[2026-11-13 22:14:09] 20 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [101 RAW] PLO_BOARDPACKET (8193 bytes)
+[2026-11-13 22:14:09] 85 c0 00 c1 00 0b 00 0c 00 0d 00 0e 00 00 00 01 00 18 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 1f 00 ff 07 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 ff 07 00 00 01 00 28 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 ff 07 ff 07 b8 0f b9 0f ff 07 ff 07 ff 07 00 00 01 00 ff 07 78 00 79 00 7a 00 d0 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 19 00 1a 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 1f 00 ff 07 28 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 11 0d 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 00 00 01 00 10 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 ff 07 ff 07 c8 0f c9 0f 7e 0e 7f 0e 02 00 03 00 02 00 03 00 ff 07 89 00 8a 00 e0 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 29 00 2a 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 ff 07 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 ff 07 68 00 69 00 6a 00 6b 00 c0 00 c1 00 0b 00 0c 00 c2 00 c3 00 c0 00 c1 00 0b 00 0c 00 0d 00 0e 00 ff 07 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 00 00 01 00 ff 07 ff 07 8e 0e 8f 0e 12 00 13 00 12 00 13 00 ff 07 ff 07 9a 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 39 00 3a 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 10 00 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 ff 07 78 00 79 00 7a 00 d0 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 1f 00 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 e6 00 e7 00 10 00 00 00 01 00 02 00 03 00 a5 02 a6 02 ff 01 ec 00 ed 00 11 0d 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 49 00 4a 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 ff 07 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 02 00 03 00 89 00 8a 00 e0 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 68 00 69 00 6a 00 6b 00 6c 00 6d 00 6e 00 6f 00 f6 00 f7 00 e7 00 ff 07 ff 07 12 00 13 00 b5 02 b6 02 ec 00 fc 00 fd 00 ff 07 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 59 00 5a 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 ff 07 68 00 69 00 6a 00 6b 00 6c 00 6d 00 6e 00 6f 00 12 00 13 00 ff 07 9a 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 78 00 79 00 7a 00 7b 00 7c 00 7d 00 7e 00 7f 00 a6 00 a7 00 f7 00 a9 00 a9 00 a9 00 a9 00 a9 00 a9 00 fc 00 ac 00 ad 00 ff 07 68 00 69 00 6a 00 6b 00 c0 00 c1 00 0b 00 0c 00 c2 00 0c 00 c2 00 c3 00 6c 00 6d 00 6e 00 6f 00 ff 07 78 00 79 00 7a 00 7b 00 7c 00 7d 00 7e 00 7f 00 02 00 03 00 a5 02 a6 02 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 11 0d 89 00 8a 00 8b 00 8c 00 8d 00 8e 00 ff 07 b6 00 b7 00 b8 00 b9 00 ba 00 b9 00 ba 00 b9 00 ba 00 bb 00 bc 00 bd 00 ff 07 78 00 79 00 7a 00 d0 00 19 00 1a 00 1b 00 1c 00 1d 00 1c 00 1d 00 1e 00 d1 00 7d 00 7e 00 7f 00 ff 07 11 0d 89 00 8a 00 8b 00 8c 00 8d 00 8e 00 ff 07 12 00 13 00 b5 02 b6 02 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 7e 0e 7f 0e 9a 00 9b 00 9c 00 9d 00 02 00 03 00 11 0d c7 00 c8 00 c9 00 ca 00 c9 00 ca 00 c9 00 ca 00 cb 00 cc 00 00 00 01 00 ff 07 89 00 8a 00 e0 00 29 00 2a 00 2b 00 2c 00 2d 00 2c 00 2d 00 2e 00 e1 00 8d 00 8e 00 a5 02 a6 02 02 00 03 00 9a 00 9b 00 9c 00 9d 00 ff 07 02 00 03 00 10 00 00 00 01 00 68 00 69 00 6a 00 6b 00 c0 00 c1 00 0b 00 0c 00 c2 00 c3 00 6c 00 6d 00 6e 00 6f 00 8e 0e 8f 0e ff 07 ff 07 02 00 03 00 12 00 13 00 ff 07 d7 00 d8 00 d9 00 da 00 d9 00 da 00 d9 00 da 00 db 00 dc 00 ff 07 22 00 23 00 ff 07 9a 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3c 00 3d 00 3e 00 3f 00 9d 00 ff 07 b5 02 b6 02 12 00 13 00 7e 0e 7f 0e ff 07 ff 07 ff 07 12 00 13 00 00 00 01 00 ff 07 78 00 79 00 7a 00 d0 00 19 00 1a 00 1b 00 1c 00 1d 00 1e 00 d1 00 7d 00 7e 00 7f 00 00 00 01 00 ff 07 ff 07 12 00 13 00 02 00 03 00 00 00 01 00 e8 00 e9 00 ea 00 e9 00 ea 00 e9 00 ea 00 eb 00 02 00 03 00 32 00 33 00 7e 0e 7f 0e 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4c 00 4d 00 4e 00 4f 00 b8 0f b9 0f ff 07 ff 07 ff 07 ff 07 8e 0e 8f 0e ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 02 00 03 00 89 00 8a 00 e0 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 e1 00 8d 00 8e 00 20 0d 21 0d ff 07 ff 07 ff 07 a5 02 a6 02 12 00 13 00 02 00 03 00 f8 00 f9 00 fa 00 f9 00 fa 00 f9 00 fa 00 fb 00 12 00 13 00 02 00 03 00 8e 0e 8f 0e 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5c 00 5d 00 5e 00 5f 00 c8 0f c9 0f ff 07 ff 07 ff 07 00 00 01 00 10 00 ff 07 ff 07 10 00 00 00 01 00 ff 07 ff 07 12 00 13 00 ff 07 9a 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 9d 00 11 0d 30 0d 31 0d ff 07 ff 07 ff 07 b5 02 b6 02 ff 07 ff 07 12 00 13 00 ff 07 ff 07 00 00 01 00 02 00 03 00 02 00 03 00 a5 02 a6 02 12 00 13 00 00 00 01 00 68 00 69 00 6a 00 6b 00 6c 00 6d 00 6c 00 6d 00 6e 00 6f 00 11 0d 00 00 01 00 ff 07 ff 07 ff 07 10 00 ff 07 10 00 10 00 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 b8 0f b9 0f 48 00 49 00 4a 00 4b 00 4c 00 4d 00 4e 00 4f 00 11 0d ff 07 ff 07 10 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 12 00 13 00 12 00 13 00 b5 02 b6 02 ff 07 00 00 01 00 ff 07 78 00 79 00 7a 00 7b 00 7c 00 7d 00 7c 00 7d 00 7e 00 7f 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 04 00 05 00 06 00 07 00 ff 07 10 00 00 00 01 00 ff 07 c8 0f c9 0f 58 00 59 00 5a 00 5b 00 5c 00 5d 00 5e 00 5f 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 22 00 23 00 00 00 01 00 22 00 23 00 22 00 23 00 ff 07 ff 07 00 00 01 00 02 00 03 00 02 00 03 00 00 00 01 00 ff 07 ff 07 ff 07 11 0d 89 00 8a 00 8b 00 8c 00 8d 00 8c 00 8d 00 8e 00 02 00 03 00 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 10 00 14 00 15 00 16 00 17 00 10 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 68 00 69 00 6a 00 6b 00 6c 00 6d 00 6e 00 6f 00 02 00 03 00 ff 07 00 00 01 00 ff 07 32 00 33 00 22 00 23 00 32 00 33 00 32 00 33 00 ff 07 ff 07 ff 07 ff 07 12 00 13 00 12 00 13 00 ff 07 ff 07 ff 07 ff 07 ff 07 02 00 03 00 9a 00 9b 00 9c 00 9d 00 9c 00 9d 00 ff 07 12 00 13 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 10 00 24 00 25 00 26 00 27 00 10 00 10 00 ff 07 ff 07 ff 07 10 00 ff 07 78 00 79 00 7a 00 7b 00 7c 00 7d 00 7e 00 7f 00 12 00 13 00 ff 07 ff 07 ff 07 ff 07 22 00 23 00 32 00 33 00 ff 07 00 00 01 00 ff 07 22 00 23 00 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 12 00 13 00 02 00 03 00 02 00 03 00 02 00 03 00 02 00 03 00 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 10 00 34 00 35 00 36 00 37 00 10 00 ff 07 ff 07 ff 07 00 00 01 00 02 00 03 00 89 00 8a 00 8b 00 8c 00 8d 00 8e 00 02 00 03 00 00 00 01 00 ff 07 ff 07 ff 07 32 00 33 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 32 00 33 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 12 00 13 00 12 00 13 00 12 00 13 00 12 00 13 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 10 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 12 00 13 00 ff 07 9a 00 9b 00 9c 00 9d 00 ff 07 12 00 13 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 11 0d a5 02 a6 02 02 00 03 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 b8 0f b9 0f ff 07 ff 07 ff 07 a9 02 aa 02 ff 07 00 00 01 00 ff 07 ff 07 ff 07 b5 02 b6 02 12 00 13 00 ff 07 ff 07 10 00 ff 07 00 00 01 00 ff 07 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 c8 0f c9 0f ff 07 ff 07 ff 07 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 11 00 60 00 11 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 11 00 60 00 11 00 ff 07 ff 07 b7 02 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 8b 03 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 70 00 21 00 11 00 10 00 ff 07 00 00 01 00 ff 07 ff 07 00 00 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 11 00 21 00 70 00 21 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 11 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 11 00 21 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 20 00 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a9 02 aa 02 20 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 b8 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 11 00 b9 02 ba 02 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b9 02 ba 02 11 00 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 00 00 01 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 00 00 01 00 ff 07 30 00 31 00 ff 07 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 8b 03 ff 07 b7 02 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 00 00 01 00 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 00 00 01 00 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b8 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 b8 02 ff 07 30 00 31 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 30 00 31 00 00 00 01 00 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 b7 02 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 00 00 01 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 00 00 01 00 ff 07 8b 03 ff 07 ff 07 30 00 31 00 ff 07 00 00 01 00 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 00 00 01 00 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 a7 02 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 00 00 01 00 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 00 00 01 00 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 b7 02 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 b7 02 ff 07 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 30 00 31 00 00 00 01 00 b7 02 ff 07 8b 03 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 00 00 01 00 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 b7 02 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 00 00 01 00 ff 07 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 ff 07 00 00 01 00 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 00 00 01 00 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 b8 02 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 00 00 01 00 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 a7 02 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 b8 02 ff 07 8b 03 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 00 00 01 00 ff 07 30 00 31 00 8b 03 ff 07 30 00 31 00 ff 07 ff 07 00 00 01 00 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b8 02 ff 07 00 00 01 00 30 00 31 00 ff 07 b8 02 00 00 01 00 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 11 00 ff 07 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 b8 02 30 00 31 00 ff 07 30 00 31 00 00 00 01 00 ff 07 b7 02 30 00 31 00 ff 07 30 00 31 00 b7 02 ff 07 00 00 01 00 30 00 31 00 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 11 00 ff 07 ff 07 ff 07 00 00 01 00 10 00 00 00 01 00 ff 07 ff 07 a9 02 aa 02 20 00 00 00 01 00 ff 07 b7 02 ff 07 30 00 31 00 30 00 31 00 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 30 00 31 00 ff 07 ff 07 ff 07 ff 07 30 00 31 00 ff 07 ff 07 30 00 31 00 30 00 31 00 30 00 31 00 30 00 31 00 ff 07 ff 07 20 00 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b9 02 ba 02 11 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 11 00 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 21 00 11 00 ff 07 ff 07 ff 07 a7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 b7 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 11 00 21 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 11 00 60 00 11 00 ff 07 ff 07 8b 03 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 b8 02 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 8b 03 ff 07 ff 07 00 00 01 00 11 00 60 00 11 00 21 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 21 00 70 00 21 00 01 00 ff 07 ff 07 ff 07 b8 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 8b 03 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 21 00 70 00 21 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 a9 02 aa 02 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 00 00 01 00 ff 07 ff 07 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 00 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 11 0d 11 0d ff 07 ff 07 ff 07 ff 07 ff 07 4a 01 4b 01 00 00 01 00 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 02 00 03 00 ff 07 00 00 01 00 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 c8 02 c9 02 ca 02 ab 02 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 20 0d 21 0d 11 0d ff 07 ff 07 ff 07 5a 01 5b 01 4a 01 4b 01 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 10 00 ff 07 12 00 13 00 02 00 03 00 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 a9 02 aa 02 d8 02 d9 02 da 02 bb 02 a9 02 aa 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 30 0d 31 0d 4a 01 4b 01 ff 07 ff 07 ff 07 ff 07 5a 01 5b 01 ff 07 ff 07 b6 01 c5 01 d7 01 ff 01 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 ff 07 00 00 01 00 11 0d 12 00 13 00 02 00 03 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b9 02 ba 02 d8 02 d9 02 da 02 bb 02 b9 02 ba 02 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 01 ff 07 00 00 01 00 11 0d ff 07 5a 01 5b 01 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 e4 01 8e 01 e7 01 d7 01 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 02 00 03 00 b8 0f b9 0f ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 02 00 03 00 12 00 13 00 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 e8 02 e9 02 ea 02 cb 02 ff 07 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 11 0d ff 07 ff 07 b6 01 c4 01 c5 01 c5 01 c5 01 c6 01 f5 01 8e 01 bb 01 00 00 01 00 ff 07 ff 07 02 00 03 00 12 00 13 00 c8 0f c9 0f ff 07 ff 07 c4 01 d7 01 ff 07 ff 07 12 00 13 00 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b8 0f b9 0f ff 07 ff 07 ff 07 a9 02 aa 02 ff 07 ff 07 ff 07 02 00 03 00 ff 07 ff 07 ff 07 02 00 03 00 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 b6 01 c6 01 8e 01 8e 01 8e 01 f5 01 f4 01 8e 01 b7 01 c7 01 ff 07 00 00 01 00 ff 07 12 00 13 00 ff 07 7e 0e 7f 0e ff 07 ff 07 ff 07 f5 01 e7 01 c4 01 d7 01 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 c8 0f c9 0f ff 07 ff 07 ff 07 b9 02 ba 02 ff 07 ff 07 ff 07 12 00 13 00 ff 07 00 00 01 00 12 00 13 00 ff 07 ff 07 ff 07 ff 07 ff 07 b6 01 c4 01 c5 01 d7 01 ff 07 e4 01 8e 01 f5 01 f5 01 f4 01 8e 01 b7 01 f6 01 c7 01 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 8e 0e 8f 0e ff 07 b6 01 c6 01 8e 01 8e 01 8e 01 e7 01 c4 01 c5 01 c4 01 c5 01 d7 01 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 ff 07 00 00 01 00 ff 07 ff 07 00 00 01 00 ff 07 00 00 01 00 7e 0e 7f 0e ff 07 ff 07 ff 07 b6 01 c4 01 c5 01 c6 01 f5 01 8e 01 e7 01 d7 01 a6 01 96 01 8e 01 8e 01 b7 01 f6 01 c7 01 ff 07 b6 01 c4 01 c5 01 c4 01 c5 01 c4 01 d7 01 ff 07 ff 07 ff 07 00 00 01 00 d4 01 f5 01 fa 01 8e 01 8e 01 8e 01 8e 01 f5 01 8e 01 f5 01 e7 01 c4 01 d7 01 00 00 01 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 8e 0e 8f 0e ff 07 ff 07 b6 01 c6 01 8e 01 8e 01 8e 01 8e 01 8e 01 f4 01 bb 01 ff 01 a6 01 f6 01 f7 01 c7 01 ff 01 b6 01 c4 01 c6 01 8e 01 8e 01 f4 01 f5 01 8e 01 e7 01 c5 01 d7 01 ff 07 ff 07 ff 07 e4 01 8e 01 42 01 42 01 42 01 42 01 fa 01 8e 01 8e 01 8e 01 8e 01 f4 01 e7 01 c4 01 c5 01 d7 01 ff 07 ff 07 ff 07 ff 07 b6 01 c4 01 c5 01 c4 01 c5 01 d7 01 ff 07 ff 07 ff 07 ff 07 ff 07 ff 07 00 00 01 00 ff 07 e4 01 f5 01 8e 01 8e 01 c8 01 42 01 fa 01 8e 01 bb 01 ff 07 10 00 ff 07 b6 01 c4 01 c5 01 c6 01 8e 01 8e 01 8e 01 f5 01 8e 01 8e 01 8e 01 8e 01 8e 01 bb 01 ff 07 10 00 b6 01 c6 01 8e 01 43 01 44 01 42 01 42 01 42 01 fa 01 8e 01 8e 01 f5 01 8e 01 8e 01 8e 01 8e 01 e7 01 d7 01 b6 01 c4 01 c5 01 c6 01 8e 01 f5 01 8e 01 8e 01 e7 01 c4 01 d7 01 ff 07 ff 07 10 00 ff 07 ff 07 ff 07 ff 07 e4 01 8e 01 f5 01 8e 01 42 01 42 01 42 01 8e 01 e7 01 c5 01 c4 01 c5 01 c6 01 8e 01 8e 01 8e 01 8e 01 8e 01 8e 01 8e 01 8e 01 c8 01 42 01 fa 01 8e 01 e7 01 c4 01 c5 01 c6 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 43 01 44 01 42 01 fa 01 8e 01 8e 01 8e 01 f5 01 8e 01 e7 01 c6 01 8e 01 8e 01 f4 01 8e 01 8e 01 8e 01 8e 01 8e 01 8e 01 e7 01 d7 01 ff 07 ff 07 ff 07 b6 01 c4 01 c5 01 c6 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 8e 01 8e 01 8e 01 8e 01 f5 01 8e 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 8e 01 f5 01 8e 01 8e 01 f4 01 8e 01 42 01 d5 01 d6 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 fa 01 8e 01 8e 01 8e 01 8e 01 f5 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 fa 01 f5 01 8e 01 bb 01 ff 07 b6 01 c4 01 c6 01 8e 01 8e 01 8e 01 8e 01 c8 01 42 01 42 01 43 01 44 01 fa 01 8e 01 f5 01 8e 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 fa 01 8e 01 8e 01 8e 01 8e 01 c8 01 42 01 e5 01 e6 01 42 01 52 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 fa 01 f5 01 bb 01 b6 01 c6 01 f4 01 8e 01 f5 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 52 01 42 01 42 01 43 01 44 01 42 01 42 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 52 01 42 01 42 01 42 01 42 01 42 01 43 01 44 01 42 01 42 01 42 01 42 01 42 01 52 01 42 01 42 01 8e 01 e7 01 c6 01 f5 01 8e 01 c8 01 42 01 42 01 52 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 52 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 fa 01 c8 01 42 01 43 01 44 01 42 01 43 01 44 01 42 01 42 01 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 42 01 42 01 42 01 fa 01 8e 01 8e 01 8e 01 c8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 d5 01 42 01 42 01 42 01 42 01 42 01 42 01 43 01 44 01 42 01 42 01 42 01 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 42 01 42 01 1c 0e 3c 0e 1d 0e 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 d5 01 d6 01 42 01 42 01 e5 01 42 01 42 01 42 01 52 01 42 01 42 01 1c 0e 3c 0e 3c 0e 3c 0e 1d 0e 42 01 42 01 42 01 42 01 52 01 42 01 42 01 43 01 44 01 42 01 d5 01 d6 01 42 01 42 01 43 01 44 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 52 01 e5 01 e6 01 42 01 42 01 1c 0e 3c 0e 3c 0e 3c 0e 42 01 42 01 42 01 43 01 44 01 d5 01 d6 01 42 01 42 01 52 01 42 01 d5 01 d6 01 e5 01 e6 01 42 01 42 01 52 01 42 01 d5 01 d6 01 42 01 42 01 1c 0e 3c 0e 3c 0e 3c 0e 3c 0e 3c 0e 3c 0e 1d 0e 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 43 01 44 01 42 01 42 01 42 01 42 01 42 01 52 01 1c 0e 3c 0e 3c 0e 3c 0e 3c 0e 3c 0e 1d 0e 42 01 42 01 42 01 42 01 e5 01 e6 01 42 01 42 01 42 01 42 01 e5 01 e6 01 43 01 44 01 42 01 42 01 42 01 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [4] PLO_LEVELCHEST (6 bytes)
+[2026-11-13 22:14:09] $ 48  
+[2026-11-13 22:14:09] 24 20 34 38 20 20 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [4] PLO_LEVELCHEST (6 bytes)
+[2026-11-13 22:14:09] $ 8A8 
+[2026-11-13 22:14:09] 24 20 38 41 38 20 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [4] PLO_LEVELCHEST (6 bytes)
+[2026-11-13 22:14:09] $ /@+ 
+[2026-11-13 22:14:09] 24 20 2f 40 2b 20 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [39] PLO_LEVELMODTIME (6 bytes)
+[2026-11-13 22:14:09] G&wru\
+[2026-11-13 22:14:09] 47 26 77 72 75 5c 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [6] PLO_LEVELNAME (20 bytes)
+[2026-11-13 22:14:09] &onlinestartlocal.nw
+[2026-11-13 22:14:09] 26 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [10] PLO_ISLEADER (1 bytes)
+[2026-11-13 22:14:09] *
+[2026-11-13 22:14:09] 2a 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [174] PLO_GHOSTICON (2 bytes)
+[2026-11-13 22:14:09] Î 
+[2026-11-13 22:14:09] ce 20 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [10] PLO_ISLEADER (1 bytes)
+[2026-11-13 22:14:09] *
+[2026-11-13 22:14:09] 2a 
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [156] PLO_SETACTIVELEVEL (20 bytes)
+[2026-11-13 22:14:09] ¼onlinestartlocal.nw
+[2026-11-13 22:14:09] bc 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77 
+
+[2026-11-13 22:14:09] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: default | 27 64 65 66 61 75 6c 74
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+  PlayerProp::HEADIMAGE: head: head0.png | 8d 68 65 61 64 30 2e 70 6e 67
+  PlayerProp::MESSAGE: value: (empty) | 20
+  PlayerProp::COLORS: values: [2, 0, 10, 4, 18] | 22 20 2a 24 32
+  PlayerProp::X: tile: 30.00 (pixel: 480) | 5c
+  PlayerProp::Y: tile: 30.50 (pixel: 488) | 5d
+  PlayerProp::SPRITE: sprite: 0, direction: 2 | 22
+  PlayerProp::STATUS: value: 20 | 34
+  PlayerProp::CARRYSPRITE: value: 255 | 1f
+  PlayerProp::LEVEL: value: onlinestartlocal.nw | 33 6f 6e 6c 69 6e 65 73 74 61 72 74 6c 6f 63 61 6c 2e 6e 77
+  PlayerProp::HORSEIMAGE: value: (empty) | 20
+  PlayerProp::CARRYNPCID: value: 0 | 20 20 20
+  PlayerProp::IPADDR: value: 16777343 | 20 28 20 20 9f
+  PlayerProp::UDPPORT: value: 0 | 20 20 20
+  PlayerProp::ALIGNMENT: value: 50 | 52
+  PlayerProp::ACCOUNTNAME: value: labato | 26 6c 61 62 61 74 6f
+  PlayerProp::BODYIMAGE: value: body.png | 28 62 6f 64 79 2e 70 6e 67
+  PlayerProp::RATING: rating: 1500.00, deviation: 350.00 | 4e 92 7e
+  PlayerProp::GATTRIB1: value: (empty) | 20
+  PlayerProp::GATTRIB2: value: (empty) | 20
+  PlayerProp::GATTRIB3: value: (empty) | 20
+  PlayerProp::GATTRIB4: value: (empty) | 20
+  PlayerProp::GATTRIB5: value: (empty) | 20
+  PlayerProp::GMAPLEVELX: value: 0 | 20
+  PlayerProp::GMAPLEVELY: value: 0 | 20
+  PlayerProp::Z: tile: 0.00 (pixel: 0) | 52
+  PlayerProp::GATTRIB6: value: (empty) | 20
+  PlayerProp::GATTRIB7: value: (empty) | 20
+  PlayerProp::GATTRIB8: value: (empty) | 20
+  PlayerProp::GATTRIB9: value: (empty) | 20
+  PlayerProp::PLAYERLISTSTATUS: value: 0 | 20
+  PlayerProp::GATTRIB10: value: (empty) | 20
+  PlayerProp::GATTRIB11: value: (empty) | 20
+  PlayerProp::GATTRIB12: value: (empty) | 20
+  PlayerProp::GATTRIB13: value: (empty) | 20
+  PlayerProp::GATTRIB14: value: (empty) | 20
+  PlayerProp::GATTRIB15: value: (empty) | 20
+  PlayerProp::GATTRIB16: value: (empty) | 20
+  PlayerProp::GATTRIB17: value: (empty) | 20
+  PlayerProp::GATTRIB18: value: (empty) | 20
+  PlayerProp::GATTRIB19: value: (empty) | 20
+  PlayerProp::GATTRIB20: value: (empty) | 20
+  PlayerProp::GATTRIB21: value: (empty) | 20
+  PlayerProp::GATTRIB22: value: (empty) | 20
+  PlayerProp::GATTRIB23: value: (empty) | 20
+  PlayerProp::GATTRIB24: value: (empty) | 20
+  PlayerProp::GATTRIB25: value: (empty) | 20
+  PlayerProp::GATTRIB26: value: (empty) | 20
+  PlayerProp::GATTRIB27: value: (empty) | 20
+  PlayerProp::GATTRIB28: value: (empty) | 20
+  PlayerProp::GATTRIB29: value: (empty) | 20
+  PlayerProp::GATTRIB30: value: (empty) | 20
+  PlayerProp::X2: pixel: 480 (tile: 30.00) | 27 60
+  PlayerProp::Y2: pixel: 488 (tile: 30.50) | 27 70
+  PlayerProp::Z2: pixel: 0 (tile: 0.00) | 20 20
+  PlayerProp::COMMUNITYNAME: value: labato | 26 6c 61 62 61 74 6f
+
+[2026-11-13 22:14:09] < Out Packet to labato [ID 3]: [9] PLO_PLAYERPROPS (3 bytes)
+[2026-11-13 22:14:09] )MR
+[2026-11-13 22:14:09] 29 4d 52 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [42] PLO_NEWWORLDTIME (5 bytes)
+[2026-11-13 22:14:10] Jmjw
+[2026-11-13 22:14:10] 4a 6d 6a 7f 77 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [37] PLI_LANGUAGE (8 bytes)
+[2026-11-13 22:14:10] EEnglish
+[2026-11-13 22:14:10] 45 45 6e 67 6c 69 73 68 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [46] PLI_ENTERLEVEL (2 bytes)
+[2026-11-13 22:14:10] N!
+[2026-11-13 22:14:10] 4e 21 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (11 bytes)
+[2026-11-13 22:14:10] 7ground.3ds
+[2026-11-13 22:14:10] 37 67 72 6f 75 6e 64 2e 33 64 73 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (449 bytes)
+[2026-11-13 22:14:10] 86 26 77 75 3b 8a 2a 67 72 6f 75 6e 64 2e 33 64 73 4d 4d b0 01 00 00 02 00 0a 00 00 00 03 00 00 00 3d 3d a0 01 00 00 3e 3d 0a 00 00 00 03 00 00 00 ff af 43 00 00 00 00 a0 10 00 00 00 47 72 6f 75 6e 64 4d 61 74 00 10 a0 0f 00 00 00 11 00 09 00 00 00 0f 28 0f 20 a0 0f 00 00 00 11 00 09 00 00 00 3c a0 3c 30 a0 0f 00 00 00 11 00 09 00 00 00 ff ff ff 00 01 0a 00 00 00 00 00 80 3f 00 40 43 01 00 00 47 72 6f 75 6e 64 00 00 41 36 01 00 00 10 41 68 00 00 00 08 00 00 00 a0 c1 00 00 a0 c1 00 00 80 be 00 00 a0 41 00 00 a0 c1 00 00 80 be 00 00 a0 41 00 00 a0 41 00 00 80 be 00 00 a0 c1 00 00 a0 41 00 00 80 be 00 00 a0 c1 00 00 a0 c1 00 00 80 3e 00 00 a0 41 00 00 a0 c1 00 00 80 3e 00 00 a0 41 00 00 a0 41 00 00 80 3e 00 00 a0 c1 00 00 a0 41 00 00 80 3e 20 41 92 00 00 00 0c 00 00 00 02 00 01 00 07 00 00 00 03 00 02 00 07 00 04 00 05 00 06 00 07 00 04 00 06 00 07 00 07 00 00 00 01 00 05 00 07 00 00 00 05 00 04 00 07 00 01 00 02 00 06 00 07 00 01 00 06 00 05 00 07 00 02 00 03 00 07 00 07 00 02 00 07 00 06 00 07 00 03 00 00 00 04 00 07 00 03 00 04 00 07 00 07 00 30 41 2a 00 00 00 47 72 6f 75 6e 64 4d 61 74 00 0c 00 00 00 01 00 02 00 03 00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 0b 00 60 41 36 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (12 bytes)
+[2026-11-13 22:14:10] 7labcube.3ds
+[2026-11-13 22:14:10] 37 6c 61 62 63 75 62 65 2e 33 64 73 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (444 bytes)
+[2026-11-13 22:14:10] 86 26 77 72 75 70 2b 6c 61 62 63 75 62 65 2e 33 64 73 4d 4d aa 01 00 00 02 00 0a 00 00 00 03 00 00 00 3d 3d 9a 01 00 00 3e 3d 0a 00 00 00 03 00 00 00 ff af 41 00 00 00 00 a0 0e 00 00 00 43 75 62 65 4d 61 74 00 10 a0 0f 00 00 00 11 00 09 00 00 00 3c 3c 3c 20 a0 0f 00 00 00 11 00 09 00 00 00 c8 78 28 30 a0 0f 00 00 00 11 00 09 00 00 00 ff ff ff 00 01 0a 00 00 00 00 00 80 3f 00 40 3f 01 00 00 43 75 62 65 00 00 41 34 01 00 00 10 41 68 00 00 00 08 00 00 00 00 bf 00 00 00 bf 00 00 00 bf 00 00 00 3f 00 00 00 bf 00 00 00 bf 00 00 00 3f 00 00 00 3f 00 00 00 bf 00 00 00 bf 00 00 00 3f 00 00 00 bf 00 00 00 bf 00 00 00 bf 00 00 00 3f 00 00 00 3f 00 00 00 bf 00 00 00 3f 00 00 00 3f 00 00 00 3f 00 00 00 3f 00 00 00 bf 00 00 00 3f 00 00 00 3f 20 41 90 00 00 00 0c 00 00 00 02 00 01 00 07 00 00 00 03 00 02 00 07 00 04 00 05 00 06 00 07 00 04 00 06 00 07 00 07 00 00 00 01 00 05 00 07 00 00 00 05 00 04 00 07 00 01 00 02 00 06 00 07 00 01 00 06 00 05 00 07 00 02 00 03 00 07 00 07 00 02 00 07 00 06 00 07 00 03 00 00 00 04 00 07 00 03 00 04 00 07 00 07 00 30 41 28 00 00 00 43 75 62 65 4d 61 74 00 0c 00 00 00 01 00 02 00 03 00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 0b 00 60 41 36 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3f 00 00 00 00 00 00 00 00 00 00 00 00 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (7 bytes)
+[2026-11-13 22:14:10] 7sky_fr
+[2026-11-13 22:14:10] 37 73 6b 79 5f 66 72 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (193 bytes)
+[2026-11-13 22:14:10] 86 26 77 75 42 61 26 73 6b 79 5f 66 72 89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 40 00 00 00 40 08 02 00 00 00 25 0b e6 89 00 00 00 7b 49 44 41 54 78 9c ed cf 51 09 00 20 14 c0 c0 d7 3f 80 71 cc 64 04 43 f8 71 08 83 05 b8 cd da e7 eb 86 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 78 ec 02 d0 db 42 1d 44 d3 74 d5 00 00 00 00 49 45 4e 44 ae 42 60 82 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (7 bytes)
+[2026-11-13 22:14:10] 7sky_rt
+[2026-11-13 22:14:10] 37 73 6b 79 5f 72 74 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (193 bytes)
+[2026-11-13 22:14:10] 86 26 77 75 42 61 26 73 6b 79 5f 72 74 89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 40 00 00 00 40 08 02 00 00 00 25 0b e6 89 00 00 00 7b 49 44 41 54 78 9c ed cf 51 09 00 20 14 c0 c0 d7 3f 80 71 cc 64 04 43 f8 71 08 83 05 b8 cd da e7 eb 86 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 78 ec 02 d0 db 42 1d 44 d3 74 d5 00 00 00 00 49 45 4e 44 ae 42 60 82 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (7 bytes)
+[2026-11-13 22:14:10] 7sky_bk
+[2026-11-13 22:14:10] 37 73 6b 79 5f 62 6b 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (193 bytes)
+[2026-11-13 22:14:10] 86 26 77 75 42 61 26 73 6b 79 5f 62 6b 89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 40 00 00 00 40 08 02 00 00 00 25 0b e6 89 00 00 00 7b 49 44 41 54 78 9c ed cf 51 09 00 20 14 c0 c0 d7 3f 80 71 cc 64 04 43 f8 71 08 83 05 b8 cd da e7 eb 86 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 78 ec 02 d0 db 42 1d 44 d3 74 d5 00 00 00 00 49 45 4e 44 ae 42 60 82 
+
+[2026-11-13 22:14:10] > In Packet from labato [ID 3]: [23] PLI_WANTFILE (7 bytes)
+[2026-11-13 22:14:10] 7sky_lf
+[2026-11-13 22:14:10] 37 73 6b 79 5f 6c 66 
+
+[2026-11-13 22:14:10] < Out Packet to labato [ID 3]: [102 RAW] PLO_FILE (193 bytes)
+[2026-11-13 22:14:10] 86 26 77 75 42 61 26 73 6b 79 5f 6c 66 89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 40 00 00 00 40 08 02 00 00 00 25 0b e6 89 00 00 00 7b 49 44 41 54 78 9c ed cf 51 09 00 20 14 c0 c0 d7 3f 80 71 cc 64 04 43 f8 71 08 83 05 b8 cd da e7 eb 86 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 68 40 0b 1a d0 82 06 b4 a0 01 2d 78 ec 02 d0 db 42 1d 44 d3 74 d5 00 00 00 00 49 45 4e 44 ae 42 60 82 
+

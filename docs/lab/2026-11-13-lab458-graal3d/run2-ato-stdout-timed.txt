@@ -1,0 +1,92 @@
+   0.234 3d: opening the Graal3D link beside 127.0.0.1:14830
+   0.293 logged in at 127.0.0.1:14830 as labato (5.12)
+   0.754 3d: Connection established (19 classes)
+   0.755 level onlinestartlocal.nw: from the server's board, start (30, 30.5), 0 NPCs (0 from the server, 0 in the file)
+   0.766 board: 4096 tiles, 227 distinct [0, 1, 2, 3, 4, 5, 6, 7, ...], 0 links, 3 chests, 0 signs
+   0.766   chest at (20, 24): greenrupee, sign 0
+   0.766   chest at (24, 33): spinattack, sign 0
+   0.766   chest at (15, 32): fullheart, sign 0
+   0.766 player props: 56
+   0.766   1 MAXPOWER: 23 = 3
+   0.766   2 CURPOWER: 26 = 6
+   0.766   3 RUPEESCOUNT: 202020
+   0.766   4 ARROWSCOUNT: 2a = 10
+   0.766   5 BOMBSCOUNT: 25 = 5
+   0.766   6 GLOVEPOWER: 21 = 1
+   0.766   8 SWORDPOWER: 3f2a73776f7264312e706e67
+   0.766   9 SHIELDPOWER: 2b2b736869656c64312e706e67
+   0.766   10 GANI: 2469646c65 "idle"
+   0.766   11 HEADGIF: 8d68656164302e706e67
+   0.766   13 COLORS: 22202a2432
+   0.766   17 SPRITE: 22 = 2
+   0.766   18 STATUS: 34 = 20
+   0.766   21 HORSEGIF: 20 = 0
+   0.766   22 HORSEBUSHES: 20 = 0
+   0.766   23 EFFECTCOLORS: 20 = 0
+   0.766   25 APCOUNTER: 209e
+   0.766   26 MAGICPOINTS: 20 = 0
+   0.766   32 ALIGNMENT: 53 = 51
+   0.766   34 ACCOUNTNAME: 266c616261746f "labato"
+   0.766   35 BODYIMG: 28626f64792e706e67 "body.png"
+   0.766   36 RATING: 4e927e
+   0.766   37 ?: 20 = 0
+   0.766   38 ?: 20 = 0
+   0.766   39 ?: 20 = 0
+   0.766   40 ?: 20 = 0
+   0.766   41 ?: 20 = 0
+   0.766   45 Z: 1f = 255
+   0.766   46 ?: 20 = 0
+   0.766   47 ?: 20 = 0
+   0.766   48 ?: 20 = 0
+   0.766   49 ?: 20 = 0
+   0.766   54 ?: 20 = 0
+   0.766   55 ?: 20 = 0
+   0.766   56 ?: 20 = 0
+   0.766   57 ?: 20 = 0
+   0.766   58 ?: 20 = 0
+   0.766   59 ?: 20 = 0
+   0.766   60 ?: 20 = 0
+   0.766   61 ?: 20 = 0
+   0.766   62 ?: 20 = 0
+   0.766   63 ?: 20 = 0
+   0.766   64 ?: 20 = 0
+   0.766   65 ?: 20 = 0
+   0.766   66 ?: 20 = 0
+   0.766   67 ?: 20 = 0
+   0.766   68 ?: 20 = 0
+   0.766   69 ?: 20 = 0
+   0.766   70 ?: 20 = 0
+   0.766   71 ?: 20 = 0
+   0.766   72 ?: 20 = 0
+   0.766   73 ?: 20 = 0
+   0.766   74 ?: 20 = 0
+   0.766   78 X2: 2760
+   0.766   79 Y2: 2770
+   0.766   80 Z2: 2c81
+   0.834 3d: MissionStartPhase1
+   0.848 3d: flag clientr.g3dpos=0 -6 1
+   0.848 3d: weapon -Move3D added
+   0.851 3d: ghost 0 GameObject Ground
+   0.868 3d: requesting ground.3ds over TCP
+   0.868 3d: ghost 1 GameObject Cube
+   0.868 3d: requesting labcube.3ds over TCP
+   0.868 3d: ghost 2 Sun
+   0.897 3d: ghost 3 Sky
+   0.897 3d: requesting sky_fr over TCP
+   0.897 3d: requesting sky_rt over TCP
+   0.897 3d: requesting sky_bk over TCP
+   0.897 3d: requesting sky_lf over TCP
+   0.897 3d: requesting sky_up over TCP
+   0.897 3d: requesting sky_dn over TCP
+   0.897 3d: ghost 4 GameObject G3DPlayer_labato
+   0.917 requesting ground.3ds
+   0.919 requesting labcube.3ds
+   0.919 requesting sky_fr
+   0.919 requesting sky_rt
+   0.929 3d: got ground.3ds (432 bytes)
+   0.948 3d: got labcube.3ds (426 bytes)
+   0.954 3d: ghost 5 Camera
+   1.017 3d: weapon -Move3D script (1101 bytes, kept; not run yet)
+   1.017 3d: MissionStartPhase2
+   1.017 3d: Mission lighting done
+   1.054 3d: control object is ghost 4 GameObject G3DPlayer_labato

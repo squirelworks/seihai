@@ -1,0 +1,93 @@
+3d: opening the Graal3D link beside 127.0.0.1:14830
+logged in at 127.0.0.1:14830 as labato (5.12)
+3d: Connection established (19 classes)
+3d: MissionStartPhase1
+3d: flag clientr.g3dpos=0 -6 1
+3d: weapon -Move3D added
+3d: ghost 0 GameObject Ground
+3d: requesting ground.3ds over TCP
+requesting ground.3ds
+3d: ghost 1 GameObject Cube
+3d: requesting labcube.3ds over TCP
+3d: ghost 2 Sun
+requesting labcube.3ds
+level onlinestartlocal.nw: from the server's board, start (30, 30.5), 0 NPCs (0 from the server, 0 in the file)
+board: 4096 tiles, 227 distinct [0, 1, 2, 3, 4, 5, 6, 7, ...], 0 links, 3 chests, 0 signs
+  chest at (20, 24): greenrupee, sign 0
+  chest at (24, 33): spinattack, sign 0
+  chest at (15, 32): fullheart, sign 0
+player props: 56
+  1 MAXPOWER: 23 = 3
+  2 CURPOWER: 26 = 6
+  3 RUPEESCOUNT: 202020
+  4 ARROWSCOUNT: 2a = 10
+  5 BOMBSCOUNT: 25 = 5
+  6 GLOVEPOWER: 21 = 1
+  8 SWORDPOWER: 3f2a73776f7264312e706e67
+  9 SHIELDPOWER: 2b2b736869656c64312e706e67
+  10 GANI: 2469646c65 "idle"
+  11 HEADGIF: 8d68656164302e706e67
+  13 COLORS: 22202a2432
+  17 SPRITE: 22 = 2
+  18 STATUS: 34 = 20
+  21 HORSEGIF: 20 = 0
+  22 HORSEBUSHES: 20 = 0
+  23 EFFECTCOLORS: 20 = 0
+  25 APCOUNTER: 205c
+  26 MAGICPOINTS: 20 = 0
+  32 ALIGNMENT: 52 = 50
+  34 ACCOUNTNAME: 266c616261746f "labato"
+  35 BODYIMG: 28626f64792e706e67 "body.png"
+  36 RATING: 4e927e
+  37 ?: 20 = 0
+  38 ?: 20 = 0
+  39 ?: 20 = 0
+  40 ?: 20 = 0
+  41 ?: 20 = 0
+  45 Z: 52 = 50
+  46 ?: 20 = 0
+  47 ?: 20 = 0
+  48 ?: 20 = 0
+  49 ?: 20 = 0
+  54 ?: 20 = 0
+  55 ?: 20 = 0
+  56 ?: 20 = 0
+  57 ?: 20 = 0
+  58 ?: 20 = 0
+  59 ?: 20 = 0
+  60 ?: 20 = 0
+  61 ?: 20 = 0
+  62 ?: 20 = 0
+  63 ?: 20 = 0
+  64 ?: 20 = 0
+  65 ?: 20 = 0
+  66 ?: 20 = 0
+  67 ?: 20 = 0
+  68 ?: 20 = 0
+  69 ?: 20 = 0
+  70 ?: 20 = 0
+  71 ?: 20 = 0
+  72 ?: 20 = 0
+  73 ?: 20 = 0
+  74 ?: 20 = 0
+  78 X2: 2760
+  79 Y2: 2770
+  80 Z2: 2020
+3d: got ground.3ds (432 bytes)
+3d: ghost 3 Sky
+3d: requesting sky_fr over TCP
+3d: requesting sky_rt over TCP
+3d: requesting sky_bk over TCP
+3d: requesting sky_lf over TCP
+3d: requesting sky_up over TCP
+3d: requesting sky_dn over TCP
+3d: ghost 4 GameObject G3DPlayer_labato
+requesting sky_fr
+requesting sky_rt
+requesting sky_bk
+3d: got labcube.3ds (426 bytes)
+3d: ghost 5 Camera
+3d: weapon -Move3D script (1101 bytes, kept; not run yet)
+3d: MissionStartPhase2
+3d: Mission lighting done
+3d: control object is ghost 4 GameObject G3DPlayer_labato
