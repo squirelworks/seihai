@@ -8,6 +8,8 @@
 //! have no chat bar of their own (lab, #444), so this line is Seihai's
 //! own until those scripts run (#447). Toalls, PMs and admin lines show
 //! for a while above it.
+//!
+//! S swings the sword ([`Game::swing`]).
 
 use crate::game::{bubble_at, bubbles, name_tags, Game};
 use crate::render::{self, TILE_PX};
@@ -54,6 +56,10 @@ impl View {
             Some(_) if pressed(egui::Key::Escape) => {}
             Some(text) if pressed(egui::Key::Enter) => self.game.say(&text, now),
             other => self.typing = other,
+        }
+        // S swings the sword, as in the classic key set.
+        if self.typing.is_none() && pressed(egui::Key::S) {
+            self.game.swing();
         }
         let held = |k| self.typing.is_none() && ctx.input(|i| i.key_down(k));
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;

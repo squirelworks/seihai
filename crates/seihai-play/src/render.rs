@@ -197,10 +197,10 @@ impl Players<'_> {
     }
 }
 
-/// The player's own figure: swimming, walking or standing, in the
-/// session's looks.
+/// The player's own figure: swinging the sword, swimming, walking or
+/// standing, in the session's looks.
 pub fn own_figure(s: &OfflineSession) -> Figure {
-    chars::own_figure(
+    let mut f = chars::own_figure(
         s.player_x,
         s.player_y,
         s.player_dir,
@@ -208,7 +208,13 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         s.in_water,
         s.walking,
         s.walk_gani.as_ref().map(|g| g.frame),
-    )
+    );
+    // A sword swing wins over the walk (core's pose order).
+    if let Some(step) = s.combat.swing_frame().filter(|_| !s.in_water) {
+        f.pose = "sword";
+        f.step = chars::Step::At(step);
+    }
+    f
 }
 
 /// Draw the session's level around the player, `view_w` x `view_h` tiles,

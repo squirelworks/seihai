@@ -65,6 +65,7 @@ pub fn run(o: &Online, sound_on: bool) -> Result<(), String> {
             );
             let mut g = Game::new(rx, resolver.as_ref(), sound_on)?;
             g.attach(live);
+            g.set_version(o.version);
             g.show_hud();
             Ok(Box::new(IsshoApp {
                 view: View::new(g, CANVAS),
@@ -84,6 +85,7 @@ pub fn run_offline(
 ) -> Result<(), String> {
     let resolver = game::resolver(assets.as_ref(), version);
     let mut g = Game::open_offline(resolver.as_ref(), level, sound_on)?;
+    g.set_version(version);
     g.show_hud();
     let title = format!("Graal {} (Seihai Issho, offline)", version.label());
     let app = IsshoApp {
@@ -96,6 +98,17 @@ pub fn run_offline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every 6.x row swings: its profile carries combat rules.
+    #[test]
+    fn every_6x_row_has_combat_rules() {
+        for v in ClientVersion::all_versions()
+            .iter()
+            .filter(|v| crate::is_v6(**v))
+        {
+            assert!(v.profile().life.combat.is_some(), "{}", v.label());
+        }
+    }
 
     #[test]
     fn the_window_is_64_by_48_tiles() {

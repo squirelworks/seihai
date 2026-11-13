@@ -109,6 +109,8 @@ pub struct Game {
     drawn_own: online::OwnStats,
     /// Where typed lines go for the network thread to say.
     pub say: Arc<Mutex<Vec<String>>>,
+    /// Where messages the game built go for the network thread to send.
+    pub send: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Where the network thread puts the chat lines that come in.
     pub chat_in: online::SharedChat,
     /// The chat lines taken so far (toalls, PMs, admin lines and what was
@@ -143,6 +145,42 @@ fn load_motion_ganis(resolver: &AssetResolver, session: &mut OfflineSession) {
     }
 }
 
+/// The pose GANIs core plays for the player (the sword swing and the spin,
+/// hurt, death): from the asset folders, else the built-in ones.
+fn load_pose_ganis(resolver: Option<&AssetResolver>, session: &mut OfflineSession) {
+    for name in [
+        "sword.gani",
+        "spin.gani",
+        "hurt.gani",
+        "dead.gani",
+        "idle.gani",
+    ] {
+        let Some(kind) = seihai_core::pose::PoseKind::from_file(name) else {
+            continue;
+        };
+        let from_disk = resolver
+            .and_then(|r| r.pose_gani(name))
+            .and_then(|p| Gani::load(p).ok());
+        let gani = from_disk.or_else(|| {
+            let text = seihai_core::assets::builtin::bytes(&format!("gani/{name}"))?;
+            Gani::parse(&String::from_utf8_lossy(text)).ok()
+        });
+        if let Some(g) = gani {
+            session.set_pose_gani(kind, g);
+        }
+    }
+}
+
+/// The cut and lift tables, from the build's `arrays.dat` where it has
+/// one. Without them the sword cuts nothing.
+fn load_object_tables(resolver: &AssetResolver, session: &mut OfflineSession) {
+    if let Some((p, seihai_core::assets::TileTypesFile::ArraysDat)) = resolver.tile_types() {
+        session.object_tables = std::fs::read(p)
+            .ok()
+            .and_then(|d| seihai_core::assets::ObjectTables::parse(&d));
+    }
+}
+
 /// The sound engine for this run: core's default backend over the asset
 /// folders' sounds, or off.
 fn sound_engine(resolver: Option<&AssetResolver>, sound_on: bool) -> SoundEngine {
@@ -170,7 +208,9 @@ impl Game {
         session.tiletypes = render::tile_types(resolver);
         if let Some(r) = resolver {
             load_motion_ganis(r, &mut session);
+            load_object_tables(r, &mut session);
         }
+        load_pose_ganis(resolver, &mut session);
         Ok(Game {
             session,
             sheet: Sheet::load(resolver)?,
@@ -205,6 +245,7 @@ impl Game {
             own: Default::default(),
             drawn_own: Default::default(),
             say: Default::default(),
+            send: Default::default(),
             chat_in: Default::default(),
             chat: Vec::new(),
             own_bubble: None,
@@ -614,12 +655,70 @@ impl Game {
 
     /// Hand the current pose to the network thread.
     fn set_pose(&self, walking: bool) {
+        let s = &self.session;
+        let swinging = s.combat.is_swinging() || s.combat.spin_elapsed_ms().is_some();
         *self.pose.lock().unwrap_or_else(|e| e.into_inner()) = Some(online::Pose {
-            x: self.session.player_x,
-            y: self.session.player_y,
-            dir: self.session.player_dir % 4,
+            x: s.player_x,
+            y: s.player_y,
+            dir: s.player_dir % 4,
             walking,
+            sprite: Some(s.sprite_value()),
+            gani: swinging.then(|| s.bow_slot_anim()),
         });
+    }
+
+    /// Take the build's rules: combat (the swing and being hit), death,
+    /// the knockback and how the build shows a swing to the others (its
+    /// GANI prop, or the sprite), as `seihai-mae` sets them.
+    pub fn set_version(&mut self, version: ClientVersion) {
+        let p = version.profile();
+        self.session.life.set_rules(p.life.death);
+        self.session.combat.set_rules(p.life.combat);
+        self.session.set_mannerisms(p.mannerisms);
+        self.session.walk_sprite = !p.ui.ganis;
+        self.session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304)
+            || seihai_core::protocol::lobby::LobbyBurst::for_version(version).is_some();
+    }
+
+    /// Swing the sword (the sword key). The swing cuts what is in front of
+    /// it (core's `OfflineSession::try_cut`); online the cut goes to the
+    /// server as a board change and the swing as the player's GANI or
+    /// sprite. False when no swing started: no combat rules for the build,
+    /// no sword, in water, or already swinging.
+    pub fn swing(&mut self) -> bool {
+        if self.session.current_level.is_none() || !self.session.start_swing() {
+            return false;
+        }
+        self.send_board_changes();
+        self.set_pose(self.session.walking);
+        self.dirty = true;
+        true
+    }
+
+    /// The board changes the player made (a cut): to the server online,
+    /// as `PLI_BOARDMODIFY`. Offline the level already holds them.
+    fn send_board_changes(&mut self) {
+        let changes = self.session.take_board_changes();
+        if self.offline || changes.is_empty() {
+            return;
+        }
+        let in_range = |v: i32| u8::try_from(v).ok().filter(|v| *v < 64);
+        let msgs: Vec<Vec<u8>> = changes
+            .iter()
+            .filter_map(|c| {
+                Some(seihai_core::net::board_modify_message(
+                    in_range(c.x)?,
+                    in_range(c.y)?,
+                    u8::try_from(c.width).ok()?,
+                    u8::try_from(c.height).ok()?,
+                    &c.tiles,
+                ))
+            })
+            .collect();
+        self.send
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .extend(msgs);
     }
 
     /// The player's position in tiles, for the view, once a level is in.
@@ -642,6 +741,14 @@ impl Game {
         self.pose_clock += std::time::Duration::from_millis(ms);
         if self.session.tick_poses(ms) {
             self.dirty = true;
+        }
+        // The swing runs on the same clock; its end goes to the server.
+        let swinging = self.session.combat.is_swinging();
+        if self.session.tick_combat(ms) || swinging != self.session.combat.is_swinging() {
+            self.dirty = true;
+            if self.session.current_level.is_some() {
+                self.set_pose(self.session.walking);
+            }
         }
     }
 
@@ -718,6 +825,7 @@ impl Game {
         self.closed = live.closed;
         self.own = live.own;
         self.say = live.say;
+        self.send = live.send;
         self.chat_in = live.chat;
     }
 
@@ -1392,6 +1500,47 @@ mod tests {
         g.own.lock().unwrap().bombs = Some(8);
         assert!(g.take_chat_and_counters(now));
         assert!(g.has_hud());
+    }
+
+    /// S swings the sword on a 6.x build: the player is drawn in the sword
+    /// pose, the server is told `sword` and then the swing's end.
+    #[test]
+    fn the_sword_swings_and_the_server_hears_of_it() {
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V603R7);
+        assert!(!g.swing(), "no level yet");
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        assert!(g.swing());
+        assert_eq!(render::own_figure(&g.session).pose, "sword");
+        let pose = g.pose.lock().unwrap().unwrap();
+        assert_eq!(pose.gani, Some("sword"));
+        assert!(!g.swing(), "already swinging");
+        // Run the clock until the swing is over.
+        let t0 = Instant::now();
+        for i in 1..=40 {
+            g.tick_poses(t0 + Duration::from_millis(50 * i));
+        }
+        assert!(!g.session.combat.is_swinging());
+        assert_ne!(render::own_figure(&g.session).pose, "sword");
+        assert_eq!(g.pose.lock().unwrap().unwrap().gani, None);
+    }
+
+    /// A build with no combat rules does not swing.
+    #[test]
+    fn no_combat_rules_no_swing() {
+        let (mut g, tx) = game();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        assert!(!g.swing());
     }
 
     /// A folder with `levels/a.nw` (a link east to `b.nw`) and `levels/b.nw`.

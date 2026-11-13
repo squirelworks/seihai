@@ -16,10 +16,10 @@ license = "MIT OR Apache-2.0"
 # Pinned by rev to squirelworks/seihai-core#40 (0.0.29: the client session
 # shares the player's counters and the chat) until that is tagged; then
 # this goes back to `tag = "v0.0.29"`.
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "a4d53976272a4066fc61df30fe4bdf10301e4a98", default-features = false }
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "3ce8b6e8b3ca3851a16144f5c3bfe9bc2a468be5", default-features = false }
 # The drawing shared with tools: tiles, sprites and gani frames into an
 # RGBA buffer. From the same seihai-core tag.
-seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "a4d53976272a4066fc61df30fe4bdf10301e4a98" }
+seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "3ce8b6e8b3ca3851a16144f5c3bfe9bc2a468be5" }
 
 # Release builds ship one program (`seihai`), so it is built small: no
 # debug symbols, and link-time optimisation across all the crates.
