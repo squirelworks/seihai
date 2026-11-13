@@ -8,10 +8,11 @@
 //! disconnects or goes silent, or when the caller sets `stop`, in which
 //! case it sends a disconnect first.
 
-use super::events::{mission_start_answer, ClassTable, Events};
+use super::events::{mission_start_answer, BigDataAssembler, ClassTable, Events};
 use super::ghosts::{
     ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Sky, Transform,
 };
+use super::graal_text::{self, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use crate::torque::TorqueProfile;
@@ -201,6 +202,8 @@ pub fn run_with_sequence(
     let mut last_acked = Instant::now();
     let mut step = Step::Established;
     let mut fetch = Fetch::default();
+    let mut big_data = BigDataAssembler::default();
+    let mut text = GraalText::default();
     loop {
         if let Some(f) = files {
             fetch.take_answers(f, out);
@@ -293,6 +296,24 @@ pub fn run_with_sequence(
             }
         };
         for ev in &delivered {
+            // Graal text (flags, weapons, scripts) over BigData.
+            if let Some(done) = big_data.feed(ev) {
+                let unpacked = match done {
+                    Ok(d) => Ok(d),
+                    Err((d, compression)) => graal_text::unpack(d, compression),
+                };
+                match unpacked {
+                    Ok(d) => {
+                        for a in text.apply(&d) {
+                            let _ = writeln!(out, "3d: {}", a.describe());
+                        }
+                    }
+                    Err(e) => {
+                        let _ = writeln!(out, "3d: skipped {e}");
+                    }
+                }
+                continue;
+            }
             let Some(cmd) = events.command(ev) else {
                 continue;
             };

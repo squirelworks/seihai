@@ -53,8 +53,12 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   end of the TCP session closes it. While it is up the window leaves out
   the TCP level boards, as the real clients do. The shapes and Sky textures
   the ghosts name are asked for over TCP through core's session, and
-  login step 6 is logged once every request is answered. Nothing is drawn
-  in 3D yet. 3.153 and 4.04r2
+  login step 6 is logged once every request is answered. Graal text over
+  BigData (`graal_text`) is applied and logged: flags, `events`, weapons
+  and their scripts (kept, not run until the GS2 client VM takes them),
+  `addnpc`, `setmaterials`, `rpg` and weapon texts; zlib transfers are
+  unpacked. `ClientEvents` builds the client's `events` text (`w`, `s`,
+  `t` lines). Nothing is drawn in 3D yet. 3.153 and 4.04r2
   (protocol 19, the Torque game layer) are not run. Source: Graal_analysis
   `torque/udp-session.md` and the open (MIT) Torque net layer.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
