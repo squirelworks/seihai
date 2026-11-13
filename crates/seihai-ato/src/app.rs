@@ -13,9 +13,10 @@
 //! server sends (its name, the start position and the NPC count) and draws
 //! it flat; the arrow keys walk it. With both `--online` and `--account`
 //! the start window is skipped and the login starts at once. `--no-window`
-//! only logs. `--graal3d` (with `--no-window`) also opens the Torque UDP
-//! link of a Graal3D server at the same moment, to its port + 1, and logs
-//! its progress with a `3d:` prefix.
+//! only logs. `--graal3d` also opens the Torque UDP link of a Graal3D
+//! server at the same moment, to its port + 1, and logs its progress with a
+//! `3d:` prefix; a server warp to a `3 ` server opens it too. The single
+//! launcher passes `--graal3d` for a `3 ` server it lists.
 //!
 //! `seihai-launcher` starts this binary for a 3.x `--version` and passes the
 //! user's arguments through; flags meant for `seihai-mae` are ignored.
@@ -63,6 +64,7 @@ pub fn main(argv: Vec<String>) -> ExitCode {
     if !a.no_window {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
+        w.graal3d = a.graal3d;
         let skip_start = game::skips_start(&w);
         w.fill_from(&seihai_play::start::Saved::load());
         if let Some(ls) = a.listserver.clone() {
@@ -97,18 +99,16 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         nick,
         language: "English".into(),
     };
-    let udp = if a.graal3d {
-        match graal3d::start(&addr, version, &login) {
-            Ok(u) => Some(u),
-            Err(e) => {
-                eprintln!("seihai-ato: {e}");
-                return ExitCode::from(2);
-            }
+    if a.graal3d {
+        if let Err(e) = graal3d::profile(version) {
+            eprintln!("seihai-ato: {e}");
+            return ExitCode::from(2);
         }
-    } else {
-        None
-    };
-    let tcp = online::run(
+    }
+    // The 3D link follows the session: the first server with `--graal3d`,
+    // then any server warp to a `3 ` server.
+    let side = graal3d::Side::new(version, login.clone(), a.graal3d);
+    let tcp = online::run_hooked(
         &addr,
         version,
         &login,
@@ -116,10 +116,9 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         a.first_level,
         &mut std::io::stdout(),
         &mut |_, _| {},
+        &side.hooks(),
     );
-    if let Some(u) = udp {
-        let _ = u.stop();
-    }
+    side.stop();
     match tcp {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

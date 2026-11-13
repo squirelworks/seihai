@@ -46,6 +46,16 @@ fn serve(version: ClientVersion, listener: TcpListener) {
 /// only a `PLO_SERVERWARP` (178) to that port and waits for the client to
 /// leave.
 fn serve_with(version: ClientVersion, listener: TcpListener, warp_to: Option<u16>) {
+    serve_warping(version, listener, warp_to, "Lab Server");
+}
+
+/// As [`serve_with`], warping under the name `warp_name`.
+fn serve_warping(
+    version: ClientVersion,
+    listener: TcpListener,
+    warp_to: Option<u16>,
+    warp_name: &str,
+) {
     let (mut s, _) = listener.accept().unwrap();
     s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     // The login frame: u16 length, plain zlib, the login line first.
@@ -71,7 +81,7 @@ fn serve_with(version: ClientVersion, listener: TcpListener, warp_to: Option<u16
     if let Some(port) = warp_to {
         send(msg(
             178,
-            format!("0,Lab Server,127.0.0.1,{port}").as_bytes(),
+            format!("0,{warp_name},127.0.0.1,{port}").as_bytes(),
         ));
         let mut rest = Vec::new();
         let _ = s.read_to_end(&mut rest);
@@ -220,4 +230,67 @@ fn the_404_lobby_burst_goes_out() {
     assert!(seihai_core::protocol::lobby::LobbyBurst::for_version(v).is_some());
     let out = run(v);
     assert!(out.contains("sent the post-login frames"), "{out}");
+}
+
+/// A warp to a `3 ` server is a Graal3D server: the session tells Ato's
+/// Graal3D side of each server before its login, and the side opens the
+/// UDP link for the warp target only (the first server was not picked as
+/// a 3D one).
+#[test]
+fn a_warp_to_a_3_server_is_where_the_3d_link_opens() {
+    use seihai_ato::graal3d::Side;
+    use seihai_ato::online::{Hooks, ServerJoin};
+    use std::sync::{Arc, Mutex};
+    let v = ClientVersion::V512;
+    let game = TcpListener::bind("127.0.0.1:0").unwrap();
+    let game_port = game.local_addr().unwrap().port();
+    let lobby = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = lobby.local_addr().unwrap().to_string();
+    let a = std::thread::spawn(move || serve_warping(v, lobby, Some(game_port), "3 Lab3D"));
+    let b = std::thread::spawn(move || serve(v, game));
+    let login = Login {
+        account: "lab".into(),
+        password: "pw".into(),
+        nick: "lab".into(),
+        language: "English".into(),
+    };
+    let joins: Arc<Mutex<Vec<ServerJoin>>> = Arc::default();
+    let seen = joins.clone();
+    let hooks = Hooks {
+        on_server: Some(Arc::new(move |j: &ServerJoin| {
+            seen.lock().unwrap().push(j.clone())
+        })),
+        files: None,
+    };
+    let mut out = Vec::new();
+    online::run_hooked(
+        &addr,
+        v,
+        &login,
+        None,
+        true,
+        &mut out,
+        &mut |_, _| {},
+        &hooks,
+    )
+    .unwrap();
+    a.join().unwrap();
+    b.join().unwrap();
+    let joins = joins.lock().unwrap().clone();
+    assert_eq!(
+        joins,
+        [
+            ServerJoin {
+                addr: addr.clone(),
+                name: None
+            },
+            ServerJoin {
+                addr: format!("127.0.0.1:{game_port}"),
+                name: Some("3 Lab3D".into())
+            },
+        ]
+    );
+    let side = Side::new(v, login, false);
+    assert!(!side.is_3d(&joins[0]));
+    assert!(side.is_3d(&joins[1]));
 }

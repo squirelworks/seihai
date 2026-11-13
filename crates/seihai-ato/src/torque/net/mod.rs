@@ -7,11 +7,13 @@
 //! [`bits`] and [`huffman`] are the bit stream and string coding every
 //! packet uses, [`handshake`] opens the link, [`link`] numbers and acks
 //! data packets, [`events`] and [`ghosts`] read and write their contents,
+//! [`graal_text`] applies the Graal text sent over BigData,
 //! and [`session`] runs it all over a UDP socket (Ato's `--graal3d`).
 
 pub mod bits;
 pub mod events;
 pub mod ghosts;
+pub mod graal_text;
 pub mod handshake;
 pub mod huffman;
 pub mod link;

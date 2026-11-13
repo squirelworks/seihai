@@ -14,6 +14,7 @@ use seihai_ato::torque::net::ghosts::{GameObjectUpdate, Transform};
 use seihai_ato::torque::net::handshake::{self, ServerPacket};
 use seihai_ato::torque::net::session::{self, Ended, Identity};
 use seihai_ato::torque::GRAAL3D_24;
+use seihai_core::client::{FileAnswer, FileAsks};
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -67,6 +68,28 @@ fn reaches_the_control_object_against_a_replaying_server() {
     let addr = server.local_addr().unwrap();
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
+    // The TCP side's file session, played here: each file the 3D world
+    // asks for is sent, as core's session would answer it.
+    let asks = FileAsks::default();
+    let tcp = asks.clone();
+    let tcp_stop = stop.clone();
+    let tcp_side = std::thread::spawn(move || {
+        let mut asked = Vec::new();
+        while !tcp_stop.load(Ordering::Relaxed) {
+            let names = std::mem::take(&mut *tcp.wanted.lock().unwrap());
+            for name in names {
+                asked.push(name.clone());
+                tcp.answers.lock().unwrap().push(FileAnswer {
+                    name,
+                    data: Some(b"3DS!".to_vec()),
+                });
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        asked
+    });
+    let world = seihai_ato::view3d::Shared3d::default();
+    let view = world.clone();
     let client = std::thread::spawn(move || {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let who = Identity {
@@ -75,8 +98,17 @@ fn reaches_the_control_object_against_a_replaying_server() {
             nickname: "Lab".into(),
         };
         let mut out = Vec::new();
-        let ended =
-            session::run_with_sequence(&socket, addr, GRAAL3D_24, &who, &flag, &mut out, 0x400);
+        let ended = session::run_with_sequence(
+            &socket,
+            addr,
+            GRAAL3D_24,
+            &who,
+            &flag,
+            Some(&asks),
+            Some(&world),
+            &mut out,
+            0x400,
+        );
         (ended, String::from_utf8(out).unwrap())
     });
 
@@ -239,10 +271,26 @@ fn reaches_the_control_object_against_a_replaying_server() {
         "3d: ghost 0 Sun",
         "3d: ghost 1 GameObject G3DPlayer_lab",
         "3d: control object is ghost 1 GameObject G3DPlayer_lab",
+        "3d: requesting labcube.3ds over TCP",
+        "3d: got labcube.3ds (4 bytes)",
+        "3d: login step 6: every file request answered (files: 1, not on the server: 0)",
     ] {
         assert!(
             log.lines().any(|l| l == line),
             "missing {line:?} in:\n{log}"
         );
     }
+    // The view's world has the player as the control object, at its
+    // transform, and the Sun; the shape's bytes are not a .3ds here.
+    {
+        let w = view.lock().unwrap();
+        assert_eq!(w.control, Some(1));
+        let me = &w.objects[&1];
+        assert_eq!(me.shape.as_deref(), Some("labcube.3ds"));
+        assert_eq!(me.transform.unwrap().position, [0.0, 0.0, 1.0]);
+        assert!(w.sun.is_some());
+        assert_eq!(w.models.get("labcube.3ds"), Some(&None));
+    }
+    // The player's shape is asked for once.
+    assert_eq!(tcp_side.join().unwrap(), ["labcube.3ds"]);
 }

@@ -29,7 +29,9 @@ pub mod level;
 pub mod online;
 pub mod server_list;
 pub mod start_window;
+pub mod three_ds;
 pub mod torque;
+pub mod view3d;
 pub mod wire;
 
 /// The flat renderer, shared with Issho in `seihai-play`.
