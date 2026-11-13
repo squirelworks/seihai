@@ -103,8 +103,28 @@ fn interactive() {
     println!();
     let pw = password.trim_end_matches(['\r', '\n']).to_string();
     password.clear();
-    let all = ask("Check every version profile? (y = all, Enter = 3.04 only): ")
-        .eq_ignore_ascii_case("y");
+    println!("What to check:");
+    println!("  Enter = the 3.04 list login on both listserver ports");
+    println!("  y     = every version profile's list login on both listserver ports");
+    println!("  C     = every 4.x to 6.x build's login at the community Login server");
+    println!("          (the Login entry of the community server list)");
+    let choice = ask("Choice: ");
+    let login_at = if choice.eq_ignore_ascii_case("c") {
+        Some(community_login(&account, &pw).unwrap_or_default())
+    } else {
+        None
+    };
+    if let Some(addr) = login_at {
+        if !addr.is_empty() {
+            login_servers(&addr, &account, &pw);
+        }
+        drop(pw);
+        print!("Done. Press Enter to close.");
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stdin().read_line(&mut String::new());
+        return;
+    }
+    let all = choice.eq_ignore_ascii_case("y");
     // One row per distinct list login: builds with no listserver of their
     // own borrow another's, so they are asked once, under that build.
     let mut builds: Vec<ClientVersion> = Vec::new();
@@ -150,6 +170,125 @@ fn interactive() {
     print!("Done. Press Enter to close.");
     let _ = std::io::stdout().flush();
     let _ = std::io::stdin().read_line(&mut String::new());
+}
+
+/// The community's Login server: the entry whose name starts with "login"
+/// in the list the 3.04 login gets (one list login on 14923). Prints the
+/// list's names when there is none. The address is not printed.
+fn community_login(account: &str, pw: &str) -> Option<String> {
+    let v = ClientVersion::V304;
+    let addr = format!("{}:14923", v.listserver_host());
+    let reply = match Connection::fetch_server_list(&addr, v, account, pw) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("server list: {}", list_failure_text(&addr, &e));
+            return None;
+        }
+    };
+    if let Some(e) = reply.error {
+        println!("server list: rejected: {e}");
+        return None;
+    }
+    let found = reply
+        .servers
+        .iter()
+        .find(|s| s.name.to_ascii_lowercase().starts_with("login"));
+    match found {
+        Some(s) => {
+            println!("Community Login server found in the list: \"{}\".", s.name);
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            Some(format!("{}:{}", s.host, s.port))
+        }
+        None => {
+            println!("No server named Login in the list. The list has:");
+            for s in &reply.servers {
+                println!("  {}", s.name);
+            }
+            None
+        }
+    }
+}
+
+/// One game login per lobby build (4.04r2 to 6.03r7) at the Login server,
+/// 10 s apart: read what comes back for a few seconds, then disconnect.
+/// Prints only the verdict per build; never the host, account or password.
+fn login_servers(addr: &str, account: &str, pw: &str) {
+    use seihai_core::net::{login_gserver, random_key};
+    use seihai_core::protocol::split_messages;
+    use std::io::Write;
+    let builds: Vec<ClientVersion> = ClientVersion::all_versions()
+        .iter()
+        .copied()
+        .filter(|v| v.profile().protocol.lobby.is_some())
+        .collect();
+    println!(
+        "{} builds, one login each at the Login server, 10 s apart (about {} minutes); stops at the first sign of throttling.",
+        builds.len(),
+        (builds.len() * 15).div_ceil(60)
+    );
+    for (i, v) in builds.into_iter().enumerate() {
+        if i > 0 {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+        let verdict = match login_gserver(addr, v, random_key(), account, pw, false) {
+            Err(e) => format!("failed: {e}"),
+            Ok(mut s) => {
+                let mut seen = Vec::new();
+                let mut verdict = None;
+                let start = Instant::now();
+                while verdict.is_none() && start.elapsed().as_secs() < 8 {
+                    let body = match s.conn.read_body() {
+                        Ok(b) => b,
+                        Err(e) => {
+                            let quiet = matches!(
+                                e.kind(),
+                                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                            );
+                            verdict = Some(match (seen.is_empty(), quiet) {
+                                (true, true) => "no reply (the server stayed silent)".to_string(),
+                                (true, false) => format!("closed with no reply ({})", e.kind()),
+                                (false, true) => format!(
+                                    "accepted: {} messages, then the server waited",
+                                    seen.len()
+                                ),
+                                (false, false) => {
+                                    format!("closed after {} messages ({})", seen.len(), e.kind())
+                                }
+                            });
+                            break;
+                        }
+                    };
+                    for m in split_messages(&body) {
+                        match m.id {
+                            16 => {
+                                verdict = Some(format!(
+                                    "rejected: {}",
+                                    String::from_utf8_lossy(&m.payload).trim()
+                                ))
+                            }
+                            178 => verdict = Some("accepted, sent a server warp (178)".to_string()),
+                            _ => {}
+                        }
+                        seen.push(m.id);
+                    }
+                }
+                verdict.unwrap_or_else(|| {
+                    let lvl = seen.contains(&6);
+                    format!(
+                        "accepted: {} messages in 8 s{}",
+                        seen.len(),
+                        if lvl { ", a level sent" } else { "" }
+                    )
+                })
+            }
+        };
+        println!("{:<13} {verdict}", v.label());
+        let _ = std::io::stdout().flush();
+        if throttled(&verdict) {
+            println!("Stopping: that reply looks like throttling or a ban.");
+            break;
+        }
+    }
 }
 
 /// A reply that looks like the listserver pushing back: stop asking.

@@ -271,3 +271,56 @@ than an account-less 2.05-style request.
 The 2.05 list login answering on 14923 was already known from earlier runs;
 this run only matches it. 14922 was not tried with that login, and no real
 3.x, 4.x or 5.x client was captured against the public service.
+
+### Every list login (2026-11-13)
+
+The owner ran `list_probe`'s double-click mode twice per pass, with two of
+their own real accounts, on their own machine (password typed, nothing
+kept). One connection per line, 10 s apart, no retries; the run would have
+stopped at a reply that looked like throttling. The two accounts got the
+same answers except for the list size noted below.
+
+**Listserver, every distinct list login** (21: the builds with no listserver
+of their own borrow 2.05's and are asked once under it):
+
+| Login (shape) | Builds | 14922 | 14923 |
+|---|---|---|---|
+| id 0 only (A) | 1.42, 2.00 to 2.05 | silent (no reply in 5 s) | accepted, 2 or 4 servers |
+| silent, then id 0 + id 1 (S, B fallback) | 1.41 | accepted, 2 servers | accepted, 4 servers |
+| id 0 + id 1 (B) | 2.1, 2.12 to 2.17 | accepted, 2 servers | accepted, 2 servers |
+| gen-5, `GNW30123` | 2.22, 2.3, 2.31 | accepted, 8 servers | accepted, 8 servers |
+| gen-5 one frame, `G3D30123` | 3.04, 3.153 | accepted, 8 servers | accepted, 8 servers |
+
+- 14923 answers every login Seihai sends. 14922 stays silent to the
+  id-0-only frame, as before, but now answers the classic id 0 + id 1 login
+  (2.1 to 2.17, and 1.41's fallback), which the 2026-10-25 matrix saw it
+  ignore. The port defaults are unchanged: 14923 still answers all of them.
+- The list grows with the login: 2 servers for the classic logins, up to 4
+  for the id-0-only frame on 14923 (2 or 4 between runs: the port sends an
+  old list and then the current one, and the count is the last one read in
+  the wait), and 8 for the gen-5 logins.
+
+**4.x to 6.x at the community Login server** (`list_probe` option C, run
+once each with two real community accounts, the same results both times): the server list's `Login DEV` entry, one game login
+per lobby build, 10 s apart, replies read for up to 8 s.
+
+| Builds | Reply |
+|---|---|
+| 4.04r2, 4.04r2 Mac, 4.20r6, 4.20r8, 5.00r7, 5.12 Mac, 5.24r4, 5.30r3, 5.31r4, 6.00r2, 6.00r4, 6.015, 6.034, 6.03r7, 6.03r7 Linux | accepted: 42 to 50 messages (the Login burst), then the server waited |
+| 5.12 (Windows) | PLO_DISCMESSAGE "Parse error: Adler chksum doesn't match" |
+
+- 15 of 16 builds log in, including the 4.x builds and 5.00r7; this server
+  takes every lobby token, with the machine fields empty.
+- The Windows 5.12 failure came in both runs, with the same first checksum,
+  so it is the same frame each time. It matches what core already
+  records for the real client: 5.12 encrypts a compressed body in len/4
+  groups rounded down (the partial last group stays plain), and with
+  `gen5_compress_all` every small body is compressed. A server that rounds
+  up, as stock GServer-v2 does, XORs that last group too, and zlib's Adler
+  check fails. The lab needed a translating proxy for the real 5.12 for the
+  same reason. So this is the server's rounding, not a Seihai bug, and the
+  real 5.12 should get the same error here; a lab run of the real client
+  against this server would confirm it.
+- The earlier version of this probe printed these as "closed after N
+  messages (timed out)"; a read timeout after the burst means the server is
+  waiting, so it now prints "accepted".
