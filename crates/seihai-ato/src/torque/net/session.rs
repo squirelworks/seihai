@@ -18,12 +18,12 @@ use super::graal_text::{self, Applied, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use super::scripts3d::{vm_version, Weapons3d};
-use super::tge::{self, ClientGame19, Control19, Game19Error, Phase, PhaseAcks};
+use super::tge::{self, ClientGame19, Control19, Game19Error, Move, Phase, PhaseAcks};
 use crate::torque::TorqueProfile;
 use crate::view3d::{Shared3d, SharedInput3d};
 use seihai_core::client::FileAsks;
 use seihai_core::protocol::ClientVersion;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{ErrorKind, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -228,7 +228,7 @@ pub fn run_with_sequence(
     if tge_layer {
         let _ = writeln!(
             out,
-            "3d: protocol {} game layer: static reads only, never run against a real server; no moves are sent",
+            "3d: protocol {} game layer: static reads only, never run against a real client's server",
             profile.protocol
         );
     }
@@ -240,6 +240,11 @@ pub fn run_with_sequence(
     let mut game = ClientGame::before_control();
     let mut game19 = ClientGame19::before_control();
     let mut datablocks = 0u32;
+    // Protocol 19 moves not yet taken by the server, the first numbered
+    // `first_move19`.
+    let mut moves19: VecDeque<Move> = VecDeque::new();
+    let mut first_move19 = 0u32;
+    let mut walking19 = false;
     let mut max_rate = Some(Rate::CLIENT_512_MAX);
     let mut last_data = None::<Instant>;
     let mut last_heard = Instant::now();
@@ -329,7 +334,12 @@ pub fn run_with_sequence(
                 own.chat = Some(line.into_bytes());
             }
         }
-        let moving = own != GameObjectUpdate::default();
+        // Protocol 19: the keys become moves of the control object.
+        if let (true, Some(inp), Some(_)) = (tge_layer, input, game19.control) {
+            let forward = inp.lock().unwrap_or_else(|e| e.into_inner()).forward;
+            walking19 = forward != 0;
+        }
+        let moving = own != GameObjectUpdate::default() || walking19;
         let due = last_data.is_none_or(|t| t.elapsed() >= KEEP_ALIVE)
             || events.has_pending()
             || (moving && last_data.is_none_or(|t| t.elapsed() >= MOVE_PACKET));
@@ -341,6 +351,15 @@ pub fn run_with_sequence(
                     game.update = Some(std::mem::take(&mut own));
                 }
                 if tge_layer {
+                    if game19.control.is_some() && moves19.len() < tge::MAX_MOVES {
+                        let forward = match input {
+                            Some(i) => i.lock().unwrap_or_else(|e| e.into_inner()).forward,
+                            None => 0,
+                        };
+                        moves19.push_back(Move::walk(forward, 0));
+                    }
+                    game19.first_move = first_move19;
+                    game19.moves = moves19.iter().copied().collect();
                     game19.write(&mut w);
                 } else {
                     game.write(&mut w);
@@ -407,14 +426,29 @@ pub fn run_with_sequence(
                         data.sequence,
                         class.as_deref().unwrap_or("unknown class")
                     );
-                    (game, false)
+                    (*game, false)
                 }
                 Err(e) => {
                     let _ = writeln!(out, "3d: packet {}: game section: {e:?}", data.sequence);
                     continue;
                 }
             };
-            game19.first_move = g.last_move_ack;
+            // The ack is the index after the last move the server took.
+            while first_move19 < g.last_move_ack && moves19.pop_front().is_some() {
+                first_move19 += 1;
+            }
+            first_move19 = first_move19.max(g.last_move_ack);
+            if let Some(c) = g.control_camera {
+                game19.position = c.position;
+                if let Some(w) = world {
+                    w.lock().unwrap_or_else(|e| e.into_inner()).camera =
+                        Some(crate::view3d::Transform {
+                            position: c.position,
+                            axis: [0.0, 0.0, 1.0],
+                            angle: c.yaw,
+                        });
+                }
+            }
             if let Control19::Object { index, .. } = g.control {
                 game19.control = Some(index);
                 if step < Step::Control {
