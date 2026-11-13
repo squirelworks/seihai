@@ -261,6 +261,13 @@ What is new:
   with a version string and a player count). One entry's host came with a
   leading dot, which core keeps as received (`protocol/list.rs`).
 
+**With a real account** (the owner's, typed into the double-click mode of
+`list_probe` on their own machine; nothing kept): the same 3.04 login was
+accepted on both ports, and each sent a list of 8 servers, twice the 4 the
+borrowed 2.05 login got. So the 3.x login is a working login on both 14922
+and 14923, and the public service shows a logged-in 3.x client more servers
+than an account-less 2.05-style request.
+
 The 2.05 list login answering on 14923 was already known from earlier runs;
 this run only matches it. 14922 was not tried with that login, and no real
 3.x, 4.x or 5.x client was captured against the public service.
