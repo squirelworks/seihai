@@ -300,8 +300,8 @@ of their own borrow 2.05's and are asked once under it):
   old list and then the current one, and the count is the last one read in
   the wait), and 8 for the gen-5 logins.
 
-**4.x to 6.x at the community Login server** (`list_probe` option C, one
-real community account): the server list's `Login DEV` entry, one game login
+**4.x to 6.x at the community Login server** (`list_probe` option C, run
+once each with two real community accounts, the same results both times): the server list's `Login DEV` entry, one game login
 per lobby build, 10 s apart, replies read for up to 8 s.
 
 | Builds | Reply |
@@ -311,7 +311,8 @@ per lobby build, 10 s apart, replies read for up to 8 s.
 
 - 15 of 16 builds log in, including the 4.x builds and 5.00r7; this server
   takes every lobby token, with the machine fields empty.
-- The Windows 5.12 failure is one run, and it matches what core already
+- The Windows 5.12 failure came in both runs, with the same first checksum,
+  so it is the same frame each time. It matches what core already
   records for the real client: 5.12 encrypts a compressed body in len/4
   groups rounded down (the partial last group stays plain), and with
   `gen5_compress_all` every small body is compressed. A server that rounds
