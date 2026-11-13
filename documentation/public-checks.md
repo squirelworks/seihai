@@ -310,7 +310,13 @@ per lobby build, 10 s apart, replies read for up to 8 s.
 | 5.12 (Windows) | PLO_DISCMESSAGE "Parse error: Adler chksum doesn't match" |
 
 - 15 of 16 builds log in, including the 4.x builds and 5.00r7; this server
-  takes every lobby token, with the machine fields empty.
+  takes every lobby token, with the machine fields empty. What "accepted"
+  means here: Login DEV runs Preagonal GameServer 0.0.32. It does not run the
+  Login world's scripts, so the real 5.x and 6.x clients stay at the guest
+  stage there with no account prompt, and it may not verify accounts.
+  "Accepted" means the login line was taken and the login burst sent, not
+  that the account was checked. A real 4.20r8 logging in with the account
+  was accepted too (lab VM run, 2026-11-13).
 - The Windows 5.12 failure came in both runs, with the same first checksum,
   so it is the same frame each time. It matches what core already
   records for the real client: 5.12 encrypts a compressed body in len/4
