@@ -16,7 +16,7 @@
 //! fires ([`Game::toggle_item_list`]). A alone lifts, throws, opens a
 //! chest or grabs ([`Game::interact`]); S while carrying throws.
 
-use crate::game::{bubble_at, bubbles, name_tags, npc_bubbles, Game, ItemList, ListKey};
+use crate::game::{bubble_at, bubbles, name_tags, npc_bubbles, Game, ItemList, ListKey, SignKey};
 use crate::render::{self, TILE_PX};
 use seihai_core::protocol::ChatKind;
 use std::time::{Duration, Instant};
@@ -28,6 +28,9 @@ pub struct View {
     texture: Option<egui::TextureHandle>,
     /// The chat line being typed, while it is open.
     typing: Option<String>,
+    /// A sign is open, or closed with a game key still down: the game keys
+    /// stay away from the player.
+    sign_hold: bool,
 }
 
 /// How long a toall, PM or admin line stays on screen.
@@ -42,6 +45,7 @@ impl View {
             canvas,
             texture: None,
             typing: None,
+            sign_hold: false,
         }
     }
 
@@ -62,10 +66,52 @@ impl View {
         }
         let now = Instant::now();
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
+        // An open sign takes the game keys (the 2.05 rules, `game::signs`):
+        // Up goes back a page, Escape closes it, the others go on. The keys
+        // stay away from the player until they are let go after it closes.
+        let sign_busy = self.typing.is_none() && self.game.reading();
+        if sign_busy {
+            if pressed(egui::Key::ArrowUp) {
+                self.game.sign_key(SignKey::Back);
+            } else if pressed(egui::Key::Escape) {
+                self.game.sign_key(SignKey::Close);
+            } else if [
+                egui::Key::ArrowDown,
+                egui::Key::ArrowLeft,
+                egui::Key::ArrowRight,
+                egui::Key::A,
+                egui::Key::S,
+                egui::Key::D,
+                egui::Key::Q,
+                egui::Key::Enter,
+            ]
+            .into_iter()
+            .any(pressed)
+            {
+                self.game.sign_key(SignKey::Next);
+            }
+            self.sign_hold = true;
+        } else if self.sign_hold {
+            let any_down = ctx.input(|i| {
+                [
+                    egui::Key::ArrowUp,
+                    egui::Key::ArrowDown,
+                    egui::Key::ArrowLeft,
+                    egui::Key::ArrowRight,
+                    egui::Key::A,
+                    egui::Key::S,
+                    egui::Key::D,
+                ]
+                .into_iter()
+                .any(|k| i.key_down(k))
+            });
+            self.sign_hold = any_down;
+        }
+        let sign_busy = sign_busy || self.sign_hold;
         let list_before = self.game.list_open();
         // The open item list takes the game keys: the arrows move its
         // selection and the others close it.
-        if self.typing.is_none() && self.game.list_open() {
+        if !sign_busy && self.typing.is_none() && self.game.list_open() {
             for (keys, lk) in [
                 ([egui::Key::ArrowUp, egui::Key::ArrowLeft], ListKey::Back),
                 ([egui::Key::ArrowDown, egui::Key::ArrowRight], ListKey::Next),
@@ -87,13 +133,13 @@ impl View {
             {
                 self.game.item_list_key(ListKey::Close);
             }
-        } else if self.typing.is_none() && pressed(egui::Key::Q) {
+        } else if !sign_busy && self.typing.is_none() && pressed(egui::Key::Q) {
             self.game.toggle_item_list();
         }
         // Busy with the list this frame: it was open, or Q opened it.
         let list_busy = list_before || self.game.list_open();
         match self.typing.take() {
-            None if list_busy => {}
+            None if list_busy || sign_busy => {}
             None if pressed(egui::Key::Tab) || pressed(egui::Key::Enter) => {
                 self.typing = Some(String::new())
             }
@@ -104,7 +150,7 @@ impl View {
         // S swings the sword (and spins), D fires the weapon, A with S
         // held picks an item to drop and A lays it, as in the classic key
         // set. Not while the list is open or was closed this frame.
-        let game_keys = self.typing.is_none() && !list_busy;
+        let game_keys = self.typing.is_none() && !list_busy && !sign_busy;
         if game_keys && pressed(egui::Key::A) {
             let s_held = ctx.input(|i| i.key_down(egui::Key::S));
             self.game.act(s_held);
@@ -131,7 +177,7 @@ impl View {
         });
         self.game.keys_up(a_down, arrow_up);
 
-        let held = |k| self.typing.is_none() && ctx.input(|i| i.key_down(k));
+        let held = |k| self.typing.is_none() && !sign_busy && ctx.input(|i| i.key_down(k));
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;
         let dy = held(egui::Key::ArrowDown) as i8 - held(egui::Key::ArrowUp) as i8;
         let changed = self.game.tick(dx, dy, now);
@@ -228,6 +274,33 @@ impl View {
                         egui::Align2::CENTER_BOTTOM,
                         &text,
                     );
+                }
+                // The sign page being read: a dark panel across the lower
+                // part of the view, three lines a page.
+                if let Some(lines) = self.game.sign_page() {
+                    let panel = egui::Rect::from_min_size(
+                        origin + egui::vec2(w * scale * 0.1, h * scale * 0.58),
+                        egui::vec2(w * scale * 0.8, 86.0),
+                    );
+                    ui.painter().rect_filled(
+                        panel,
+                        6.0,
+                        egui::Color32::from_rgba_unmultiplied(16, 24, 48, 230),
+                    );
+                    ui.painter().rect_stroke(
+                        panel,
+                        6.0,
+                        egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(200, 180, 120)),
+                    );
+                    for (i, line) in lines.iter().enumerate() {
+                        ui.painter().text(
+                            panel.left_top() + egui::vec2(16.0, 12.0 + 22.0 * i as f32),
+                            egui::Align2::LEFT_TOP,
+                            line,
+                            egui::FontId::proportional(18.0),
+                            egui::Color32::WHITE,
+                        );
+                    }
                 }
                 // Toalls, PMs and admin lines, newest at the foot, above
                 // the chat line and the status line.

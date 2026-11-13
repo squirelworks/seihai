@@ -212,6 +212,11 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         s.walking,
         s.walk_gani.as_ref().map(|g| g.frame),
     );
+    // On a chair (core's `sitting`, the 2.05 chair probe): the sit pose.
+    if s.sitting && !s.walking {
+        f.pose = "sit";
+        f.step = chars::Step::At(0);
+    }
     // Lifting and carrying hold the object up (the lift shows as the
     // still carry, as `lift.gani` is not among the poses drawn).
     if s.carried.is_some() && !s.in_water {
@@ -712,5 +717,15 @@ mod tests {
         s.gmap.as_mut().unwrap().levels.clear();
         let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_ne!(px(&f, nx, ny), NPC_MISSING);
+    }
+
+    /// On a chair the player is drawn sitting; walking off it, walking.
+    #[test]
+    fn a_player_on_a_chair_sits() {
+        let mut s = session(0);
+        s.sitting = true;
+        assert_eq!(own_figure(&s).pose, "sit");
+        s.walking = true;
+        assert_ne!(own_figure(&s).pose, "sit");
     }
 }
