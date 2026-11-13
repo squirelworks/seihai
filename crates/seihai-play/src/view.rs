@@ -11,12 +11,15 @@
 //!
 //! S swings the sword ([`Game::swing`]), and S again during the swing
 //! spins when the server allows it. D fires the picked weapon
-//! ([`Game::fire`]); A with S held picks an item to drop and A lays it
+//! ([`Game::fire`]), or, carrying a bush or a stone, hides under it (D or
+//! A comes out); A with S held picks an item to drop and A lays it
 //! ([`Game::act`]). Q opens the item list, whose arrows pick the weapon D
 //! fires ([`Game::toggle_item_list`]). A alone lifts, throws, opens a
 //! chest or grabs ([`Game::interact`]); S while carrying throws.
 
-use crate::game::{bubble_at, bubbles, name_tags, npc_bubbles, Game, ItemList, ListKey, SignKey};
+use crate::game::{
+    baddy_verses, bubble_at, bubbles, name_tags, npc_bubbles, Game, ItemList, ListKey, SignKey,
+};
 use crate::render::{self, TILE_PX};
 use seihai_core::protocol::ChatKind;
 use std::time::{Duration, Instant};
@@ -272,6 +275,15 @@ impl View {
                         ui.painter(),
                         origin + egui::vec2(x, y) * scale,
                         egui::Align2::CENTER_BOTTOM,
+                        &text,
+                    );
+                }
+                // The verses the baddies say.
+                for (text, x, y) in baddy_verses(&self.game.session, cam_x, cam_y) {
+                    outlined(
+                        ui.painter(),
+                        origin + egui::vec2(x, y) * scale,
+                        egui::Align2::CENTER_TOP,
                         &text,
                     );
                 }
