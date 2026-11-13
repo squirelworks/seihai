@@ -35,6 +35,7 @@ use super::Game;
 use seihai_core::client::{OwnStats, OwnWeapons};
 use seihai_core::offline::Interaction;
 use seihai_core::protocol::ClientVersion;
+use seihai_core::protocol::ServerItem;
 use seihai_core::protocol::{ChatKind, ChatLine, LevelObject};
 use seihai_core::scripting::engine::host::{SessionScripts, WeaponScript};
 
@@ -384,8 +385,21 @@ impl Game {
         let objects =
             std::mem::take(&mut *self.level_objects.lock().unwrap_or_else(|e| e.into_inner()));
         let throws = std::mem::take(&mut *self.throws.lock().unwrap_or_else(|e| e.into_inner()));
+        // The server's floor items (other players' drops and the items it
+        // rolls) join the level, or leave it, as Mae takes them; walking
+        // over one picks it up (core's `tick_items`).
+        let items = std::mem::take(&mut *self.items.lock().unwrap_or_else(|e| e.into_inner()));
+        let items_changed = !items.is_empty();
+        if self.session.current_level.is_some() {
+            for it in items {
+                match it {
+                    ServerItem::Add(it) => self.session.add_server_item(it),
+                    ServerItem::Del(x, y) => self.session.remove_server_item(x, y),
+                }
+            }
+        }
         if objects.is_empty() && throws.is_empty() {
-            return false;
+            return items_changed;
         }
         self.session.present_players = self.drawn_others.iter().map(|o| o.id).collect();
         for obj in objects {
@@ -677,5 +691,31 @@ mod tests {
         assert!(g.level_objects.lock().unwrap().is_empty());
         run(&mut g, 60);
         assert!(g.session.placed_bombs.is_empty());
+    }
+
+    /// The server's floor items join the level and leave it; one under the
+    /// player's feet is picked up.
+    #[test]
+    fn the_server_floor_items_join_the_level() {
+        use seihai_core::items::{FloorItem, ITEM_LIFE};
+        let (tx, rx) = std::sync::mpsc::channel();
+        drop(tx);
+        let mut g = Game::new(rx, None, true).unwrap();
+        let live = seihai_core::client::Live::default();
+        g.attach(live.clone());
+        g.session.current_level = Some(seihai_core::assets::Level::from_board(&[0; 4096]));
+        g.session.arrive(30.0, 30.0);
+        let far = FloorItem {
+            item: seihai_core::items::GREENRUPEE,
+            x: 10.0,
+            y: 10.0,
+            life: ITEM_LIFE,
+        };
+        live.items.lock().unwrap().push(ServerItem::Add(far));
+        assert!(g.take_others_actions());
+        assert_eq!(g.session.floor_items, vec![far]);
+        live.items.lock().unwrap().push(ServerItem::Del(10.0, 10.0));
+        g.take_others_actions();
+        assert!(g.session.floor_items.is_empty());
     }
 }

@@ -165,6 +165,9 @@ pub struct Game {
     pub level_objects: online::SharedLevelObjects,
     /// Where the network thread puts other players' throws.
     pub throws: online::SharedThrows,
+    /// Where the network thread puts the server's floor item changes
+    /// (other players' drops, the items the server rolls).
+    pub items: online::SharedItems,
     /// The spin, the weapon key, the lay mode and the item list
     /// ([`actions`]).
     actions: actions::Actions,
@@ -323,6 +326,7 @@ impl Game {
             weapons: Default::default(),
             level_objects: Default::default(),
             throws: Default::default(),
+            items: Default::default(),
             actions: actions::Actions::new(),
             effect_sheets: EffectSheets::load(resolver),
         })
@@ -1041,6 +1045,7 @@ impl Game {
         self.weapons = live.weapons;
         self.level_objects = live.level_objects;
         self.throws = live.throws;
+        self.items = live.items;
     }
 
     /// Draw the status display over the level (hearts, gralats, bombs,
