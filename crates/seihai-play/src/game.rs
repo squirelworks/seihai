@@ -102,7 +102,19 @@ pub struct Game {
     crossings_sent: u64,
     /// The name of the level `session.current_level` holds (online).
     level_here: Option<String>,
+    /// Set while a Graal3D UDP link is up: the real 4.20r6 and 5.x clients
+    /// ignore the TCP level boards then (the world comes over UDP), so the
+    /// flat level is not drawn.
+    pub boards_hidden: Arc<std::sync::atomic::AtomicBool>,
+    /// What [`Game::boards_hidden`] was on the last tick.
+    hidden_drawn: bool,
+    /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
+    /// world), given the frame's size in pixels; black without one.
+    pub view3d: Option<View3d>,
 }
+
+/// [`Game::view3d`].
+pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
 /// are the footsteps and the water, as in `seihai-mae`.
@@ -178,6 +190,9 @@ impl Game {
             net_world: None,
             crossings_sent: 0,
             level_here: None,
+            boards_hidden: Default::default(),
+            hidden_drawn: false,
+            view3d: None,
         })
     }
 
@@ -693,6 +708,18 @@ impl Game {
     /// the picture changed and wants drawing again.
     pub fn tick(&mut self, dx: i8, dy: i8, now: Instant) -> bool {
         self.poll();
+        let hidden = self.boards_hidden();
+        if hidden != self.hidden_drawn {
+            self.hidden_drawn = hidden;
+            if hidden {
+                self.status = "Graal3D: the world comes over the 3D link.".into();
+            }
+            self.dirty = true;
+        }
+        // The 3D world moves on its own thread: draw every frame.
+        if hidden && self.view3d.is_some() {
+            self.dirty = true;
+        }
         self.walk(dx, dy, now);
         self.tick_poses(now);
         self.play_sounds();
@@ -726,6 +753,16 @@ impl Game {
     /// The level around the player, `view` tiles wide and high, with the
     /// other players as last taken.
     pub fn draw(&self, view: (u32, u32)) -> Frame {
+        if self.boards_hidden() {
+            if let Some(v) = &self.view3d {
+                return v(view.0 * render::TILE_PX, view.1 * render::TILE_PX);
+            }
+            return Frame::filled(
+                view.0 * render::TILE_PX,
+                view.1 * render::TILE_PX,
+                [0, 0, 0, 255],
+            );
+        }
         let others = self.other_figures();
         let players = Players {
             chars: &self.chars,
@@ -740,6 +777,12 @@ impl Game {
             view.0,
             view.1,
         )
+    }
+
+    /// True while a Graal3D link is up and the TCP boards are not drawn.
+    pub fn boards_hidden(&self) -> bool {
+        self.boards_hidden
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The other players as last taken.
@@ -805,6 +848,32 @@ pub fn spawn_online(
     level_lines: LevelLines,
     wake: impl Fn() + Clone + Send + 'static,
 ) -> (Receiver<Event>, Live) {
+    spawn_online_hooked(
+        addr,
+        version,
+        login,
+        assets,
+        level_lines,
+        online::Hooks::default(),
+        || {},
+        wake,
+    )
+}
+
+/// As [`spawn_online`], with the client line's session [`online::Hooks`]
+/// (Ato's Graal3D side). `ended` runs on the network thread once the
+/// session is over, before the view hears of it.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_online_hooked(
+    addr: String,
+    version: ClientVersion,
+    login: online::Login,
+    assets: Option<PathBuf>,
+    level_lines: LevelLines,
+    hooks: online::Hooks,
+    ended: impl FnOnce() + Send + 'static,
+    wake: impl Fn() + Clone + Send + 'static,
+) -> (Receiver<Event>, Live) {
     let (tx, rx) = mpsc::channel();
     let live = Live::default();
     let net_live = live.clone();
@@ -815,7 +884,7 @@ pub fn spawn_online(
             let _ = shown_tx.send(Event::Level(Box::new(l.clone()), a.clone()));
             shown_wake();
         };
-        let why = match online::run_with(
+        let why = match online::run_hooked(
             &addr,
             version,
             &login,
@@ -825,10 +894,12 @@ pub fn spawn_online(
             &mut shown,
             Some(net_live),
             &|level, name, st| level_lines(version, level, name, st),
+            &hooks,
         ) {
             Ok(()) => "The server closed the connection.".to_string(),
             Err(e) => format!("Could not log in: {e}"),
         };
+        ended();
         let _ = tx.send(Event::Ended(why));
         wake();
     });
@@ -842,6 +913,31 @@ mod tests {
     fn game() -> (Game, mpsc::Sender<Event>) {
         let (tx, rx) = mpsc::channel();
         (Game::new(rx, None, true).unwrap(), tx)
+    }
+
+    /// While a Graal3D link is up the TCP board is not drawn, and the
+    /// status says why; when it goes down the level comes back.
+    #[test]
+    fn a_graal3d_link_hides_the_tcp_board() {
+        let (mut g, tx) = game();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0x1FF; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.tick(0, 0, Instant::now());
+        let drawn = g.draw((4, 4));
+        let black = Frame::filled(4 * render::TILE_PX, 4 * render::TILE_PX, [0, 0, 0, 255]);
+        assert_ne!(drawn, black, "the level is drawn first");
+        g.boards_hidden
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(g.tick(0, 0, Instant::now()));
+        assert!(g.status.starts_with("Graal3D"), "{}", g.status);
+        assert_eq!(g.draw((4, 4)), black);
+        g.boards_hidden
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(g.tick(0, 0, Instant::now()));
+        assert_eq!(g.draw((4, 4)), drawn);
     }
 
     fn arrival(start: Option<(f32, f32)>) -> Arrival {

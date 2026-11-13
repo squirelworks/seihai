@@ -477,9 +477,9 @@ pub struct BigDataAssembler {
 
 impl BigDataAssembler {
     /// Feeds one event. Returns a transfer once all of it has arrived.
-    /// Compressed transfers (zlib, bzip2) come back with `Err` naming the
-    /// compression, since this client does not unpack them yet.
-    pub fn feed(&mut self, ev: &Event) -> Option<Result<BigData, u32>> {
+    /// Compressed transfers (zlib, bzip2) come back as `Err` with their
+    /// packed text and the compression (`graal_text::unpack` reads them).
+    pub fn feed(&mut self, ev: &Event) -> Option<Result<BigData, (BigData, u32)>> {
         match ev {
             Event::BigDataStart {
                 transfer,
@@ -507,7 +507,7 @@ impl BigDataAssembler {
         }
     }
 
-    fn finish(&mut self, transfer: u32) -> Option<Result<BigData, u32>> {
+    fn finish(&mut self, transfer: u32) -> Option<Result<BigData, (BigData, u32)>> {
         let (d, total, _) = self.open.get(&transfer)?;
         if d.text.len() < *total {
             return None;
@@ -516,7 +516,7 @@ impl BigDataAssembler {
         Some(if compression == 0 {
             Ok(d)
         } else {
-            Err(compression)
+            Err((d, compression))
         })
     }
 }
