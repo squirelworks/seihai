@@ -93,6 +93,9 @@ pub struct Game {
     pub board_mods: online::SharedBoardMods,
     /// Where the network thread puts the server's NPC updates.
     pub npc_changes: online::SharedNpcChanges,
+    /// Set when the game is dropped (its window closed): the network
+    /// thread logs out instead of keeping the player on the server.
+    closed: Arc<std::sync::atomic::AtomicBool>,
     /// The network thread's gmap, as last taken.
     net_world: Option<online::WorldView>,
     /// Crossings handed to the network thread so far.
@@ -171,6 +174,7 @@ impl Game {
             crossings: Default::default(),
             board_mods: Default::default(),
             npc_changes: Default::default(),
+            closed: Default::default(),
             net_world: None,
             crossings_sent: 0,
             level_here: None,
@@ -680,6 +684,7 @@ impl Game {
         self.crossings = live.crossings;
         self.board_mods = live.board_mods;
         self.npc_changes = live.npc_changes;
+        self.closed = live.closed;
     }
 
     /// One turn of the loop: take what the network thread sent, walk one
@@ -781,6 +786,13 @@ pub fn no_lines(_: ClientVersion, _: &Level, _: &str, _: &SessionState) -> Vec<S
     Vec::new()
 }
 
+impl Drop for Game {
+    /// The window is gone: tell the network thread to log out.
+    fn drop(&mut self) {
+        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 /// Log in at `addr` as `version` on a thread of its own (core's client
 /// session, logging to stdout) and return what the [`Game`] takes:
 /// the levels as [`Event`]s and the [`Live`] state to [`Game::attach`].
@@ -842,6 +854,19 @@ mod tests {
             file_npcs: 0,
             scripts: Vec::new(),
         }
+    }
+
+    /// Closing the window drops the game, which tells the network thread
+    /// to log out.
+    #[test]
+    fn dropping_the_game_closes_the_connection() {
+        let (mut g, _tx) = game();
+        let live = Live::default();
+        let closed = live.closed.clone();
+        g.attach(live);
+        assert!(!closed.load(std::sync::atomic::Ordering::SeqCst));
+        drop(g);
+        assert!(closed.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]
