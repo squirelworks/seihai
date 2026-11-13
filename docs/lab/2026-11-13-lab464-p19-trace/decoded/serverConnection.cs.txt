@@ -1,0 +1,118 @@
+// decompiled from serverConnection.cs.dso (dso v33)
+addMessageCallback('MsgConnectionError', handleConnectionErrorMessage);
+function handleConnectionErrorMessage(%unused0, %unused1, %msgError) {
+  $ServerConnectionErrorMessage = %msgError;
+  return;
+}
+
+function GameConnection::initialControlSet(%this) {
+  echo("*** Initial Control Object");
+  if (!(Canvas.getContent() != PlayGui.getId())) goto L80;
+  Canvas.setContent(PlayGui);
+  L80:
+  return;
+}
+
+function GameConnection::setLagIcon(%this, %state) {
+  if (!(%this.getAddress() $= "local")) goto L106;
+  return;
+  L106:
+  LagIcon.setVisible((%state $= "true"));
+  return;
+}
+
+function GameConnection::onConnectionAccepted(%this) {
+  LagIcon.setVisible("0");
+  return;
+}
+
+function GameConnection::onConnectionTimedOut(%this) {
+  disconnectedCleanup();
+  MessageBoxOK("TIMED OUT", "The server connection has timed out.");
+  return;
+}
+
+function GameConnection::onConnectionDropped(%this, %msg) {
+  disconnectedCleanup();
+  MessageBoxOK("DISCONNECT", "The server has dropped the connection: " @ %msg);
+  return;
+}
+
+function GameConnection::onConnectionError(%this, %msg) {
+  return;
+}
+
+function GameConnection::onConnectRequestRejected(%this, %msg) {
+  if (!(%msg $= "CR_INVALID_PROTOCOL_VERSION")) goto L242;
+  %error = "Incompatible protocol version: Your game version is not compatible with this server.";
+  goto L389;
+  L242:
+  if (!(%msg $= "CR_INVALID_CONNECT_PACKET")) goto L259;
+  %error = "Internal Error: badly formed network packet";
+  goto L389;
+  L259:
+  if (!(%msg $= "CR_YOUAREBANNED")) goto L276;
+  %error = "You are not allowed to play on this server.";
+  goto L389;
+  L276:
+  if (!(%msg $= "CR_SERVERFULL")) goto L293;
+  %error = "This server is full.";
+  goto L389;
+  L293:
+  if (!(%msg $= "CHR_PROTOCOL")) goto L310;
+  %error = "Incompatible protocol version: Your game version is not compatible with this server.";
+  goto L389;
+  L310:
+  if (!(%msg $= "CHR_CLASSCRC")) goto L327;
+  %error = "Incompatible game classes: Your game version is not compatible with this server.";
+  goto L389;
+  L327:
+  if (!(%msg $= "CHR_INVALID_CHALLENGE_PACKET")) goto L344;
+  %error = "Internal Error: Invalid server response packet";
+  goto L389;
+  L344:
+  if (!(%msg $= "CHR_PROTOCOL_LESS")) goto L361;
+  %error = "Please update your Graal, the server is requiring a new Graal version!";
+  goto L389;
+  L361:
+  if (!(%msg $= "CHR_PROTOCOL_GREATER")) goto L378;
+  %error = "The server runs an older version of Graal, contact the admins to update it.";
+  goto L389;
+  L378:
+  %error = "Connection error: " @ %msg;
+  L389:
+  disconnectedCleanup();
+  MessageBoxOK("REJECTED", %error);
+  return;
+}
+
+function GameConnection::onConnectRequestTimedOut(%this) {
+  disconnectedCleanup();
+  MessageBoxOK("TIMED OUT", "Your connection to the server timed out.");
+  return;
+}
+
+function disconnect() {
+  if (!isObject(ServerConnection)) goto L463;
+  ServerConnection.delete();
+  L463:
+  disconnectedCleanup();
+  return;
+}
+
+function disconnectedCleanup() {
+  HudMessageVector.clear();
+  alxStopAll();
+  if (!isObject(MusicPlayer)) goto L512;
+  MusicPlayer.stop();
+  L512:
+  LagIcon.setVisible("0");
+  clientCmdclearBottomPrint();
+  clientCmdClearCenterPrint();
+  clearTextureHolds();
+  purgeResources();
+  Canvas.setContent(MainMenuGui2D);
+  return;
+}
+
+return;

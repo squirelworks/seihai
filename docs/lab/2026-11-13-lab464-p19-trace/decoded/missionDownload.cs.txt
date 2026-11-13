@@ -1,0 +1,67 @@
+// decompiled from missionDownload.cs.dso (dso v33)
+function clientCmdMissionStartPhase1(%seq, %missionName, %musicTrack) {
+  echo("*** New Mission: " @ %missionName);
+  echo("*** Phase 1: Download Datablocks & Targets");
+  onMissionDownloadPhase1(%missionName, %musicTrack);
+  commandToServer('MissionStartPhase1Ack', %seq);
+  return;
+}
+
+function onDataBlockObjectReceived(%index, %total) {
+  onPhase1Progress((%index / %total));
+  return;
+}
+
+function clientCmdMissionStartPhase2(%seq, %missionName) {
+  onPhase1Complete();
+  echo("*** Phase 2: Download Ghost Objects");
+  purgeResources();
+  onMissionDownloadPhase2(%missionName);
+  commandToServer('MissionStartPhase2Ack', %seq);
+  return;
+}
+
+function onGhostAlwaysStarted(%ghostCount) {
+  $ghostCount = %ghostCount;
+  $ghostsRecvd = 0;
+  return;
+}
+
+function onGhostAlwaysObjectReceived() {
+  $ghostsRecvd = ($ghostsRecvd + 1.0);
+  onPhase2Progress(($ghostsRecvd / $ghostCount));
+  return;
+}
+
+function clientCmdMissionStartPhase3(%seq, %missionName) {
+  onPhase2Complete();
+  StartClientReplication();
+  StartFoliageReplication();
+  echo("*** Phase 3: Mission Lighting");
+  $MSeq = %seq;
+  error("Lighting mission....");
+  if (!lightScene("sceneLightingComplete", "")) goto L290;
+  schedule("1", "0", "updateLightingProgress");
+  onMissionDownloadPhase3(%missionName);
+  $lightingMission = 1;
+  L290:
+  return;
+}
+
+function updateLightingProgress() {
+  onPhase3Progress($SceneLighting::lightingProgress);
+  if (!$lightingMission) goto L331;
+  $lightingProgressThread = schedule("1", "0", "updateLightingProgress");
+  L331:
+  return;
+}
+
+function sceneLightingComplete() {
+  echo("Mission lighting done");
+  onPhase3Complete();
+  onMissionDownloadComplete();
+  commandToServer('MissionStartPhase3Ack', $MSeq);
+  return;
+}
+
+return;

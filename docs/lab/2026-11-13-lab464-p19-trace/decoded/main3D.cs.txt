@@ -1,0 +1,86 @@
+// decompiled from main3D.cs.dso (dso v33)
+function loadScripts() {
+  exec("defaults.cs");
+  exec("clientprefs3D.cs");
+  exec("message.cs");
+  exec("actionMap.cs");
+  exec("canvas.cs");
+  addMaterialMapping("sand.jpg", "detail: terraindetail_sand", "sound: 0", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("grass.jpg", "detail: terraindetail_grass", "sound: 1", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("patchy.jpg", "detail: terraindetail_patchy", "sound: 2", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("cobbles.png", "detail: terraindetail_cobbles", "sound: 3", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("terrain_desert1.jpg", "detail: terraindetail_desert", "sound: 0", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("terrain_desert2.jpg", "detail: terraindetail_cobbles", "sound: 0", "color: 0.46 0.36 0.26 0.4 0.0");
+  addMaterialMapping("terrain_snow1.jpg", "detail: terraindetail_snow", "sound: 0", "color: 1 1 1 0.4 0.0");
+  addMaterialMapping("terrain_snow2.jpg", "detail: terraindetail_snow", "sound: 0", "color: 1 1 1 0.4 0.0");
+  addMaterialMapping("terrain_snow3.jpg", "detail: terraindetail_snow", "sound: 0", "color: 1 1 1 0.4 0.0");
+  return;
+}
+
+function initClient() {
+  exec("customProfiles.cs");
+  if (!!$gameScreenSet) goto L289;
+  $gameScreenSet = 1;
+  setScreenMode(firstWord($pref::Video::resolution), getWord($pref::Video::resolution, "1"), getWord($pref::Video::resolution, "2"), $pref::Video::fullScreen);
+  L289:
+  initCanvas("Graal3D");
+  exec("audioProfiles.cs");
+  exec("defaultGameProfiles.cs");
+  exec("playGui.gui");
+  exec("loadingGui.gui");
+  exec("frameOverlayGui.gui");
+  exec("metrics.cs");
+  exec("missionDownload.cs");
+  exec("missionDownload2.cs");
+  exec("serverConnection.cs");
+  exec("loadingGui.cs");
+  exec("playGui.cs");
+  exec("centerPrint.cs");
+  setNetPort("0");
+  setShadowDetailLevel($pref::shadows);
+  setDefaultFov($pref::Player::defaultFov);
+  setZoomSpeed($pref::Player::zoomSpeed);
+  Canvas.setContent("LoadingGui");
+  new GameConnection(ServerConnection) {
+  };
+  %conn = <new GameConnection(ServerConnection)>;
+  %conn.connect();
+  return;
+}
+
+function clientCmdSyncClock(%time) {
+  HudClock.setTime(%time);
+  return;
+}
+
+function clientCmdMissionStart(%unused0) {
+  return;
+}
+
+function clientCmdMissionEnd(%unused0) {
+  alxStopAll();
+  $lightingMission = 0;
+  $sceneLighting::terminateLighting = 1;
+  return;
+}
+
+function onStart()   // package graal3D {
+  Parent::onStart();
+  echo("\n--------- Initializing Graal 3D ---------");
+  setRandomSeed();
+  loadScripts();
+  initClient();
+  return;
+}
+
+function onExit()   // package graal3D {
+  echo("Exporting client prefs");
+  export("$pref::*", "scripts/clientprefs3D.cs", False);
+  Parent::onExit();
+  return;
+}
+
+deactivatePackage(graal);
+activatePackage(graal3D);
+onStart();
+return;

@@ -1,0 +1,199 @@
+##### C:/Users/brian/AppData/Local/Temp/claude/53f153c29421b466/00fd0f50-3cb1-4a52-b876-37d470b01f16/scratchpad/p19/in/missionDownload.cs.dso  ver=33 code=375 trailing=0
+    0  FUNC clientCmdMissionStartPhase1(%seq, %missionName, %musicTrack) end=61
+   10  PUSH_FRAME
+   11  LOADIMMED_STR '*** New Mission: '
+   13  ADVANCE_STR
+   14  SETCURVAR %missionName
+   16  LOADVAR_STR
+   17  REWIND_STR
+   18  PUSH
+   19  CALLFUNC_RESOLVE echo [func]
+   23  STR_TO_NONE
+   24  PUSH_FRAME
+   25  LOADIMMED_STR '*** Phase 1: Download Datablocks & Targets'
+   27  PUSH
+   28  CALLFUNC_RESOLVE echo [func]
+   32  STR_TO_NONE
+   33  PUSH_FRAME
+   34  SETCURVAR %missionName
+   36  LOADVAR_STR
+   37  PUSH
+   38  SETCURVAR %musicTrack
+   40  LOADVAR_STR
+   41  PUSH
+   42  CALLFUNC_RESOLVE onMissionDownloadPhase1 [func]
+   46  STR_TO_NONE
+   47  PUSH_FRAME
+   48  TAG_TO_STR 'MissionStartPhase1Ack'
+   50  PUSH
+   51  SETCURVAR %seq
+   53  LOADVAR_STR
+   54  PUSH
+   55  CALLFUNC_RESOLVE commandToServer [func]
+   59  STR_TO_NONE
+   60  RETURN
+   61  FUNC onDataBlockObjectReceived(%index, %total) end=86
+   70  PUSH_FRAME
+   71  SETCURVAR %total
+   73  LOADVAR_FLT
+   74  SETCURVAR %index
+   76  LOADVAR_FLT
+   77  DIV
+   78  FLT_TO_STR
+   79  PUSH
+   80  CALLFUNC_RESOLVE onPhase1Progress [func]
+   84  STR_TO_NONE
+   85  RETURN
+   86  FUNC clientCmdMissionStartPhase2(%seq, %missionName) end=140
+   95  PUSH_FRAME
+   96  CALLFUNC_RESOLVE onPhase1Complete [func]
+  100  STR_TO_NONE
+  101  PUSH_FRAME
+  102  LOADIMMED_STR '*** Phase 2: Download Ghost Objects'
+  104  PUSH
+  105  CALLFUNC_RESOLVE echo [func]
+  109  STR_TO_NONE
+  110  PUSH_FRAME
+  111  CALLFUNC_RESOLVE purgeResources [func]
+  115  STR_TO_NONE
+  116  PUSH_FRAME
+  117  SETCURVAR %missionName
+  119  LOADVAR_STR
+  120  PUSH
+  121  CALLFUNC_RESOLVE onMissionDownloadPhase2 [func]
+  125  STR_TO_NONE
+  126  PUSH_FRAME
+  127  TAG_TO_STR 'MissionStartPhase2Ack'
+  129  PUSH
+  130  SETCURVAR %seq
+  132  LOADVAR_STR
+  133  PUSH
+  134  CALLFUNC_RESOLVE commandToServer [func]
+  138  STR_TO_NONE
+  139  RETURN
+  140  FUNC onGhostAlwaysStarted(%ghostCount) end=162
+  148  SETCURVAR %ghostCount
+  150  LOADVAR_STR
+  151  SETCURVAR_CREATE $ghostCount
+  153  SAVEVAR_STR
+  154  STR_TO_NONE
+  155  LOADIMMED_UINT 0
+  157  SETCURVAR_CREATE $ghostsRecvd
+  159  SAVEVAR_UINT
+  160  UINT_TO_NONE
+  161  RETURN
+  162  FUNC onGhostAlwaysObjectReceived() end=193
+  169  LOADIMMED_FLT 1.0
+  171  SETCURVAR_CREATE $ghostsRecvd
+  173  LOADVAR_FLT
+  174  ADD
+  175  SAVEVAR_FLT
+  176  FLT_TO_NONE
+  177  PUSH_FRAME
+  178  SETCURVAR $ghostCount
+  180  LOADVAR_FLT
+  181  SETCURVAR $ghostsRecvd
+  183  LOADVAR_FLT
+  184  DIV
+  185  FLT_TO_STR
+  186  PUSH
+  187  CALLFUNC_RESOLVE onPhase2Progress [func]
+  191  STR_TO_NONE
+  192  RETURN
+  193  FUNC clientCmdMissionStartPhase3(%seq, %missionName) end=291
+  202  PUSH_FRAME
+  203  CALLFUNC_RESOLVE onPhase2Complete [func]
+  207  STR_TO_NONE
+  208  PUSH_FRAME
+  209  CALLFUNC_RESOLVE StartClientReplication [func]
+  213  STR_TO_NONE
+  214  PUSH_FRAME
+  215  CALLFUNC_RESOLVE StartFoliageReplication [func]
+  219  STR_TO_NONE
+  220  PUSH_FRAME
+  221  LOADIMMED_STR '*** Phase 3: Mission Lighting'
+  223  PUSH
+  224  CALLFUNC_RESOLVE echo [func]
+  228  STR_TO_NONE
+  229  SETCURVAR %seq
+  231  LOADVAR_STR
+  232  SETCURVAR_CREATE $MSeq
+  234  SAVEVAR_STR
+  235  STR_TO_NONE
+  236  PUSH_FRAME
+  237  LOADIMMED_STR 'Lighting mission....'
+  239  PUSH
+  240  CALLFUNC_RESOLVE error [func]
+  244  STR_TO_NONE
+  245  PUSH_FRAME
+  246  LOADIMMED_STR 'sceneLightingComplete'
+  248  PUSH
+  249  LOADIMMED_STR ''
+  251  PUSH
+  252  CALLFUNC_RESOLVE lightScene [func]
+  256  STR_TO_FLT
+  257  JMPIFFNOT 290
+  259  PUSH_FRAME
+  260  LOADIMMED_STR '1'
+  262  PUSH
+  263  LOADIMMED_STR '0'
+  265  PUSH
+  266  LOADIMMED_STR 'updateLightingProgress'
+  268  PUSH
+  269  CALLFUNC_RESOLVE schedule [func]
+  273  STR_TO_NONE
+  274  PUSH_FRAME
+  275  SETCURVAR %missionName
+  277  LOADVAR_STR
+  278  PUSH
+  279  CALLFUNC_RESOLVE onMissionDownloadPhase3 [func]
+  283  STR_TO_NONE
+  284  LOADIMMED_UINT 1
+  286  SETCURVAR_CREATE $lightingMission
+  288  SAVEVAR_UINT
+  289  UINT_TO_NONE
+  290  RETURN
+  291  FUNC updateLightingProgress() end=332
+  298  PUSH_FRAME
+  299  SETCURVAR $SceneLighting::lightingProgress
+  301  LOADVAR_STR
+  302  PUSH
+  303  CALLFUNC_RESOLVE onPhase3Progress [func]
+  307  STR_TO_NONE
+  308  SETCURVAR $lightingMission
+  310  LOADVAR_FLT
+  311  JMPIFFNOT 331
+  313  PUSH_FRAME
+  314  LOADIMMED_STR '1'
+  316  PUSH
+  317  LOADIMMED_STR '0'
+  319  PUSH
+  320  LOADIMMED_STR 'updateLightingProgress'
+  322  PUSH
+  323  CALLFUNC_RESOLVE schedule [func]
+  327  SETCURVAR_CREATE $lightingProgressThread
+  329  SAVEVAR_STR
+  330  STR_TO_NONE
+  331  RETURN
+  332  FUNC sceneLightingComplete() end=374
+  339  PUSH_FRAME
+  340  LOADIMMED_STR 'Mission lighting done'
+  342  PUSH
+  343  CALLFUNC_RESOLVE echo [func]
+  347  STR_TO_NONE
+  348  PUSH_FRAME
+  349  CALLFUNC_RESOLVE onPhase3Complete [func]
+  353  STR_TO_NONE
+  354  PUSH_FRAME
+  355  CALLFUNC_RESOLVE onMissionDownloadComplete [func]
+  359  STR_TO_NONE
+  360  PUSH_FRAME
+  361  TAG_TO_STR 'MissionStartPhase3Ack'
+  363  PUSH
+  364  SETCURVAR $MSeq
+  366  LOADVAR_STR
+  367  PUSH
+  368  CALLFUNC_RESOLVE commandToServer [func]
+  372  STR_TO_NONE
+  373  RETURN
+  374  RETURN

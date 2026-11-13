@@ -1,0 +1,53 @@
+// decompiled from message.cs.dso (dso v33)
+function clientCmdChatMessage(%unused0, %voice, %pitch, %msgString, %a1, %a2, %a3, %a4, %a5, %a6, %a7, %a8, %a9, %a10) {
+  onChatMessage(detag(%msgString), %voice, %pitch);
+  return;
+}
+
+function clientCmdServerMessage(%msgType, %msgString, %a1, %a2, %a3, %a4, %a5, %a6, %a7, %a8, %a9, %a10) {
+  %tag = getWord(%msgType, "0");
+  %i = 0;
+  %func = $MSGCB["", %i];
+  if (!!(%func $= "")) goto L199;
+  L110:
+  call(%func, %msgType, %msgString, %a1, %a2, %a3, %a4, %a5, %a6, %a7, %a8, %a9, %a10);
+  %i = (%i + 1.0);
+  %func = $MSGCB["", %i];
+  if (!(%func $= "")) goto L110;
+  L199:
+  if (!!(%tag $= "")) goto L329;
+  %i = 0;
+  %func = $MSGCB[%tag, %i];
+  if (!!(%func $= "")) goto L329;
+  L239:
+  call(%func, %msgType, %msgString, %a1, %a2, %a3, %a4, %a5, %a6, %a7, %a8, %a9, %a10);
+  %i = (%i + 1.0);
+  %func = $MSGCB[%tag, %i];
+  if (!(%func $= "")) goto L239;
+  L329:
+  return;
+}
+
+function addMessageCallback(%msgType, %func) {
+  %i = 0;
+  %afunc = $MSGCB[%msgType, %i];
+  if (!!(%afunc $= "")) goto L412;
+  L369:
+  if (!(%afunc $= %func)) goto L380;
+  return;
+  L380:
+  %i = (%i + 1.0);
+  %afunc = $MSGCB[%msgType, %i];
+  if (!(%afunc $= "")) goto L369;
+  L412:
+  $MSGCB[%msgType, %i] = %func;
+  return;
+}
+
+function defaultMessageCallback(%msgType, %msgString, %a1, %a2, %a3, %a4, %a5, %a6, %a7, %a8, %a9, %a10) {
+  onServerMessage(detag(%msgString));
+  return;
+}
+
+addMessageCallback("", defaultMessageCallback);
+return;

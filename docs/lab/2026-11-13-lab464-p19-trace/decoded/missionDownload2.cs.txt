@@ -1,0 +1,92 @@
+// decompiled from missionDownload2.cs.dso (dso v33)
+function setSnowBallPosition(%progress) {
+  %screenw = getWord(LoadingGui.extent, "0");
+  %screenh = getWord(LoadingGui.extent, "0");
+  if (!(%progress > 0.2)) goto L71;
+  goto L77;
+  L71:
+  L77:
+  %snowprogress = (%progress / 4.0);
+  %snowballx = mFloor((((110.0 + (375.0 * %snowprogress)) * %screenw) / 640.0));
+  %snowbally = mFloor((((245.0 - (100.0 * mSin((%snowprogress * 3.14)))) * %screenh) / 480.0));
+  LoadingGuiSnowBall.position = %snowballx SPC %snowbally;
+  %snowgfx = (1.0 + mFloor((%progress * 2.99)));
+  LoadingGuiSnowBall.setBitmap("g3d_splashsnow" @ %snowgfx @ ".png");
+  %snowplayer = (1.0 + mFloor((%progress * 10.0)));
+  if (!(%snowplayer > 5.0)) goto L241;
+  %snowplayer = 5;
+  L241:
+  LoadingGuiPlayer.setBitmap("g3d_playersnow" @ %snowplayer @ ".png");
+  return;
+}
+
+function onMissionDownloadPhase1(%unused0, %unused1) {
+  setSnowBallPosition("0");
+  LoadingGuiSnowHair.setBitmap("g3d_hairsnow1.png");
+  return;
+}
+
+function onPhase1Progress(%progress) {
+  setSnowBallPosition(%progress);
+  Canvas.repaint();
+  return;
+}
+
+function onPhase1Complete() {
+  return;
+}
+
+function onMissionDownloadPhase2() {
+  $loadingObjects = 1;
+  setSnowBallPosition("0");
+  LoadingGuiSnowHair.setBitmap("g3d_hairsnow3.png");
+  Canvas.repaint();
+  return;
+}
+
+function onPhase2Progress(%progress) {
+  setSnowBallPosition(%progress);
+  Canvas.repaint();
+  return;
+}
+
+function onPhase2Complete() {
+  $loadingObjects = 0;
+  return;
+}
+
+function onFileChunkReceived(%fileName, %ofs, %size) {
+  LoadingFileProgress.setVisible("1");
+  LoadingFileProgress.setValue((%ofs / %size));
+  LoadingFileProgressTxt.setValue("Downloading " @ %fileName @ "...");
+  Canvas.repaint();
+  return;
+}
+
+function onMissionDownloadPhase3() {
+  setSnowBallPosition("0");
+  LoadingGuiSnowHair.setBitmap("g3d_hairsnow4.png");
+  Canvas.repaint();
+  return;
+}
+
+function onPhase3Progress(%progress) {
+  setSnowBallPosition(%progress);
+  return;
+}
+
+function onPhase3Complete() {
+  setSnowBallPosition("1");
+  $lightingMission = 0;
+  return;
+}
+
+function onMissionDownloadComplete() {
+  LoadingFileProgress.setVisible("0");
+  $missionRunning = 1;
+  StartSurfaceReferencer();
+  StartGrassReplication();
+  return;
+}
+
+return;

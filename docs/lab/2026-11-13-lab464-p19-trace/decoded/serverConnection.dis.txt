@@ -1,0 +1,300 @@
+##### C:/Users/brian/AppData/Local/Temp/claude/53f153c29421b466/00fd0f50-3cb1-4a52-b876-37d470b01f16/scratchpad/p19/in/serverConnection.cs.dso  ver=33 code=562 trailing=0
+    0  PUSH_FRAME
+    1  TAG_TO_STR 'MsgConnectionError'
+    3  PUSH
+    4  LOADIMMED_IDENT handleConnectionErrorMessage
+    6  PUSH
+    7  CALLFUNC_RESOLVE addMessageCallback [func]
+   11  STR_TO_NONE
+   12  FUNC handleConnectionErrorMessage(<bad 611>, <bad 620>, %msgError) end=30
+   22  SETCURVAR %msgError
+   24  LOADVAR_STR
+   25  SETCURVAR_CREATE $ServerConnectionErrorMessage
+   27  SAVEVAR_STR
+   28  STR_TO_NONE
+   29  RETURN
+   30  FUNC GameConnection::initialControlSet(%this) end=81
+   38  PUSH_FRAME
+   39  LOADIMMED_STR '*** Initial Control Object'
+   41  PUSH
+   42  CALLFUNC_RESOLVE echo [func]
+   46  STR_TO_NONE
+   47  PUSH_FRAME
+   48  LOADIMMED_IDENT PlayGui
+   50  PUSH
+   51  CALLFUNC getId [method]
+   55  STR_TO_FLT
+   56  PUSH_FRAME
+   57  LOADIMMED_IDENT Canvas
+   59  PUSH
+   60  CALLFUNC getContent [method]
+   64  STR_TO_FLT
+   65  CMPNE
+   66  JMPIFNOT 80
+   68  PUSH_FRAME
+   69  LOADIMMED_IDENT Canvas
+   71  PUSH
+   72  LOADIMMED_IDENT PlayGui
+   74  PUSH
+   75  CALLFUNC setContent [method]
+   79  STR_TO_NONE
+   80  RETURN
+   81  FUNC GameConnection::setLagIcon(%this, %state) end=125
+   90  PUSH_FRAME
+   91  SETCURVAR %this
+   93  LOADVAR_STR
+   94  PUSH
+   95  CALLFUNC getAddress [method]
+   99  ADVANCE_STR_NUL
+  100  LOADIMMED_STR 'local'
+  102  COMPARE_STR
+  103  JMPIFNOT 106
+  105  RETURN
+  106  PUSH_FRAME
+  107  LOADIMMED_IDENT LagIcon
+  109  PUSH
+  110  SETCURVAR %state
+  112  LOADVAR_STR
+  113  ADVANCE_STR_NUL
+  114  LOADIMMED_STR 'true'
+  116  COMPARE_STR
+  117  UINT_TO_STR
+  118  PUSH
+  119  CALLFUNC setVisible [method]
+  123  STR_TO_NONE
+  124  RETURN
+  125  FUNC GameConnection::onConnectionAccepted(%this) end=146
+  133  PUSH_FRAME
+  134  LOADIMMED_IDENT LagIcon
+  136  PUSH
+  137  LOADIMMED_STR '0'
+  139  PUSH
+  140  CALLFUNC setVisible [method]
+  144  STR_TO_NONE
+  145  RETURN
+  146  FUNC GameConnection::onConnectionTimedOut(%this) end=173
+  154  PUSH_FRAME
+  155  CALLFUNC_RESOLVE disconnectedCleanup [func]
+  159  STR_TO_NONE
+  160  PUSH_FRAME
+  161  LOADIMMED_STR 'TIMED OUT'
+  163  PUSH
+  164  LOADIMMED_STR 'The server connection has timed out.'
+  166  PUSH
+  167  CALLFUNC_RESOLVE MessageBoxOK [func]
+  171  STR_TO_NONE
+  172  RETURN
+  173  FUNC GameConnection::onConnectionDropped(%this, %msg) end=206
+  182  PUSH_FRAME
+  183  CALLFUNC_RESOLVE disconnectedCleanup [func]
+  187  STR_TO_NONE
+  188  PUSH_FRAME
+  189  LOADIMMED_STR 'DISCONNECT'
+  191  PUSH
+  192  LOADIMMED_STR 'The server has dropped the connection: '
+  194  ADVANCE_STR
+  195  SETCURVAR %msg
+  197  LOADVAR_STR
+  198  REWIND_STR
+  199  PUSH
+  200  CALLFUNC_RESOLVE MessageBoxOK [func]
+  204  STR_TO_NONE
+  205  RETURN
+  206  FUNC GameConnection::onConnectionError(%this, %msg) [nobody] end=216
+  215  RETURN
+  216  FUNC GameConnection::onConnectRequestRejected(%this, %msg) end=409
+  225  SETCURVAR %msg
+  227  LOADVAR_STR
+  228  ADVANCE_STR_NUL
+  229  LOADIMMED_STR 'CR_INVALID_PROTOCOL_VERSION'
+  231  COMPARE_STR
+  232  JMPIFNOT 242
+  234  LOADIMMED_STR 'Incompatible protocol version: Your game version is not compatible with this server.'
+  236  SETCURVAR_CREATE %error
+  238  SAVEVAR_STR
+  239  STR_TO_NONE
+  240  JMP 389
+  242  SETCURVAR %msg
+  244  LOADVAR_STR
+  245  ADVANCE_STR_NUL
+  246  LOADIMMED_STR 'CR_INVALID_CONNECT_PACKET'
+  248  COMPARE_STR
+  249  JMPIFNOT 259
+  251  LOADIMMED_STR 'Internal Error: badly formed network packet'
+  253  SETCURVAR_CREATE %error
+  255  SAVEVAR_STR
+  256  STR_TO_NONE
+  257  JMP 389
+  259  SETCURVAR %msg
+  261  LOADVAR_STR
+  262  ADVANCE_STR_NUL
+  263  LOADIMMED_STR 'CR_YOUAREBANNED'
+  265  COMPARE_STR
+  266  JMPIFNOT 276
+  268  LOADIMMED_STR 'You are not allowed to play on this server.'
+  270  SETCURVAR_CREATE %error
+  272  SAVEVAR_STR
+  273  STR_TO_NONE
+  274  JMP 389
+  276  SETCURVAR %msg
+  278  LOADVAR_STR
+  279  ADVANCE_STR_NUL
+  280  LOADIMMED_STR 'CR_SERVERFULL'
+  282  COMPARE_STR
+  283  JMPIFNOT 293
+  285  LOADIMMED_STR 'This server is full.'
+  287  SETCURVAR_CREATE %error
+  289  SAVEVAR_STR
+  290  STR_TO_NONE
+  291  JMP 389
+  293  SETCURVAR %msg
+  295  LOADVAR_STR
+  296  ADVANCE_STR_NUL
+  297  LOADIMMED_STR 'CHR_PROTOCOL'
+  299  COMPARE_STR
+  300  JMPIFNOT 310
+  302  LOADIMMED_STR 'Incompatible protocol version: Your game version is not compatible with this server.'
+  304  SETCURVAR_CREATE %error
+  306  SAVEVAR_STR
+  307  STR_TO_NONE
+  308  JMP 389
+  310  SETCURVAR %msg
+  312  LOADVAR_STR
+  313  ADVANCE_STR_NUL
+  314  LOADIMMED_STR 'CHR_CLASSCRC'
+  316  COMPARE_STR
+  317  JMPIFNOT 327
+  319  LOADIMMED_STR 'Incompatible game classes: Your game version is not compatible with this server.'
+  321  SETCURVAR_CREATE %error
+  323  SAVEVAR_STR
+  324  STR_TO_NONE
+  325  JMP 389
+  327  SETCURVAR %msg
+  329  LOADVAR_STR
+  330  ADVANCE_STR_NUL
+  331  LOADIMMED_STR 'CHR_INVALID_CHALLENGE_PACKET'
+  333  COMPARE_STR
+  334  JMPIFNOT 344
+  336  LOADIMMED_STR 'Internal Error: Invalid server response packet'
+  338  SETCURVAR_CREATE %error
+  340  SAVEVAR_STR
+  341  STR_TO_NONE
+  342  JMP 389
+  344  SETCURVAR %msg
+  346  LOADVAR_STR
+  347  ADVANCE_STR_NUL
+  348  LOADIMMED_STR 'CHR_PROTOCOL_LESS'
+  350  COMPARE_STR
+  351  JMPIFNOT 361
+  353  LOADIMMED_STR 'Please update your Graal, the server is requiring a new Graal version!'
+  355  SETCURVAR_CREATE %error
+  357  SAVEVAR_STR
+  358  STR_TO_NONE
+  359  JMP 389
+  361  SETCURVAR %msg
+  363  LOADVAR_STR
+  364  ADVANCE_STR_NUL
+  365  LOADIMMED_STR 'CHR_PROTOCOL_GREATER'
+  367  COMPARE_STR
+  368  JMPIFNOT 378
+  370  LOADIMMED_STR 'The server runs an older version of Graal, contact the admins to update it.'
+  372  SETCURVAR_CREATE %error
+  374  SAVEVAR_STR
+  375  STR_TO_NONE
+  376  JMP 389
+  378  LOADIMMED_STR 'Connection error: '
+  380  ADVANCE_STR
+  381  SETCURVAR %msg
+  383  LOADVAR_STR
+  384  REWIND_STR
+  385  SETCURVAR_CREATE %error
+  387  SAVEVAR_STR
+  388  STR_TO_NONE
+  389  PUSH_FRAME
+  390  CALLFUNC_RESOLVE disconnectedCleanup [func]
+  394  STR_TO_NONE
+  395  PUSH_FRAME
+  396  LOADIMMED_STR 'REJECTED'
+  398  PUSH
+  399  SETCURVAR %error
+  401  LOADVAR_STR
+  402  PUSH
+  403  CALLFUNC_RESOLVE MessageBoxOK [func]
+  407  STR_TO_NONE
+  408  RETURN
+  409  FUNC GameConnection::onConnectRequestTimedOut(%this) end=436
+  417  PUSH_FRAME
+  418  CALLFUNC_RESOLVE disconnectedCleanup [func]
+  422  STR_TO_NONE
+  423  PUSH_FRAME
+  424  LOADIMMED_STR 'TIMED OUT'
+  426  PUSH
+  427  LOADIMMED_STR 'Your connection to the server timed out.'
+  429  PUSH
+  430  CALLFUNC_RESOLVE MessageBoxOK [func]
+  434  STR_TO_NONE
+  435  RETURN
+  436  FUNC disconnect() end=470
+  443  PUSH_FRAME
+  444  LOADIMMED_IDENT ServerConnection
+  446  PUSH
+  447  CALLFUNC_RESOLVE isObject [func]
+  451  STR_TO_FLT
+  452  JMPIFFNOT 463
+  454  PUSH_FRAME
+  455  LOADIMMED_IDENT ServerConnection
+  457  PUSH
+  458  CALLFUNC delete [method]
+  462  STR_TO_NONE
+  463  PUSH_FRAME
+  464  CALLFUNC_RESOLVE disconnectedCleanup [func]
+  468  STR_TO_NONE
+  469  RETURN
+  470  FUNC disconnectedCleanup() end=561
+  477  PUSH_FRAME
+  478  LOADIMMED_IDENT HudMessageVector
+  480  PUSH
+  481  CALLFUNC clear [method]
+  485  STR_TO_NONE
+  486  PUSH_FRAME
+  487  CALLFUNC_RESOLVE alxStopAll [func]
+  491  STR_TO_NONE
+  492  PUSH_FRAME
+  493  LOADIMMED_IDENT MusicPlayer
+  495  PUSH
+  496  CALLFUNC_RESOLVE isObject [func]
+  500  STR_TO_FLT
+  501  JMPIFFNOT 512
+  503  PUSH_FRAME
+  504  LOADIMMED_IDENT MusicPlayer
+  506  PUSH
+  507  CALLFUNC stop [method]
+  511  STR_TO_NONE
+  512  PUSH_FRAME
+  513  LOADIMMED_IDENT LagIcon
+  515  PUSH
+  516  LOADIMMED_STR '0'
+  518  PUSH
+  519  CALLFUNC setVisible [method]
+  523  STR_TO_NONE
+  524  PUSH_FRAME
+  525  CALLFUNC_RESOLVE clientCmdclearBottomPrint [func]
+  529  STR_TO_NONE
+  530  PUSH_FRAME
+  531  CALLFUNC_RESOLVE clientCmdClearCenterPrint [func]
+  535  STR_TO_NONE
+  536  PUSH_FRAME
+  537  CALLFUNC_RESOLVE clearTextureHolds [func]
+  541  STR_TO_NONE
+  542  PUSH_FRAME
+  543  CALLFUNC_RESOLVE purgeResources [func]
+  547  STR_TO_NONE
+  548  PUSH_FRAME
+  549  LOADIMMED_IDENT Canvas
+  551  PUSH
+  552  LOADIMMED_IDENT MainMenuGui2D
+  554  PUSH
+  555  CALLFUNC setContent [method]
+  559  STR_TO_NONE
+  560  RETURN
+  561  RETURN

@@ -1,0 +1,360 @@
+##### C:/Users/brian/AppData/Local/Temp/claude/53f153c29421b466/00fd0f50-3cb1-4a52-b876-37d470b01f16/scratchpad/p19/in/main3D.cs.dso  ver=33 code=651 trailing=0
+    0  FUNC loadScripts() end=215
+    7  PUSH_FRAME
+    8  LOADIMMED_STR 'defaults.cs'
+   10  PUSH
+   11  CALLFUNC_RESOLVE exec [func]
+   15  STR_TO_NONE
+   16  PUSH_FRAME
+   17  LOADIMMED_STR 'clientprefs3D.cs'
+   19  PUSH
+   20  CALLFUNC_RESOLVE exec [func]
+   24  STR_TO_NONE
+   25  PUSH_FRAME
+   26  LOADIMMED_STR 'message.cs'
+   28  PUSH
+   29  CALLFUNC_RESOLVE exec [func]
+   33  STR_TO_NONE
+   34  PUSH_FRAME
+   35  LOADIMMED_STR 'actionMap.cs'
+   37  PUSH
+   38  CALLFUNC_RESOLVE exec [func]
+   42  STR_TO_NONE
+   43  PUSH_FRAME
+   44  LOADIMMED_STR 'canvas.cs'
+   46  PUSH
+   47  CALLFUNC_RESOLVE exec [func]
+   51  STR_TO_NONE
+   52  PUSH_FRAME
+   53  LOADIMMED_STR 'sand.jpg'
+   55  PUSH
+   56  LOADIMMED_STR 'detail: terraindetail_sand'
+   58  PUSH
+   59  LOADIMMED_STR 'sound: 0'
+   61  PUSH
+   62  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+   64  PUSH
+   65  CALLFUNC_RESOLVE addMaterialMapping [func]
+   69  STR_TO_NONE
+   70  PUSH_FRAME
+   71  LOADIMMED_STR 'grass.jpg'
+   73  PUSH
+   74  LOADIMMED_STR 'detail: terraindetail_grass'
+   76  PUSH
+   77  LOADIMMED_STR 'sound: 1'
+   79  PUSH
+   80  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+   82  PUSH
+   83  CALLFUNC_RESOLVE addMaterialMapping [func]
+   87  STR_TO_NONE
+   88  PUSH_FRAME
+   89  LOADIMMED_STR 'patchy.jpg'
+   91  PUSH
+   92  LOADIMMED_STR 'detail: terraindetail_patchy'
+   94  PUSH
+   95  LOADIMMED_STR 'sound: 2'
+   97  PUSH
+   98  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+  100  PUSH
+  101  CALLFUNC_RESOLVE addMaterialMapping [func]
+  105  STR_TO_NONE
+  106  PUSH_FRAME
+  107  LOADIMMED_STR 'cobbles.png'
+  109  PUSH
+  110  LOADIMMED_STR 'detail: terraindetail_cobbles'
+  112  PUSH
+  113  LOADIMMED_STR 'sound: 3'
+  115  PUSH
+  116  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+  118  PUSH
+  119  CALLFUNC_RESOLVE addMaterialMapping [func]
+  123  STR_TO_NONE
+  124  PUSH_FRAME
+  125  LOADIMMED_STR 'terrain_desert1.jpg'
+  127  PUSH
+  128  LOADIMMED_STR 'detail: terraindetail_desert'
+  130  PUSH
+  131  LOADIMMED_STR 'sound: 0'
+  133  PUSH
+  134  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+  136  PUSH
+  137  CALLFUNC_RESOLVE addMaterialMapping [func]
+  141  STR_TO_NONE
+  142  PUSH_FRAME
+  143  LOADIMMED_STR 'terrain_desert2.jpg'
+  145  PUSH
+  146  LOADIMMED_STR 'detail: terraindetail_cobbles'
+  148  PUSH
+  149  LOADIMMED_STR 'sound: 0'
+  151  PUSH
+  152  LOADIMMED_STR 'color: 0.46 0.36 0.26 0.4 0.0'
+  154  PUSH
+  155  CALLFUNC_RESOLVE addMaterialMapping [func]
+  159  STR_TO_NONE
+  160  PUSH_FRAME
+  161  LOADIMMED_STR 'terrain_snow1.jpg'
+  163  PUSH
+  164  LOADIMMED_STR 'detail: terraindetail_snow'
+  166  PUSH
+  167  LOADIMMED_STR 'sound: 0'
+  169  PUSH
+  170  LOADIMMED_STR 'color: 1 1 1 0.4 0.0'
+  172  PUSH
+  173  CALLFUNC_RESOLVE addMaterialMapping [func]
+  177  STR_TO_NONE
+  178  PUSH_FRAME
+  179  LOADIMMED_STR 'terrain_snow2.jpg'
+  181  PUSH
+  182  LOADIMMED_STR 'detail: terraindetail_snow'
+  184  PUSH
+  185  LOADIMMED_STR 'sound: 0'
+  187  PUSH
+  188  LOADIMMED_STR 'color: 1 1 1 0.4 0.0'
+  190  PUSH
+  191  CALLFUNC_RESOLVE addMaterialMapping [func]
+  195  STR_TO_NONE
+  196  PUSH_FRAME
+  197  LOADIMMED_STR 'terrain_snow3.jpg'
+  199  PUSH
+  200  LOADIMMED_STR 'detail: terraindetail_snow'
+  202  PUSH
+  203  LOADIMMED_STR 'sound: 0'
+  205  PUSH
+  206  LOADIMMED_STR 'color: 1 1 1 0.4 0.0'
+  208  PUSH
+  209  CALLFUNC_RESOLVE addMaterialMapping [func]
+  213  STR_TO_NONE
+  214  RETURN
+  215  FUNC initClient() end=489
+  222  PUSH_FRAME
+  223  LOADIMMED_STR 'customProfiles.cs'
+  225  PUSH
+  226  CALLFUNC_RESOLVE exec [func]
+  230  STR_TO_NONE
+  231  SETCURVAR $gameScreenSet
+  233  LOADVAR_UINT
+  234  NOT
+  235  JMPIFNOT 289
+  237  LOADIMMED_UINT 1
+  239  SETCURVAR_CREATE $gameScreenSet
+  241  SAVEVAR_UINT
+  242  UINT_TO_NONE
+  243  PUSH_FRAME
+  244  PUSH_FRAME
+  245  SETCURVAR $pref::Video::resolution
+  247  LOADVAR_STR
+  248  PUSH
+  249  CALLFUNC_RESOLVE firstWord [func]
+  253  PUSH
+  254  PUSH_FRAME
+  255  SETCURVAR $pref::Video::resolution
+  257  LOADVAR_STR
+  258  PUSH
+  259  LOADIMMED_STR '1'
+  261  PUSH
+  262  CALLFUNC_RESOLVE getWord [func]
+  266  PUSH
+  267  PUSH_FRAME
+  268  SETCURVAR $pref::Video::resolution
+  270  LOADVAR_STR
+  271  PUSH
+  272  LOADIMMED_STR '2'
+  274  PUSH
+  275  CALLFUNC_RESOLVE getWord [func]
+  279  PUSH
+  280  SETCURVAR $pref::Video::fullScreen
+  282  LOADVAR_STR
+  283  PUSH
+  284  CALLFUNC_RESOLVE setScreenMode [func]
+  288  STR_TO_NONE
+  289  PUSH_FRAME
+  290  LOADIMMED_STR 'Graal3D'
+  292  PUSH
+  293  CALLFUNC_RESOLVE initCanvas [func]
+  297  STR_TO_NONE
+  298  PUSH_FRAME
+  299  LOADIMMED_STR 'audioProfiles.cs'
+  301  PUSH
+  302  CALLFUNC_RESOLVE exec [func]
+  306  STR_TO_NONE
+  307  PUSH_FRAME
+  308  LOADIMMED_STR 'defaultGameProfiles.cs'
+  310  PUSH
+  311  CALLFUNC_RESOLVE exec [func]
+  315  STR_TO_NONE
+  316  PUSH_FRAME
+  317  LOADIMMED_STR 'playGui.gui'
+  319  PUSH
+  320  CALLFUNC_RESOLVE exec [func]
+  324  STR_TO_NONE
+  325  PUSH_FRAME
+  326  LOADIMMED_STR 'loadingGui.gui'
+  328  PUSH
+  329  CALLFUNC_RESOLVE exec [func]
+  333  STR_TO_NONE
+  334  PUSH_FRAME
+  335  LOADIMMED_STR 'frameOverlayGui.gui'
+  337  PUSH
+  338  CALLFUNC_RESOLVE exec [func]
+  342  STR_TO_NONE
+  343  PUSH_FRAME
+  344  LOADIMMED_STR 'metrics.cs'
+  346  PUSH
+  347  CALLFUNC_RESOLVE exec [func]
+  351  STR_TO_NONE
+  352  PUSH_FRAME
+  353  LOADIMMED_STR 'missionDownload.cs'
+  355  PUSH
+  356  CALLFUNC_RESOLVE exec [func]
+  360  STR_TO_NONE
+  361  PUSH_FRAME
+  362  LOADIMMED_STR 'missionDownload2.cs'
+  364  PUSH
+  365  CALLFUNC_RESOLVE exec [func]
+  369  STR_TO_NONE
+  370  PUSH_FRAME
+  371  LOADIMMED_STR 'serverConnection.cs'
+  373  PUSH
+  374  CALLFUNC_RESOLVE exec [func]
+  378  STR_TO_NONE
+  379  PUSH_FRAME
+  380  LOADIMMED_STR 'loadingGui.cs'
+  382  PUSH
+  383  CALLFUNC_RESOLVE exec [func]
+  387  STR_TO_NONE
+  388  PUSH_FRAME
+  389  LOADIMMED_STR 'playGui.cs'
+  391  PUSH
+  392  CALLFUNC_RESOLVE exec [func]
+  396  STR_TO_NONE
+  397  PUSH_FRAME
+  398  LOADIMMED_STR 'centerPrint.cs'
+  400  PUSH
+  401  CALLFUNC_RESOLVE exec [func]
+  405  STR_TO_NONE
+  406  PUSH_FRAME
+  407  LOADIMMED_STR '0'
+  409  PUSH
+  410  CALLFUNC_RESOLVE setNetPort [func]
+  414  STR_TO_NONE
+  415  PUSH_FRAME
+  416  SETCURVAR $pref::shadows
+  418  LOADVAR_STR
+  419  PUSH
+  420  CALLFUNC_RESOLVE setShadowDetailLevel [func]
+  424  STR_TO_NONE
+  425  PUSH_FRAME
+  426  SETCURVAR $pref::Player::defaultFov
+  428  LOADVAR_STR
+  429  PUSH
+  430  CALLFUNC_RESOLVE setDefaultFov [func]
+  434  STR_TO_NONE
+  435  PUSH_FRAME
+  436  SETCURVAR $pref::Player::zoomSpeed
+  438  LOADVAR_STR
+  439  PUSH
+  440  CALLFUNC_RESOLVE setZoomSpeed [func]
+  444  STR_TO_NONE
+  445  PUSH_FRAME
+  446  LOADIMMED_IDENT Canvas
+  448  PUSH
+  449  LOADIMMED_STR 'LoadingGui'
+  451  PUSH
+  452  CALLFUNC setContent [method]
+  456  STR_TO_NONE
+  457  LOADIMMED_UINT 0
+  459  PUSH_FRAME
+  460  LOADIMMED_IDENT GameConnection
+  462  PUSH
+  463  LOADIMMED_IDENT ServerConnection
+  465  PUSH
+  466  CREATE_OBJECT parent= datablock=0 fail=474
+  470  ADD_OBJECT 1
+  472  END_OBJECT 1
+  474  SETCURVAR_CREATE %conn
+  476  SAVEVAR_UINT
+  477  UINT_TO_NONE
+  478  PUSH_FRAME
+  479  SETCURVAR %conn
+  481  LOADVAR_STR
+  482  PUSH
+  483  CALLFUNC connect [method]
+  487  STR_TO_NONE
+  488  RETURN
+  489  FUNC clientCmdSyncClock(%time) end=511
+  497  PUSH_FRAME
+  498  LOADIMMED_IDENT HudClock
+  500  PUSH
+  501  SETCURVAR %time
+  503  LOADVAR_STR
+  504  PUSH
+  505  CALLFUNC setTime [method]
+  509  STR_TO_NONE
+  510  RETURN
+  511  FUNC clientCmdMissionStart(<bad 593>) [nobody] end=520
+  519  RETURN
+  520  FUNC clientCmdMissionEnd(<bad 593>) end=547
+  528  PUSH_FRAME
+  529  CALLFUNC_RESOLVE alxStopAll [func]
+  533  STR_TO_NONE
+  534  LOADIMMED_UINT 0
+  536  SETCURVAR_CREATE $lightingMission
+  538  SAVEVAR_UINT
+  539  UINT_TO_NONE
+  540  LOADIMMED_UINT 1
+  542  SETCURVAR_CREATE $sceneLighting::terminateLighting
+  544  SAVEVAR_UINT
+  545  UINT_TO_NONE
+  546  RETURN
+  547  FUNC onStart() package=graal3D end=588
+  554  PUSH_FRAME
+  555  CALLFUNC Parent::onStart [parent]
+  559  STR_TO_NONE
+  560  PUSH_FRAME
+  561  LOADIMMED_STR '\n--------- Initializing Graal 3D ---------'
+  563  PUSH
+  564  CALLFUNC_RESOLVE echo [func]
+  568  STR_TO_NONE
+  569  PUSH_FRAME
+  570  CALLFUNC_RESOLVE setRandomSeed [func]
+  574  STR_TO_NONE
+  575  PUSH_FRAME
+  576  CALLFUNC_RESOLVE loadScripts [func]
+  580  STR_TO_NONE
+  581  PUSH_FRAME
+  582  CALLFUNC_RESOLVE initClient [func]
+  586  STR_TO_NONE
+  587  RETURN
+  588  FUNC onExit() package=graal3D end=626
+  595  PUSH_FRAME
+  596  LOADIMMED_STR 'Exporting client prefs'
+  598  PUSH
+  599  CALLFUNC_RESOLVE echo [func]
+  603  STR_TO_NONE
+  604  PUSH_FRAME
+  605  LOADIMMED_STR '$pref::*'
+  607  PUSH
+  608  LOADIMMED_STR 'scripts/clientprefs3D.cs'
+  610  PUSH
+  611  LOADIMMED_IDENT False
+  613  PUSH
+  614  CALLFUNC_RESOLVE export [func]
+  618  STR_TO_NONE
+  619  PUSH_FRAME
+  620  CALLFUNC Parent::onExit [parent]
+  624  STR_TO_NONE
+  625  RETURN
+  626  PUSH_FRAME
+  627  LOADIMMED_IDENT graal
+  629  PUSH
+  630  CALLFUNC_RESOLVE deactivatePackage [func]
+  634  STR_TO_NONE
+  635  PUSH_FRAME
+  636  LOADIMMED_IDENT graal3D
+  638  PUSH
+  639  CALLFUNC_RESOLVE activatePackage [func]
+  643  STR_TO_NONE
+  644  PUSH_FRAME
+  645  CALLFUNC_RESOLVE onStart [func]
+  649  STR_TO_NONE
+  650  RETURN
