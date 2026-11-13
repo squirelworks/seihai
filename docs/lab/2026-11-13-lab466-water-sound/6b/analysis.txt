@@ -1,0 +1,90 @@
+beep found at 1.013 s into the recording (gain 0.37); times below are seconds after the beep event
+recording 42.2 s at 44100 Hz; peak abs 0.0000
+
+events (s after the beep):
+     0.00 beep
+     1.97 rec-start
+     2.52 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+     6.02 shot 0-start
+     6.18 mark land-walk-start
+     6.18 down Down
+     6.43 up Down
+     6.74 down Down
+     6.99 ato: link to egk-10.graal at 54.5 19
+     7.46 ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs 
+    10.09 up Down
+    13.40 shot 1-egk10
+    13.56 down Left
+    13.82 up Left
+    14.13 down Left
+    16.68 up Left
+    16.98 mark land-idle-start
+    19.99 shot 2-land-idle
+    20.13 down Left
+    21.77 up Left
+    22.08 mark float-start
+    23.08 shot 3-in-water
+    27.23 mark float-end
+    27.23 down Left
+    27.89 ato: link to egj-10.graal at 61 45
+    28.31 ato: level egj-10.graal: from the server's board, start (61, 45), 0 NPCs (0
+    30.28 up Left
+    30.59 shot 4-swim-left
+    30.69 down Right
+    32.60 ato: link to egk-10.graal at 0 45
+    32.91 ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 
+    35.35 up Right
+    35.66 mark back-on-land
+    36.66 shot 5-back-on-land
+    36.80 down Right
+    38.35 up Right
+    40.66 mark stop-rec
+    40.66 shot 6-end
+    40.82 done
+
+water.wav onsets (0):
+
+steps2.wav onsets (0):
+
+RMS per second (dBFS):
+    0   -180.0
+    1   -180.0
+    2   -180.0
+    3   -180.0
+    4   -180.0
+    5   -180.0
+    6   -180.0
+    7   -180.0
+    8   -180.0
+    9   -180.0
+   10   -180.0
+   11   -180.0
+   12   -180.0
+   13   -180.0
+   14   -180.0
+   15   -180.0
+   16   -180.0
+   17   -180.0
+   18   -180.0
+   19   -180.0
+   20   -180.0
+   21   -180.0
+   22   -180.0
+   23   -180.0
+   24   -180.0
+   25   -180.0
+   26   -180.0
+   27   -180.0
+   28   -180.0
+   29   -180.0
+   30   -180.0
+   31   -180.0
+   32   -180.0
+   33   -180.0
+   34   -180.0
+   35   -180.0
+   36   -180.0
+   37   -180.0
+   38   -180.0
+   39   -180.0
+   40   -180.0

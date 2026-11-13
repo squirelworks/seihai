@@ -1,0 +1,578 @@
+Determining the server to start... success! (command line)
+[02:24 AM] :: ------------------------------ START ------------------------------
+[02:24 AM] :: Preagonal GS2Emu version 4.0.0-beta (2026-11-13 16:19)
+[02:24 AM] :: Programmed by Joey, Nalin, Codr, and Cadavre.
+[02:24 AM] 
+[02:24 AM] :: Starting server: enigma.
+[02:24 AM]      (command line): /home/graalrunner/lab400/w/servers/enigma
+[02:24 AM] :: Loading server configuration.
+[02:24 AM]      Loading settings...
+[02:24 AM]        Server generation: newmain
+[02:24 AM]      Loading admin settings.
+[02:24 AM]      Loading allowed client versions.
+[02:24 AM]      Folder config: ENABLED
+[02:24 AM]      Loading file system...
+[02:24 AM]        adding bodies_enigma/ [*.png] to body
+[02:24 AM]        adding heads_enigma/ [*.png] to head
+[02:24 AM]        adding swords_enigma/ [*.png] to sword
+[02:24 AM]        adding shields_enigma/ [*.png] to shield
+[02:24 AM]        adding / [*.graal] to level
+[02:24 AM]        adding / [*.nw] to level
+[02:24 AM]        adding / [*.gmap] to level
+[02:24 AM]        adding / [*.png] to file
+[02:24 AM]        adding / [*.mng] to file
+[02:24 AM]        adding / [*.gif] to file
+[02:24 AM]        adding / [*.gani] to file
+[02:24 AM]        adding / [*.wav] to file
+[02:24 AM]        adding / [*.txt] to file
+[02:24 AM]        adding / [*.gmap] to file
+[02:24 AM]        adding / [*.gani] to file
+[02:24 AM]        adding images/ [*.png] to file
+[02:24 AM]        adding images/ [*.gif] to file
+[02:24 AM]        adding images/ [*.mng] to file
+[02:24 AM]        adding gifs/ [*.png] to file
+[02:24 AM]        adding gifs/ [*.gif] to file
+[02:24 AM]        adding wings_enigma/ [*.gif] to file
+[02:24 AM]        adding quests/ [*.nw] to level
+[02:24 AM]        adding quests/ [*.graal] to level
+[02:24 AM]        adding ganis/ [*gani] to file
+[02:24 AM]        adding sounds/ [*.wav] to file
+[02:24 AM]        adding overworld/ [*.nw] to level
+[02:24 AM]        adding enigma/ [*.nw] to level
+[02:24 AM]        adding enigma/ [*.txt] to file
+[02:24 AM]        adding enigma/ [*.gmap] to level
+[02:24 AM]        adding KuJi/ [*.nw] to level
+[02:24 AM]        adding KuJi/ [*.graal] to level
+[02:24 AM]        adding houses/ [*.nw] to level
+[02:24 AM]        adding hellraven/ [*.nw] to level
+[02:24 AM]        adding hellraven/ [*.graal] to level
+[02:24 AM]        adding hellraven/ [*.png] to file
+[02:24 AM]        adding hellraven/ [*.mng] to file
+[02:24 AM]        adding hellraven/ [*.txt] to file
+[02:24 AM]        adding hellraven/ [*.gif] to file
+[02:24 AM]        adding dev/ [*.nw] to level
+[02:24 AM]        adding dev/ [*.png] to file
+[02:24 AM]        adding dev/ [*.mng] to file
+[02:24 AM]        adding dev/ [*gif] to file
+[02:24 AM]        adding bodies_enigma/ [*.mng] to body
+[02:24 AM]        adding enigma/ [*.nw] to level
+[02:24 AM]        adding enigma/ [*.gmap] to level
+[02:24 AM]        adding enigma/ [*.gmap] to file
+[02:24 AM]        adding hats/ [*.png] to file
+[02:24 AM]        adding hats/ [*.gif] to file
+[02:24 AM]        adding hats/ [*.mng] to file
+[02:24 AM]        adding holycarp/ [*.nw] to level
+[02:24 AM]        adding j5/ [*.nw] to level
+[02:24 AM]        adding j5/ [*.gmap] to level
+[02:24 AM]        adding j5/ [*.png] to file
+[02:24 AM]        adding j5/ [*.gmap] to file
+[02:24 AM]        adding events/ [*.nw] to level
+[02:24 AM]        adding events/ [*.graal] to level
+[02:24 AM]        adding oldeg/ [*.graal] to level
+[02:24 AM]        adding oldeg/ [*.nw] to level
+[02:24 AM]      Loading config/servermessage.html.
+[02:24 AM]      Loading config/ipbans.txt.
+[02:24 AM]      Loading translations: classic style.
+[02:24 AM]      Loading word filter.
+[02:24 AM]      Loading serverflags.txt.
+[02:24 AM]      Loading guilds...
+[02:24 AM]        Example
+[02:24 AM]      Loading maps...
+[02:24 AM]        [gmap] start2.gmap
+[02:24 AM] :: Secure login (SEI00001): created key config/seihai-login.key
+[02:24 AM]      Public key: Ow7GztZU+PFzMrjgYVaO7UsZUHY0Vxjoehf3AvRzTH0
+[02:24 AM]      Fingerprint: SHA256:qsEKD1jXmV4pgm2WVstk8gctQc5Ko4oc0cQnY+Iz6ek
+[02:24 AM] :: Loading server objects.
+[02:24 AM]      Loading weapons...
+[02:24 AM]        Staff/GP Tool (0.146482 ms)
+[02:24 AM]        Events Setter (0.045942 ms)
+[02:24 AM]        j5/d (0.081077 ms)
+[02:24 AM]        Warp Rings/Main Warp (0.161878 ms)
+[02:24 AM]        Axe (0.169075 ms)
+[02:24 AM]        Toys/Car (0.168255 ms)
+[02:24 AM]        Staff/GAT Tool (0.133939 ms)
+[02:24 AM]        -dropmoney (0.278169 ms)
+[02:24 AM]        Schoko/gun (0.280512 ms)
+[02:24 AM]        *Trading (0.434315 ms)
+[02:24 AM]        Toys/Mine (0.139437 ms)
+[02:24 AM]        HR/Ingame RC (0.11307 ms)
+[02:24 AM]        Ninjablade/Fishing Rod (0.241279 ms)
+[02:24 AM]        Weapons/Sword (0.235429 ms)
+[02:24 AM]        *Survivor System (0.055281 ms)
+[02:24 AM]        -Tiles (0.030318 ms)
+[02:24 AM]        -system (0.06092 ms)
+[02:24 AM]        -atmosphere (0.058223 ms)
+[02:24 AM]        Hammer (0.12396 ms)
+[02:24 AM]        Staff/FAQ Tool (0.075765 ms)
+[02:24 AM]        SongBooks/Shop Melody (0.253338 ms)
+[02:24 AM]        cliffjumping2 (0.068756 ms)
+[02:24 AM]        Warp Rings/Ciro Warp (0.111983 ms)
+[02:24 AM]        HolyCrusaders Ring (0.073564 ms)
+[02:24 AM]        Tantalus Warp (0.063453 ms)
+[02:24 AM]        hellraven/testwarp (0.082297 ms)
+[02:24 AM]        Staff/Admin Boots (0.079102 ms)
+[02:24 AM]        Merry Christmas!/Teddy Bear (0.073103 ms)
+[02:24 AM]        Trading Item (0.149989 ms)
+[02:24 AM]        -movement (0.467978 ms)
+[02:24 AM]        M14 (0.152538 ms)
+[02:24 AM]        Radio (0.120622 ms)
+[02:24 AM]        Weeds Warper (0.092831 ms)
+[02:24 AM]        -hurt (0.076034 ms)
+[02:24 AM]        James/Tristad (0.348037 ms)
+[02:24 AM]        Staff/Gani Setter (0.078816 ms)
+[02:24 AM]        The Flames Warp Ring (0.060583 ms)
+[02:24 AM]        *Jungle System (0.062579 ms)
+[02:24 AM]        -commands (0.10044 ms)
+[02:24 AM]        StaffLounge (0.05858 ms)
+[02:24 AM]        CV Warp (0.062935 ms)
+[02:24 AM]        *Commands (0.067778 ms)
+[02:24 AM]        Staff/ET Admin Tool (0.068955 ms)
+[02:24 AM]        The Flames Boots (0.079253 ms)
+[02:24 AM]        hellraven/fibspiral (0.075056 ms)
+[02:24 AM]        Spar Warp (0.059964 ms)
+[02:24 AM]        Outfit Saver (0.083637 ms)
+[02:24 AM]        Schoko/Hatsetter (0.052372 ms)
+[02:24 AM]        j5/M14 (0.06179 ms)
+[02:24 AM]        Staff/Admin Tool (0.29685 ms)
+[02:24 AM]        House/Deed (0.067096 ms)
+[02:24 AM]        Toys/Rock Buster (0.102523 ms)
+[02:24 AM]        Pick Axe (0.061623 ms)
+[02:24 AM]        db_gui (0.058057 ms)
+[02:24 AM]        Staff/Guild Control (0.063098 ms)
+[02:24 AM]        Planter (0.061824 ms)
+[02:24 AM]        ! Developer Rules (0.067207 ms)
+[02:24 AM]        Suit Saver (0.060491 ms)
+[02:24 AM]        -SwordSystem (0.049624 ms)
+[02:24 AM]        Jumping Shoes (0.063213 ms)
+[02:24 AM]        Staff/Summoner (0.048481 ms)
+[02:24 AM]        Merry Christmas!/Santa Hat (0.051194 ms)
+[02:24 AM]        Staff/ET Boots (0.057433 ms)
+[02:24 AM]        -Hotel System2 (0.053781 ms)
+[02:24 AM]        Chrono Hangout (0.059877 ms)
+[02:24 AM]        Warp Rings/Events Center (0.04748 ms)
+[02:24 AM]        *Events Warper (0.044795 ms)
+[02:24 AM]        *SPARBAN (0.04289 ms)
+[02:24 AM]        Toys/Jumprope (0.041763 ms)
+[02:24 AM]        -Clothing (0.045188 ms)
+[02:24 AM]        Flute (0.07431 ms)
+[02:24 AM]        db_menu (0.08152 ms)
+[02:24 AM]        db_items (0.187445 ms)
+[02:24 AM]        Toys/Fallapart (0.05565 ms)
+[02:24 AM]        Warp Rings/PK warp (0.779563 ms)
+[02:24 AM]        *CS System (0.065975 ms)
+[02:24 AM]        Weapons/Bow (0.054705 ms)
+[02:24 AM]        Staff/Guild NPC Control! (0.054573 ms)
+[02:24 AM]        Bow (0.051689 ms)
+[02:24 AM]        Fishing Rod (0.05891 ms)
+[02:24 AM]        Toys/BB Gun (0.052103 ms)
+[02:24 AM]        -EventTxt (0.055357 ms)
+[02:24 AM]        Hat (0.086002 ms)
+[02:24 AM]        Toys/Pogostick (0.050435 ms)
+[02:24 AM]        Misc./Wings (0.125515 ms)
+[02:24 AM]        Ninjablade/Chat (0.058769 ms)
+[02:24 AM]        testthing (0.05738 ms)
+[02:24 AM]        Pirate Ship (0.043704 ms)
+[02:24 AM]        (Completed in 11.0135 ms)
+[02:24 AM]      Pre-loading map levels.
+[02:24 AM]        (Completed in 0.000528 ms)
+[02:24 AM] :: Initializing player listen socket.
+[02:24 AM]      Listening on: 127.0.0.1:14806.
+[02:24 AM] :: Started server enigma (Enigma (2005))
+[02:25 AM] :: New login: lab400s1 [New Client (2.22+)] [G3D03014 (3.041)]
+[02:25 AM] :: [Login] Localhost mode: accepting 'lab400s1' without listserver verification.
+[02:25 AM] :: Client disconnected: [3] lab400s1
+[02:25 AM] :: New login: lab400s1 [New Client (2.22+)] [G3D28015 (3.153)]
+[02:25 AM] :: [Login] Localhost mode: accepting 'lab400s1' without listserver verification.
+[02:25 AM] :: Client disconnected: [3] lab400s1
+[02:25 AM] :: The server is now shutting down...
+[02:25 AM] :: -------------------------------------
+=== restart localhost=false
+Determining the server to start... success! (command line)
+[02:25 AM] :: ------------------------------ START ------------------------------
+[02:25 AM] :: Preagonal GS2Emu version 4.0.0-beta (2026-11-13 16:19)
+[02:25 AM] :: Programmed by Joey, Nalin, Codr, and Cadavre.
+[02:25 AM] 
+[02:25 AM] :: Starting server: enigma.
+[02:25 AM]      (command line): /home/graalrunner/lab400/w/servers/enigma
+[02:25 AM] :: Loading server configuration.
+[02:25 AM]      Loading settings...
+[02:25 AM]        Server generation: newmain
+[02:25 AM]      Loading admin settings.
+[02:25 AM]      Loading allowed client versions.
+[02:25 AM]      Folder config: ENABLED
+[02:25 AM]      Loading file system...
+[02:25 AM]        adding bodies_enigma/ [*.png] to body
+[02:25 AM]        adding heads_enigma/ [*.png] to head
+[02:25 AM]        adding swords_enigma/ [*.png] to sword
+[02:25 AM]        adding shields_enigma/ [*.png] to shield
+[02:25 AM]        adding / [*.graal] to level
+[02:25 AM]        adding / [*.nw] to level
+[02:25 AM]        adding / [*.gmap] to level
+[02:25 AM]        adding / [*.png] to file
+[02:25 AM]        adding / [*.mng] to file
+[02:25 AM]        adding / [*.gif] to file
+[02:25 AM]        adding / [*.gani] to file
+[02:25 AM]        adding / [*.wav] to file
+[02:25 AM]        adding / [*.txt] to file
+[02:25 AM]        adding / [*.gmap] to file
+[02:25 AM]        adding / [*.gani] to file
+[02:25 AM]        adding images/ [*.png] to file
+[02:25 AM]        adding images/ [*.gif] to file
+[02:25 AM]        adding images/ [*.mng] to file
+[02:25 AM]        adding gifs/ [*.png] to file
+[02:25 AM]        adding gifs/ [*.gif] to file
+[02:25 AM]        adding wings_enigma/ [*.gif] to file
+[02:25 AM]        adding quests/ [*.nw] to level
+[02:25 AM]        adding quests/ [*.graal] to level
+[02:25 AM]        adding ganis/ [*gani] to file
+[02:25 AM]        adding sounds/ [*.wav] to file
+[02:25 AM]        adding overworld/ [*.nw] to level
+[02:25 AM]        adding enigma/ [*.nw] to level
+[02:25 AM]        adding enigma/ [*.txt] to file
+[02:25 AM]        adding enigma/ [*.gmap] to level
+[02:25 AM]        adding KuJi/ [*.nw] to level
+[02:25 AM]        adding KuJi/ [*.graal] to level
+[02:25 AM]        adding houses/ [*.nw] to level
+[02:25 AM]        adding hellraven/ [*.nw] to level
+[02:25 AM]        adding hellraven/ [*.graal] to level
+[02:25 AM]        adding hellraven/ [*.png] to file
+[02:25 AM]        adding hellraven/ [*.mng] to file
+[02:25 AM]        adding hellraven/ [*.txt] to file
+[02:25 AM]        adding hellraven/ [*.gif] to file
+[02:25 AM]        adding dev/ [*.nw] to level
+[02:25 AM]        adding dev/ [*.png] to file
+[02:25 AM]        adding dev/ [*.mng] to file
+[02:25 AM]        adding dev/ [*gif] to file
+[02:25 AM]        adding bodies_enigma/ [*.mng] to body
+[02:25 AM]        adding enigma/ [*.nw] to level
+[02:25 AM]        adding enigma/ [*.gmap] to level
+[02:25 AM]        adding enigma/ [*.gmap] to file
+[02:25 AM]        adding hats/ [*.png] to file
+[02:25 AM]        adding hats/ [*.gif] to file
+[02:25 AM]        adding hats/ [*.mng] to file
+[02:25 AM]        adding holycarp/ [*.nw] to level
+[02:25 AM]        adding j5/ [*.nw] to level
+[02:25 AM]        adding j5/ [*.gmap] to level
+[02:25 AM]        adding j5/ [*.png] to file
+[02:25 AM]        adding j5/ [*.gmap] to file
+[02:25 AM]        adding events/ [*.nw] to level
+[02:25 AM]        adding events/ [*.graal] to level
+[02:25 AM]        adding oldeg/ [*.graal] to level
+[02:25 AM]        adding oldeg/ [*.nw] to level
+[02:25 AM]      Loading config/servermessage.html.
+[02:25 AM]      Loading config/ipbans.txt.
+[02:25 AM]      Loading translations: classic style.
+[02:25 AM]      Loading word filter.
+[02:25 AM]      Loading serverflags.txt.
+[02:25 AM]      Loading guilds...
+[02:25 AM]        Example
+[02:25 AM]      Loading maps...
+[02:25 AM]        [gmap] start2.gmap
+[02:25 AM] :: Secure login (SEI00001): loaded key config/seihai-login.key
+[02:25 AM]      Public key: Ow7GztZU+PFzMrjgYVaO7UsZUHY0Vxjoehf3AvRzTH0
+[02:25 AM]      Fingerprint: SHA256:qsEKD1jXmV4pgm2WVstk8gctQc5Ko4oc0cQnY+Iz6ek
+[02:25 AM] :: Loading server objects.
+[02:25 AM]      Loading weapons...
+[02:25 AM]        Staff/GP Tool (0.217089 ms)
+[02:25 AM]        Events Setter (0.085296 ms)
+[02:25 AM]        j5/d (0.07849 ms)
+[02:25 AM]        db_items (0.56831 ms)
+[02:25 AM]        Axe (0.098831 ms)
+[02:25 AM]        Toys/Car (0.165333 ms)
+[02:25 AM]        Staff/GAT Tool (0.065796 ms)
+[02:25 AM]        -dropmoney (0.118227 ms)
+[02:25 AM]        *Trading (0.127277 ms)
+[02:25 AM]        Toys/Mine (0.056775 ms)
+[02:25 AM]        HR/Ingame RC (0.047246 ms)
+[02:25 AM]        Ninjablade/Fishing Rod (0.088054 ms)
+[02:25 AM]        Weapons/Sword (0.057532 ms)
+[02:25 AM]        *Survivor System (0.061497 ms)
+[02:25 AM]        -Tiles (0.048645 ms)
+[02:25 AM]        Pirate Ship (0.057801 ms)
+[02:25 AM]        testthing (0.061593 ms)
+[02:25 AM]        -system (0.095533 ms)
+[02:25 AM]        -atmosphere (0.065128 ms)
+[02:25 AM]        Hammer (0.051719 ms)
+[02:25 AM]        Staff/FAQ Tool (0.069756 ms)
+[02:25 AM]        SongBooks/Shop Melody (0.054042 ms)
+[02:25 AM]        cliffjumping2 (0.051752 ms)
+[02:25 AM]        Warp Rings/Ciro Warp (0.0796 ms)
+[02:25 AM]        HolyCrusaders Ring (0.033888 ms)
+[02:25 AM]        Trading Item (0.048981 ms)
+[02:25 AM]        -movement (0.187583 ms)
+[02:25 AM]        M14 (0.049912 ms)
+[02:25 AM]        Tantalus Warp (0.106313 ms)
+[02:25 AM]        hellraven/testwarp (0.052971 ms)
+[02:25 AM]        Staff/Admin Boots (0.050445 ms)
+[02:25 AM]        Merry Christmas!/Teddy Bear (0.083883 ms)
+[02:25 AM]        Pick Axe (0.073112 ms)
+[02:25 AM]        Radio (0.046868 ms)
+[02:25 AM]        Weeds Warper (0.044365 ms)
+[02:25 AM]        -hurt (0.044075 ms)
+[02:25 AM]        James/Tristad (0.044212 ms)
+[02:25 AM]        Staff/Gani Setter (0.523721 ms)
+[02:25 AM]        Schoko/gun (0.813348 ms)
+[02:25 AM]        Warp Rings/Main Warp (0.318316 ms)
+[02:25 AM]        The Flames Warp Ring (0.189126 ms)
+[02:25 AM]        *Jungle System (0.136567 ms)
+[02:25 AM]        -commands (0.284244 ms)
+[02:25 AM]        StaffLounge (0.437514 ms)
+[02:25 AM]        CV Warp (0.182289 ms)
+[02:25 AM]        *Commands (0.154192 ms)
+[02:25 AM]        Staff/ET Admin Tool (0.150046 ms)
+[02:25 AM]        The Flames Boots (0.153689 ms)
+[02:25 AM]        hellraven/fibspiral (0.221622 ms)
+[02:25 AM]        Spar Warp (0.076502 ms)
+[02:25 AM]        Outfit Saver (0.107008 ms)
+[02:25 AM]        Schoko/Hatsetter (0.05017 ms)
+[02:25 AM]        j5/M14 (0.047403 ms)
+[02:25 AM]        Staff/Admin Tool (0.22481 ms)
+[02:25 AM]        House/Deed (0.051711 ms)
+[02:25 AM]        Toys/Rock Buster (0.079153 ms)
+[02:25 AM]        db_gui (0.047838 ms)
+[02:25 AM]        Staff/Guild Control (0.053677 ms)
+[02:25 AM]        Planter (0.061964 ms)
+[02:25 AM]        ! Developer Rules (0.055172 ms)
+[02:25 AM]        Suit Saver (0.071107 ms)
+[02:25 AM]        -SwordSystem (0.075693 ms)
+[02:25 AM]        Jumping Shoes (0.102394 ms)
+[02:25 AM]        Staff/Summoner (0.079858 ms)
+[02:25 AM]        Merry Christmas!/Santa Hat (0.082653 ms)
+[02:25 AM]        Staff/ET Boots (0.098819 ms)
+[02:25 AM]        -Hotel System2 (0.101999 ms)
+[02:25 AM]        Chrono Hangout (0.072681 ms)
+[02:25 AM]        Warp Rings/Events Center (0.193157 ms)
+[02:25 AM]        *Events Warper (0.112205 ms)
+[02:25 AM]        *SPARBAN (0.08391 ms)
+[02:25 AM]        Toys/Jumprope (0.081726 ms)
+[02:25 AM]        -Clothing (0.080912 ms)
+[02:25 AM]        Flute (0.118362 ms)
+[02:25 AM]        db_menu (0.139915 ms)
+[02:25 AM]        Toys/Fallapart (0.074369 ms)
+[02:25 AM]        Warp Rings/PK warp (0.075514 ms)
+[02:25 AM]        *CS System (0.076968 ms)
+[02:25 AM]        Weapons/Bow (0.143054 ms)
+[02:25 AM]        Staff/Guild NPC Control! (0.138402 ms)
+[02:25 AM]        Bow (0.090603 ms)
+[02:25 AM]        Fishing Rod (0.232386 ms)
+[02:25 AM]        Toys/BB Gun (0.090474 ms)
+[02:25 AM]        -EventTxt (0.114068 ms)
+[02:25 AM]        Hat (0.318406 ms)
+[02:25 AM]        Toys/Pogostick (0.090973 ms)
+[02:25 AM]        Misc./Wings (0.282094 ms)
+[02:25 AM]        Ninjablade/Chat (0.099839 ms)
+[02:25 AM]        (Completed in 12.6765 ms)
+[02:25 AM]      Pre-loading map levels.
+[02:25 AM]        (Completed in 0.000517 ms)
+[02:25 AM] :: Initializing player listen socket.
+[02:25 AM]      Listening on: 127.0.0.1:14806.
+[02:25 AM] :: Started server enigma (Enigma (2005))
+[02:25 AM] :: Initializing listserver socket.
+[02:25 AM] :: listserver - Connected to 127.0.0.1:14900.
+[02:25 AM] :: ** [WARNING] Socket returned 127.0.0.1 for its local ip!  Not sending local ip to serverlist.
+[02:27 AM] :: New login: lab400a [New Client (2.22+)] [G3D03014 (3.041)]
+[02:28 AM] :: Client disconnected: [3] lab400a
+[02:28 AM] :: New login: lab400b [New Client (2.22+)] [G3D28015 (3.153)]
+[02:29 AM] :: New login: lab400c [New Client (2.22+)] [G3D03014 (3.041)]
+[02:29 AM] :: Client disconnected: [3] lab400b
+[02:29 AM] :: Client disconnected: [4] lab400c
+[02:31 AM] :: New login: lab400k3153 [New Client (2.22+)] [G3D28015 (3.153)]
+[02:32 AM] :: Client disconnected: [3] lab400k3153
+[02:34 AM] :: The server is now shutting down...
+[02:34 AM] :: -------------------------------------
+=== lab466 2026-11-13T17:59:21Z
+Determining the server to start... success! (command line)
+[02:59 AM] :: ------------------------------ START ------------------------------
+[02:59 AM] :: Preagonal GS2Emu version 4.0.0-beta (2026-11-13 16:19)
+[02:59 AM] :: Programmed by Joey, Nalin, Codr, and Cadavre.
+[02:59 AM] 
+[02:59 AM] :: Starting server: enigma.
+[02:59 AM]      (command line): /home/graalrunner/lab400/w/servers/enigma
+[02:59 AM] :: Loading server configuration.
+[02:59 AM]      Loading settings...
+[02:59 AM]        Server generation: newmain
+[02:59 AM]      Loading admin settings.
+[02:59 AM]      Loading allowed client versions.
+[02:59 AM]      Folder config: ENABLED
+[02:59 AM]      Loading file system...
+[02:59 AM]        adding bodies_enigma/ [*.png] to body
+[02:59 AM]        adding heads_enigma/ [*.png] to head
+[02:59 AM]        adding swords_enigma/ [*.png] to sword
+[02:59 AM]        adding shields_enigma/ [*.png] to shield
+[02:59 AM]        adding / [*.graal] to level
+[02:59 AM]        adding / [*.nw] to level
+[02:59 AM]        adding / [*.gmap] to level
+[02:59 AM]        adding / [*.png] to file
+[02:59 AM]        adding / [*.mng] to file
+[02:59 AM]        adding / [*.gif] to file
+[02:59 AM]        adding / [*.gani] to file
+[02:59 AM]        adding / [*.wav] to file
+[02:59 AM]        adding / [*.txt] to file
+[02:59 AM]        adding / [*.gmap] to file
+[02:59 AM]        adding / [*.gani] to file
+[02:59 AM]        adding images/ [*.png] to file
+[02:59 AM]        adding images/ [*.gif] to file
+[02:59 AM]        adding images/ [*.mng] to file
+[02:59 AM]        adding gifs/ [*.png] to file
+[02:59 AM]        adding gifs/ [*.gif] to file
+[02:59 AM]        adding wings_enigma/ [*.gif] to file
+[02:59 AM]        adding quests/ [*.nw] to level
+[02:59 AM]        adding quests/ [*.graal] to level
+[02:59 AM]        adding ganis/ [*gani] to file
+[02:59 AM]        adding sounds/ [*.wav] to file
+[02:59 AM]        adding overworld/ [*.nw] to level
+[02:59 AM]        adding enigma/ [*.nw] to level
+[02:59 AM]        adding enigma/ [*.txt] to file
+[02:59 AM]        adding enigma/ [*.gmap] to level
+[02:59 AM]        adding KuJi/ [*.nw] to level
+[02:59 AM]        adding KuJi/ [*.graal] to level
+[02:59 AM]        adding houses/ [*.nw] to level
+[02:59 AM]        adding hellraven/ [*.nw] to level
+[02:59 AM]        adding hellraven/ [*.graal] to level
+[02:59 AM]        adding hellraven/ [*.png] to file
+[02:59 AM]        adding hellraven/ [*.mng] to file
+[02:59 AM]        adding hellraven/ [*.txt] to file
+[02:59 AM]        adding hellraven/ [*.gif] to file
+[02:59 AM]        adding dev/ [*.nw] to level
+[02:59 AM]        adding dev/ [*.png] to file
+[02:59 AM]        adding dev/ [*.mng] to file
+[02:59 AM]        adding dev/ [*gif] to file
+[02:59 AM]        adding bodies_enigma/ [*.mng] to body
+[02:59 AM]        adding enigma/ [*.nw] to level
+[02:59 AM]        adding enigma/ [*.gmap] to level
+[02:59 AM]        adding enigma/ [*.gmap] to file
+[02:59 AM]        adding hats/ [*.png] to file
+[02:59 AM]        adding hats/ [*.gif] to file
+[02:59 AM]        adding hats/ [*.mng] to file
+[02:59 AM]        adding holycarp/ [*.nw] to level
+[02:59 AM]        adding j5/ [*.nw] to level
+[02:59 AM]        adding j5/ [*.gmap] to level
+[02:59 AM]        adding j5/ [*.png] to file
+[02:59 AM]        adding j5/ [*.gmap] to file
+[02:59 AM]        adding events/ [*.nw] to level
+[02:59 AM]        adding events/ [*.graal] to level
+[02:59 AM]        adding oldeg/ [*.graal] to level
+[02:59 AM]        adding oldeg/ [*.nw] to level
+[02:59 AM]      Loading config/servermessage.html.
+[02:59 AM]      Loading config/ipbans.txt.
+[02:59 AM]      Loading translations: classic style.
+[02:59 AM]      Loading word filter.
+[02:59 AM]      Loading serverflags.txt.
+[02:59 AM]      Loading guilds...
+[02:59 AM]        Example
+[02:59 AM]      Loading maps...
+[02:59 AM]        [gmap] start2.gmap
+[02:59 AM] :: Secure login (SEI00001): loaded key config/seihai-login.key
+[02:59 AM]      Public key: Ow7GztZU+PFzMrjgYVaO7UsZUHY0Vxjoehf3AvRzTH0
+[02:59 AM]      Fingerprint: SHA256:qsEKD1jXmV4pgm2WVstk8gctQc5Ko4oc0cQnY+Iz6ek
+[02:59 AM] :: Loading server objects.
+[02:59 AM]      Loading weapons...
+[02:59 AM]        Staff/GP Tool (163.584 ms)
+[02:59 AM]        Events Setter (151.415 ms)
+[02:59 AM]        j5/d (8.63532 ms)
+[02:59 AM]        db_items (20.8427 ms)
+[02:59 AM]        Staff/Gani Setter (4.57358 ms)
+[02:59 AM]        Toys/Car (13.4169 ms)
+[02:59 AM]        -dropmoney (19.6802 ms)
+[02:59 AM]        *Trading (3.61675 ms)
+[02:59 AM]        Toys/Mine (46.0061 ms)
+[02:59 AM]        *Survivor System (11.5969 ms)
+[02:59 AM]        -Tiles (23.5603 ms)
+[02:59 AM]        Pirate Ship (19.8409 ms)
+[02:59 AM]        testthing (68.1085 ms)
+[02:59 AM]        -system (16.4326 ms)
+[02:59 AM]        -atmosphere (15.1962 ms)
+[02:59 AM]        Hammer (126.758 ms)
+[02:59 AM]        Staff/FAQ Tool (15.0231 ms)
+[02:59 AM]        SongBooks/Shop Melody (21.6422 ms)
+[02:59 AM]        Warp Rings/Ciro Warp (2.93891 ms)
+[02:59 AM]        HolyCrusaders Ring (0.763172 ms)
+[02:59 AM]        Flute (0.861925 ms)
+[02:59 AM]        Tantalus Warp (1.27911 ms)
+[02:59 AM]        hellraven/testwarp (9.34646 ms)
+[02:59 AM]        Staff/Admin Boots (10.4256 ms)
+[02:59 AM]        Merry Christmas!/Teddy Bear (10.1823 ms)
+[02:59 AM]        Pick Axe (15.3289 ms)
+[02:59 AM]        M14 (1.60013 ms)
+[02:59 AM]        Weapons/Sword (4.70649 ms)
+[02:59 AM]        -movement (2.96302 ms)
+[02:59 AM]        Trading Item (4.46184 ms)
+[02:59 AM]        Weeds Warper (0.718415 ms)
+[02:59 AM]        cliffjumping2 (0.676854 ms)
+[02:59 AM]        -hurt (0.545138 ms)
+[02:59 AM]        James/Tristad (0.543717 ms)
+[02:59 AM]        Ninjablade/Chat (67.886 ms)
+[02:59 AM]        Misc./Wings (24.8508 ms)
+[02:59 AM]        Radio (20.0108 ms)
+[02:59 AM]        Ninjablade/Fishing Rod (1.35889 ms)
+[02:59 AM]        HR/Ingame RC (0.765866 ms)
+[02:59 AM]        Staff/GAT Tool (1.10205 ms)
+[02:59 AM]        Axe (0.711124 ms)
+[02:59 AM]        Schoko/gun (5.57942 ms)
+[02:59 AM]        Warp Rings/Main Warp (0.930238 ms)
+[02:59 AM]        The Flames Warp Ring (0.782766 ms)
+[02:59 AM]        *Jungle System (1.28133 ms)
+[02:59 AM]        -commands (1.71134 ms)
+[02:59 AM]        StaffLounge (1.342 ms)
+[02:59 AM]        CV Warp (0.904304 ms)
+[02:59 AM]        *Commands (0.857538 ms)
+[02:59 AM]        Staff/ET Admin Tool (1.41428 ms)
+[02:59 AM]        The Flames Boots (6.3092 ms)
+[02:59 AM]        hellraven/fibspiral (15.6731 ms)
+[02:59 AM]        Spar Warp (0.797523 ms)
+[02:59 AM]        Outfit Saver (0.660905 ms)
+[02:59 AM]        Schoko/Hatsetter (0.830603 ms)
+[02:59 AM]        j5/M14 (8.47053 ms)
+[02:59 AM]        Staff/Admin Tool (10.5595 ms)
+[02:59 AM]        House/Deed (1.63258 ms)
+[02:59 AM]        Toys/Rock Buster (2.37378 ms)
+[02:59 AM]        db_gui (1.50607 ms)
+[02:59 AM]        Staff/Guild Control (0.547671 ms)
+[02:59 AM]        Planter (0.623818 ms)
+[02:59 AM]        ! Developer Rules (0.499147 ms)
+[02:59 AM]        Suit Saver (1.11028 ms)
+[02:59 AM]        -SwordSystem (0.556147 ms)
+[02:59 AM]        Jumping Shoes (0.595473 ms)
+[02:59 AM]        Staff/Summoner (0.795943 ms)
+[02:59 AM]        Merry Christmas!/Santa Hat (0.532423 ms)
+[02:59 AM]        Staff/ET Boots (0.441872 ms)
+[02:59 AM]        -Hotel System2 (0.326531 ms)
+[02:59 AM]        Chrono Hangout (0.529736 ms)
+[02:59 AM]        Warp Rings/Events Center (0.498142 ms)
+[02:59 AM]        *Events Warper (0.502794 ms)
+[02:59 AM]        *SPARBAN (7.82032 ms)
+[02:59 AM]        Toys/Jumprope (0.65925 ms)
+[02:59 AM]        -Clothing (0.487974 ms)
+[02:59 AM]        db_menu (0.718263 ms)
+[02:59 AM]        Toys/Fallapart (0.488101 ms)
+[02:59 AM]        Warp Rings/PK warp (0.553695 ms)
+[02:59 AM]        *CS System (0.717915 ms)
+[02:59 AM]        Weapons/Bow (0.622758 ms)
+[02:59 AM]        Staff/Guild NPC Control! (0.717423 ms)
+[02:59 AM]        Bow (0.668984 ms)
+[02:59 AM]        Fishing Rod (0.726735 ms)
+[02:59 AM]        Toys/BB Gun (0.590492 ms)
+[02:59 AM]        -EventTxt (0.65966 ms)
+[02:59 AM]        Hat (0.735384 ms)
+[02:59 AM]        Toys/Pogostick (0.553113 ms)
+[02:59 AM]        (Completed in 1025.57 ms)
+[02:59 AM]      Pre-loading map levels.
+[02:59 AM]        (Completed in 0.000733 ms)
+[02:59 AM] :: Initializing player listen socket.
+[02:59 AM]      Listening on: 127.0.0.1:14806.
+[02:59 AM] :: Started server enigma (Enigma (2005))
+[02:59 AM] :: Initializing listserver socket.
+[02:59 AM] :: listserver - Connected to 127.0.0.1:14900.
+[02:59 AM] :: ** [WARNING] Socket returned 127.0.0.1 for its local ip!  Not sending local ip to serverlist.
+[03:00 AM] :: New login: lab466a [New Client (2.22+)] [G3D28015 (3.153)]
+[03:00 AM] :: Client disconnected: [3] lab466a
+[03:05 AM] :: New login: lab466a2 [New Client (2.22+)] [G3D28015 (3.153)]
+[03:06 AM] :: Client disconnected: [3] lab466a2
+[03:06 AM] :: New login: lab466b [New Client (2.22+)] [G3D28015 (3.153)]
+[03:07 AM] :: Client disconnected: [3] lab466b
+[03:10 AM] :: New login: lab466a3 [New Client (2.22+)] [G3D28015 (3.153)]
+[03:11 AM] :: Client disconnected: [3] lab466a3
+[03:11 AM] :: New login: lab466b2 [New Client (2.22+)] [G3D28015 (3.153)]
+[03:11 AM] :: Client disconnected: [3] lab466b2
+[03:16 AM] :: The server is now shutting down...
+[03:16 AM] :: -------------------------------------

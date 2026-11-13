@@ -1,0 +1,151 @@
+beep found at 1.012 s into the recording (gain 0.37); times below are seconds after the beep event
+recording 41.9 s at 44100 Hz; peak abs 0.4062
+
+events (s after the beep):
+     0.00 beep
+     1.98 rec-start
+     2.20 ato: sound: audio device opened; sounds from /home/graalrunner/seihai-lab/c
+     2.61 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+     6.06 shot 0-start
+     6.26 mark land-walk-start
+     6.26 down Down
+     6.51 up Down
+     6.82 down Down
+     7.12 ato: link to egk-10.graal at 54.5 19
+     7.61 ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs 
+    10.18 up Down
+    13.50 shot 1-egk10
+    13.67 down Left
+    13.92 up Left
+    14.23 down Left
+    16.79 up Left
+    17.10 mark land-idle-start
+    20.11 shot 2-land-idle
+    20.26 down Left
+    21.92 up Left
+    22.22 mark float-start
+    23.23 shot 3-in-water
+    27.43 mark float-end
+    27.43 down Left
+    28.11 ato: link to egj-10.graal at 61 45
+    28.50 ato: level egj-10.graal: from the server's board, start (61, 45), 0 NPCs (0
+    30.48 up Left
+    30.78 shot 4-swim-left
+    30.88 down Right
+    32.77 ato: link to egk-10.graal at 0 45
+    33.11 ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 
+    35.53 up Right
+    35.84 mark back-on-land
+    36.84 shot 5-back-on-land
+    36.94 down Right
+    38.50 up Right
+    40.80 mark stop-rec
+    40.81 shot 6-end
+    40.93 done
+
+water.wav onsets (18):
+    20.91  ncc 0.92  (after: down Left)
+    21.72  ncc 0.93  (after: down Left)
+    22.87  ncc 0.93  (after: mark float-start)
+    23.61  ncc 0.93  (after: shot 3-in-water)
+    24.42  ncc 0.93  (after: shot 3-in-water)
+    25.29  ncc 0.93  (after: shot 3-in-water)
+    26.08  ncc 0.93  (after: shot 3-in-water)
+    26.87  ncc 0.93  (after: shot 3-in-water)
+    27.64  ncc 0.93  (after: down Left)
+    28.42  ncc 0.93  (after: ato: link to egj-10.graal at 61 45)
+    29.20  ncc 0.93  (after: ato: level egj-10.graal: from the server's board, start (61, 45), 0 NPCs (0)
+    30.04  ncc 0.93  (after: ato: level egj-10.graal: from the server's board, start (61, 45), 0 NPCs (0)
+    31.38  ncc 0.93  (after: down Right)
+    32.16  ncc 0.93  (after: down Right)
+    32.97  ncc 0.93  (after: ato: link to egk-10.graal at 0 45)
+    33.78  ncc 0.93  (after: ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 )
+    34.56  ncc 0.93  (after: ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 )
+    34.99  ncc 0.82  (after: ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 )
+
+steps2.wav onsets (43):
+     6.53  ncc 1.00  (after: up Down)
+     6.91  ncc 1.00  (after: down Down)
+     7.13  ncc 1.00  (after: ato: link to egk-10.graal at 54.5 19)
+     7.81  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     8.03  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     8.23  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     8.43  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     8.63  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     8.83  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     9.01  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     9.21  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     9.43  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     9.61  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+     9.81  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+    10.03  ncc 1.00  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 4 NPCs )
+    10.23  ncc 1.00  (after: up Down)
+    13.89  ncc 1.00  (after: down Left)
+    14.34  ncc 1.00  (after: down Left)
+    14.50  ncc 0.88  (after: down Left)
+    14.70  ncc 1.00  (after: down Left)
+    14.91  ncc 1.00  (after: down Left)
+    15.08  ncc 1.00  (after: down Left)
+    15.29  ncc 1.00  (after: down Left)
+    15.49  ncc 1.00  (after: down Left)
+    15.70  ncc 1.00  (after: down Left)
+    15.90  ncc 1.00  (after: down Left)
+    16.10  ncc 1.00  (after: down Left)
+    16.30  ncc 1.00  (after: down Left)
+    16.51  ncc 1.00  (after: down Left)
+    16.71  ncc 1.00  (after: down Left)
+    20.38  ncc 1.00  (after: down Left)
+    20.60  ncc 1.00  (after: down Left)
+    20.78  ncc 0.80  (after: down Left)
+    35.37  ncc 0.96  (after: ato: level egk-10.graal: from the server's board, start (0, 45), 4 NPCs (4 )
+    35.57  ncc 1.00  (after: up Right)
+    37.16  ncc 1.00  (after: down Right)
+    37.37  ncc 1.00  (after: down Right)
+    37.57  ncc 1.00  (after: down Right)
+    37.77  ncc 1.00  (after: down Right)
+    37.97  ncc 1.00  (after: down Right)
+    38.17  ncc 1.00  (after: down Right)
+    38.35  ncc 1.00  (after: down Right)
+    38.56  ncc 1.00  (after: up Right)
+
+RMS per second (dBFS):
+    0   -180.0
+    1   -180.0
+    2   -180.0
+    3   -180.0
+    4   -180.0
+    5   -180.0
+    6    -40.3
+    7    -32.5
+    8    -33.3
+    9    -33.3
+   10    -37.3
+   11   -180.0
+   12   -180.0
+   13    -40.7
+   14    -33.1
+   15    -32.7
+   16    -34.1
+   17   -180.0
+   18   -180.0
+   19   -180.0
+   20    -34.5
+   21    -33.3
+   22    -35.4
+   23    -31.8
+   24    -34.2
+   25    -34.2
+   26    -33.3
+   27    -31.9
+   28    -34.0
+   29    -34.2
+   30    -34.2
+   31    -34.2
+   32    -34.1
+   33    -33.4
+   34    -31.8
+   35    -32.0
+   36   -180.0
+   37    -34.3
+   38    -34.3
+   39   -180.0
