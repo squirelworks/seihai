@@ -44,7 +44,7 @@ fn options() -> eframe::NativeOptions {
 pub fn run(o: &Online, sound_on: bool) -> Result<(), String> {
     let title = format!("Graal {} (Seihai Issho)", o.version.label());
     let o = o.clone();
-    eframe::run_native(
+    seihai_play::window::run_native(
         &title,
         options(),
         Box::new(move |cc| {
@@ -82,7 +82,7 @@ pub fn run_offline(
     let app = IsshoApp {
         view: View::new(g, CANVAS),
     };
-    eframe::run_native(&title, options(), Box::new(move |_| Ok(Box::new(app))))
+    seihai_play::window::run_native(&title, options(), Box::new(move |_| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
 }
 

@@ -14,7 +14,8 @@
 //! This was `seihai-ato`'s `game` module. It moved here unchanged, less
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
-use crate::render::{self, Frame, NpcImages, Sheet};
+use crate::chars::{self, Characters, Figure};
+use crate::render::{self, Frame, NpcImages, Players, Sheet};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
 };
@@ -55,6 +56,10 @@ pub struct Game {
     pub others: online::SharedOthers,
     /// The other players drawn last frame.
     drawn_others: Vec<online::Other>,
+    /// The players' pose GANIs and pictures.
+    chars: Characters,
+    /// When the game started: the clock the walking poses run on.
+    started: Instant,
     /// Where the network thread takes a link request from.
     pub link: Arc<Mutex<Option<online::LinkAsk>>>,
     /// The link asked for, until its level arrives.
@@ -88,6 +93,9 @@ pub struct Game {
     pub board_mods: online::SharedBoardMods,
     /// Where the network thread puts the server's NPC updates.
     pub npc_changes: online::SharedNpcChanges,
+    /// Set when the game is dropped (its window closed): the network
+    /// thread logs out instead of keeping the player on the server.
+    closed: Arc<std::sync::atomic::AtomicBool>,
     /// The network thread's gmap, as last taken.
     net_world: Option<online::WorldView>,
     /// Crossings handed to the network thread so far.
@@ -149,6 +157,8 @@ impl Game {
             pose: online::SharedPose::default(),
             others: online::SharedOthers::default(),
             drawn_others: Vec::new(),
+            chars: Characters::load(resolver),
+            started: Instant::now(),
             link: Default::default(),
             link_to: None,
             sound: sound_engine(resolver, sound_on),
@@ -164,6 +174,7 @@ impl Game {
             crossings: Default::default(),
             board_mods: Default::default(),
             npc_changes: Default::default(),
+            closed: Default::default(),
             net_world: None,
             crossings_sent: 0,
             level_here: None,
@@ -673,6 +684,7 @@ impl Game {
         self.crossings = live.crossings;
         self.board_mods = live.board_mods;
         self.npc_changes = live.npc_changes;
+        self.closed = live.closed;
     }
 
     /// One turn of the loop: take what the network thread sent, walk one
@@ -693,18 +705,38 @@ impl Game {
             self.drawn_others = others;
             self.dirty = true;
         }
+        // The pictures the players are drawn with, read once each.
+        let mut figures = self.other_figures();
+        figures.push(render::own_figure(&self.session));
+        if self.chars.load_pictures(self.resolver.as_ref(), &figures) {
+            self.dirty = true;
+        }
+        // A pose that runs on the clock (another player walking, the swim
+        // stroke) needs every frame drawn.
+        if figures.iter().any(|f| f.step == chars::Step::Clock) {
+            self.dirty = true;
+        }
         std::mem::take(&mut self.dirty)
+    }
+
+    fn other_figures(&self) -> Vec<Figure> {
+        self.drawn_others.iter().map(chars::other_figure).collect()
     }
 
     /// The level around the player, `view` tiles wide and high, with the
     /// other players as last taken.
     pub fn draw(&self, view: (u32, u32)) -> Frame {
-        let at: Vec<(f32, f32)> = self.drawn_others.iter().map(|o| (o.x, o.y)).collect();
+        let others = self.other_figures();
+        let players = Players {
+            chars: &self.chars,
+            others: &others,
+            clock_ms: self.started.elapsed().as_millis() as u64,
+        };
         render::draw(
             &self.session,
             &self.sheet,
             &self.npc_images,
-            &at,
+            players,
             view.0,
             view.1,
         )
@@ -752,6 +784,13 @@ pub type LevelLines = fn(ClientVersion, &Level, &str, &SessionState) -> Vec<Stri
 /// No extra log lines.
 pub fn no_lines(_: ClientVersion, _: &Level, _: &str, _: &SessionState) -> Vec<String> {
     Vec::new()
+}
+
+impl Drop for Game {
+    /// The window is gone: tell the network thread to log out.
+    fn drop(&mut self) {
+        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 /// Log in at `addr` as `version` on a thread of its own (core's client
@@ -815,6 +854,19 @@ mod tests {
             file_npcs: 0,
             scripts: Vec::new(),
         }
+    }
+
+    /// Closing the window drops the game, which tells the network thread
+    /// to log out.
+    #[test]
+    fn dropping_the_game_closes_the_connection() {
+        let (mut g, _tx) = game();
+        let live = Live::default();
+        let closed = live.closed.clone();
+        g.attach(live);
+        assert!(!closed.load(std::sync::atomic::Ordering::SeqCst));
+        drop(g);
+        assert!(closed.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]
@@ -1151,6 +1203,7 @@ mod tests {
             y: 20.0,
             dir: 2,
             nick: nick.map(Into::into),
+            ..Default::default()
         };
         let tags = name_tags(
             &[other(1, Some("Ann")), other(2, None), other(3, Some(" "))],

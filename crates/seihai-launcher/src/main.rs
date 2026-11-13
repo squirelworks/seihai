@@ -35,7 +35,9 @@
 
 use seihai_core::protocol::{ClientVersion, VersionProfile};
 use seihai_issho::{is_v6, is_v7_label};
-use seihai_play::start::{Handoff, Line, Saved, StartScreen, LAUNCHER_ENV, PROGRAM_ENV};
+use seihai_play::start::{
+    Handoff, Line, Saved, StartScreen, LAUNCHER_ENV, PASSWORD_ENV, PROGRAM_ENV,
+};
 use std::process::ExitCode;
 
 /// Which line a profile belongs to. v6 is Issho. The token says the rest:
@@ -207,26 +209,31 @@ fn main() -> ExitCode {
 }
 
 /// The start window, then the client it hands over to, in this process.
-fn start_window(error: Option<String>, dry_run: bool) -> ExitCode {
-    let Some(h) = open_window(error) else {
-        return ExitCode::SUCCESS;
-    };
-    if dry_run {
-        println!(
-            "would run: {} {}",
-            h.line().subcommand(),
-            h.args().join(" ")
-        );
-        return ExitCode::SUCCESS;
-    }
-    if let Some((var, value)) = h.env() {
-        std::env::set_var(var, value);
-    }
+/// Closing the game comes back to the start window; closing the start
+/// window ends the program.
+fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
     // A lost connection comes back to this window, not the client's own.
     if let Ok(me) = std::env::current_exe() {
         std::env::set_var(LAUNCHER_ENV, me);
     }
-    run_line(h.line(), h.args())
+    loop {
+        let Some(h) = open_window(error.take()) else {
+            return ExitCode::SUCCESS;
+        };
+        if dry_run {
+            println!(
+                "would run: {} {}",
+                h.line().subcommand(),
+                h.args().join(" ")
+            );
+            return ExitCode::SUCCESS;
+        }
+        if let Some((var, value)) = h.env() {
+            std::env::set_var(var, value);
+        }
+        // The start window comes back whatever the game's exit code.
+        let _ = run_line(h.line(), h.args());
+    }
 }
 
 /// Open the window and block until it closes. The hand-over, if the
@@ -247,15 +254,24 @@ fn open_window(error: Option<String>) -> Option<Handoff> {
     }
     let out = std::rc::Rc::new(std::cell::RefCell::new(None));
     let app = App {
-        screen: StartScreen::new(Saved::load(), error),
+        screen: {
+            let mut screen = StartScreen::new(Saved::load(), error);
+            // The password of this run (and of the run a lost connection
+            // restarted from): kept in the environment, never saved.
+            screen.password = std::env::var(PASSWORD_ENV).unwrap_or_default();
+            screen
+        },
         out: out.clone(),
     };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 520.0]),
         ..Default::default()
     };
-    if let Err(e) = eframe::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app)))) {
+    if let Err(e) =
+        seihai_play::window::run_native("Seihai", options, Box::new(move |_| Ok(Box::new(app))))
+    {
         eprintln!("seihai: could not open the start window: {e}");
+        eprintln!("seihai: no renderer could draw a window here (tried {}); install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe", e.tried.iter().map(|(r, _)| *r).collect::<Vec<_>>().join(", then "));
         eprintln!("seihai: run a client with --version and --online instead (see `seihai --help`)");
         std::process::exit(1);
     }
