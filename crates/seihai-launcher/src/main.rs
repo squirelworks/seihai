@@ -24,6 +24,13 @@
 //! unchanged. Arguments with no `--version` are Mae's. A 7.x label is not
 //! a profile and runs nothing. `--launcher-dry-run` prints what would run.
 //!
+//! `seihai --launcher-smoke VERSION@HOST:PORT` is for CI on a desktop with
+//! no one at it: the start window draws, joins `HOST:PORT` with VERSION as
+//! if Join were pressed, runs that client in this process, and when the
+//! client comes back draws the start window once more, prints the reason
+//! it came back with, and ends. Nothing is saved to `launcher.conf`. The
+//! password box is `SEIHAI_PASSWORD`, as for any start window.
+//!
 //! Usage:
 //!   seihai                                the start window
 //!   seihai mae|ato|issho|g3d [ARGS...]    that client, on its own
@@ -36,7 +43,7 @@
 use seihai_core::protocol::{ClientVersion, VersionProfile};
 use seihai_issho::{is_v6, is_v7_label};
 use seihai_play::start::{
-    Handoff, Line, Saved, StartScreen, LAUNCHER_ENV, PASSWORD_ENV, PROGRAM_ENV,
+    Choice, Handoff, Line, Saved, StartScreen, LAUNCHER_ENV, PASSWORD_ENV, PROGRAM_ENV,
 };
 use std::process::ExitCode;
 
@@ -183,7 +190,18 @@ fn main() -> ExitCode {
     }
 
     if let Some(error) = window_args(&args) {
-        return start_window(error, dry_run);
+        return start_window(error, dry_run, None);
+    }
+    if let [flag, value] = args.as_slice() {
+        if flag == "--launcher-smoke" {
+            return match Smoke::parse(value) {
+                Some(smoke) => start_window(None, dry_run, Some(smoke)),
+                None => {
+                    eprintln!("seihai: --launcher-smoke takes VERSION@HOST:PORT, not {value}");
+                    ExitCode::from(2)
+                }
+            };
+        }
     }
 
     let (line, profile) = match pick(&args) {
@@ -204,18 +222,62 @@ fn main() -> ExitCode {
     run_line(line, args)
 }
 
+/// `--launcher-smoke VERSION@HOST:PORT`: what the start window joins on
+/// its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Smoke {
+    choice: Choice,
+    server: String,
+}
+
+impl Smoke {
+    fn parse(value: &str) -> Option<Smoke> {
+        let (label, server) = value.split_once('@')?;
+        let choice = Choice::from_label(label.trim())?;
+        let server = server.trim();
+        (!server.is_empty()).then(|| Smoke {
+            choice,
+            server: server.to_string(),
+        })
+    }
+
+    /// Frames the start window draws before it acts.
+    const FRAMES: u32 = 30;
+}
+
+/// Set for the whole of a `--launcher-smoke` run, so the start window
+/// Mae comes back to (it starts this program again with
+/// `--launcher-error`) is still the smoke's.
+const SMOKE_ENV: &str = "SEIHAI_LAUNCHER_SMOKE";
+
 /// The start window, then the client it hands over to, in this process.
 /// Closing the game comes back to the start window; closing the start
 /// window ends the program.
-fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
+fn start_window(mut error: Option<String>, dry_run: bool, smoke: Option<Smoke>) -> ExitCode {
     // A lost connection comes back to this window, not the client's own.
     if let Ok(me) = std::env::current_exe() {
         std::env::set_var(LAUNCHER_ENV, me);
     }
+    // A smoke run Mae started again has joined already.
+    let smoke_run = smoke.is_some() || std::env::var_os(SMOKE_ENV).is_some();
+    let mut joined = smoke.is_none() && smoke_run;
+    if smoke.is_some() {
+        std::env::set_var(SMOKE_ENV, "1");
+    }
     loop {
-        let Some(h) = open_window(error.take()) else {
+        // A smoke run joins once; the second window only says why the
+        // client came back.
+        let smoke_now = smoke.as_ref().filter(|_| !joined);
+        if smoke_run && joined {
+            println!(
+                "seihai: smoke: back at the start window: {}",
+                error.as_deref().unwrap_or("(no error)")
+            );
+        }
+        let Some(h) = open_window(error.take(), smoke_run, smoke_now) else {
             return ExitCode::SUCCESS;
         };
+        joined = true;
         if dry_run {
             println!(
                 "would run: {} {}",
@@ -246,19 +308,57 @@ fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
 }
 
 /// Open the window and block until it closes. The hand-over, if the
-/// player joined a server or opened a client's own window.
-fn open_window(error: Option<String>) -> Option<Handoff> {
+/// player joined a server or opened a client's own window. A smoke run
+/// (`smoke_run`) saves nothing, joins `smoke` after a few frames, or with
+/// no `smoke` closes the window after them.
+fn open_window(error: Option<String>, smoke_run: bool, smoke: Option<&Smoke>) -> Option<Handoff> {
     struct App {
         screen: StartScreen,
         out: std::rc::Rc<std::cell::RefCell<Option<Handoff>>>,
+        smoke_run: bool,
+        smoke: Option<Smoke>,
+        frames: u32,
+        done: bool,
     }
     impl eframe::App for App {
         fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
             if let Some(h) = self.screen.show(ctx) {
-                self.screen.saved().save();
+                if !self.smoke_run {
+                    self.screen.saved().save();
+                }
                 *self.out.borrow_mut() = Some(h);
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
             }
+            if !self.smoke_run || self.done {
+                return;
+            }
+            self.frames += 1;
+            if self.frames < Smoke::FRAMES {
+                ctx.request_repaint();
+                return;
+            }
+            if let Some(s) = self.smoke.take() {
+                self.screen.pick(s.choice);
+                if self.screen.account.trim().is_empty() {
+                    self.screen.account = "smoke".into();
+                }
+                let h = self.screen.handoff(Some(s.server.clone()), false);
+                println!(
+                    "seihai: smoke: start window drew {} frames; joining {} at {}",
+                    self.frames,
+                    s.choice.label(),
+                    s.server
+                );
+                *self.out.borrow_mut() = Some(h);
+            } else {
+                println!(
+                    "seihai: smoke: start window drew {} frames again",
+                    self.frames
+                );
+            }
+            self.done = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
     let out = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -271,6 +371,10 @@ fn open_window(error: Option<String>) -> Option<Handoff> {
             screen
         },
         out: out.clone(),
+        smoke_run,
+        smoke: smoke.cloned(),
+        frames: 0,
+        done: false,
     };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 520.0]),
@@ -440,5 +544,15 @@ mod tests {
             shown(&args("--account a --password secret --version 2.22")),
             "--account a --password **** --version 2.22"
         );
+    }
+
+    #[test]
+    fn smoke_takes_version_at_server() {
+        let s = Smoke::parse("2.22@127.0.0.1:14900").unwrap();
+        assert_eq!(s.choice.label(), "2.22");
+        assert_eq!(s.server, "127.0.0.1:14900");
+        assert!(Smoke::parse("2.22").is_none());
+        assert!(Smoke::parse("2.22@").is_none());
+        assert!(Smoke::parse("nonsense@127.0.0.1:14900").is_none());
     }
 }
