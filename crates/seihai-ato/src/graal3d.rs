@@ -3,8 +3,10 @@
 //!
 //! Both start at the same moment, to the same host: TCP on the listed
 //! port, UDP on the listed port + 1. The UDP link stops when the TCP side
-//! ends. Only 4.20r6 and 5.x (protocols 21 and 24) run here; 3.153 and
-//! 4.04r2 use the Torque game layer, which Ato does not run yet.
+//! ends. 4.20r6 and 5.x run protocols 21 and 24. 3.153 and 4.04r2 run
+//! protocol 19, the stock Torque game layer, which Ato takes as far as
+//! the static reads go (`torque::net::tge`): it has not been run against
+//! a real protocol 19 server.
 //!
 //! [`Side`] follows the TCP session through core's session hooks: the
 //! first server opens the link when it was picked as a `3 ` server
@@ -47,11 +49,13 @@ impl Udp3d {
 /// The Torque profile of a build whose 3D side Ato runs.
 pub fn profile(version: ClientVersion) -> Result<TorqueProfile, String> {
     match torque::of(version) {
-        Some(p) if !p.tge_game_layer => Ok(p),
-        Some(p) => Err(format!(
-            "--graal3d: the 3D side of {} (protocol {}) is not run by Ato yet; use 4.20r6 or 5.x",
+        // 3.04's protocol 9 is stock TGE 1.x networking with no Graal
+        // changes, and no 3D server for it is known.
+        Some(p) if p.protocol == torque::TGE_9.protocol => Err(format!(
+            "--graal3d: {} (protocol {}) has no Graal3D server to join",
             p.builds, p.protocol
         )),
+        Some(p) => Ok(p),
         None => Err(format!(
             "--graal3d: {} has no Graal3D side",
             version.label()
@@ -110,6 +114,7 @@ pub fn start(
         },
         password: login.password.clone(),
         nickname: login.nick.clone(),
+        version,
     };
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
@@ -227,11 +232,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_graal_object_model_builds_run() {
+    fn every_graal3d_build_runs_and_304_does_not() {
         assert_eq!(profile(ClientVersion::V512).unwrap().protocol, 24);
         assert_eq!(profile(ClientVersion::V420R6).unwrap().protocol, 21);
-        assert!(profile(ClientVersion::V3153).is_err());
-        assert!(profile(ClientVersion::V404R2).is_err());
+        assert_eq!(profile(ClientVersion::V3153).unwrap().protocol, 19);
+        assert_eq!(profile(ClientVersion::V404R2).unwrap().protocol, 19);
+        assert!(profile(ClientVersion::V304).is_err());
     }
 
     #[test]

@@ -43,7 +43,7 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   `torque/wire-by-build.md`.
 - `torque::net` and `graal3d`: the 3D side of a Graal3D server, the
   Torque UDP link to the listed port + 1, for 4.20r6 and 5.x (protocols
-  21 and 24): bit stream and strings, handshake, data packet numbering
+  21 and 24) and, partly, 3.153 and 4.04r2 (protocol 19): bit stream and strings, handshake, data packet numbering
   and acks, events (the mission start is answered), ghosts and the
   control object. `--graal3d` with `--online host:port` opens it beside
   the TCP login, with or without the window, and logs its progress with a
@@ -58,9 +58,17 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   and their scripts (kept, not run until the GS2 client VM takes them),
   `addnpc`, `setmaterials`, `rpg` and weapon texts; zlib transfers are
   unpacked. `ClientEvents` builds the client's `events` text (`w`, `s`,
-  `t` lines). Nothing is drawn in 3D yet. 3.153 and 4.04r2
-  (protocol 19, the Torque game layer) are not run. Source: Graal_analysis
-  `torque/udp-session.md` and the open (MIT) Torque net layer.
+  `t` lines). Nothing is drawn in 3D yet. 3.153 and 4.04r2 (protocol 19,
+  the stock Torque game layer, `torque::net::tge`) run as far as the
+  static reads go and have not met a real protocol 19 server: the three
+  mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
+  not), datablocks are counted by class, the stock ghosting and
+  datablocks-done connection messages are answered, ghosts are kept by
+  class name, and the client sends its position with no moves. The control
+  object's own packet data (stock `Player`) is not read yet, so the rest of
+  a packet that carries it is skipped. Source: Graal_analysis
+  `torque/udp-session.md` (§10 for protocol 19),
+  `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). Start opens the
   server list; with `--online`, it hands the form straight to Stage 2.
