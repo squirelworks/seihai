@@ -50,6 +50,49 @@ pub struct World3d {
 /// The world, shared between the link's thread and the window.
 pub type Shared3d = Arc<Mutex<World3d>>;
 
+/// What the window hands the link: the keys held and lines to say (#462).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Input3d {
+    /// 1 forward (up arrow), -1 back, 0 still.
+    pub forward: i8,
+    /// 1 turn left, -1 right, 0 none.
+    pub turn: i8,
+    /// Chat lines, sent as the own object's chat section (`e:emoticon`
+    /// included, as typed).
+    pub say: Vec<String>,
+}
+
+/// [`Input3d`], shared between the window and the link's thread.
+pub type SharedInput3d = Arc<Mutex<Input3d>>;
+
+/// Walking speed, units a second. Seihai's choice until the walking lab
+/// trace (#462) shows the real client's.
+pub const WALK_SPEED: f32 = 6.0;
+/// Turning speed, radians a second (Seihai's choice, as above).
+pub const TURN_SPEED: f32 = 2.5;
+
+/// The heading of a transform: its rotation about z (0 faces +y).
+fn heading(t: &Transform) -> f32 {
+    if t.axis[2] < 0.0 {
+        -t.angle
+    } else {
+        t.angle
+    }
+}
+
+/// Move `t` for `dt` seconds of keys: turn about z, then step along the
+/// new facing. The rotation comes out as a turn about +z.
+pub fn step(t: Transform, forward: i8, turn: i8, dt: f32) -> Transform {
+    let h = heading(&t) + turn as f32 * TURN_SPEED * dt;
+    let d = forward as f32 * WALK_SPEED * dt;
+    let (s, c) = h.sin_cos();
+    Transform {
+        position: [t.position[0] - s * d, t.position[1] + c * d, t.position[2]],
+        axis: [0.0, 0.0, 1.0],
+        angle: h,
+    }
+}
+
 impl World3d {
     /// A GameObject was created or updated: its shape and transform, when
     /// the update carried them.
@@ -438,6 +481,28 @@ mod tests {
         assert!(
             p[1] > p[0] && p[1] > p[2],
             "green ground at the bottom: {p:?}"
+        );
+    }
+
+    #[test]
+    fn walking_steps_along_the_facing_and_turning_turns() {
+        let t = Transform {
+            position: [0.0; 3],
+            axis: [0.0, 0.0, 1.0],
+            angle: 0.0,
+        };
+        let a = step(t, 1, 0, 0.5);
+        assert!((a.position[1] - WALK_SPEED * 0.5).abs() < 1e-5 && a.position[0].abs() < 1e-5);
+        let quarter = std::f32::consts::FRAC_PI_2 / TURN_SPEED;
+        let b = step(t, 0, 1, quarter);
+        assert!((b.angle - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
+        assert_eq!(b.position, [0.0; 3]);
+        // A left quarter turn from +y faces -x.
+        let c = step(b, 1, 0, 1.0);
+        assert!(
+            (c.position[0] + WALK_SPEED).abs() < 1e-4,
+            "{:?}",
+            c.position
         );
     }
 

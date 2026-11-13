@@ -75,6 +75,7 @@ impl AtoApp {
         let hooks = side.hooks();
         let boards_hidden = side.boards_hidden.clone();
         let world3d = side.world.clone();
+        let input3d = side.input.clone();
         let (rx, live) = game::spawn_online_hooked(
             addr,
             version,
@@ -94,6 +95,13 @@ impl AtoApp {
                 g.view3d = Some(Box::new(move |w, h| {
                     let w3 = world.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     crate::view3d::draw(&w3, w, h)
+                }));
+                // The arrows walk the own object: up and down step, left
+                // and right turn (#462).
+                g.keys3d = Some(Box::new(move |dx, dy| {
+                    let mut i = input3d.lock().unwrap_or_else(|e| e.into_inner());
+                    i.forward = -dy;
+                    i.turn = -dx;
                 }));
                 self.game = Some(View::new(g, CANVAS));
             }

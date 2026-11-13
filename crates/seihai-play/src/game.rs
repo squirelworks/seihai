@@ -111,7 +111,13 @@ pub struct Game {
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
+    /// Takes the arrows (`dx`, `dy`) while [`Game::boards_hidden`] is set,
+    /// in place of the flat walk (Ato's Graal3D walk).
+    pub keys3d: Option<Keys3d>,
 }
+
+/// [`Game::keys3d`].
+pub type Keys3d = Box<dyn Fn(i8, i8) + Send>;
 
 /// [`Game::view3d`].
 pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
@@ -193,6 +199,7 @@ impl Game {
             boards_hidden: Default::default(),
             hidden_drawn: false,
             view3d: None,
+            keys3d: None,
         })
     }
 
@@ -720,7 +727,10 @@ impl Game {
         if hidden && self.view3d.is_some() {
             self.dirty = true;
         }
-        self.walk(dx, dy, now);
+        match (&self.keys3d, hidden) {
+            (Some(k), true) => k(dx, dy),
+            _ => self.walk(dx, dy, now),
+        }
         self.tick_poses(now);
         self.play_sounds();
         let others = self
