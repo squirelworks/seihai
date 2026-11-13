@@ -240,10 +240,20 @@ fn login_servers(addr: &str, account: &str, pw: &str) {
                     let body = match s.conn.read_body() {
                         Ok(b) => b,
                         Err(e) => {
-                            verdict = Some(if seen.is_empty() {
-                                format!("closed with no reply ({})", e.kind())
-                            } else {
-                                format!("closed after {} messages ({})", seen.len(), e.kind())
+                            let quiet = matches!(
+                                e.kind(),
+                                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                            );
+                            verdict = Some(match (seen.is_empty(), quiet) {
+                                (true, true) => "no reply (the server stayed silent)".to_string(),
+                                (true, false) => format!("closed with no reply ({})", e.kind()),
+                                (false, true) => format!(
+                                    "accepted: {} messages, then the server waited",
+                                    seen.len()
+                                ),
+                                (false, false) => {
+                                    format!("closed after {} messages ({})", seen.len(), e.kind())
+                                }
                             });
                             break;
                         }

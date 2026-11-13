@@ -300,6 +300,23 @@ of their own borrow 2.05's and are asked once under it):
   old list and then the current one, and the count is the last one read in
   the wait), and 8 for the gen-5 logins.
 
-The 4.x to 6.x builds have no list login of their own (they reach a
-`Login` game server). Their check is `list_probe` option C, at the
-community `Login` entry of this server list; it has not been run yet.
+**4.x to 6.x at the community Login server** (`list_probe` option C, one
+real community account): the server list's `Login DEV` entry, one game login
+per lobby build, 10 s apart, replies read for up to 8 s.
+
+| Builds | Reply |
+|---|---|
+| 4.04r2, 4.04r2 Mac, 4.20r6, 4.20r8, 5.00r7, 5.12 Mac, 5.24r4, 5.30r3, 5.31r4, 6.00r2, 6.00r4, 6.015, 6.034, 6.03r7, 6.03r7 Linux | accepted: 42 to 50 messages (the Login burst), then the server waited |
+| 5.12 (Windows) | PLO_DISCMESSAGE "Parse error: Adler chksum doesn't match" |
+
+- 15 of 16 builds log in, including the 4.x builds and 5.00r7; this server
+  takes every lobby token, with the machine fields empty.
+- The Windows 5.12 failure is one run, but it points at something real: the
+  server could not unpack a frame Seihai sent as 5.12. The 5.12 profile is
+  the only lobby profile with `gen5_compress_all` and `gen5_round_down` set
+  (5.12 Mac and 5.24r4 to 6.03r7 have both off and got in), so the compressed
+  small frames or the rounded cipher limit are the first suspects. Not fixed
+  here; to be checked against a lab capture of the real 5.12.
+- The earlier version of this probe printed these as "closed after N
+  messages (timed out)"; a read timeout after the burst means the server is
+  waiting, so it now prints "accepted".
