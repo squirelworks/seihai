@@ -87,7 +87,7 @@ fn run(target: &str, data: &[u8], vi: usize) {
             let _ = seihai_core::assets::gif::read_gif_rgba(data);
         }
         "gs1" => {
-            for era in [seihai_core::scripting::engine::Era::V205, seihai_core::scripting::engine::Era::V21] {
+            for era in [seihai_core::scripting::engine::Era::V205, seihai_core::scripting::engine::Era::V217] {
                 let _ = seihai_core::scripting::engine::parser::parse(&s, era);
             }
         }
