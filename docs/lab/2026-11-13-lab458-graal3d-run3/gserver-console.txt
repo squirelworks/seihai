@@ -1,0 +1,16 @@
+[10:59 PM] :: New login: labato [New Client (2.22+)] [G3D14097 (5.12)]
+[10:59 PM] :: [Login] Localhost mode: accepting 'labato' without listserver verification.
+[10:59 PM] :: Graal3D: labato gets 4 world objects and 1 players.
+[10:59 PM] :: Graal3D: labato linked from 127.0.0.1 (protocol 24, 5.x (5.00r7, 5.12)).
+[10:59 PM] :: ** [Warning] Graal3D: weapon3d -Move3D: not compiled (needs serverside = true, or a compile error); sending the source
+[10:59 PM] :: Graal3D labato: ghost 0 (GameObject Ground) created on the client (seq 1)
+[10:59 PM] :: Graal3D labato: ghost 1 (GameObject Cube) created on the client (seq 2)
+[10:59 PM] :: Graal3D labato: ghost 2 (Sun ) created on the client (seq 2)
+[10:59 PM] :: Graal3D labato: ghost 3 (Sky ) created on the client (seq 3)
+[10:59 PM] :: Graal3D labato: ghost 4 (GameObject G3DPlayer_labato) created on the client (seq 3)
+[10:59 PM] :: Graal3D labato: ghost 5 (Camera G3DCamera_labato) created on the client (seq 4)
+[10:59 PM] :: Graal3D: labato finished the mission start.
+[10:59 PM] :: Graal3D labato: control object (ghost 4) sent in seq 6
+[10:59 PM] :: Graal3D labato: control object delivered (seq 6)
+[11:03 PM] :: Graal3D: link from 127.0.0.1 closed (You have been disconnected from the game server.).
+[11:03 PM] :: Client disconnected: [3] labato
