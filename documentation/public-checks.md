@@ -311,12 +311,15 @@ per lobby build, 10 s apart, replies read for up to 8 s.
 
 - 15 of 16 builds log in, including the 4.x builds and 5.00r7; this server
   takes every lobby token, with the machine fields empty.
-- The Windows 5.12 failure is one run, but it points at something real: the
-  server could not unpack a frame Seihai sent as 5.12. The 5.12 profile is
-  the only lobby profile with `gen5_compress_all` and `gen5_round_down` set
-  (5.12 Mac and 5.24r4 to 6.03r7 have both off and got in), so the compressed
-  small frames or the rounded cipher limit are the first suspects. Not fixed
-  here; to be checked against a lab capture of the real 5.12.
+- The Windows 5.12 failure is one run, and it matches what core already
+  records for the real client: 5.12 encrypts a compressed body in len/4
+  groups rounded down (the partial last group stays plain), and with
+  `gen5_compress_all` every small body is compressed. A server that rounds
+  up, as stock GServer-v2 does, XORs that last group too, and zlib's Adler
+  check fails. The lab needed a translating proxy for the real 5.12 for the
+  same reason. So this is the server's rounding, not a Seihai bug, and the
+  real 5.12 should get the same error here; a lab run of the real client
+  against this server would confirm it.
 - The earlier version of this probe printed these as "closed after N
   messages (timed out)"; a read timeout after the burst means the server is
   waiting, so it now prints "accepted".
