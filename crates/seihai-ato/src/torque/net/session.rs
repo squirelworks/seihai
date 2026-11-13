@@ -16,7 +16,7 @@ use super::graal_text::{self, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use crate::torque::TorqueProfile;
-use crate::view3d::Shared3d;
+use crate::view3d::{Shared3d, SharedInput3d};
 use seihai_core::client::FileAsks;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
@@ -34,6 +34,9 @@ const KEEP_ALIVE: Duration = Duration::from_secs(1);
 const PING_AFTER: Duration = Duration::from_millis(4600);
 /// The link is dead after this long without a packet.
 const SILENCE: Duration = Duration::from_secs(30);
+/// While the own object moves, a packet at most this often (Torque's
+/// default packet rate).
+const MOVE_PACKET: Duration = Duration::from_millis(32);
 /// The largest packet the client sends.
 const MAX_PACKET: usize = 450;
 /// How long to wait when no datagram is queued.
@@ -47,6 +50,17 @@ pub struct Identity {
     pub password: String,
     /// May be empty.
     pub nickname: String,
+}
+
+/// What the link shares with the rest of the client, each part optional.
+#[derive(Clone, Copy, Default)]
+pub struct Shared<'a> {
+    /// The TCP session's file requests (shapes and Sky textures).
+    pub files: Option<&'a FileAsks>,
+    /// The world the window draws.
+    pub world: Option<&'a Shared3d>,
+    /// The keys and chat the window hands over (walk and chat, #462).
+    pub input: Option<&'a SharedInput3d>,
 }
 
 /// How the link ended.
@@ -85,8 +99,7 @@ pub fn run(
     profile: TorqueProfile,
     who: &Identity,
     stop: &AtomicBool,
-    files: Option<&FileAsks>,
-    world: Option<&Shared3d>,
+    with: Shared<'_>,
     out: &mut impl Write,
 ) -> Result<Ended, String> {
     run_with_sequence(
@@ -95,8 +108,7 @@ pub fn run(
         profile,
         who,
         stop,
-        files,
-        world,
+        with,
         out,
         connect_sequence(),
     )
@@ -110,11 +122,15 @@ pub fn run_with_sequence(
     profile: TorqueProfile,
     who: &Identity,
     stop: &AtomicBool,
-    files: Option<&FileAsks>,
-    world: Option<&Shared3d>,
+    with: Shared<'_>,
     out: &mut impl Write,
     sequence: u32,
 ) -> Result<Ended, String> {
+    let Shared {
+        files,
+        world,
+        input,
+    } = with;
     if profile.tge_game_layer {
         return Err(format!(
             "the 3D side of {} (protocol {}) uses the Torque game layer, which Ato does not run yet",
@@ -210,6 +226,11 @@ pub fn run_with_sequence(
     let mut step = Step::Established;
     let mut fetch = Fetch::default();
     let mut big_data = BigDataAssembler::default();
+    // The own object as this client moves it, and the sections it changed
+    // since the last packet (#462).
+    let mut me_at: Option<crate::view3d::Transform> = None;
+    let mut own = GameObjectUpdate::default();
+    let mut last_move = Instant::now();
     let mut text = GraalText::default();
     loop {
         if let Some(f) = files {
@@ -232,9 +253,47 @@ pub fn run_with_sequence(
             let _ = writeln!(out, "3d: The 3D server connection has timed out");
             return Ok(Ended::TimedOut);
         }
-        let due = last_data.is_none_or(|t| t.elapsed() >= KEEP_ALIVE) || events.has_pending();
+        // The keys and chat from the window move and voice the own object.
+        let now = Instant::now();
+        let dt = now.duration_since(last_move).as_secs_f32().min(0.1);
+        last_move = now;
+        if let (Some(inp), Some(_)) = (input, game.control) {
+            let (forward, turn, said) = {
+                let mut i = inp.lock().unwrap_or_else(|e| e.into_inner());
+                (i.forward, i.turn, std::mem::take(&mut i.say))
+            };
+            if let Some(t) = me_at.filter(|_| forward != 0 || turn != 0) {
+                let t = crate::view3d::step(t, forward, turn, dt);
+                me_at = Some(t);
+                game.position = t.position;
+                own.transform = Some(Transform {
+                    position: t.position,
+                    axis: t.axis,
+                    angle: t.angle,
+                });
+                if let (Some(w), Some(i)) = (world, game.control) {
+                    let mut w = w.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(o) = w.objects.get_mut(&i) {
+                        o.transform = Some(t);
+                    }
+                }
+            }
+            for line in said {
+                let _ = writeln!(out, "3d: say {line}");
+                own.chat = Some(line.into_bytes());
+            }
+        }
+        let moving = own != GameObjectUpdate::default();
+        let due = last_data.is_none_or(|t| t.elapsed() >= KEEP_ALIVE)
+            || events.has_pending()
+            || (moving && last_data.is_none_or(|t| t.elapsed() >= MOVE_PACKET));
         if due && !link.window_full() {
             if let Some(mut w) = link.data(None, max_rate.take()) {
+                // After the echo has gone, the own changes ride the update
+                // every packet carries.
+                if moving && game.update.as_ref() == Some(&GameObjectUpdate::default()) {
+                    game.update = Some(std::mem::take(&mut own));
+                }
                 game.write(&mut w);
                 if game.update.is_some() {
                     // After the echo, every packet carries the empty update.
@@ -405,6 +464,11 @@ pub fn run_with_sequence(
                     game.update = Some(control_echo(me));
                     if let Some(t) = me.transform {
                         game.position = t.position;
+                        me_at = Some(crate::view3d::Transform {
+                            position: t.position,
+                            axis: t.axis,
+                            angle: t.angle,
+                        });
                     }
                 }
             }

@@ -88,6 +88,14 @@ fn reaches_the_control_object_against_a_replaying_server() {
         }
         asked
     });
+    // The window holds the up arrow and says one line from the start; both
+    // wait for the control object.
+    let keys = seihai_ato::view3d::SharedInput3d::default();
+    {
+        let mut k = keys.lock().unwrap();
+        k.forward = 1;
+        k.say.push("hi e:smile".into());
+    }
     let world = seihai_ato::view3d::Shared3d::default();
     let view = world.clone();
     let client = std::thread::spawn(move || {
@@ -104,8 +112,11 @@ fn reaches_the_control_object_against_a_replaying_server() {
             GRAAL3D_24,
             &who,
             &flag,
-            Some(&asks),
-            Some(&world),
+            session::Shared {
+                files: Some(&asks),
+                world: Some(&world),
+                input: Some(&keys),
+            },
             &mut out,
             0x400,
         );
@@ -260,9 +271,12 @@ fn reaches_the_control_object_against_a_replaying_server() {
         ..Default::default()
     };
     assert_eq!(own_updates.first(), Some(&echo), "{log}");
-    assert!(own_updates[1..]
-        .iter()
-        .all(|u| *u == GameObjectUpdate::default()));
+    // Then the walk: the transform moved along +y, and the line said.
+    let walked = &own_updates[1];
+    let t = walked.transform.expect("the walk's transform");
+    assert!(t.position[1] > 0.0 && t.position[2] == 1.0, "{t:?}");
+    assert_eq!(walked.chat.as_deref(), Some(&b"hi e:smile"[..]));
+    assert!(log.lines().any(|l| l == "3d: say hi e:smile"), "{log}");
     for line in [
         "3d: Connection established (19 classes)",
         "3d: MissionStartPhase1",
@@ -280,14 +294,16 @@ fn reaches_the_control_object_against_a_replaying_server() {
             "missing {line:?} in:\n{log}"
         );
     }
-    // The view's world has the player as the control object, at its
-    // transform, and the Sun; the shape's bytes are not a .3ds here.
+    // The view's world has the player as the control object, where it
+    // walked, and the Sun; the shape's bytes are not a .3ds here.
     {
         let w = view.lock().unwrap();
         assert_eq!(w.control, Some(1));
         let me = &w.objects[&1];
         assert_eq!(me.shape.as_deref(), Some("labcube.3ds"));
-        assert_eq!(me.transform.unwrap().position, [0.0, 0.0, 1.0]);
+        // Walked from (0, 0, 1) along +y while the test ran.
+        let at = me.transform.unwrap().position;
+        assert!(at[0] == 0.0 && at[1] > 0.0 && at[2] == 1.0, "{at:?}");
         assert!(w.sun.is_some());
         assert_eq!(w.models.get("labcube.3ds"), Some(&None));
     }

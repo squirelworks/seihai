@@ -18,7 +18,7 @@ use crate::online::{FileAsks, Hooks, Login, ServerJoin};
 #[cfg(not(feature = "era6"))]
 use crate::torque::net::session::{self, Identity};
 use crate::torque::{self, TorqueProfile};
-use crate::view3d::Shared3d;
+use crate::view3d::{Shared3d, SharedInput3d};
 use seihai_core::protocol::ClientVersion;
 #[cfg(not(feature = "era6"))]
 use std::net::UdpSocket;
@@ -77,6 +77,7 @@ pub fn start(
     _login: &Login,
     _files: Option<FileAsks>,
     _world: Option<Shared3d>,
+    _input: Option<SharedInput3d>,
 ) -> Result<Udp3d, String> {
     Err("--graal3d: this build leaves out the Torque engine (era6)".into())
 }
@@ -91,6 +92,7 @@ pub fn start(
     login: &Login,
     files: Option<FileAsks>,
     world: Option<Shared3d>,
+    input: Option<SharedInput3d>,
 ) -> Result<Udp3d, String> {
     let profile = profile(version)?;
     let server = udp_addr(addr)?;
@@ -118,8 +120,11 @@ pub fn start(
             profile,
             &who,
             &flag,
-            files.as_ref(),
-            world.as_ref(),
+            session::Shared {
+                files: files.as_ref(),
+                world: world.as_ref(),
+                input: input.as_ref(),
+            },
             &mut std::io::stdout(),
         );
         match &ended {
@@ -145,6 +150,8 @@ pub struct Side {
     pub files: FileAsks,
     /// The 3D world, for the window's view.
     pub world: Shared3d,
+    /// The window's keys and chat for the own object.
+    pub input: SharedInput3d,
 }
 
 impl Side {
@@ -157,6 +164,7 @@ impl Side {
             boards_hidden: Arc::default(),
             files: FileAsks::default(),
             world: Shared3d::default(),
+            input: SharedInput3d::default(),
         })
     }
 
@@ -193,6 +201,7 @@ impl Side {
             &self.login,
             Some(self.files.clone()),
             Some(self.world.clone()),
+            Some(self.input.clone()),
         ) {
             Ok(u) => {
                 println!("3d: opening the Graal3D link beside {}", join.addr);

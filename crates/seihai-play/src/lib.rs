@@ -22,6 +22,7 @@
 //! (Direct3D 12 and its software WARP on Windows).
 
 pub mod chars;
+pub mod effects;
 pub mod game;
 pub mod hud;
 pub mod render;
