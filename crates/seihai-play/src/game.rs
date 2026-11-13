@@ -130,7 +130,19 @@ pub struct Game {
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
+    /// Takes the arrows (`dx`, `dy`) while [`Game::boards_hidden`] is set,
+    /// in place of the flat walk (Ato's Graal3D walk).
+    pub keys3d: Option<Keys3d>,
+    /// Takes what the player says while [`Game::boards_hidden`] is set, in
+    /// place of the TCP chat (Ato's Graal3D chat section).
+    pub say3d: Option<Say3d>,
 }
+
+/// [`Game::keys3d`].
+pub type Keys3d = Box<dyn Fn(i8, i8) + Send>;
+
+/// [`Game::say3d`].
+pub type Say3d = Box<dyn Fn(&str) + Send>;
 
 /// How many chat lines the game keeps.
 pub const CHAT_KEEP: usize = 100;
@@ -265,6 +277,8 @@ impl Game {
             boards_hidden: Default::default(),
             hidden_drawn: false,
             view3d: None,
+            keys3d: None,
+            say3d: None,
         })
     }
 
@@ -863,6 +877,11 @@ impl Game {
         if text.is_empty() {
             return;
         }
+        if let (Some(s), true) = (&self.say3d, self.boards_hidden()) {
+            s(text);
+            self.own_bubble = Some((text.to_string(), now));
+            return;
+        }
         self.say
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -919,7 +938,10 @@ impl Game {
         if hidden && self.view3d.is_some() {
             self.dirty = true;
         }
-        self.walk(dx, dy, now);
+        match (&self.keys3d, hidden) {
+            (Some(k), true) => k(dx, dy),
+            _ => self.walk(dx, dy, now),
+        }
         self.tick_poses(now);
         self.play_sounds();
         if self.take_chat_and_counters(now) {
@@ -1145,6 +1167,22 @@ mod tests {
 
     /// While a Graal3D link is up the TCP board is not drawn, and the
     /// status says why; when it goes down the level comes back.
+    /// While the 3D link is up, what the player says goes to the 3D side,
+    /// not the TCP chat.
+    #[test]
+    fn a_graal3d_link_takes_what_is_said() {
+        let (mut g, _tx) = game();
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let sink = got.clone();
+        g.say3d = Some(Box::new(move |t| sink.lock().unwrap().push(t.to_string())));
+        g.say("flat", Instant::now());
+        g.boards_hidden
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        g.say("in 3d", Instant::now());
+        assert_eq!(*got.lock().unwrap(), ["in 3d"]);
+        assert_eq!(*g.say.lock().unwrap(), ["flat"]);
+    }
+
     #[test]
     fn a_graal3d_link_hides_the_tcp_board() {
         let (mut g, tx) = game();
