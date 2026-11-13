@@ -47,6 +47,26 @@ pub const PASSWORD_ENV: &str = "SEIHAI_PASSWORD";
 /// this with `--launcher-error` instead of its own window.
 pub const LAUNCHER_ENV: &str = "SEIHAI_LAUNCHER";
 
+/// Why the game the `seihai` start window handed over to ended, for the
+/// start window to show when it comes back.
+static ENDED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// True when a client runs inside the `seihai` program's start window
+/// loop, so a lost connection goes back to that window.
+pub fn under_launcher() -> bool {
+    std::env::var_os(LAUNCHER_ENV).is_some()
+}
+
+/// Note why the game ended (see [`take_ended`]).
+pub fn report_ended(why: &str) {
+    *ENDED.lock().unwrap_or_else(|e| e.into_inner()) = Some(why.to_string());
+}
+
+/// The reason [`report_ended`] noted, once.
+pub fn take_ended() -> Option<String> {
+    ENDED.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
 /// Set by the `seihai` program for every client it runs: its own path.
 /// A client that hands over to another line (Mae's version box picking a
 /// 3.x build) starts `$SEIHAI_PROGRAM <subcommand> ARGS...`, since the
@@ -767,6 +787,16 @@ impl StartScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_ended_reason_is_taken_once() {
+        report_ended("The server closed the connection.");
+        assert_eq!(
+            take_ended().as_deref(),
+            Some("The server closed the connection.")
+        );
+        assert_eq!(take_ended(), None);
+    }
 
     #[test]
     fn every_row_has_its_line() {

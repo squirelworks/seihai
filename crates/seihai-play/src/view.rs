@@ -52,6 +52,14 @@ impl View {
 
     /// One frame: run a turn of the loop for the arrows held and draw it.
     pub fn show(&mut self, ctx: &egui::Context) {
+        // Run from the `seihai` start window, a lost connection closes the
+        // game and goes back there with the reason, as Mae does.
+        if crate::start::under_launcher() {
+            if let Some(why) = self.game.ended.take() {
+                crate::start::report_ended(&why);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
         let now = Instant::now();
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
         let list_before = self.game.list_open();
