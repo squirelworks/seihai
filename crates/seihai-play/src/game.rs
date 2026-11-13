@@ -157,6 +157,9 @@ pub struct Game {
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
+    /// The texts over the 3D world's objects while [`Game::boards_hidden`]
+    /// is set (Ato's nicknames and chat), for the frame's size in pixels.
+    pub tags3d: Option<Tags3d>,
     /// Takes the arrows (`dx`, `dy`) while [`Game::boards_hidden`] is set,
     /// in place of the flat walk (Ato's Graal3D walk).
     pub keys3d: Option<Keys3d>,
@@ -194,6 +197,21 @@ pub const OWN_BUBBLE: std::time::Duration =
 
 /// [`Game::view3d`].
 pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
+
+/// One text over the 3D world, in frame pixels: its bottom centre.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tag3d {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    /// R, G, B, A.
+    pub colour: [u8; 4],
+    /// A chat bubble (outlined), not a nickname.
+    pub chat: bool,
+}
+
+/// [`Game::tags3d`].
+pub type Tags3d = Box<dyn Fn(u32, u32) -> Vec<Tag3d> + Send>;
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
 /// are the footsteps and the water, as in `seihai-mae`.
@@ -325,6 +343,7 @@ impl Game {
             boards_hidden: Default::default(),
             hidden_drawn: false,
             view3d: None,
+            tags3d: None,
             keys3d: None,
             say3d: None,
             weapons: Default::default(),
@@ -1240,6 +1259,15 @@ impl Game {
             hud::draw(&mut f, art, &self.hud_values());
         }
         f
+    }
+
+    /// The texts over the 3D world for a `view` tiles wide and high, while
+    /// the 3D world is drawn; empty otherwise.
+    pub fn tags3d(&self, view: (u32, u32)) -> Vec<Tag3d> {
+        match (&self.tags3d, self.boards_hidden()) {
+            (Some(t), true) => t(view.0 * render::TILE_PX, view.1 * render::TILE_PX),
+            _ => Vec::new(),
+        }
     }
 
     /// True while a Graal3D link is up and the TCP boards are not drawn.

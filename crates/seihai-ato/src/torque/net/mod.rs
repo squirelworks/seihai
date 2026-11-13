@@ -8,6 +8,7 @@
 //! packet uses, [`handshake`] opens the link, [`link`] numbers and acks
 //! data packets, [`events`] and [`ghosts`] read and write their contents,
 //! [`graal_text`] applies the Graal text sent over BigData,
+//! [`scripts3d`] runs the weapon scripts it brings on core's GS2 VM,
 //! and [`session`] runs it all over a UDP socket (Ato's `--graal3d`).
 
 pub mod bits;
@@ -17,4 +18,5 @@ pub mod graal_text;
 pub mod handshake;
 pub mod huffman;
 pub mod link;
+pub mod scripts3d;
 pub mod session;

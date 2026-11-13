@@ -92,10 +92,25 @@ impl AtoApp {
                 g.attach(live);
                 g.boards_hidden = boards_hidden;
                 // While the link is up, the 3D world is drawn instead (#461).
-                let world = world3d;
+                let world = world3d.clone();
                 g.view3d = Some(Box::new(move |w, h| {
                     let w3 = world.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     crate::view3d::draw(&w3, w, h)
+                }));
+                // Nicknames and chat over the objects, in the window's font.
+                let world = world3d;
+                g.tags3d = Some(Box::new(move |w, h| {
+                    let w3 = world.lock().unwrap_or_else(|e| e.into_inner());
+                    crate::view3d::labels(&w3, w, h)
+                        .into_iter()
+                        .map(|l| seihai_play::game::Tag3d {
+                            text: l.text,
+                            x: l.x,
+                            y: l.y,
+                            colour: l.colour,
+                            chat: l.chat,
+                        })
+                        .collect()
                 }));
                 // The arrows walk the own object: up and down step, left
                 // and right turn (#462).

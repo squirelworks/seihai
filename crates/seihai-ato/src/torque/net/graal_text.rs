@@ -7,7 +7,7 @@
 //! strings: `s1` (a weapon name, or empty), `s2` (the action) and `s3`
 //! (its argument). With `s1` set the text goes to that weapon's
 //! `onReceiveText`. Otherwise `s2` selects what the client does with it.
-//! Weapon scripts are kept, not run: they wait on the GS2 client VM.
+//! Weapon scripts are kept here and run by [`super::scripts3d`].
 
 use super::events::{big_data_events, BigData, Event};
 use std::collections::BTreeMap;
@@ -178,7 +178,7 @@ impl Applied {
             } => format!("trigger {target},{kind},{action},{params}"),
             Applied::WeaponAdded(w) => format!("weapon {w} added"),
             Applied::WeaponScript { weapon, bytes } => {
-                format!("weapon {weapon} script ({bytes} bytes, kept; not run yet)")
+                format!("weapon {weapon} script ({bytes} bytes)")
             }
             Applied::WeaponDeleted(w) => format!("weapon {w} deleted"),
             Applied::NpcScript { object, bytes } => {
@@ -218,6 +218,11 @@ impl ClientEvents {
     /// `t weapon,<name>,<params>`: a serverside trigger from a weapon.
     pub fn trigger(&mut self, weapon: &str, params: &str) {
         self.lines.push(format!("t weapon,{weapon},{params}"));
+    }
+
+    /// `t <line>`: a `triggerserver` call, its arguments joined by commas.
+    pub fn trigger_line(&mut self, line: &str) {
+        self.lines.push(format!("t {line}"));
     }
 
     pub fn is_empty(&self) -> bool {
