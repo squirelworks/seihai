@@ -21,6 +21,7 @@
 //! [`window::run_native`] opens every Seihai window: OpenGL, else wgpu
 //! (Direct3D 12 and its software WARP on Windows).
 
+pub mod baddies;
 pub mod chars;
 pub mod effects;
 pub mod game;

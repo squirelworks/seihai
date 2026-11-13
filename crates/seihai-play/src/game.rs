@@ -172,6 +172,9 @@ pub struct Game {
     /// Where the network thread puts the server's floor item changes
     /// (other players' drops, the items the server rolls).
     pub items: online::SharedItems,
+    /// Set by the network thread while the player leads the level: the
+    /// leader runs the level's baddies.
+    pub leader: Arc<std::sync::atomic::AtomicBool>,
     /// The spin, the weapon key, the lay mode and the item list
     /// ([`actions`]).
     actions: actions::Actions,
@@ -331,6 +334,7 @@ impl Game {
             level_objects: Default::default(),
             throws: Default::default(),
             items: Default::default(),
+            leader: Default::default(),
             actions: actions::Actions::new(),
             effect_sheets: EffectSheets::load(resolver),
         })
@@ -771,6 +775,8 @@ impl Game {
         self.session.combat.set_rules(p.life.combat);
         self.session.set_mannerisms(p.mannerisms);
         self.session.walk_sprite = !p.ui.ganis;
+        // Baddy pictures by the build's extension (2.0x names `.gif`).
+        self.session.baddy_image_ext = p.files.image_ext.to_string();
         self.session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304)
             || seihai_core::protocol::lobby::LobbyBurst::for_version(version).is_some();
         self.set_action_version(version);
@@ -1072,6 +1078,7 @@ impl Game {
         self.level_objects = live.level_objects;
         self.throws = live.throws;
         self.items = live.items;
+        self.leader = live.leader;
     }
 
     /// Draw the status display over the level (hearts, gralats, bombs,
@@ -1265,6 +1272,8 @@ pub fn name_tags(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(Strin
     let t = render::TILE_PX as f32;
     others
         .iter()
+        // A hidden player's name is left out with the figure (2.05).
+        .filter(|o| o.status.is_none_or(|s| s & chars::STATUS_HIDDEN == 0))
         .filter_map(|o| {
             let nick = o.nick.as_deref()?.trim();
             (!nick.is_empty()).then(|| {
@@ -1309,6 +1318,12 @@ pub fn npc_bubbles(level: &Level, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f
             )
         })
         .collect()
+}
+
+/// The verse each baddy says, in view pixels: the top of the text centred
+/// over `(x + 1, y - 2)`, as Mae draws it.
+pub fn baddy_verses(s: &OfflineSession, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    crate::baddies::verses(s, cam_x, cam_y)
 }
 
 /// Where a bubble for a player at `(x, y)` tiles goes in view pixels: the

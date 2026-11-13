@@ -24,6 +24,8 @@ pub(super) struct LifeState {
     /// The server's STATUS without the dead and paused bits: what the dead
     /// bit is sent with.
     pub status_base: u8,
+    /// The hide bits last sent in STATUS (core's `hide_status`).
+    pub hide_told: u8,
 }
 
 impl Default for LifeState {
@@ -32,6 +34,7 @@ impl Default for LifeState {
             version: None,
             clock: Instant::now(),
             status_base: 0,
+            hide_told: 0,
         }
     }
 }
@@ -154,6 +157,30 @@ impl Game {
         self.set_pose(false);
         self.dirty = true;
         true
+    }
+
+    /// Hiding under a carried object, or coming out, goes to the server as
+    /// STATUS with the hidden bit (0x02) set or cleared, once the level is
+    /// in, as Mae sends it (`pause_message_bits`). The position goes with
+    /// the next pose tick.
+    pub(super) fn send_hide_status(&mut self) {
+        let bits = self.session.hide_status();
+        if bits == self.life.hide_told || self.session.current_level.is_none() {
+            return;
+        }
+        self.life.hide_told = bits;
+        let Some(version) = self.life.version else {
+            return;
+        };
+        if self.offline {
+            return;
+        }
+        let (status, _) =
+            seihai_core::offline::pause_message_bits(version, self.life.status_base, bits);
+        self.send
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(seihai_core::life::status_message(status));
     }
 
     /// Send what the real client sends for these life events, with the

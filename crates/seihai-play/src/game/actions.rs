@@ -271,8 +271,9 @@ impl Game {
         self.actions.list.open
     }
 
-    /// D: fire the picked weapon. In the lay mode D leaves it instead.
-    /// False when nothing was fired.
+    /// D: fire the picked weapon. In the lay mode D leaves it instead;
+    /// carrying a bush or a stone, D hides under it, and D again comes out
+    /// (core's `toggle_hide`). False when nothing was fired.
     pub fn fire(&mut self) -> bool {
         if self.session.current_level.is_none() || self.list_open() {
             return false;
@@ -286,6 +287,9 @@ impl Game {
             return false;
         }
         if self.session.carried.is_some() {
+            if self.session.toggle_hide() {
+                self.hide_changed();
+            }
             return false;
         }
         let Some(name) = self.actions.weapon.clone() else {
@@ -324,6 +328,12 @@ impl Game {
         // A key while dead respawns, once the death allows it.
         if self.session.life.is_dead() {
             self.respawn();
+            return None;
+        }
+        // A while hidden comes out, back to carrying.
+        if self.session.hidden && !sword_held {
+            self.session.leave_hiding();
+            self.hide_changed();
             return None;
         }
         if self.interact() == Interaction::Nothing && sword_held {
@@ -376,6 +386,21 @@ impl Game {
         got
     }
 
+    /// Hiding started or ended: the pose and the STATUS bit go out.
+    fn hide_changed(&mut self) {
+        eprintln!(
+            "{}",
+            if self.session.hidden {
+                "hidden under the carried object"
+            } else {
+                "out of hiding"
+            }
+        );
+        self.send_hide_status();
+        self.set_pose(self.session.walking);
+        self.dirty = true;
+    }
+
     /// The keys let go this frame: A (`a_down` false) ends a grab, and an
     /// arrow let go ends a push or a pull.
     pub fn keys_up(&mut self, a_down: bool, arrow_let_go: bool) {
@@ -423,7 +448,13 @@ impl Game {
                 LevelObject::Arrow { sender, arrow } => {
                     self.session.receive_arrow(&arrow, Some(sender))
                 }
-                _ => {}
+                // The level's baddies: core's network thread keeps only
+                // the player's own level's on a gmap.
+                LevelObject::BaddiesClear => self.session.clear_baddies(),
+                LevelObject::BaddyProps { payload, .. } => {
+                    self.session.receive_baddy_props(&payload)
+                }
+                LevelObject::BaddyHurt(payload) => self.session.receive_baddy_hurt(&payload),
             }
         }
         for t in throws {
@@ -440,6 +471,7 @@ impl Game {
         if let Some(sc) = self.actions.scripts.as_mut() {
             sc.tick(&mut self.session, ms);
         }
+        moved |= self.tick_baddies(ms);
         moved |= self.session.tick_bombs(ms);
         moved |= self.session.tick_arrows(ms, &|_, _| None);
         moved |= !self.session.floor_items.is_empty();
@@ -455,6 +487,39 @@ impl Game {
         self.session.take_landings();
         self.session.take_pelts();
         self.after_actions();
+        // A throw from hiding ends it: the bit goes out with the change.
+        self.send_hide_status();
+        moved
+    }
+
+    /// The baddies' clock: offline, or online as the level's leader, their
+    /// AI runs here (core's `tick_baddies`); their hits on the player and
+    /// the player's on them are judged; what the leader or a follower owes
+    /// the server goes out. Pictures not read yet are looked for.
+    fn tick_baddies(&mut self, ms: u64) -> bool {
+        self.session.baddy_role = seihai_core::offline::BaddyRole {
+            online: !self.offline,
+            leader: self.leader.load(std::sync::atomic::Ordering::Relaxed),
+        };
+        let others: Vec<(u16, f32, f32)> =
+            self.drawn_others.iter().map(|o| (o.id, o.x, o.y)).collect();
+        let moved = self.session.tick_baddies(ms, &others);
+        let sends = self.session.take_baddy_sends();
+        if !self.offline && !sends.is_empty() {
+            self.send
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(sends);
+        }
+        if !self.session.baddies.is_empty() {
+            for name in crate::baddies::load_images(
+                &self.session,
+                self.resolver.as_ref(),
+                &mut self.npc_images,
+            ) {
+                eprintln!("baddy image {name}: not in the asset folders; left out");
+            }
+        }
         moved
     }
 
@@ -642,6 +707,78 @@ mod tests {
         g.walk(1, 0, Instant::now() + Duration::from_secs(1));
         assert!(g.session.laying.is_none());
         assert_eq!(g.session.player_x, x);
+    }
+
+    /// S throws from hiding too, and the hidden bit is cleared.
+    #[test]
+    fn s_while_carrying_throws_from_hiding_too() {
+        let mut g = game_on(ClientVersion::V205);
+        g.session.carried = Some(seihai_core::offline::Carried {
+            kind: 0,
+            tiles: [[0, 0], [0, 0]],
+        });
+        assert!(!g.fire());
+        assert!(g.session.hidden);
+        sent(&g);
+        g.swing();
+        assert!(!g.session.hidden && g.session.carried.is_none());
+        run(&mut g, 1);
+        let out = sent(&g);
+        let (cleared, _) = seihai_core::offline::pause_message_bits(ClientVersion::V205, 0, 0);
+        assert!(out.contains(&seihai_core::life::status_message(cleared)));
+    }
+
+    /// D while carrying a bush hides under it: the hidden pose and STATUS
+    /// with bit 0x02; A comes out and clears it. D carrying a pot does
+    /// nothing.
+    #[test]
+    fn d_while_carrying_hides_and_a_comes_out() {
+        let mut g = game_on(ClientVersion::V205);
+        let carry = |g: &mut Game, kind| {
+            g.session.carried = Some(seihai_core::offline::Carried {
+                kind,
+                tiles: [[0, 0], [0, 0]],
+            })
+        };
+        carry(&mut g, 2);
+        assert!(!g.fire());
+        assert!(!g.session.hidden, "a pot does not hide");
+        carry(&mut g, 0);
+        sent(&g);
+        assert!(!g.fire(), "D fires nothing while carrying");
+        assert!(g.session.hidden);
+        assert_eq!(crate::render::own_figure(&g.session).pose, "hiddenstill");
+        let status = |bits| {
+            let (s, _) = seihai_core::offline::pause_message_bits(ClientVersion::V205, 0, bits);
+            seihai_core::life::status_message(s)
+        };
+        assert_eq!(sent(&g), vec![status(seihai_core::offline::HIDDEN_STATUS)]);
+        run(&mut g, 2);
+        assert!(sent(&g).is_empty(), "sent once");
+        g.act(false);
+        assert!(!g.session.hidden && g.session.carried.is_some());
+        assert_eq!(sent(&g), vec![status(0)]);
+    }
+
+    /// The server's baddies join the level and a new level clears them.
+    #[test]
+    fn the_servers_baddies_join_and_leave() {
+        let mut g = game_on(ClientVersion::V205);
+        g.level_objects
+            .lock()
+            .unwrap()
+            .push(LevelObject::BaddyProps {
+                level: Some("test.nw".into()),
+                payload: vec![1 + 32],
+            });
+        g.tick(0, 0, Instant::now());
+        assert_eq!(g.session.baddies.len(), 1);
+        g.level_objects
+            .lock()
+            .unwrap()
+            .push(LevelObject::BaddiesClear);
+        g.tick(0, 0, Instant::now());
+        assert!(g.session.baddies.is_empty());
     }
 
     /// Carrying, the others see the carry pose; S throws what is carried:
