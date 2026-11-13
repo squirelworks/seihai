@@ -74,6 +74,7 @@ impl AtoApp {
         let side = crate::graal3d::Side::new(version, login.clone(), self.start.graal3d);
         let hooks = side.hooks();
         let boards_hidden = side.boards_hidden.clone();
+        let world3d = side.world.clone();
         let (rx, live) = game::spawn_online_hooked(
             addr,
             version,
@@ -88,6 +89,12 @@ impl AtoApp {
             Ok(mut g) => {
                 g.attach(live);
                 g.boards_hidden = boards_hidden;
+                // While the link is up, the 3D world is drawn instead (#461).
+                let world = world3d;
+                g.view3d = Some(Box::new(move |w, h| {
+                    let w3 = world.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    crate::view3d::draw(&w3, w, h)
+                }));
                 self.game = Some(View::new(g, CANVAS));
             }
             Err(e) => self.start.status = e,

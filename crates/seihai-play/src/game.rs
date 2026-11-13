@@ -108,7 +108,13 @@ pub struct Game {
     pub boards_hidden: Arc<std::sync::atomic::AtomicBool>,
     /// What [`Game::boards_hidden`] was on the last tick.
     hidden_drawn: bool,
+    /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
+    /// world), given the frame's size in pixels; black without one.
+    pub view3d: Option<View3d>,
 }
+
+/// [`Game::view3d`].
+pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
 /// are the footsteps and the water, as in `seihai-mae`.
@@ -186,6 +192,7 @@ impl Game {
             level_here: None,
             boards_hidden: Default::default(),
             hidden_drawn: false,
+            view3d: None,
         })
     }
 
@@ -705,10 +712,12 @@ impl Game {
         if hidden != self.hidden_drawn {
             self.hidden_drawn = hidden;
             if hidden {
-                self.status =
-                    "Graal3D: the world comes over the 3D link; the 3D view is not drawn yet."
-                        .into();
+                self.status = "Graal3D: the world comes over the 3D link.".into();
             }
+            self.dirty = true;
+        }
+        // The 3D world moves on its own thread: draw every frame.
+        if hidden && self.view3d.is_some() {
             self.dirty = true;
         }
         self.walk(dx, dy, now);
@@ -745,6 +754,9 @@ impl Game {
     /// other players as last taken.
     pub fn draw(&self, view: (u32, u32)) -> Frame {
         if self.boards_hidden() {
+            if let Some(v) = &self.view3d {
+                return v(view.0 * render::TILE_PX, view.1 * render::TILE_PX);
+            }
             return Frame::filled(
                 view.0 * render::TILE_PX,
                 view.1 * render::TILE_PX,

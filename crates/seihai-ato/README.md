@@ -187,5 +187,5 @@ cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlo
 
 The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
 other players' looks (they show as plain markers),
-GANI art, and the 3D drawing, walking and chat of the Torque UDP side. The clients' background images are not shipped,
+GANI art, and, on the Torque UDP side, textures and the other shape formats, walking and chat. The clients' background images are not shipped,
 so the start window's panel is a plain fill.

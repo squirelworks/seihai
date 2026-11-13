@@ -88,6 +88,8 @@ fn reaches_the_control_object_against_a_replaying_server() {
         }
         asked
     });
+    let world = seihai_ato::view3d::Shared3d::default();
+    let view = world.clone();
     let client = std::thread::spawn(move || {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let who = Identity {
@@ -103,6 +105,7 @@ fn reaches_the_control_object_against_a_replaying_server() {
             &who,
             &flag,
             Some(&asks),
+            Some(&world),
             &mut out,
             0x400,
         );
@@ -276,6 +279,17 @@ fn reaches_the_control_object_against_a_replaying_server() {
             log.lines().any(|l| l == line),
             "missing {line:?} in:\n{log}"
         );
+    }
+    // The view's world has the player as the control object, at its
+    // transform, and the Sun; the shape's bytes are not a .3ds here.
+    {
+        let w = view.lock().unwrap();
+        assert_eq!(w.control, Some(1));
+        let me = &w.objects[&1];
+        assert_eq!(me.shape.as_deref(), Some("labcube.3ds"));
+        assert_eq!(me.transform.unwrap().position, [0.0, 0.0, 1.0]);
+        assert!(w.sun.is_some());
+        assert_eq!(w.models.get("labcube.3ds"), Some(&None));
     }
     // The player's shape is asked for once.
     assert_eq!(tcp_side.join().unwrap(), ["labcube.3ds"]);

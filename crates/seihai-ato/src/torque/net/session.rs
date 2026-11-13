@@ -16,6 +16,7 @@ use super::graal_text::{self, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use crate::torque::TorqueProfile;
+use crate::view3d::Shared3d;
 use seihai_core::client::FileAsks;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
@@ -74,7 +75,10 @@ pub enum Step {
 }
 
 /// Runs the link from `socket` (already bound) to `server` until it
-/// ends. Progress lines go to `out` with a `3d:` prefix.
+/// ends. Progress lines go to `out` with a `3d:` prefix. The files the
+/// ghosts name are asked for through `files`, and the view's `world` is
+/// kept up to date.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     socket: &UdpSocket,
     server: SocketAddr,
@@ -82,6 +86,7 @@ pub fn run(
     who: &Identity,
     stop: &AtomicBool,
     files: Option<&FileAsks>,
+    world: Option<&Shared3d>,
     out: &mut impl Write,
 ) -> Result<Ended, String> {
     run_with_sequence(
@@ -91,6 +96,7 @@ pub fn run(
         who,
         stop,
         files,
+        world,
         out,
         connect_sequence(),
     )
@@ -105,6 +111,7 @@ pub fn run_with_sequence(
     who: &Identity,
     stop: &AtomicBool,
     files: Option<&FileAsks>,
+    world: Option<&Shared3d>,
     out: &mut impl Write,
     sequence: u32,
 ) -> Result<Ended, String> {
@@ -206,7 +213,7 @@ pub fn run_with_sequence(
     let mut text = GraalText::default();
     loop {
         if let Some(f) = files {
-            fetch.take_answers(f, out);
+            fetch.take_answers(f, world, out);
         }
         if files.is_some() && step == Step::Control && fetch.all_answered() {
             step = Step::Attached;
@@ -345,11 +352,22 @@ pub fn run_with_sequence(
                             i
                         }
                         GhostChange::Updated(i) => i,
-                        GhostChange::Deleted(_) => continue,
+                        GhostChange::Deleted(i) => {
+                            if let Some(w) = world {
+                                w.lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .objects
+                                    .remove(&i);
+                            }
+                            continue;
+                        }
                     };
                     let Some(g) = ghosts.ghosts.get(&i) else {
                         continue;
                     };
+                    if let Some(w) = world {
+                        to_world(&mut w.lock().unwrap_or_else(|e| e.into_inner()), i, g);
+                    }
                     if let GhostState::Sky(_) = g {
                         if fetch.sky_textures_in && matches!(c, GhostChange::Updated(_)) {
                             let _ = writeln!(out, "3d: Sky read again with its textures");
@@ -380,6 +398,9 @@ pub fn run_with_sequence(
             }
             if game.control != Some(i) {
                 game.control = Some(i);
+                if let Some(w) = world {
+                    w.lock().unwrap_or_else(|e| e.into_inner()).control = Some(i);
+                }
                 if let Some(GhostState::GameObject(me)) = ghosts.ghosts.get(&i) {
                     game.update = Some(control_echo(me));
                     if let Some(t) = me.transform {
@@ -424,7 +445,7 @@ impl Fetch {
     }
 
     /// Take the answers core's session has put in.
-    fn take_answers(&mut self, asks: &FileAsks, out: &mut impl Write) {
+    fn take_answers(&mut self, asks: &FileAsks, world: Option<&Shared3d>, out: &mut impl Write) {
         let got = std::mem::take(&mut *asks.answers.lock().unwrap_or_else(|e| e.into_inner()));
         for a in got {
             match &a.data {
@@ -434,6 +455,11 @@ impl Fetch {
                 None => {
                     let _ = writeln!(out, "3d: {} is not on the server", a.name);
                 }
+            }
+            if let Some(w) = world {
+                w.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .shape_file(&a.name, a.data.as_deref());
             }
             self.pending.retain(|p| !p.eq_ignore_ascii_case(&a.name));
             self.files.insert(a.name.to_ascii_lowercase(), a.data);
@@ -452,6 +478,38 @@ impl Fetch {
 
     fn all_answered(&self) -> bool {
         self.pending.is_empty()
+    }
+}
+
+/// Put ghost `i`'s state into the view's world.
+fn to_world(w: &mut crate::view3d::World3d, i: u32, g: &GhostState) {
+    let place = |t: Transform| crate::view3d::Transform {
+        position: t.position,
+        axis: t.axis,
+        angle: t.angle,
+    };
+    match g {
+        GhostState::GameObject(u) => w.object(i, u.shape.as_deref(), u.transform.map(place)),
+        GhostState::Camera(u) => {
+            if let Some(t) = u.transform {
+                w.camera = Some(place(t));
+            }
+        }
+        GhostState::Sun {
+            direction,
+            colour,
+            ambient,
+            ..
+        } => w.sun = Some((*direction, *colour, *ambient)),
+        GhostState::Sky(sky) => {
+            if sky.solid_colour.is_some() {
+                w.sky_colour = sky.solid_colour;
+            }
+            if sky.fog_colour.is_some() {
+                w.fog_colour = sky.fog_colour;
+            }
+        }
+        GhostState::Other(_) => {}
     }
 }
 
