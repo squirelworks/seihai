@@ -205,9 +205,18 @@ wall. A plain level link leaves the gmap.
 cargo run -p seihai-ato -- --version 3.04 --assets ~/graal --level onlinestartlocal.nw
 ```
 
+## Lab checked
+
+On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran against a loopback lab stack: seihai-listserver and three seihai-gserver-v2 servers (#400).
+- All six passed the headless login, walking with a second client, and level links.
+- 3.04, 3.153, 4.04r2, 4.20r8 and 5.12 passed the server list and Connect.
+- 4.20r8, 5.00r7 and 5.12 passed the Login warp (`PLO_SERVERWARP`).
+- 5.12's Graal3D link reaches login step 6 (#458).
+- The water sound and `--no-sound` pass on 3.153 (#466).
+
 ## Not in yet
 
 The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
 other players' looks (they show as plain markers),
-GANI art, and, on the Torque UDP side, textures and the other shape formats, walking and chat. The clients' background images are not shipped,
+GANI art, and, on the Torque UDP side, textures and the other shape formats, and the 3.153/4.04r2 game layer past the handshake against a real server (no lab server runs it yet, #464). The clients' background images are not shipped,
 so the start window's panel is a plain fill.
