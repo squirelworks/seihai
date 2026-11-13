@@ -22,6 +22,9 @@ egui = "0.29"
 # machine has no OpenGL 2.0 (#475). The `wgpu` feature is on for every
 # crate that links eframe, since Cargo unifies features.
 eframe = { version = "0.29", features = ["wgpu"] }
+# eframe's own winit, only to name its "EventLoop can't be recreated" error
+# (#508). No features of its own: eframe picks them.
+winit = { version = "0.30", default-features = false }
 
 # eframe's wgpu has no Direct3D 12 of its own (only Vulkan, Metal and GL).
 # Direct3D 12 is what reaches WARP, Windows' software renderer, on a PC

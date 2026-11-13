@@ -12,6 +12,14 @@
 //! Once OpenGL has failed, the rest of the run goes straight to wgpu, so
 //! the game window after the start window does not try OpenGL again.
 //! `SEIHAI_RENDERER=glow` or `wgpu` picks one and does not fall back.
+//!
+//! Both renderers need the desktop's windowing system (winit's event
+//! loop), and winit makes that only once per run. If it cannot start (no
+//! display, or on Linux a missing `libxkbcommon-x11`), the OpenGL attempt
+//! fails while making it, and wgpu then only hears "EventLoop can't be
+//! recreated" (#508). That case is reported as the windowing system's
+//! failure with the first attempt's reason, not as two renderer failures,
+//! and later windows in the same run fail at once with the same reason.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,6 +31,10 @@ pub const RENDERER_ENV: &str = "SEIHAI_RENDERER";
 
 /// OpenGL failed once this run: go straight to wgpu.
 static GLOW_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// The windowing system could not start this run, and why. winit cannot
+/// try again, so every later window fails with this.
+static NO_WINDOWING: Mutex<Option<String>> = Mutex::new(None);
 
 /// What `SEIHAI_RENDERER` asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,10 +84,16 @@ fn name(r: eframe::Renderer) -> &'static str {
 pub struct WindowError {
     /// `(renderer, what it said)`, in the order tried.
     pub tried: Vec<(&'static str, String)>,
+    /// The windowing system itself could not start, and why. No renderer
+    /// can open a window then, so `tried` is not the cause.
+    pub windowing: Option<String>,
 }
 
 impl std::fmt::Display for WindowError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(why) = &self.windowing {
+            return write!(f, "the windowing system could not start: {why}");
+        }
         let parts: Vec<String> = self
             .tried
             .iter()
@@ -87,6 +105,42 @@ impl std::fmt::Display for WindowError {
 
 impl std::error::Error for WindowError {}
 
+impl WindowError {
+    /// What the player can do about it, as one line.
+    pub fn hint(&self) -> String {
+        if self.windowing.is_some() {
+            return "no window can open in this session; run seihai from a desktop session (on Linux one with DISPLAY or WAYLAND_DISPLAY set, and libxkbcommon-x11 installed for X11)".into();
+        }
+        let tried: Vec<&str> = self.tried.iter().map(|(r, _)| *r).collect();
+        format!(
+            "no renderer could draw a window here (tried {}); install the graphics driver, or put Mesa's software opengl32.dll next to seihai.exe",
+            tried.join(", then ")
+        )
+    }
+}
+
+/// How one renderer's attempt failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Failure {
+    /// The renderer said this.
+    Said(String),
+    /// winit refused to make the event loop because an earlier attempt
+    /// already tried (and failed) to make it.
+    NoEventLoop,
+}
+
+impl Failure {
+    fn from_eframe(e: eframe::Error) -> Failure {
+        use winit::error::EventLoopError;
+        match e {
+            eframe::Error::WinitEventLoop(EventLoopError::RecreationAttempt) => {
+                Failure::NoEventLoop
+            }
+            e => Failure::Said(e.to_string()),
+        }
+    }
+}
+
 /// One renderer's attempt. wgpu 22 reports a surface it cannot configure
 /// (no display, a session with no desktop) by panicking inside eframe, not
 /// as an error, so the attempt is run under `catch_unwind` and a panic
@@ -97,10 +151,22 @@ fn attempt(
     options: eframe::NativeOptions,
     create: eframe::AppCreator<'_>,
     started: &Arc<AtomicBool>,
-) -> Result<(), String> {
-    caught(started, || {
-        eframe::run_native(title, options, create).map_err(|e| e.to_string())
-    })
+) -> Result<(), Failure> {
+    let mut no_loop = false;
+    let r = caught(started, || {
+        eframe::run_native(title, options, create).map_err(|e| match Failure::from_eframe(e) {
+            Failure::Said(why) => why,
+            Failure::NoEventLoop => {
+                no_loop = true;
+                String::new()
+            }
+        })
+    });
+    match r {
+        Ok(()) => Ok(()),
+        Err(_) if no_loop => Err(Failure::NoEventLoop),
+        Err(why) => Err(Failure::Said(why)),
+    }
 }
 
 /// Run `f`; a panic in it before `started` is set is returned as its
@@ -163,8 +229,14 @@ pub fn run_native<'a>(
     options: eframe::NativeOptions,
     create: eframe::AppCreator<'a>,
 ) -> Result<(), WindowError> {
+    if let Some(why) = no_windowing() {
+        return Err(WindowError {
+            tried: Vec::new(),
+            windowing: Some(why),
+        });
+    }
     let slot: Rc<RefCell<Option<eframe::AppCreator<'a>>>> = Rc::new(RefCell::new(Some(create)));
-    let mut tried = Vec::new();
+    let mut tried: Vec<(&'static str, String)> = Vec::new();
     for &renderer in order(Wanted::from_env(), GLOW_FAILED.load(Ordering::Relaxed)) {
         let Some(_) = slot.borrow().as_ref() else {
             break;
@@ -190,7 +262,16 @@ pub fn run_native<'a>(
         );
         match r {
             Ok(()) => return Ok(()),
-            Err(e) => {
+            Err(Failure::NoEventLoop) => {
+                let why = windowing_reason(&tried);
+                eprintln!("seihai: the windowing system could not start: {why}");
+                *NO_WINDOWING.lock().unwrap_or_else(|e| e.into_inner()) = Some(why.clone());
+                return Err(WindowError {
+                    tried,
+                    windowing: Some(why),
+                });
+            }
+            Err(Failure::Said(e)) => {
                 eprintln!("seihai: {} could not open the window: {e}", name(renderer));
                 // Only a window that never got as far as the app counts
                 // against OpenGL; an error of the app's own is not retried.
@@ -201,7 +282,29 @@ pub fn run_native<'a>(
             }
         }
     }
-    Err(WindowError { tried })
+    Err(WindowError {
+        tried,
+        windowing: None,
+    })
+}
+
+/// The windowing system's earlier failure this run, if any.
+fn no_windowing() -> Option<String> {
+    NO_WINDOWING
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+/// winit refused a second event loop: the attempt before this one failed
+/// while making it, so its reason is the windowing system's. With no
+/// earlier attempt in this call (an earlier window of the run used up the
+/// event loop without keeping it), there is no better reason to give.
+fn windowing_reason(tried: &[(&'static str, String)]) -> String {
+    tried
+        .last()
+        .map(|(_, why)| why.clone())
+        .unwrap_or_else(|| "winit could not make its event loop again".into())
 }
 
 /// `NativeOptions` is not `Clone`; the fields Seihai sets are copied and
@@ -297,8 +400,50 @@ mod tests {
                 ("OpenGL", "needs 2.0".into()),
                 ("wgpu", "no surface".into()),
             ],
+            windowing: None,
         };
         assert_eq!(e.to_string(), "OpenGL: needs 2.0; wgpu: no surface");
+    }
+
+    /// #508: winit's "can't be recreated" means the event loop never came
+    /// up, so the attempt before it is the windowing system's reason.
+    #[test]
+    fn a_second_event_loop_is_the_windowing_systems_failure() {
+        use winit::error::EventLoopError;
+        let f = Failure::from_eframe(eframe::Error::WinitEventLoop(
+            EventLoopError::RecreationAttempt,
+        ));
+        assert_eq!(f, Failure::NoEventLoop);
+        let f = Failure::from_eframe(eframe::Error::WinitEventLoop(EventLoopError::ExitFailure(
+            1,
+        )));
+        assert!(matches!(f, Failure::Said(_)), "{f:?}");
+
+        let tried = vec![(
+            "OpenGL",
+            "Library libxkbcommon-x11.so could not be loaded.".to_string(),
+        )];
+        let why = windowing_reason(&tried);
+        assert_eq!(why, "Library libxkbcommon-x11.so could not be loaded.");
+        let e = WindowError {
+            tried,
+            windowing: Some(why),
+        };
+        assert_eq!(
+            e.to_string(),
+            "the windowing system could not start: Library libxkbcommon-x11.so could not be loaded."
+        );
+        assert!(windowing_reason(&[]).contains("event loop"));
+        assert!(e.hint().contains("libxkbcommon-x11"), "{}", e.hint());
+        let renderers = WindowError {
+            tried: vec![("OpenGL", "needs 2.0".into())],
+            windowing: None,
+        };
+        assert!(
+            renderers.hint().contains("tried OpenGL)"),
+            "{}",
+            renderers.hint()
+        );
     }
 
     #[test]
