@@ -106,12 +106,10 @@ fn interactive() {
     println!("What to check:");
     println!("  Enter = the 3.04 list login on both listserver ports");
     println!("  y     = every version profile's list login on both listserver ports");
-    println!("  L     = every 4.x to 6.x build's login at the Login game server");
-    println!("  C     = the same at the community Login server from the server list");
+    println!("  C     = every 4.x to 6.x build's login at the community Login server");
+    println!("          (the Login entry of the community server list)");
     let choice = ask("Choice: ");
-    let login_at = if choice.eq_ignore_ascii_case("l") {
-        Some(login_server().unwrap_or_else(|| ask("Login server (host:port): ")))
-    } else if choice.eq_ignore_ascii_case("c") {
+    let login_at = if choice.eq_ignore_ascii_case("c") {
         Some(community_login(&account, &pw).unwrap_or_default())
     } else {
         None
@@ -209,13 +207,6 @@ fn community_login(account: &str, pw: &str) -> Option<String> {
             None
         }
     }
-}
-
-/// The Login game server the 4.x to 6.x builds reach first. Not written in
-/// the source: the build bakes it in from `SEIHAI_LOGIN_SERVER`
-/// (`host:port`), or the user types it.
-fn login_server() -> Option<String> {
-    option_env!("SEIHAI_LOGIN_SERVER").map(str::to_string)
 }
 
 /// One game login per lobby build (4.04r2 to 6.03r7) at the Login server,

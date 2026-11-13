@@ -272,7 +272,7 @@ The 2.05 list login answering on 14923 was already known from earlier runs;
 this run only matches it. 14922 was not tried with that login, and no real
 3.x, 4.x or 5.x client was captured against the public service.
 
-### Every list login, and the 4.x to 6.x Login server (2026-11-13)
+### Every list login (2026-11-13)
 
 The owner ran `list_probe`'s double-click mode twice per pass, with two of
 their own real accounts, on their own machine (password typed, nothing
@@ -300,21 +300,6 @@ of their own borrow 2.05's and are asked once under it):
   old list and then the current one, and the count is the last one read in
   the wait), and 8 for the gen-5 logins.
 
-**Login game server** (16 lobby builds, 4.04r2 to 6.03r7; the host is the
-one their license file names, on 14900; Seihai's game login with the three
-machine fields empty, `lobby.rs`):
-
-| Builds | Reply (PLO_DISCMESSAGE) |
-|---|---|
-| 4.04r2, 4.04r2 Mac, 4.20r6, 4.20r8, 5.00r7 | "You need Graal version Graal 5.1-6.04 to play on this server." |
-| 5.12, 5.12 Mac, 5.24r4, 5.30r3, 5.31r4, 6.00r2, 6.00r4, 6.015, 6.034, 6.03r7, 6.03r7 Linux | "An account with the name you typed in does not exist." |
-
-- That server checks the version first and accepts the 5.12 to 6.03r7
-  tokens, so their login reaches the account check. 4.x and 5.00r7 are
-  turned away by version.
-- Both accounts are community accounts: they work on the public listserver
-  but "do not exist" at this Login server, which is not the community's.
-  So the rejection is about the account service, not the login line. The
-  next check is the same builds at the community Login server (the `Login`
-  entry of the server list; `list_probe` option C), and the real clients
-  against it in the lab.
+The 4.x to 6.x builds have no list login of their own (they reach a
+`Login` game server). Their check is `list_probe` option C, at the
+community `Login` entry of this server list; it has not been run yet.
