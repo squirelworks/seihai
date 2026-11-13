@@ -524,17 +524,59 @@ def tiledefs_text():
 DIRS = 4  # 0 up, 1 left, 2 down, 3 right (Graal order)
 
 
+# The default player is a squirrel (Seihai's mascot): orange-brown fur for
+# the coat and sleeves, a cream belly and paws in the skin entry, dark paws
+# for shoes, and a bushy tail in colours of its own (not recoloured by the
+# player's colours, so a recoloured squirrel keeps its tail). The palette
+# names are the old ones ("tunic" is the coat entry the client recolours).
 def body_palette():
     p = Pal(transparent=True)
     for n, c in [
-        ("outline", (32, 28, 40)), ("skin", (240, 200, 160)), ("skin_dk", (208, 160, 120)),
-        ("tunic", (40, 150, 150)), ("tunic_dk", (24, 104, 110)), ("tunic_lt", (88, 196, 184)),
-        ("belt", (130, 80, 40)), ("gold", (244, 204, 64)), ("pants", (74, 72, 130)),
-        ("pants_dk", (52, 50, 98)), ("boot", (96, 60, 42)), ("boot_dk", (64, 38, 30)),
-        ("white", (240, 240, 240)), ("hair", (120, 70, 36)), ("hair_dk", (84, 46, 26)),
+        ("outline", (44, 26, 20)), ("skin", (240, 220, 178)), ("skin_dk", (214, 188, 140)),
+        ("tunic", (190, 100, 44)), ("tunic_dk", (146, 70, 30)), ("tunic_lt", (226, 146, 76)),
+        ("belt", (104, 66, 36)), ("gold", (232, 188, 76)), ("pants", (160, 80, 34)),
+        ("pants_dk", (124, 60, 26)), ("boot", (86, 50, 32)), ("boot_dk", (62, 36, 24)),
+        ("white", (244, 240, 230)), ("hair_dk", (120, 58, 24)),
+        ("tail", (204, 112, 48)), ("tail_lt", (244, 184, 112)), ("tail_dk", (150, 72, 30)),
     ]:
         p.add(n, c)
     return p
+
+
+def draw_tail(d, P, view):
+    """The bushy tail. view 0: seen from behind (over the back), 2: from the
+    front (rising behind the right shoulder), 1: facing left (behind, on the
+    right). Drawn before the body for 1 and 2, after it for 0."""
+    o = P["outline"]
+    if view == 0:
+        d.ellipse([9, 9, 22, 25], fill=P["tail"], outline=o)
+        d.ellipse([10, 2, 21, 14], fill=P["tail"], outline=o)
+        d.arc([12, 4, 19, 12], 160, 330, fill=P["tail_lt"])
+        d.line([(15, 13), (15, 22)], fill=P["tail_dk"])
+        d.arc([11, 11, 20, 23], 200, 250, fill=P["tail_lt"])
+    elif view == 2:
+        d.ellipse([23, 9, 31, 23], fill=P["tail"], outline=o)
+        d.ellipse([22, 0, 31, 12], fill=P["tail"], outline=o)
+        d.arc([24, 2, 29, 9], 160, 330, fill=P["tail_lt"])
+        d.line([(28, 12), (28, 20)], fill=P["tail_dk"])
+    else:
+        d.ellipse([18, 9, 30, 26], fill=P["tail"], outline=o)
+        d.ellipse([20, 0, 31, 13], fill=P["tail"], outline=o)
+        d.arc([22, 2, 29, 10], 160, 330, fill=P["tail_lt"])
+        d.arc([20, 12, 28, 24], 300, 30, fill=P["tail_dk"])
+
+
+def tail_layer(pal, view, mirror):
+    im = Image.new("P", (32, 32), 0)
+    draw_tail(ImageDraw.Draw(im), pal, view)
+    return im.transpose(Image.FLIP_LEFT_RIGHT) if mirror else im
+
+
+def under(im, layer):
+    """im with the clear pixels filled from layer (a layer behind it)."""
+    a, b = im.tobytes(), layer.tobytes()
+    out = Image.frombytes("P", im.size, bytes(x if x else y for x, y in zip(a, b)))
+    return out
 
 
 def body_cell(pal, direction, phase):
@@ -549,6 +591,8 @@ def body_cell(pal, direction, phase):
         a = 2 * math.pi * phase / 8
         s, sn = math.cos(a), math.sin(a)
     P = pal
+    if direction != 0:
+        draw_tail(d, P, 2 if d_eff == 2 else 1)
     if d_eff in (0, 2):
         lift_a = int(round(max(0.0, sn) * 2))
         lift_b = int(round(max(0.0, -sn) * 2))
@@ -566,13 +610,15 @@ def body_cell(pal, direction, phase):
         d.rectangle([10, 8, 21, 20], fill=P["tunic"], outline=P["outline"])
         d.rectangle([20, 9, 20, 19], fill=P["tunic_dk"])
         d.line([(11, 9), (14, 9)], fill=P["tunic_lt"])
-        d.rectangle([11, 16, 20, 18], fill=P["belt"])
         if direction == 2:
-            d.rectangle([15, 16, 16, 18], fill=P["gold"], outline=P["outline"])
+            d.ellipse([12, 9, 19, 20], fill=P["skin"])  # cream belly
+            d.rectangle([11, 16, 20, 17], fill=P["belt"])
+            d.rectangle([15, 15, 16, 18], fill=P["gold"], outline=P["outline"])
             d.rectangle([14, 7, 17, 9], fill=P["skin"])
-            d.point([(14, 8), (17, 8)], fill=P["outline"])
         else:
+            d.rectangle([11, 16, 20, 18], fill=P["belt"])
             d.rectangle([13, 7, 18, 9], fill=P["hair_dk"])
+            draw_tail(d, P, 0)
     else:
         off = int(round(3 * s))
         # far leg then near leg; forward is -x when facing left
@@ -582,6 +628,7 @@ def body_cell(pal, direction, phase):
             d.rectangle([x0 - 2, 27, x0 + 3, 30], fill=P["boot_dk"] if dark else P["boot"], outline=P["outline"])
         d.rectangle([12, 8, 19, 20], fill=P["tunic"], outline=P["outline"])
         d.rectangle([18, 9, 18, 19], fill=P["tunic_dk"])
+        d.rectangle([13, 10, 14, 19], fill=P["skin"])  # cream belly, front edge
         d.rectangle([12, 16, 19, 18], fill=P["belt"])
         d.rectangle([12, 16, 13, 18], fill=P["gold"])
         d.rectangle([13, 7, 17, 9], fill=P["skin"])
@@ -635,6 +682,8 @@ def body_pose_cell(pal, direction, kind):
             else:
                 d.rectangle([8, 11, 13, 14], fill=P["tunic_dk"], outline=P["outline"])
                 d.rectangle([4, 11, 7, 14], fill=P["skin"], outline=P["outline"])
+        if d_eff != 0:
+            im = under(im, tail_layer(pal, 2 if d_eff == 2 else 1, False))
         if mirror:
             im = im.transpose(Image.FLIP_LEFT_RIGHT)
         return im
@@ -695,6 +744,8 @@ def body_carry_cell(pal, direction, phase):
         d.rectangle([12, 16, 13, 18], fill=P["gold"])
         d.rectangle([9, 3, 11, 9], fill=P["tunic_dk"], outline=P["outline"])
         d.rectangle([9, 0, 11, 2], fill=P["skin"], outline=P["outline"])
+    if d_eff != 0:
+        im = under(im, tail_layer(pal, 2 if d_eff == 2 else 1, False))
     if mirror:
         im = im.transpose(Image.FLIP_LEFT_RIGHT)
     return im
@@ -710,6 +761,9 @@ def body_lying_cell(pal):
     P = pal
     im = Image.new("P", (32, 16), 0)
     d = ImageDraw.Draw(im)
+    # the tail, flat out past the feet
+    d.ellipse([22, 4, 31, 12], fill=P["tail"], outline=P["outline"])
+    d.line([(24, 8), (30, 8)], fill=P["tail_lt"])
     # legs and boots
     for y0, dark in ((3, True), (9, False)):
         d.rectangle([15, y0, 25, y0 + 3], fill=P["pants_dk"] if dark else P["pants"], outline=P["outline"])
@@ -764,45 +818,56 @@ def body_colour_layout(sheet, pal):
 def head_palette():
     p = Pal(transparent=True)
     for n, c in [
-        ("outline", (32, 28, 40)), ("skin", (240, 200, 160)), ("skin_dk", (208, 160, 120)),
-        ("hair", (120, 70, 36)), ("hair_dk", (84, 46, 26)), ("hair_lt", (168, 112, 60)),
-        ("white", (240, 240, 240)), ("eye", (30, 30, 60)), ("cheek", (232, 150, 140)),
+        ("outline", (44, 26, 20)), ("fur", (190, 100, 44)), ("fur_dk", (146, 70, 30)),
+        ("fur_lt", (226, 146, 76)), ("cream", (240, 220, 178)), ("ear_in", (226, 150, 140)),
+        ("white", (250, 248, 240)), ("eye", (26, 20, 26)), ("nose", (120, 52, 52)),
     ]:
         p.add(n, c)
     return p
 
 
 def head_cell(pal, direction):
+    """A squirrel head: tufted ears, big eyes, a cream muzzle and buck teeth."""
     mirror = direction == 3
     de = 1 if mirror else direction
     im = Image.new("P", (32, 32), 0)
     d = ImageDraw.Draw(im)
     P = pal
+    o = P["outline"]
+    if de in (0, 2):
+        for ex in (6, 20):  # ears with dark tufts
+            d.polygon([(ex, 9), (ex + 3, 0), (ex + 6, 9)], fill=P["fur"], outline=o)
+            if de == 2:
+                d.polygon([(ex + 2, 8), (ex + 3, 4), (ex + 4, 8)], fill=P["ear_in"])
+            d.line([(ex + 3, 0), (ex + 3, 2)], fill=P["fur_dk"])
+        d.ellipse([5, 4, 26, 24], fill=P["fur"], outline=o)
+        d.arc([8, 6, 23, 18], 200, 340, fill=P["fur_lt"])
     if de == 0:
-        d.ellipse([5, 0, 26, 21], fill=P["hair"], outline=P["outline"])
-        d.arc([8, 3, 23, 16], 200, 340, fill=P["hair_lt"])
-        d.line([(15, 4), (15, 19)], fill=P["hair_dk"])
-        d.point([(11, 18), (20, 18)], fill=P["hair_dk"])
+        d.line([(15, 7), (15, 22)], fill=P["fur_dk"])
+        d.point([(11, 21), (20, 21)], fill=P["fur_dk"])
     elif de == 2:
-        d.ellipse([5, 0, 26, 21], fill=P["hair"], outline=P["outline"])
-        d.ellipse([7, 7, 24, 20], fill=P["skin"])
-        d.rectangle([4, 11, 5, 15], fill=P["skin_dk"], outline=P["outline"])
-        d.rectangle([26, 11, 27, 15], fill=P["skin_dk"], outline=P["outline"])
-        d.arc([6, 2, 25, 14], 190, 350, fill=P["hair_lt"])
-        for x in (11, 19):
-            d.rectangle([x, 11, x + 2, 14], fill=P["white"])
-            d.rectangle([x + 1, 12, x + 2, 14], fill=P["eye"])
-        d.line([(14, 17), (17, 17)], fill=P["skin_dk"])
-        d.point([(9, 16), (22, 16)], fill=P["cheek"])
-    else:
-        d.ellipse([5, 0, 26, 21], fill=P["hair"], outline=P["outline"])
-        d.ellipse([5, 6, 21, 20], fill=P["skin"])
-        d.rectangle([17, 10, 21, 15], fill=P["skin_dk"], outline=P["outline"])
-        d.arc([6, 2, 25, 14], 190, 350, fill=P["hair_lt"])
-        d.rectangle([9, 11, 11, 14], fill=P["white"])
-        d.rectangle([9, 12, 10, 14], fill=P["eye"])
-        d.line([(7, 17), (10, 17)], fill=P["skin_dk"])
-        d.point([(12, 16)], fill=P["cheek"])
+        d.ellipse([9, 14, 22, 23], fill=P["cream"])
+        for x in (10, 18):  # big round eyes with a glint
+            d.ellipse([x, 10, x + 3, 14], fill=P["eye"])
+            d.point([(x + 1, 11)], fill=P["white"])
+        d.rectangle([15, 15, 16, 16], fill=P["nose"])
+        d.line([(14, 18), (15, 17)], fill=P["outline"])
+        d.line([(16, 17), (17, 18)], fill=P["outline"])
+        d.rectangle([15, 19, 16, 20], fill=P["white"], outline=o)
+    elif de == 1:
+        d.polygon([(15, 9), (18, 0), (21, 9)], fill=P["fur"], outline=o)
+        d.polygon([(17, 8), (18, 4), (19, 8)], fill=P["ear_in"])
+        d.line([(18, 0), (18, 2)], fill=P["fur_dk"])
+        d.ellipse([6, 4, 26, 24], fill=P["fur"], outline=o)
+        d.ellipse([2, 12, 15, 22], fill=P["cream"], outline=o)  # snout
+        d.ellipse([3, 13, 15, 21], fill=P["cream"])
+        d.arc([9, 6, 24, 18], 200, 340, fill=P["fur_lt"])
+        d.ellipse([9, 9, 12, 13], fill=P["eye"])
+        d.point([(10, 10)], fill=P["white"])
+        d.rectangle([2, 14, 3, 15], fill=P["nose"])
+        d.line([(4, 18), (7, 18)], fill=P["outline"])
+        d.rectangle([5, 19, 6, 20], fill=P["white"], outline=o)
+        d.line([(20, 14), (22, 18)], fill=P["fur_dk"])  # cheek fur
     if mirror:
         im = im.transpose(Image.FLIP_LEFT_RIGHT)
     return im
@@ -863,8 +928,10 @@ def build_shield():
     d.rectangle([7, 1, 8, 18], fill=pal["shield_lt"])
     d.rectangle([14, 0, 29, 19], fill=pal["shield"], outline=pal["outline"])
     d.rectangle([15, 1, 28, 2], fill=pal["shield_lt"])
-    d.rectangle([20, 4, 23, 16], fill=pal["emblem"])
-    d.rectangle([17, 8, 26, 11], fill=pal["emblem"])
+    # an acorn emblem: the cap, then the nut
+    d.ellipse([18, 9, 25, 17], fill=pal["emblem"], outline=pal["outline"])
+    d.rectangle([17, 6, 26, 10], fill=pal["grip"], outline=pal["outline"])
+    d.line([(21, 3), (22, 5)], fill=pal["grip"])
     d.rectangle([30, 0, 37, 19], fill=pal["shield"], outline=pal["outline"])
     d.rectangle([35, 1, 36, 18], fill=pal["shield_dk"])
     return sheet, pal
@@ -1062,11 +1129,12 @@ def build_state():
     # x 280, bombs at 326..350, arrows at 374..398; the strip is drawn at
     # x 274), so the centres are strip x 6, 65 and 113.
     ix, iy, _, _ = STATE_ICONS
-    c = ix + 6                                                     # rupee
-    d.polygon([(c, iy + 1), (c + 5, iy + 5), (c + 5, iy + 10), (c, iy + 14), (c - 5, iy + 10), (c - 5, iy + 5)],
-              fill=p["green"], outline=p["outline"])
-    d.line([(c - 2, iy + 5), (c - 2, iy + 10)], fill=p["green_lt"])
-    d.point([(c, iy + 3)], fill=p["green_lt"])
+    c = ix + 6                                                     # rupee, drawn as an acorn
+    d.ellipse([c - 4, iy + 4, c + 4, iy + 15], fill=p["gold"], outline=p["outline"])
+    d.point([(c - 2, iy + 8), (c - 2, iy + 9)], fill=p["white"])
+    d.rectangle([c - 5, iy + 3, c + 5, iy + 7], fill=p["brown"], outline=p["outline"])
+    d.line([(c - 3, iy + 5), (c + 3, iy + 5)], fill=p["outline"])
+    d.line([(c, iy + 0), (c + 1, iy + 2)], fill=p["brown"])
     c = ix + 65                                                    # bomb
     d.ellipse([c - 6, iy + 3, c + 6, iy + 15], fill=p["grey"], outline=p["outline"])
     d.point([(c - 3, iy + 6), (c - 2, iy + 6), (c - 3, iy + 7)], fill=p["white"])
@@ -1630,7 +1698,7 @@ def write_all(out):
     im, p = build_body()
     save_png(im, p, os.path.join(out, "bodies", "body.png"), 4, 16, True, BODY_CLEAR)
     im, p = build_head()
-    save_png(im, p, os.path.join(out, "heads", "head0.png"), 8, 16, True)
+    save_png(im, p, os.path.join(out, "heads", "head0.png"), 4, 16, True)
     im, p = build_sword()
     save_png(im, p, os.path.join(out, "swords", "sword1.png"), 4, 16, True)
     im, p = build_shield()
