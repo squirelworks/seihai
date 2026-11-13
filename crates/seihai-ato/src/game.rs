@@ -76,6 +76,7 @@ impl AtoApp {
         let boards_hidden = side.boards_hidden.clone();
         let world3d = side.world.clone();
         let input3d = side.input.clone();
+        let said3d = side.input.clone();
         let (rx, live) = game::spawn_online_hooked(
             addr,
             version,
@@ -103,6 +104,16 @@ impl AtoApp {
                     i.forward = -dy;
                     i.turn = -dx;
                 }));
+                // What the player says goes out as the own object's chat.
+                g.say3d = Some(Box::new(move |text| {
+                    said3d
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .say
+                        .push(text.to_string());
+                }));
+                // The build's combat rules: the sword and its messages.
+                g.set_version(version);
                 self.game = Some(View::new(g, CANVAS));
             }
             Err(e) => self.start.status = e,

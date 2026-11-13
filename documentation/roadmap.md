@@ -57,10 +57,13 @@ Single code path. Versions are profile rows, not branches.
 
 - [x] Game loop. Log in with core's client session, draw the level the server sends flat, walk it with the arrows, cross links and gmap edges, show the other players and the server's board and NPC changes, and play the walk's sounds through core's `SoundEngine`, asking the server for missing ones with `WANTFILE` (`--no-sound` turns it off). `--level` plays level files offline; `--no-window` only logs. Ato's `game` and `render` moved to `seihai-play` so both lines share them.
 - [ ] Lab run against the lab server stack, every 6.x row, in a headless VM (#441).
-- [ ] Start window and server list; the launcher and mae hand 6.x picks to Issho (#442).
+- [x] Start window and server list; the launcher and mae hand 6.x picks to Issho (#442). Issho has no start window of its own: the shared one hands a 6.x pick over, logged in at once; a pick Issho refuses comes back to the start window with a note.
 - [ ] Characters from ganis, and the renderer moved to `seihai-draw` (#443).
-- [ ] The 6.x window size and HUD (#444).
+- [x] The 6.x window size and HUD (#444): 1024 x 768, and the default status display (`seihai-play::hud`), the 2.05 routine on the 6.x window, which a lab run of the real 6.00r2 and 6.03r7 put on the same pixels. Counters from the server's player props (core's `client::OwnStats`).
 - [ ] Chat, sword, items and the rest of mae's flat play, in the shared loop (#445).
+  - [x] Chat: a chat line (Tab or Enter), the bubbles over the players and the player's own, toalls, PMs and admin lines (Ato gets them too).
+  - [x] Sword: S swings (core's swing, the build's combat rules), the player drawn in `sword.gani`, the cut in front of it from the build's `arrays.dat` sent to the server as a board change, and the swing shown to the others (the GANI prop on a GANI build, the sprite otherwise).
+  - [ ] Being hit, health and death, chests and pickups, bombs and arrows, throwing, signs, sitting, ledges.
 - [x] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
 - [ ] GS2 client scripts, clean-room in seihai-core (#447).
 - [x] The 6.00r4 profile row and `resolveHost` (#448).
