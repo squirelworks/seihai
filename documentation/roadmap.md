@@ -61,9 +61,9 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Characters from ganis, and the renderer moved to `seihai-draw` (#443).
 - [ ] The 6.x window size and HUD (#444).
 - [ ] Chat, sword, items and the rest of mae's flat play, in the shared loop (#445).
-- [ ] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
+- [x] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
 - [ ] GS2 client scripts, clean-room in seihai-core (#447).
-- [ ] The 6.00r4 profile row and `resolveHost` (#448).
+- [x] The 6.00r4 profile row and `resolveHost` (#448).
 
 ## Remaining
 
