@@ -232,4 +232,4 @@ Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in
 
 ## macOS builds
 
-macOS is built and tested on the lab's Sequoia (macOS 15) VM with the same build and test commands the Linux job runs; GitHub CI covers Linux and Windows. [documentation/macos-lab-vm.md](documentation/macos-lab-vm.md) is how to set up such a VM to reproduce a macOS failure locally.
+macOS is built and tested in the lab with the same build and test commands the Linux job runs; GitHub CI covers Linux and Windows.
