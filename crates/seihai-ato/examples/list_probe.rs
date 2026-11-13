@@ -107,9 +107,19 @@ fn interactive() {
     println!("  Enter = the 3.04 list login on both listserver ports");
     println!("  y     = every version profile's list login on both listserver ports");
     println!("  L     = every 4.x to 6.x build's login at the Login game server");
+    println!("  C     = the same at the community Login server from the server list");
     let choice = ask("Choice: ");
-    if choice.eq_ignore_ascii_case("l") {
-        login_servers(&account, &pw);
+    let login_at = if choice.eq_ignore_ascii_case("l") {
+        Some(login_server().unwrap_or_else(|| ask("Login server (host:port): ")))
+    } else if choice.eq_ignore_ascii_case("c") {
+        Some(community_login(&account, &pw).unwrap_or_default())
+    } else {
+        None
+    };
+    if let Some(addr) = login_at {
+        if !addr.is_empty() {
+            login_servers(&addr, &account, &pw);
+        }
         drop(pw);
         print!("Done. Press Enter to close.");
         let _ = std::io::stdout().flush();
@@ -164,6 +174,43 @@ fn interactive() {
     let _ = std::io::stdin().read_line(&mut String::new());
 }
 
+/// The community's Login server: the entry whose name starts with "login"
+/// in the list the 3.04 login gets (one list login on 14923). Prints the
+/// list's names when there is none. The address is not printed.
+fn community_login(account: &str, pw: &str) -> Option<String> {
+    let v = ClientVersion::V304;
+    let addr = format!("{}:14923", v.listserver_host());
+    let reply = match Connection::fetch_server_list(&addr, v, account, pw) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("server list: {}", list_failure_text(&addr, &e));
+            return None;
+        }
+    };
+    if let Some(e) = reply.error {
+        println!("server list: rejected: {e}");
+        return None;
+    }
+    let found = reply
+        .servers
+        .iter()
+        .find(|s| s.name.to_ascii_lowercase().starts_with("login"));
+    match found {
+        Some(s) => {
+            println!("Community Login server found in the list: \"{}\".", s.name);
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            Some(format!("{}:{}", s.host, s.port))
+        }
+        None => {
+            println!("No server named Login in the list. The list has:");
+            for s in &reply.servers {
+                println!("  {}", s.name);
+            }
+            None
+        }
+    }
+}
+
 /// The Login game server the 4.x to 6.x builds reach first. Not written in
 /// the source: the build bakes it in from `SEIHAI_LOGIN_SERVER`
 /// (`host:port`), or the user types it.
@@ -174,20 +221,10 @@ fn login_server() -> Option<String> {
 /// One game login per lobby build (4.04r2 to 6.03r7) at the Login server,
 /// 10 s apart: read what comes back for a few seconds, then disconnect.
 /// Prints only the verdict per build; never the host, account or password.
-fn login_servers(account: &str, pw: &str) {
+fn login_servers(addr: &str, account: &str, pw: &str) {
     use seihai_core::net::{login_gserver, random_key};
     use seihai_core::protocol::split_messages;
     use std::io::Write;
-    let addr = match login_server() {
-        Some(a) => a,
-        None => {
-            print!("Login server (host:port): ");
-            let _ = std::io::stdout().flush();
-            let mut a = String::new();
-            let _ = std::io::stdin().read_line(&mut a);
-            a.trim().to_string()
-        }
-    };
     let builds: Vec<ClientVersion> = ClientVersion::all_versions()
         .iter()
         .copied()
@@ -202,7 +239,7 @@ fn login_servers(account: &str, pw: &str) {
         if i > 0 {
             std::thread::sleep(std::time::Duration::from_secs(10));
         }
-        let verdict = match login_gserver(&addr, v, random_key(), account, pw, false) {
+        let verdict = match login_gserver(addr, v, random_key(), account, pw, false) {
             Err(e) => format!("failed: {e}"),
             Ok(mut s) => {
                 let mut seen = Vec::new();
