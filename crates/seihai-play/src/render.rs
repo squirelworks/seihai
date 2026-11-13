@@ -212,6 +212,12 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         s.walking,
         s.walk_gani.as_ref().map(|g| g.frame),
     );
+    // Lifting and carrying hold the object up (the lift shows as the
+    // still carry, as `lift.gani` is not among the poses drawn).
+    if s.carried.is_some() && !s.in_water {
+        f.pose = if s.walking { "carry" } else { "carrystill" };
+        f.step = chars::Step::Clock;
+    }
     // A sword swing wins over the walk (core's pose order), and the spin
     // over both.
     if let Some(step) = s.combat.swing_frame().filter(|_| !s.in_water) {

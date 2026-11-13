@@ -142,6 +142,10 @@ pub struct Game {
     pub say3d: Option<Say3d>,
     /// Where the network thread puts the player's weapons.
     pub weapons: online::SharedWeapons,
+    /// Where the network thread puts other players' bombs and arrows.
+    pub level_objects: online::SharedLevelObjects,
+    /// Where the network thread puts other players' throws.
+    pub throws: online::SharedThrows,
     /// The spin, the weapon key, the lay mode and the item list
     /// ([`actions`]).
     actions: actions::Actions,
@@ -291,6 +295,8 @@ impl Game {
             keys3d: None,
             say3d: None,
             weapons: Default::default(),
+            level_objects: Default::default(),
+            throws: Default::default(),
             actions: actions::Actions::new(),
             effect_sheets: EffectSheets::load(resolver),
         })
@@ -699,14 +705,15 @@ impl Game {
     /// Hand the current pose to the network thread.
     fn set_pose(&self, walking: bool) {
         let s = &self.session;
-        let swinging = s.combat.is_swinging() || s.combat.spin_elapsed_ms().is_some();
+        // The GANI the others see: the swing or spin, the lift, carrying.
+        let anim = s.bow_slot_anim();
         *self.pose.lock().unwrap_or_else(|e| e.into_inner()) = Some(online::Pose {
             x: s.player_x,
             y: s.player_y,
             dir: s.player_dir % 4,
             walking,
             sprite: Some(s.sprite_value()),
-            gani: swinging.then(|| s.bow_slot_anim()),
+            gani: (anim != "idle").then_some(anim),
         });
     }
 
@@ -731,6 +738,11 @@ impl Game {
     /// no sword, in water, or already swinging.
     pub fn swing(&mut self) -> bool {
         if self.list_open() {
+            return false;
+        }
+        // S while carrying throws what is carried (2.05).
+        if self.session.carried.is_some() && self.session.current_level.is_some() {
+            self.interact();
             return false;
         }
         // S in the lay mode leaves it.
@@ -897,6 +909,8 @@ impl Game {
         self.send = live.send;
         self.chat_in = live.chat;
         self.weapons = live.weapons;
+        self.level_objects = live.level_objects;
+        self.throws = live.throws;
     }
 
     /// Draw the status display over the level (hearts, gralats, bombs,
@@ -961,6 +975,7 @@ impl Game {
             changed |= self.hud.is_some();
         }
         changed |= self.take_weapons();
+        changed |= self.take_others_actions();
         changed
     }
 

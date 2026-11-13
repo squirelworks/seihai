@@ -13,7 +13,8 @@
 //! spins when the server allows it. D fires the picked weapon
 //! ([`Game::fire`]); A with S held picks an item to drop and A lays it
 //! ([`Game::act`]). Q opens the item list, whose arrows pick the weapon D
-//! fires ([`Game::toggle_item_list`]).
+//! fires ([`Game::toggle_item_list`]). A alone lifts, throws, opens a
+//! chest or grabs ([`Game::interact`]); S while carrying throws.
 
 use crate::game::{bubble_at, bubbles, name_tags, Game, ItemList, ListKey};
 use crate::render::{self, TILE_PX};
@@ -106,6 +107,21 @@ impl View {
         if game_keys && pressed(egui::Key::D) {
             self.game.fire();
         }
+        // Letting go of A ends a grab; of an arrow, a push or a pull.
+        let (a_down, arrow_up) = ctx.input(|i| {
+            (
+                i.key_down(egui::Key::A),
+                [
+                    egui::Key::ArrowUp,
+                    egui::Key::ArrowLeft,
+                    egui::Key::ArrowDown,
+                    egui::Key::ArrowRight,
+                ]
+                .into_iter()
+                .any(|k| i.key_released(k)),
+            )
+        });
+        self.game.keys_up(a_down, arrow_up);
 
         let held = |k| self.typing.is_none() && ctx.input(|i| i.key_down(k));
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;

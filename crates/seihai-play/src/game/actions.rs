@@ -19,6 +19,13 @@
 //!   an arrow, D or S leaves the mode. The item lies on the floor until it
 //!   is picked up or times out; online it goes to the server as
 //!   `PLI_ITEMADD` by the build's rules.
+//! - **Lift and throw.** A lifts what the player faces (a bush, pot or
+//!   rock the glove can take), opens a chest from below, or grabs a wall;
+//!   A or S while carrying throws. The others see CARRYSPRITE and the
+//!   `lift` / `carry` / `carrystill` GANI, then `PLI_THROWCARRIED`.
+//! - **Other players.** Their bombs, explosions, arrows and throws come
+//!   from core's network thread (`Live::level_objects`, `Live::throws`)
+//!   and run in the level as the player's own do.
 //! - **Item list.** Q opens and closes the list of the player's weapons
 //!   (built-in first, then the server's). The arrows move the selection,
 //!   which picks the weapon at once; Q, Esc, Enter, D, S and A close it.
@@ -26,7 +33,9 @@
 
 use super::Game;
 use seihai_core::client::{OwnStats, OwnWeapons};
+use seihai_core::offline::Interaction;
 use seihai_core::protocol::ClientVersion;
+use seihai_core::protocol::{ChatKind, ChatLine, LevelObject};
 use seihai_core::scripting::engine::host::{SessionScripts, WeaponScript};
 
 /// The STATUS bit that allows the spin attack.
@@ -280,8 +289,10 @@ impl Game {
     }
 
     /// A, with `sword_held` when S is down: in the lay mode, the next item
-    /// (S held) or lay the item (A alone); else, with S held, go into the
-    /// lay mode. Returns the item laid.
+    /// (S held) or lay the item (A alone). Else A works on what the player
+    /// faces ([`Game::interact`]): it lifts a bush, pot or rock, throws
+    /// what is carried, opens a chest or grabs a wall; and when that did
+    /// nothing with S held, the lay mode starts. Returns the item laid.
     pub fn act(&mut self, sword_held: bool) -> Option<u8> {
         if self.session.current_level.is_none() || self.list_open() {
             return None;
@@ -296,10 +307,100 @@ impl Game {
             self.after_actions();
             return laid;
         }
-        if sword_held && !self.session.life.is_dead() {
+        if self.session.life.is_dead() {
+            return None;
+        }
+        if self.interact() == Interaction::Nothing && sword_held {
             self.session.start_laying();
         }
         None
+    }
+
+    /// Work on what the player faces (core's `OfflineSession::interact`),
+    /// and tell the server as a GANI build does: the carried object
+    /// (CARRYSPRITE) on a lift, `PLI_THROWCARRIED` and empty hands on a
+    /// throw, `PLI_OPENCHEST` for a chest, and the board change a lift
+    /// left. The pose (`lift`, `carry`, `carrystill`) goes with the walk.
+    pub fn interact(&mut self) -> Interaction {
+        let got = self.session.interact();
+        let mut msgs = Vec::new();
+        match &got {
+            Interaction::Lifted { kind } => msgs.push(seihai_core::net::carry_sprite_message(
+                seihai_core::throwing::carry_sprite(*kind),
+            )),
+            Interaction::Thrown { .. } => {
+                msgs.push(seihai_core::net::throw_carried_message());
+                msgs.push(seihai_core::net::carry_sprite_message(None));
+            }
+            Interaction::Chest { x, y, got, .. } => {
+                if let (Ok(x), Ok(y)) = (u8::try_from(*x), u8::try_from(*y)) {
+                    msgs.push(vec![20 + 0x20, x + 0x20, y + 0x20, b'\n']);
+                }
+                self.chat.push((
+                    ChatLine {
+                        kind: ChatKind::Admin,
+                        from: "Chest".into(),
+                        text: format!("You got {got}."),
+                        born_ms: 0,
+                    },
+                    std::time::Instant::now(),
+                ));
+            }
+            Interaction::Grabbed | Interaction::Nothing => {}
+        }
+        if !self.offline && !msgs.is_empty() {
+            self.send
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(msgs);
+        }
+        self.send_board_changes();
+        self.set_pose(self.session.walking);
+        self.dirty = true;
+        got
+    }
+
+    /// The keys let go this frame: A (`a_down` false) ends a grab, and an
+    /// arrow let go ends a push or a pull.
+    pub fn keys_up(&mut self, a_down: bool, arrow_let_go: bool) {
+        if self.session.pushpull.grab.is_some() && !a_down && self.session.release_grab() {
+            self.dirty = true;
+        }
+        if arrow_let_go && self.session.arrow_released() {
+            self.dirty = true;
+        }
+    }
+
+    /// What other players did that the network thread handed over: their
+    /// bombs, explosions and arrows, and the objects they threw, which fly
+    /// from where they stood and can hit the player.
+    pub(super) fn take_others_actions(&mut self) -> bool {
+        let objects =
+            std::mem::take(&mut *self.level_objects.lock().unwrap_or_else(|e| e.into_inner()));
+        let throws = std::mem::take(&mut *self.throws.lock().unwrap_or_else(|e| e.into_inner()));
+        if objects.is_empty() && throws.is_empty() {
+            return false;
+        }
+        self.session.present_players = self.drawn_others.iter().map(|o| o.id).collect();
+        for obj in objects {
+            match obj {
+                LevelObject::Bomb { sender, bomb } => {
+                    self.session.receive_bomb(&bomb, Some(sender))
+                }
+                LevelObject::BombDel { x, y } => self.session.remove_bomb(x, y),
+                LevelObject::Explosion { sender, explosion } => {
+                    self.session.receive_explosion(&explosion, Some(sender))
+                }
+                LevelObject::Arrow { sender, arrow } => {
+                    self.session.receive_arrow(&arrow, Some(sender))
+                }
+                _ => {}
+            }
+        }
+        for t in throws {
+            self.session.throw_remote(t.sprite, t.x, t.y, t.dir, t.id);
+        }
+        true
     }
 
     /// The actions' 50 ms clock, run with the pose clock: the weapon
@@ -315,7 +416,15 @@ impl Game {
         moved |= !self.session.floor_items.is_empty();
         self.session.tick_items(ms, !self.offline);
         moved |= !self.session.leaps.is_empty();
+        moved |= !self.session.thrown.is_empty();
         self.session.tick_throw_with(ms, &|_, _| None);
+        // Another player's throw hurt the player: the hurt pose goes out.
+        if self.session.take_throw_hurt() {
+            self.set_pose(self.session.walking);
+            moved = true;
+        }
+        self.session.take_landings();
+        self.session.take_pelts();
         self.after_actions();
         moved
     }
@@ -504,5 +613,63 @@ mod tests {
         g.walk(1, 0, Instant::now() + Duration::from_secs(1));
         assert!(g.session.laying.is_none());
         assert_eq!(g.session.player_x, x);
+    }
+
+    /// Carrying, the others see the carry pose; S throws what is carried:
+    /// `PLI_THROWCARRIED` and empty hands go out, and the object flies.
+    #[test]
+    fn s_while_carrying_throws() {
+        let mut g = game_on(ClientVersion::V603R7);
+        g.session.carried = Some(seihai_core::offline::Carried {
+            kind: 0,
+            tiles: [[0, 0], [0, 0]],
+        });
+        g.set_pose(false);
+        assert_eq!(g.pose.lock().unwrap().unwrap().gani, Some("carrystill"));
+        assert_eq!(crate::render::own_figure(&g.session).pose, "carrystill");
+        sent(&g);
+        assert!(!g.swing(), "no swing while carrying");
+        assert!(g.session.carried.is_none());
+        assert_eq!(g.session.thrown.len(), 1);
+        let out = sent(&g);
+        assert_eq!(out[0], seihai_core::net::throw_carried_message());
+        assert_eq!(out[1], seihai_core::net::carry_sprite_message(None));
+    }
+
+    /// Another player's bomb and arrow, as the network thread hands them
+    /// over, go into the level; the bomb burns down there.
+    #[test]
+    fn other_players_bombs_and_arrows_arrive() {
+        let mut g = game_on(ClientVersion::V205);
+        g.level_objects.lock().unwrap().extend([
+            LevelObject::Bomb {
+                sender: 4,
+                bomb: seihai_core::bombs::BombAdd {
+                    x: 20.0,
+                    y: 20.0,
+                    power: 1,
+                    fuse: 40,
+                    owned: true,
+                },
+            },
+            LevelObject::Arrow {
+                sender: 4,
+                arrow: seihai_core::arrows::ArrowAdd {
+                    x: 10.0,
+                    y: 10.0,
+                    dir: 3,
+                    replaces: false,
+                    owned: true,
+                    sprite: seihai_core::arrows::ARROW_SPRITE + 3,
+                    kind: 0,
+                },
+            },
+        ]);
+        g.tick(0, 0, Instant::now());
+        assert_eq!(g.session.placed_bombs.len(), 1);
+        assert_eq!(g.session.arrows.len(), 1);
+        assert!(g.level_objects.lock().unwrap().is_empty());
+        run(&mut g, 60);
+        assert!(g.session.placed_bombs.is_empty());
     }
 }

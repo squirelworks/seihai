@@ -1,8 +1,9 @@
-//! What the player's actions put on the level, drawn as `seihai-mae`'s
+//! What the players' actions put on the level, drawn as `seihai-mae`'s
 //! `render::throw` draws it: the items on the floor (bouncing, blinking
 //! before they go), the bombs with their shadows, the blast pieces, the
-//! arrows, the break effects (a bomb into water splashes) and the item
-//! held over the head in the lay mode.
+//! arrows, the carried object over the head and thrown ones in the air,
+//! the break effects (a pot breaking, a bomb into water) and the item held
+//! over the head in the lay mode.
 //!
 //! Each image is a rectangle of `sprites.png` cut out with core's sprite
 //! table ([`seihai_core::throwing::sprite_rect`]); bombs and their blasts
@@ -145,6 +146,29 @@ pub fn draw_effects(f: &mut Frame, s: &OfflineSession, sheets: &EffectSheets, ca
             px(bomb.y + 1.0) - h / 2 - cam_y,
         );
     }
+    // The shadows of what is in the air.
+    for o in &s.thrown {
+        sprite(
+            f,
+            sprites,
+            s,
+            t::SHADOW_SPRITE,
+            px(o.x + 0.25) - cam_x,
+            px(o.ground + 1.25) - cam_y,
+        );
+    }
+    // The carried object above the head.
+    if let Some(id) = s.carried.as_ref().and_then(|c| t::carry_sprite(c.kind)) {
+        let (x, y) = t::carry_origin(s.player_x, s.player_y);
+        sprite(
+            f,
+            sheets.for_sprite(id),
+            s,
+            id,
+            px(x) - cam_x,
+            px(y) - cam_y,
+        );
+    }
     // The item picked in the lay mode, centred above the head.
     if let Some(id) = s.laying.and_then(|i| {
         seihai_core::items::ITEM_SPRITES
@@ -160,6 +184,19 @@ pub fn draw_effects(f: &mut Frame, s: &OfflineSession, sheets: &EffectSheets, ca
                 id,
                 px(x) - w / 2 - cam_x,
                 px(y) - h / 2 - cam_y,
+            );
+        }
+    }
+    // What is in the air.
+    for o in &s.thrown {
+        if let Some(id) = o.sprite {
+            sprite(
+                f,
+                sheets.for_sprite(id),
+                s,
+                id,
+                px(o.x) - cam_x,
+                px(o.y) - cam_y,
             );
         }
     }
