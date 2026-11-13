@@ -13,8 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS is not built on GitHub runners: it is built and tested on the
-        # Sequoia VM in the lab (see README.md, "macOS builds").
+        # macOS has its own workflow, macos.yml (README.md, "macOS builds").
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
@@ -30,9 +29,10 @@ jobs:
       - name: No line-ending conversion
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+      # ALSA for audio; libxkbcommon-x11 for the start-window smoke on Xvfb.
       - name: ALSA development files (Linux audio)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config libxkbcommon-x11-0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -46,3 +46,10 @@ jobs:
       - name: Clippy
         if: ${{ !cancelled() }}
         run: cargo clippy --workspace --all-targets $FEATURES -- -D warnings
+      # The start window joins a loopback stand-in with one version of each
+      # line, runs the client in this process and comes back (#469).
+      - name: One program, each line, back to the start window
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: |
+          xvfb-run -a -s "-screen 0 1280x1024x24" tools/launcher-smoke.sh \
+            "$PWD/target/debug/seihai" "$RUNNER_TEMP/smoke" 2.22 3.04 5.12 6.03r7 graal3d

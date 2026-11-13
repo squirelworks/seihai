@@ -232,4 +232,4 @@ Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in
 
 ## macOS builds
 
-macOS is built and tested in the lab with the same build and test commands the Linux job runs; GitHub CI covers Linux and Windows.
+`.github/workflows/macos.yml` builds, tests and lints the workspace on GitHub's hosted macOS 15 runners (Apple silicon and Intel), then runs `tools/launcher-smoke.sh`: the release `seihai` start window joins a loopback stand-in with 2.22, 3.04, 5.12, 6.03r7 and Graal3D, runs each client in the same process and comes back to the start window when the connection drops. It runs on demand, weekly, and on a PR that changes the launcher, the smoke or the workflow; `ci.yml` runs Linux and Windows on every PR, and the same smoke on Linux under Xvfb. The lab's Sequoia VM has no Metal device, so Mae's game window cannot open there.
