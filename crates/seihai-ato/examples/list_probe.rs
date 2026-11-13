@@ -80,16 +80,20 @@ fn main() {
     }
 }
 
-/// The double-click mode: prompts, one 3.04 list login per port, a short
-/// verdict per port.
+/// The double-click mode: prompts, then either the 3.04 login on both
+/// ports or every version profile's own list login on both ports, one
+/// connection each, a short verdict per line.
 fn interactive() {
     use std::io::Write;
-    println!("Seihai Ato listserver check (3.04 login, listserver.graal.in)");
-    print!("Account: ");
-    let _ = std::io::stdout().flush();
-    let mut account = String::new();
-    let _ = std::io::stdin().read_line(&mut account);
-    let account = account.trim().to_string();
+    let ask = |q: &str| {
+        print!("{q}");
+        let _ = std::io::stdout().flush();
+        let mut a = String::new();
+        let _ = std::io::stdin().read_line(&mut a);
+        a.trim().to_string()
+    };
+    println!("Seihai Ato listserver check (the public listserver)");
+    let account = ask("Account: ");
     print!("Password (not shown): ");
     let _ = std::io::stdout().flush();
     let mut password = String::new();
@@ -99,26 +103,71 @@ fn interactive() {
     println!();
     let pw = password.trim_end_matches(['\r', '\n']).to_string();
     password.clear();
-    for (i, port) in [14922, 14923].into_iter().enumerate() {
-        if i > 0 {
-            std::thread::sleep(std::time::Duration::from_secs(3));
+    let all = ask("Check every version profile? (y = all, Enter = 3.04 only): ")
+        .eq_ignore_ascii_case("y");
+    // One row per distinct list login: builds with no listserver of their
+    // own borrow another's, so they are asked once, under that build.
+    let mut builds: Vec<ClientVersion> = Vec::new();
+    if all {
+        for v in ClientVersion::all_versions() {
+            let l = v.list_version();
+            if !builds.contains(&l) {
+                builds.push(l);
+            }
         }
-        let addr = format!("listserver.graal.in:{port}");
-        let verdict = match Connection::fetch_server_list(&addr, ClientVersion::V304, &account, &pw)
-        {
-            Ok(r) => match (&r.error, r.servers.len()) {
-                (Some(e), _) => format!("rejected: {e}"),
-                (None, 0) => "no error and no servers".to_string(),
-                (None, n) => format!("accepted, {n} servers listed"),
-            },
-            Err(e) => list_failure_text(&addr, &e),
-        };
-        println!("port {port}: {verdict}");
+    } else {
+        builds.push(ClientVersion::V304);
+    }
+    println!(
+        "{} list login(s), 2 ports each, 10 s apart (about 7 minutes); stops at the first sign of throttling.",
+        builds.len()
+    );
+    let mut first = true;
+    'run: for v in builds {
+        for port in [14922u16, 14923] {
+            if !first {
+                std::thread::sleep(std::time::Duration::from_secs(10));
+            }
+            first = false;
+            let addr = format!("{}:{port}", v.listserver_host());
+            let verdict = match Connection::fetch_server_list(&addr, v, &account, &pw) {
+                Ok(r) => match (&r.error, r.servers.len()) {
+                    (Some(e), _) => format!("rejected: {e}"),
+                    (None, 0) => "no error and no servers".to_string(),
+                    (None, n) => format!("accepted, {n} servers listed"),
+                },
+                Err(e) => list_failure_text(&addr, &e),
+            };
+            println!("{:<8} port {port}: {verdict}", v.label());
+            let _ = std::io::stdout().flush();
+            if throttled(&verdict) {
+                println!("Stopping: that reply looks like throttling or a ban.");
+                break 'run;
+            }
+        }
     }
     drop(pw);
     print!("Done. Press Enter to close.");
     let _ = std::io::stdout().flush();
     let _ = std::io::stdin().read_line(&mut String::new());
+}
+
+/// A reply that looks like the listserver pushing back: stop asking.
+fn throttled(verdict: &str) -> bool {
+    let v = verdict.to_ascii_lowercase();
+    [
+        "ban",
+        "too many",
+        "too fast",
+        "flood",
+        "limit",
+        "try again",
+        "wait",
+        "reset",
+        "refused",
+    ]
+    .iter()
+    .any(|w| v.contains(w))
 }
 
 /// Turn the console's echo of typed keys off or back on.
