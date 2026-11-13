@@ -104,6 +104,7 @@ fn reaches_the_control_object_against_a_replaying_server() {
             account: "lab".into(),
             password: "pw".into(),
             nickname: "Lab".into(),
+            version: seihai_core::protocol::ClientVersion::V512,
         };
         let mut out = Vec::new();
         let ended = session::run_with_sequence(

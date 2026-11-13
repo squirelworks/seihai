@@ -4,11 +4,13 @@
 //! note): it keeps repeating the challenge and the connect request until
 //! the server accepts (the server waits for the TCP login to finish),
 //! then exchanges data packets, answers the mission start, keeps the
-//! ghost table and reports the login steps. It ends when the server
+//! ghost table and reports the login steps. Protocol 19 (3.153, 4.04r2)
+//! runs the stock Torque game layer from [`super::tge`] instead: three
+//! mission phases, datablocks, and a game section with moves. It ends when the server
 //! disconnects or goes silent, or when the caller sets `stop`, in which
 //! case it sends a disconnect first.
 
-use super::events::{mission_start_answer, BigDataAssembler, ClassTable, Events};
+use super::events::{mission_start_answer, BigDataAssembler, ClassTable, Event, Events};
 use super::ghosts::{
     ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Sky, Transform,
 };
@@ -16,9 +18,11 @@ use super::graal_text::{self, Applied, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
 use super::scripts3d::{vm_version, Weapons3d};
+use super::tge::{self, ClientGame19, Control19, Game19Error, Phase, PhaseAcks};
 use crate::torque::TorqueProfile;
 use crate::view3d::{Shared3d, SharedInput3d};
 use seihai_core::client::FileAsks;
+use seihai_core::protocol::ClientVersion;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Write};
 use std::net::{SocketAddr, UdpSocket};
@@ -51,6 +55,9 @@ pub struct Identity {
     pub password: String,
     /// May be empty.
     pub nickname: String,
+    /// The client build. On protocol 19 it picks how the mission phases
+    /// are acknowledged: 3.153 echoes the phase sequence, 4.04r2 does not.
+    pub version: ClientVersion,
 }
 
 /// What the link shares with the rest of the client, each part optional.
@@ -132,12 +139,12 @@ pub fn run_with_sequence(
         world,
         input,
     } = with;
-    if profile.tge_game_layer {
-        return Err(format!(
-            "the 3D side of {} (protocol {}) uses the Torque game layer, which Ato does not run yet",
-            profile.builds, profile.protocol
-        ));
-    }
+    let tge_layer = profile.tge_game_layer;
+    let phase_acks = if who.version == ClientVersion::V3153 {
+        PhaseAcks::Scripted
+    } else {
+        PhaseAcks::Native
+    };
     // Non-blocking, not a read timeout: on Windows a timed-out
     // recv_from can drop a datagram that arrives as it gives up (lab 13b
     // lost 52 of 129 that way).
@@ -218,8 +225,21 @@ pub fn run_with_sequence(
 
     let mut link = Link::new(sequence);
     let mut events = Events::new();
-    let mut ghosts = Ghosts::new();
+    if tge_layer {
+        let _ = writeln!(
+            out,
+            "3d: protocol {} game layer: static reads only, never run against a real server; no moves are sent",
+            profile.protocol
+        );
+    }
+    let mut ghosts = if tge_layer {
+        Ghosts::opaque()
+    } else {
+        Ghosts::new()
+    };
     let mut game = ClientGame::before_control();
+    let mut game19 = ClientGame19::before_control();
+    let mut datablocks = 0u32;
     let mut max_rate = Some(Rate::CLIENT_512_MAX);
     let mut last_data = None::<Instant>;
     let mut last_heard = Instant::now();
@@ -320,7 +340,11 @@ pub fn run_with_sequence(
                 if moving && game.update.as_ref() == Some(&GameObjectUpdate::default()) {
                     game.update = Some(std::mem::take(&mut own));
                 }
-                game.write(&mut w);
+                if tge_layer {
+                    game19.write(&mut w);
+                } else {
+                    game.write(&mut w);
+                }
                 if game.update.is_some() {
                     // After the echo, every packet carries the empty update.
                     game.update = Some(GameObjectUpdate::default());
@@ -373,11 +397,49 @@ pub fn run_with_sequence(
                 .map_err(|e| e.to_string())?;
         }
         let Some(mut data) = got.data else { continue };
-        let server_game = match ghosts.read_game(&mut data.body) {
-            Ok(g) => g,
-            Err(e) => {
-                let _ = writeln!(out, "3d: packet {}: game section: {e:?}", data.sequence);
+        let server_game = if tge_layer {
+            let (g, rest_readable) = match tge::read_server_game(&mut data.body, &mut ghosts) {
+                Ok(g) => (g, true),
+                Err(Game19Error::PacketData { index, class, game }) => {
+                    let _ = writeln!(
+                        out,
+                        "3d: packet {}: ghost {index} ({}) packet data not read yet; rest of the packet skipped",
+                        data.sequence,
+                        class.as_deref().unwrap_or("unknown class")
+                    );
+                    (game, false)
+                }
+                Err(e) => {
+                    let _ = writeln!(out, "3d: packet {}: game section: {e:?}", data.sequence);
+                    continue;
+                }
+            };
+            game19.first_move = g.last_move_ack;
+            if let Control19::Object { index, .. } = g.control {
+                game19.control = Some(index);
+                if step < Step::Control {
+                    step = Step::Control;
+                    let _ = writeln!(
+                        out,
+                        "3d: control object is ghost {index} {}",
+                        describe(&ghosts, index)
+                    );
+                }
+                if let Some(w) = world {
+                    w.lock().unwrap_or_else(|e| e.into_inner()).control = Some(index);
+                }
+            }
+            if !rest_readable {
                 continue;
+            }
+            super::ghosts::ServerGame::default()
+        } else {
+            match ghosts.read_game(&mut data.body) {
+                Ok(g) => g,
+                Err(e) => {
+                    let _ = writeln!(out, "3d: packet {}: game section: {e:?}", data.sequence);
+                    continue;
+                }
             }
         };
         let delivered = match events.read(&mut data.body, &classes) {
@@ -413,10 +475,65 @@ pub fn run_with_sequence(
                 }
                 continue;
             }
+            if tge_layer {
+                if let Event::SimDataBlock {
+                    id,
+                    class_id,
+                    index,
+                    total,
+                } = ev
+                {
+                    datablocks += 1;
+                    if index + 1 == *total || datablocks == 1 {
+                        let _ = writeln!(
+                            out,
+                            "3d: datablock {}/{total}: {} id {id}",
+                            index + 1,
+                            classes.datablock_name(*class_id).unwrap_or("unknown class")
+                        );
+                    }
+                    continue;
+                }
+                if let Some(answer) = tge::connection_answer(ev) {
+                    if let (
+                        Event::ConnectionMessage {
+                            sequence, message, ..
+                        },
+                        Event::ConnectionMessage { message: reply, .. },
+                    ) = (ev, &answer)
+                    {
+                        let _ = writeln!(
+                            out,
+                            "3d: connection message {message} (sequence {sequence}), answered {reply}"
+                        );
+                    }
+                    events.send(answer);
+                    continue;
+                }
+            }
             let Some(cmd) = events.command(ev) else {
                 continue;
             };
             let name = String::from_utf8_lossy(&cmd.name).into_owned();
+            if tge_layer {
+                if let Some((phase, ack, args)) = tge::mission_start(&cmd, phase_acks) {
+                    let _ = writeln!(out, "3d: {name}: {}", phase.label());
+                    if phase == Phase::Lighting {
+                        // Nothing to light yet: lit at once, then acked.
+                        let _ =
+                            writeln!(out, "3d: Mission lighting done ({datablocks} datablocks)");
+                    }
+                    events.send_command(&ack, &args);
+                    step = step.max(match phase {
+                        Phase::Datablocks => Step::Phase1,
+                        Phase::Ghosts => Step::Phase2,
+                        Phase::Lighting => Step::Lit,
+                    });
+                } else {
+                    let _ = writeln!(out, "3d: command {name}");
+                }
+                continue;
+            }
             if let Some(answer) = mission_start_answer(&cmd.name) {
                 let next = if answer == b"MissionStartPhase1Ack" {
                     Step::Phase1

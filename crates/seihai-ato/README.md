@@ -43,7 +43,7 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   `torque/wire-by-build.md`.
 - `torque::net` and `graal3d`: the 3D side of a Graal3D server, the
   Torque UDP link to the listed port + 1, for 4.20r6 and 5.x (protocols
-  21 and 24): bit stream and strings, handshake, data packet numbering
+  21 and 24) and, partly, 3.153 and 4.04r2 (protocol 19): bit stream and strings, handshake, data packet numbering
   and acks, events (the mission start is answered), ghosts and the
   control object. `--graal3d` with `--online host:port` opens it beside
   the TCP login, with or without the window, and logs its progress with a
@@ -62,9 +62,17 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   run as sent; source text is compiled with core's compiler. What a script
   sets (`set`, `client.` variables) and its `triggerserver` calls go back
   as one `events` text (`s` and `t` lines). The world is drawn by `view3d`
-  (below). 3.153 and 4.04r2
-  (protocol 19, the Torque game layer) are not run. Source: Graal_analysis
-  `torque/udp-session.md` and the open (MIT) Torque net layer.
+  (below). 3.153 and 4.04r2 (protocol 19,
+  the stock Torque game layer, `torque::net::tge`) run as far as the
+  static reads go and have not met a real protocol 19 server: the three
+  mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
+  not), datablocks are counted by class, the stock ghosting and
+  datablocks-done connection messages are answered, ghosts are kept by
+  class name, and the client sends its position with no moves. The control
+  object's own packet data (stock `Player`) is not read yet, so the rest of
+  a packet that carries it is skipped. Source: Graal_analysis
+  `torque/udp-session.md` (§10 for protocol 19),
+  `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
 - `view3d`, `three_ds` and `dts`: the 3D world as the link keeps it, drawn
   flat shaded by a small software rasteriser. Shapes are `.3ds` and Torque
   `.dts` (versions 23 to 25; the rest pose of the first detail level that is

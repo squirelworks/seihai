@@ -9,6 +9,7 @@
 //! data packets, [`events`] and [`ghosts`] read and write their contents,
 //! [`graal_text`] applies the Graal text sent over BigData,
 //! [`scripts3d`] runs the weapon scripts it brings on core's GS2 VM,
+//! [`tge`] is the protocol 19 game layer (3.153, 4.04r2),
 //! and [`session`] runs it all over a UDP socket (Ato's `--graal3d`).
 
 pub mod bits;
@@ -20,3 +21,4 @@ pub mod huffman;
 pub mod link;
 pub mod scripts3d;
 pub mod session;
+pub mod tge;
