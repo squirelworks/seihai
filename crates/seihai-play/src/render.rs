@@ -234,6 +234,16 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
                 .map_or(0, |g| g.frame_at_tick(tick, false)),
         );
     }
+    // Hit: the hurt pose while hurt mode lasts. Dead: the last step of
+    // `dead.gani`, over everything else.
+    if s.combat.is_hurt() {
+        f.pose = "hurt";
+        f.step = chars::Step::Clock;
+    }
+    if s.life.is_dead() {
+        f.pose = "dead";
+        f.step = chars::Step::At(usize::MAX);
+    }
     f
 }
 

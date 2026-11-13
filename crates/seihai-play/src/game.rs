@@ -15,6 +15,7 @@
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
 mod actions;
+mod life;
 pub use actions::{ItemList, ListKey, HAS_SPIN};
 
 use crate::chars::{self, Characters, Figure};
@@ -137,6 +138,10 @@ pub struct Game {
     scripts: Option<ClientScripts>,
     /// When the scripts' clock last ran.
     script_clock: Instant,
+    /// Where the network thread puts the hits on the player.
+    pub hits: online::SharedHits,
+    /// Health and death ([`life`]).
+    life: life::LifeState,
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
@@ -296,6 +301,8 @@ impl Game {
             own_bubble: None,
             scripts: None,
             script_clock: Instant::now(),
+            hits: Default::default(),
+            life: Default::default(),
             hud: None,
             boards_hidden: Default::default(),
             hidden_drawn: false,
@@ -737,6 +744,7 @@ impl Game {
     pub fn set_version(&mut self, version: ClientVersion) {
         let p = version.profile();
         self.scripts = Some(ClientScripts::new(version));
+        self.life.version = Some(version);
         self.session.life.set_rules(p.life.death);
         self.session.combat.set_rules(p.life.combat);
         self.session.set_mannerisms(p.mannerisms);
@@ -753,6 +761,11 @@ impl Game {
     /// no sword, in water, or already swinging.
     pub fn swing(&mut self) -> bool {
         if self.list_open() {
+            return false;
+        }
+        // The sword key while dead respawns, once the death allows it.
+        if self.session.life.is_dead() {
+            self.respawn();
             return false;
         }
         // S while carrying throws what is carried (2.05).
@@ -903,18 +916,28 @@ impl Game {
             }
             return true;
         }
-        self.session.begin_warp(&dest);
+        self.ask_link(&dest, x, y, true);
+        false
+    }
+
+    /// Ask the server for level `dest` at `(x, y)`. With `warp` the walk
+    /// waits for the level (core's warp-pending state); without it (a
+    /// respawn on the level the player is on, where the server only moves
+    /// the player) it does not.
+    fn ask_link(&mut self, dest: &str, x: f32, y: f32, warp: bool) {
         let ask = online::LinkAsk {
-            dest: dest.clone(),
+            dest: dest.to_string(),
             x,
             y,
             dir: self.session.player_dir % 4,
         };
         *self.link.lock().unwrap_or_else(|e| e.into_inner()) = Some(ask.clone());
-        self.link_to = Some(ask);
-        self.status = format!("Link to {dest}: asking the server.");
+        if warp {
+            self.session.begin_warp(dest);
+            self.link_to = Some(ask);
+            self.status = format!("Link to {dest}: asking the server.");
+        }
         self.dirty = true;
-        false
     }
 
     /// Start the GS2 scripts a level brought (with a build set).
@@ -990,6 +1013,7 @@ impl Game {
         self.say = live.say;
         self.send = live.send;
         self.chat_in = live.chat;
+        self.hits = live.hits;
         self.weapons = live.weapons;
         self.level_objects = live.level_objects;
         self.throws = live.throws;
@@ -1057,6 +1081,7 @@ impl Game {
         if own != self.drawn_own {
             let was = self.drawn_own;
             self.take_own_counters(&was, &own);
+            self.take_own_power(&was, &own);
             self.drawn_own = own;
             changed |= self.hud.is_some();
         }
@@ -1087,8 +1112,15 @@ impl Game {
             (Some(k), true) => k(dx, dy),
             _ => self.walk(dx, dy, now),
         }
+        if (dx, dy) != (0, 0) && self.session.life.is_dead() {
+            self.respawn();
+        }
         self.tick_poses(now);
         self.tick_scripts(now);
+        if self.take_hits() {
+            self.dirty = true;
+        }
+        self.tick_life(now);
         self.play_sounds();
         if self.take_chat_and_counters(now) {
             self.dirty = true;

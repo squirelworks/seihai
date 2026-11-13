@@ -271,7 +271,11 @@ impl Game {
             self.dirty = true;
             return false;
         }
-        if self.session.life.is_dead() || self.session.carried.is_some() {
+        if self.session.life.is_dead() {
+            self.respawn();
+            return false;
+        }
+        if self.session.carried.is_some() {
             return false;
         }
         let Some(name) = self.actions.weapon.clone() else {
@@ -307,7 +311,9 @@ impl Game {
             self.after_actions();
             return laid;
         }
+        // A key while dead respawns, once the death allows it.
         if self.session.life.is_dead() {
+            self.respawn();
             return None;
         }
         if self.interact() == Interaction::Nothing && sword_held {
