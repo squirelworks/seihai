@@ -15,6 +15,7 @@
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
 use crate::chars::{self, Characters, Figure};
+use crate::hud::{self, HudArt, HudValues};
 use crate::render::{self, Frame, NpcImages, Players, Sheet};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
@@ -23,7 +24,7 @@ use seihai_core::client::level::Arrival;
 use seihai_core::client::{self as online, Live};
 use seihai_core::gmap::Gmap;
 use seihai_core::offline::OfflineSession;
-use seihai_core::protocol::{ClientVersion, SessionState};
+use seihai_core::protocol::{ChatLine, ClientVersion, SessionState};
 use seihai_core::sound::{self, SoundEngine};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
@@ -102,6 +103,24 @@ pub struct Game {
     crossings_sent: u64,
     /// The name of the level `session.current_level` holds (online).
     level_here: Option<String>,
+    /// Where the network thread puts the player's own counters.
+    pub own: online::SharedOwn,
+    /// The counters drawn last frame.
+    drawn_own: online::OwnStats,
+    /// Where typed lines go for the network thread to say.
+    pub say: Arc<Mutex<Vec<String>>>,
+    /// Where messages the game built go for the network thread to send.
+    pub send: Arc<Mutex<Vec<Vec<u8>>>>,
+    /// Where the network thread puts the chat lines that come in.
+    pub chat_in: online::SharedChat,
+    /// The chat lines taken so far (toalls, PMs, admin lines and what was
+    /// said in the level), oldest first, with when each came.
+    chat: Vec<(ChatLine, Instant)>,
+    /// The player's own bubble and when it was said.
+    own_bubble: Option<(String, Instant)>,
+    /// The status display's pictures, when the line draws one
+    /// ([`Game::show_hud`]).
+    hud: Option<HudArt>,
     /// Set while a Graal3D UDP link is up: the real 4.20r6 and 5.x clients
     /// ignore the TCP level boards then (the world comes over UDP), so the
     /// flat level is not drawn.
@@ -112,6 +131,13 @@ pub struct Game {
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
 }
+
+/// How many chat lines the game keeps.
+pub const CHAT_KEEP: usize = 100;
+
+/// How long the player's own bubble stays: core's bubble time.
+pub const OWN_BUBBLE: std::time::Duration =
+    std::time::Duration::from_millis(seihai_core::chatlists::BUBBLE_MS as u64);
 
 /// [`Game::view3d`].
 pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
@@ -128,6 +154,42 @@ fn load_motion_ganis(resolver: &AssetResolver, session: &mut OfflineSession) {
             Ok(g) => session.set_walk_gani(GaniPlayer::new(g)),
             Err(e) => eprintln!("sound: cannot read {name}: {e}"),
         }
+    }
+}
+
+/// The pose GANIs core plays for the player (the sword swing and the spin,
+/// hurt, death): from the asset folders, else the built-in ones.
+fn load_pose_ganis(resolver: Option<&AssetResolver>, session: &mut OfflineSession) {
+    for name in [
+        "sword.gani",
+        "spin.gani",
+        "hurt.gani",
+        "dead.gani",
+        "idle.gani",
+    ] {
+        let Some(kind) = seihai_core::pose::PoseKind::from_file(name) else {
+            continue;
+        };
+        let from_disk = resolver
+            .and_then(|r| r.pose_gani(name))
+            .and_then(|p| Gani::load(p).ok());
+        let gani = from_disk.or_else(|| {
+            let text = seihai_core::assets::builtin::bytes(&format!("gani/{name}"))?;
+            Gani::parse(&String::from_utf8_lossy(text)).ok()
+        });
+        if let Some(g) = gani {
+            session.set_pose_gani(kind, g);
+        }
+    }
+}
+
+/// The cut and lift tables, from the build's `arrays.dat` where it has
+/// one. Without them the sword cuts nothing.
+fn load_object_tables(resolver: &AssetResolver, session: &mut OfflineSession) {
+    if let Some((p, seihai_core::assets::TileTypesFile::ArraysDat)) = resolver.tile_types() {
+        session.object_tables = std::fs::read(p)
+            .ok()
+            .and_then(|d| seihai_core::assets::ObjectTables::parse(&d));
     }
 }
 
@@ -158,7 +220,9 @@ impl Game {
         session.tiletypes = render::tile_types(resolver);
         if let Some(r) = resolver {
             load_motion_ganis(r, &mut session);
+            load_object_tables(r, &mut session);
         }
+        load_pose_ganis(resolver, &mut session);
         Ok(Game {
             session,
             sheet: Sheet::load(resolver)?,
@@ -190,6 +254,14 @@ impl Game {
             net_world: None,
             crossings_sent: 0,
             level_here: None,
+            own: Default::default(),
+            drawn_own: Default::default(),
+            say: Default::default(),
+            send: Default::default(),
+            chat_in: Default::default(),
+            chat: Vec::new(),
+            own_bubble: None,
+            hud: None,
             boards_hidden: Default::default(),
             hidden_drawn: false,
             view3d: None,
@@ -598,12 +670,70 @@ impl Game {
 
     /// Hand the current pose to the network thread.
     fn set_pose(&self, walking: bool) {
+        let s = &self.session;
+        let swinging = s.combat.is_swinging() || s.combat.spin_elapsed_ms().is_some();
         *self.pose.lock().unwrap_or_else(|e| e.into_inner()) = Some(online::Pose {
-            x: self.session.player_x,
-            y: self.session.player_y,
-            dir: self.session.player_dir % 4,
+            x: s.player_x,
+            y: s.player_y,
+            dir: s.player_dir % 4,
             walking,
+            sprite: Some(s.sprite_value()),
+            gani: swinging.then(|| s.bow_slot_anim()),
         });
+    }
+
+    /// Take the build's rules: combat (the swing and being hit), death,
+    /// the knockback and how the build shows a swing to the others (its
+    /// GANI prop, or the sprite), as `seihai-mae` sets them.
+    pub fn set_version(&mut self, version: ClientVersion) {
+        let p = version.profile();
+        self.session.life.set_rules(p.life.death);
+        self.session.combat.set_rules(p.life.combat);
+        self.session.set_mannerisms(p.mannerisms);
+        self.session.walk_sprite = !p.ui.ganis;
+        self.session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304)
+            || seihai_core::protocol::lobby::LobbyBurst::for_version(version).is_some();
+    }
+
+    /// Swing the sword (the sword key). The swing cuts what is in front of
+    /// it (core's `OfflineSession::try_cut`); online the cut goes to the
+    /// server as a board change and the swing as the player's GANI or
+    /// sprite. False when no swing started: no combat rules for the build,
+    /// no sword, in water, or already swinging.
+    pub fn swing(&mut self) -> bool {
+        if self.session.current_level.is_none() || !self.session.start_swing() {
+            return false;
+        }
+        self.send_board_changes();
+        self.set_pose(self.session.walking);
+        self.dirty = true;
+        true
+    }
+
+    /// The board changes the player made (a cut): to the server online,
+    /// as `PLI_BOARDMODIFY`. Offline the level already holds them.
+    fn send_board_changes(&mut self) {
+        let changes = self.session.take_board_changes();
+        if self.offline || changes.is_empty() {
+            return;
+        }
+        let in_range = |v: i32| u8::try_from(v).ok().filter(|v| *v < 64);
+        let msgs: Vec<Vec<u8>> = changes
+            .iter()
+            .filter_map(|c| {
+                Some(seihai_core::net::board_modify_message(
+                    in_range(c.x)?,
+                    in_range(c.y)?,
+                    u8::try_from(c.width).ok()?,
+                    u8::try_from(c.height).ok()?,
+                    &c.tiles,
+                ))
+            })
+            .collect();
+        self.send
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .extend(msgs);
     }
 
     /// The player's position in tiles, for the view, once a level is in.
@@ -626,6 +756,14 @@ impl Game {
         self.pose_clock += std::time::Duration::from_millis(ms);
         if self.session.tick_poses(ms) {
             self.dirty = true;
+        }
+        // The swing runs on the same clock; its end goes to the server.
+        let swinging = self.session.combat.is_swinging();
+        if self.session.tick_combat(ms) || swinging != self.session.combat.is_swinging() {
+            self.dirty = true;
+            if self.session.current_level.is_some() {
+                self.set_pose(self.session.walking);
+            }
         }
     }
 
@@ -700,6 +838,67 @@ impl Game {
         self.board_mods = live.board_mods;
         self.npc_changes = live.npc_changes;
         self.closed = live.closed;
+        self.own = live.own;
+        self.say = live.say;
+        self.send = live.send;
+        self.chat_in = live.chat;
+    }
+
+    /// Draw the status display over the level (hearts, gralats, bombs,
+    /// arrows, AP and the item slots), from the build's `state.png`.
+    pub fn show_hud(&mut self) {
+        self.hud = Some(HudArt::load(self.resolver.as_ref()));
+        self.dirty = true;
+    }
+
+    /// True when the status display is drawn.
+    pub fn has_hud(&self) -> bool {
+        self.hud.is_some()
+    }
+
+    /// Say `text` in the level: the network thread sends it, and the
+    /// player's own bubble shows it. Blank text says nothing.
+    pub fn say(&mut self, text: &str, now: Instant) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        self.say
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(text.to_string());
+        self.own_bubble = Some((text.to_string(), now));
+    }
+
+    /// The player's own bubble, while it lasts.
+    pub fn own_bubble(&self, now: Instant) -> Option<&str> {
+        self.own_bubble
+            .as_ref()
+            .filter(|(_, at)| now.saturating_duration_since(*at) < OWN_BUBBLE)
+            .map(|(t, _)| t.as_str())
+    }
+
+    /// The chat lines taken so far, oldest first, with when each came.
+    pub fn chat(&self) -> &[(ChatLine, Instant)] {
+        &self.chat
+    }
+
+    /// Take the chat lines and the counters the network thread put out.
+    /// True when either changed.
+    fn take_chat_and_counters(&mut self, now: Instant) -> bool {
+        let lines = std::mem::take(&mut *self.chat_in.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut changed = !lines.is_empty();
+        self.chat.extend(lines.into_iter().map(|l| (l, now)));
+        if self.chat.len() > CHAT_KEEP {
+            let extra = self.chat.len() - CHAT_KEEP;
+            self.chat.drain(..extra);
+        }
+        let own = *self.own.lock().unwrap_or_else(|e| e.into_inner());
+        if own != self.drawn_own {
+            self.drawn_own = own;
+            changed |= self.hud.is_some();
+        }
+        changed
     }
 
     /// One turn of the loop: take what the network thread sent, walk one
@@ -723,6 +922,9 @@ impl Game {
         self.walk(dx, dy, now);
         self.tick_poses(now);
         self.play_sounds();
+        if self.take_chat_and_counters(now) {
+            self.dirty = true;
+        }
         let others = self
             .others
             .lock()
@@ -769,14 +971,18 @@ impl Game {
             others: &others,
             clock_ms: self.started.elapsed().as_millis() as u64,
         };
-        render::draw(
+        let mut f = render::draw(
             &self.session,
             &self.sheet,
             &self.npc_images,
             players,
             view.0,
             view.1,
-        )
+        );
+        if let Some(art) = &self.hud {
+            hud::draw(&mut f, art, &HudValues::of(&self.drawn_own));
+        }
+        f
     }
 
     /// True while a Graal3D link is up and the TCP boards are not drawn.
@@ -813,6 +1019,28 @@ pub fn name_tags(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(Strin
             })
         })
         .collect()
+}
+
+/// Where each bubble goes, in view pixels: centred over the 48x48 box of
+/// the player who said it, as the clients draw chat over the head.
+pub fn bubbles(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    others
+        .iter()
+        .filter_map(|o| {
+            let text = o.chat.as_deref()?.trim();
+            (!text.is_empty()).then(|| {
+                let (x, y) = bubble_at(o.x, o.y, cam_x, cam_y);
+                (text.to_string(), x, y)
+            })
+        })
+        .collect()
+}
+
+/// Where a bubble for a player at `(x, y)` tiles goes in view pixels: the
+/// middle of the top of the 48x48 box.
+pub fn bubble_at(x: f32, y: f32, cam_x: i32, cam_y: i32) -> (f32, f32) {
+    let t = render::TILE_PX as f32;
+    ((x + 1.5) * t - cam_x as f32, y * t - cam_y as f32)
 }
 
 /// The asset folders for `version`, when `--assets` named one.
@@ -1310,6 +1538,105 @@ mod tests {
             tags,
             vec![("Ann".to_string(), 11.5 * 16.0 - 100.0, 23.0 * 16.0 - 200.0)]
         );
+    }
+
+    /// Bubbles go over the players who said something, and only them.
+    #[test]
+    fn bubbles_go_over_the_players_who_spoke() {
+        let other = |id, chat: Option<&str>| online::Other {
+            id,
+            x: 10.0,
+            y: 20.0,
+            chat: chat.map(Into::into),
+            ..Default::default()
+        };
+        let got = bubbles(&[other(1, Some("hi")), other(2, None)], 100, 200);
+        assert_eq!(
+            got,
+            vec![("hi".to_string(), 11.5 * 16.0 - 100.0, 20.0 * 16.0 - 200.0)]
+        );
+    }
+
+    /// A typed line goes to the network thread and shows as the player's
+    /// own bubble for the bubble time; a blank one does neither.
+    #[test]
+    fn saying_queues_the_line_and_shows_the_bubble() {
+        let (mut g, _tx) = game();
+        let t0 = Instant::now();
+        g.say("  ", t0);
+        assert!(g.say.lock().unwrap().is_empty());
+        assert_eq!(g.own_bubble(t0), None);
+        g.say(" hello ", t0);
+        assert_eq!(*g.say.lock().unwrap(), vec!["hello".to_string()]);
+        assert_eq!(g.own_bubble(t0 + Duration::from_millis(100)), Some("hello"));
+        assert_eq!(g.own_bubble(t0 + OWN_BUBBLE), None);
+    }
+
+    /// Chat lines from the network thread are kept in order, and new
+    /// counters redraw the frame only when the status display is drawn.
+    #[test]
+    fn chat_and_counters_come_in() {
+        use seihai_core::protocol::ChatKind;
+        let (mut g, _tx) = game();
+        let now = Instant::now();
+        let line = |text: &str| ChatLine {
+            kind: ChatKind::Toall,
+            from: "Ann".into(),
+            text: text.into(),
+            born_ms: 0,
+        };
+        g.chat_in.lock().unwrap().extend([line("a"), line("b")]);
+        assert!(g.take_chat_and_counters(now));
+        let texts: Vec<_> = g.chat().iter().map(|(l, _)| l.text.as_str()).collect();
+        assert_eq!(texts, ["a", "b"]);
+        assert!(!g.take_chat_and_counters(now), "taken once");
+        g.own.lock().unwrap().bombs = Some(9);
+        assert!(!g.take_chat_and_counters(now), "no status display");
+        g.show_hud();
+        g.own.lock().unwrap().bombs = Some(8);
+        assert!(g.take_chat_and_counters(now));
+        assert!(g.has_hud());
+    }
+
+    /// S swings the sword on a 6.x build: the player is drawn in the sword
+    /// pose, the server is told `sword` and then the swing's end.
+    #[test]
+    fn the_sword_swings_and_the_server_hears_of_it() {
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V603R7);
+        assert!(!g.swing(), "no level yet");
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        assert!(g.swing());
+        assert_eq!(render::own_figure(&g.session).pose, "sword");
+        let pose = g.pose.lock().unwrap().unwrap();
+        assert_eq!(pose.gani, Some("sword"));
+        assert!(!g.swing(), "already swinging");
+        // Run the clock until the swing is over.
+        let t0 = Instant::now();
+        for i in 1..=40 {
+            g.tick_poses(t0 + Duration::from_millis(50 * i));
+        }
+        assert!(!g.session.combat.is_swinging());
+        assert_ne!(render::own_figure(&g.session).pose, "sword");
+        assert_eq!(g.pose.lock().unwrap().unwrap().gani, None);
+    }
+
+    /// A build with no combat rules does not swing.
+    #[test]
+    fn no_combat_rules_no_swing() {
+        let (mut g, tx) = game();
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        assert!(!g.swing());
     }
 
     /// A folder with `levels/a.nw` (a link east to `b.nw`) and `levels/b.nw`.

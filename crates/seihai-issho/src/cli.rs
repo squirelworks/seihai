@@ -32,7 +32,8 @@ v7 is not a supported profile.\n");
     }
     let Some(label) = version_arg(args) else {
         return err(
-            "seihai-issho: pass --version with a v6 profile. Issho does not default to v6.\n",
+            "seihai-issho: pass --version with a v6 profile. Issho does not default to v6.\n\
+Issho has no start window of its own: run `seihai` with no arguments and pick a 6.x build.\n",
         );
     };
     match select_label(label) {

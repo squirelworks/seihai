@@ -105,3 +105,9 @@ names a base point `B = (15, 15)`.
   is for the power numbers.
 * The 2.22 and 2.31 status routines were not read. Their sheet and the 2.22
   picture match 2.05, so the 2.05 rules are used.
+
+## 6.x (Issho)
+
+A lab run of the real Linux 6.03r7 and Windows 6.00r2 clients (squirelworks/seihai#444, no server GUI scripts) measured the default status display in their 1024 x 768 window. Every part sits where the rules above put it on a 1024-wide view: the slots at x 15, 80 and 145 from y 30, the sword icon at (105, 31), the AP bar at (15, 65), the gralat, bomb and arrow icons from (274, 30) with the counts at y 48 (bombs and arrows two digits, zero-padded), and three big hearts at x 826, 871 and 916 (1024 − 198, 45 px apart) from y 24.
+
+So the 6.x default is this routine on the 6.x window. `seihai-play`'s `hud` module draws it for Issho, from the build's `state.png` (or the built-in one) with the counters the server sends in its player props. Left out because the 6.x run showed none of them: the key letters on the slots, the small item-list key, and the sword and glove power numbers. The 6.x clients have no default chat bar or status bar; those come from the server's GUI scripts.
