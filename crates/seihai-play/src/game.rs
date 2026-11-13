@@ -44,6 +44,10 @@ use std::time::Instant;
 /// Where a level with no start position puts the player.
 pub const NO_START: (f32, f32) = (30.0, 30.0);
 
+/// The most missed walk steps one frame takes; a longer gap since the
+/// last step starts the walk afresh.
+const MAX_CATCH_UP_STEPS: u32 = 8;
+
 /// What the network thread hands the window.
 pub enum Event {
     Level(Box<Level>, Arrival),
@@ -901,12 +905,37 @@ impl Game {
             }
             return;
         }
-        if self.session.current_level.is_none()
-            || now.duration_since(self.last_step) < self.session.step_interval()
-        {
+        if self.session.current_level.is_none() {
             return;
         }
-        self.last_step = now;
+        let interval = self.session.step_interval();
+        let since = now.saturating_duration_since(self.last_step);
+        if since < interval {
+            return;
+        }
+        // The real 6.x walks at its own clock, not the frame rate: a slow
+        // frame takes the steps it missed (Windows lab, 2026-11-13: one
+        // step a frame gave 2 to 4 tiles a second under software
+        // rendering). A long gap is a fresh start: one step, now.
+        let missed = (since.as_nanos() / interval.as_nanos().max(1)) as u32;
+        let steps = if missed > MAX_CATCH_UP_STEPS {
+            self.last_step = now;
+            1
+        } else {
+            self.last_step += interval * missed;
+            missed
+        };
+        for _ in 0..steps {
+            if self.step(dx, dy) {
+                return;
+            }
+        }
+        self.dirty = true;
+    }
+
+    /// One 0.5-tile step of the walk. True when it ended in a link the
+    /// walk now waits on.
+    fn step(&mut self, dx: i8, dy: i8) -> bool {
         self.session.try_move(dx as f32 * 0.5, dy as f32 * 0.5);
         // Offline on a gmap: core already moved the player into the next
         // cell; its neighbours change with it.
@@ -924,10 +953,7 @@ impl Game {
         self.set_pose(true);
         // A link the feet are now in: ask the server once and wait for the
         // level (no walking meanwhile, core's warp-pending state).
-        if self.session.check_links() && self.follow_link() {
-            return;
-        }
-        self.dirty = true;
+        self.session.check_links() && self.follow_link()
     }
 
     /// Go where `session.pending_link` says (a link the feet are in, or a
@@ -2103,6 +2129,30 @@ mod tests {
         let mut a = arrival(start);
         a.name = name.into();
         Event::Level(Box::new(Level::from_board(&[0; 4096])), a)
+    }
+
+    /// A slow frame takes the steps it missed, so the walk keeps the real
+    /// client's pace at any frame rate; a long gap starts afresh with one
+    /// step.
+    #[test]
+    fn a_slow_frame_takes_the_missed_steps() {
+        let (mut g, _tx) = game();
+        g.session.current_level = Some(Level::from_board(&[0; 4096]));
+        g.session.arrive(10.0, 30.0);
+        let step = g.session.step_interval();
+        // A fresh start: one step.
+        let t0 = g.last_step + Duration::from_secs(5);
+        g.walk(1, 0, t0);
+        assert_eq!(g.session.player_x, 10.5);
+        // A frame four steps long: four steps.
+        g.walk(1, 0, t0 + step * 4);
+        assert_eq!(g.session.player_x, 12.5);
+        // Less than a step since: none.
+        g.walk(1, 0, t0 + step * 4 + step / 2);
+        assert_eq!(g.session.player_x, 12.5);
+        // The half step left over still counts towards the next.
+        g.walk(1, 0, t0 + step * 5);
+        assert_eq!(g.session.player_x, 13.0);
     }
 
     /// Walk east until the walk crosses into the next cell.

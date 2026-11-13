@@ -266,6 +266,19 @@ mod tests {
         assert!(live.hits.lock().unwrap().is_empty(), "taken once");
     }
 
+    /// The HUD shows the hearts a hit took, without waiting for a
+    /// CURPOWER the server does not echo.
+    #[test]
+    fn the_hud_hearts_drop_with_a_hit() {
+        let (mut g, live, _tx) = game();
+        let before = g.hud_values().half_hearts;
+        assert_eq!(before, g.session.hearts_half());
+        *live.hits.lock().unwrap() = hurt(2);
+        g.tick(0, 0, Instant::now());
+        assert_eq!(g.hud_values().half_hearts, before - 2);
+        assert_eq!(g.hud_values().max_half_hearts, g.session.max_hearts);
+    }
+
     /// Before the build is set nothing is judged.
     #[test]
     fn no_build_no_hits() {
