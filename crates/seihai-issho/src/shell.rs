@@ -167,9 +167,9 @@ const WORLD: &[WorldObject] = &[
 
 /// What the two unpacked 6.00 images differed by.
 ///
-/// Seihai's profile table has 6.00r2 and does not have 6.00r4, so [`R4`](Self::R4)
-/// is not a selectable version. It records the static read: `resolveHost`
-/// and an HTTP keep-alive header.
+/// Both are profile rows (6.00r2 and 6.00r4). [`R4`](Self::R4) records the
+/// static read: `resolveHost` and an HTTP keep-alive header. The profile's
+/// `scripts.resolve_host` carries the first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unpacked600 {
     /// Product 6.002. No `resolveHost`. No HTTP keep-alive header.
@@ -192,6 +192,7 @@ impl Unpacked600 {
 pub fn unpacked(version: ClientVersion) -> Option<Unpacked600> {
     match version {
         ClientVersion::V600R2 => Some(Unpacked600::R2),
+        ClientVersion::V600R4 => Some(Unpacked600::R4),
         _ => None,
     }
 }
@@ -284,8 +285,19 @@ mod tests {
     }
 
     #[test]
-    fn unpacked_600r4_is_recorded_and_not_a_profile() {
+    fn unpacked_600_images_match_their_profile_rows() {
         assert_eq!(unpacked(ClientVersion::V600R2), Some(Unpacked600::R2));
+        assert_eq!(unpacked(ClientVersion::V600R4), Some(Unpacked600::R4));
+        assert!(Session::open(ClientVersion::V600R4).is_ok());
+        for v in [ClientVersion::V600R2, ClientVersion::V600R4] {
+            let p = v.profile();
+            assert_eq!(
+                p.scripts.resolve_host,
+                unpacked(v).unwrap().resolve_host(),
+                "{}",
+                p.label
+            );
+        }
         assert!(!Unpacked600::R2.resolve_host());
         assert!(!Unpacked600::R2.http_keep_alive());
         assert!(Unpacked600::R4.resolve_host());

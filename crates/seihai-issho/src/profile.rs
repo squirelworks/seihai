@@ -191,6 +191,10 @@ mod tests {
     fn packed_stubs_are_not_the_engine() {
         assert_eq!(select_label("6.037"), Err(SelectError::Unknown));
         assert_eq!(select_label("6.113"), Err(SelectError::Unknown));
-        assert_eq!(select_label("6.00r4"), Err(SelectError::Unknown));
+    }
+
+    #[test]
+    fn the_600r4_row_selects_issho() {
+        assert_eq!(select_label("6.00r4"), Ok(EngineProfile::V6));
     }
 }

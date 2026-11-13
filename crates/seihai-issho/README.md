@@ -66,8 +66,8 @@ Torque. Issho owns that shape:
   and the level objects beside them).
 
 6.00r2 has no `resolveHost` and no HTTP keep-alive header. 6.00r4 adds
-both. Seihai has a profile row for 6.00r2 and none for 6.00r4, so 6.00r4
-is recorded and not selectable.
+both. Both are profile rows and both select Issho. The 6.00r4 row turns
+on core's `resolveHost` builtin, a real DNS lookup.
 
 Packed Windows 6.037 and 6.113 are packer stubs with a QPlay.exe CyaSSL
 export surface. They are not the engine. CyaSSL is not implemented.
@@ -103,5 +103,4 @@ This crate does not do that. 7.x is not a supported version profile.
 
 ## Not in this pass
 
-The 6.x playfield and HUD, FMOD, the GS2 VM, `resolveHost` as a real
-lookup, HTTP, CyaSSL, Torque, and Unity.
+The 6.x playfield and HUD, FMOD, the GS2 VM, HTTP, CyaSSL, Torque, and Unity.
