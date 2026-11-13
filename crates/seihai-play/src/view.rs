@@ -9,9 +9,13 @@
 //! own until those scripts run (#447). Toalls, PMs and admin lines show
 //! for a while above it.
 //!
-//! S swings the sword ([`Game::swing`]).
+//! S swings the sword ([`Game::swing`]), and S again during the swing
+//! spins when the server allows it. D fires the picked weapon
+//! ([`Game::fire`]); A with S held picks an item to drop and A lays it
+//! ([`Game::act`]). Q opens the item list, whose arrows pick the weapon D
+//! fires ([`Game::toggle_item_list`]).
 
-use crate::game::{bubble_at, bubbles, name_tags, Game};
+use crate::game::{bubble_at, bubbles, name_tags, Game, ItemList, ListKey};
 use crate::render::{self, TILE_PX};
 use seihai_core::protocol::ChatKind;
 use std::time::{Duration, Instant};
@@ -49,7 +53,38 @@ impl View {
     pub fn show(&mut self, ctx: &egui::Context) {
         let now = Instant::now();
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
+        let list_before = self.game.list_open();
+        // The open item list takes the game keys: the arrows move its
+        // selection and the others close it.
+        if self.typing.is_none() && self.game.list_open() {
+            for (keys, lk) in [
+                ([egui::Key::ArrowUp, egui::Key::ArrowLeft], ListKey::Back),
+                ([egui::Key::ArrowDown, egui::Key::ArrowRight], ListKey::Next),
+            ] {
+                if keys.into_iter().any(pressed) {
+                    self.game.item_list_key(lk);
+                }
+            }
+            if [
+                egui::Key::Q,
+                egui::Key::Escape,
+                egui::Key::Enter,
+                egui::Key::D,
+                egui::Key::S,
+                egui::Key::A,
+            ]
+            .into_iter()
+            .any(pressed)
+            {
+                self.game.item_list_key(ListKey::Close);
+            }
+        } else if self.typing.is_none() && pressed(egui::Key::Q) {
+            self.game.toggle_item_list();
+        }
+        // Busy with the list this frame: it was open, or Q opened it.
+        let list_busy = list_before || self.game.list_open();
         match self.typing.take() {
+            None if list_busy => {}
             None if pressed(egui::Key::Tab) || pressed(egui::Key::Enter) => {
                 self.typing = Some(String::new())
             }
@@ -57,10 +92,21 @@ impl View {
             Some(text) if pressed(egui::Key::Enter) => self.game.say(&text, now),
             other => self.typing = other,
         }
-        // S swings the sword, as in the classic key set.
-        if self.typing.is_none() && pressed(egui::Key::S) {
+        // S swings the sword (and spins), D fires the weapon, A with S
+        // held picks an item to drop and A lays it, as in the classic key
+        // set. Not while the list is open or was closed this frame.
+        let game_keys = self.typing.is_none() && !list_busy;
+        if game_keys && pressed(egui::Key::A) {
+            let s_held = ctx.input(|i| i.key_down(egui::Key::S));
+            self.game.act(s_held);
+        }
+        if game_keys && pressed(egui::Key::S) {
             self.game.swing();
         }
+        if game_keys && pressed(egui::Key::D) {
+            self.game.fire();
+        }
+
         let held = |k| self.typing.is_none() && ctx.input(|i| i.key_down(k));
         let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;
         let dy = held(egui::Key::ArrowDown) as i8 - held(egui::Key::ArrowUp) as i8;
@@ -172,6 +218,9 @@ impl View {
                         line,
                     );
                 }
+                if self.game.list_open() {
+                    item_list(ui.painter(), origin, scale, self.game.item_list());
+                }
                 if let Some(text) = self.typing.as_mut() {
                     let at = egui::Rect::from_min_size(
                         origin + egui::vec2(4.0, foot),
@@ -193,6 +242,47 @@ impl View {
         } else {
             100
         }));
+    }
+}
+
+/// The item list (Q): a box near the top with the weapons, one a row, the
+/// picked one marked.
+fn item_list(p: &egui::Painter, origin: egui::Pos2, scale: f32, list: &ItemList) {
+    let rows = list.entries.len().max(1) as f32;
+    let at = egui::Rect::from_min_size(
+        origin + egui::vec2(40.0, 40.0) * scale,
+        egui::vec2(220.0 * scale, 24.0 + 18.0 * rows),
+    );
+    p.rect_filled(at, 4.0, egui::Color32::from_black_alpha(200));
+    p.text(
+        at.min + egui::vec2(8.0, 4.0),
+        egui::Align2::LEFT_TOP,
+        "Items (arrows pick, Q closes)",
+        egui::FontId::proportional(12.0),
+        egui::Color32::LIGHT_GRAY,
+    );
+    if list.entries.is_empty() {
+        outlined(
+            p,
+            at.min + egui::vec2(8.0, 22.0),
+            egui::Align2::LEFT_TOP,
+            "(no weapons)",
+        );
+    }
+    for (i, name) in list.entries.iter().enumerate() {
+        let picked = list.selected == Some(i);
+        let row = at.min + egui::vec2(8.0, 22.0 + 18.0 * i as f32);
+        if picked {
+            p.rect_filled(
+                egui::Rect::from_min_size(
+                    row - egui::vec2(4.0, 1.0),
+                    egui::vec2(at.width() - 8.0, 18.0),
+                ),
+                2.0,
+                egui::Color32::from_rgb(40, 80, 160),
+            );
+        }
+        outlined(p, row, egui::Align2::LEFT_TOP, name);
     }
 }
 

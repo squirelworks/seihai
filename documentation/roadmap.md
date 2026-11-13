@@ -63,7 +63,8 @@ Single code path. Versions are profile rows, not branches.
 - [ ] Chat, sword, items and the rest of mae's flat play, in the shared loop (#445).
   - [x] Chat: a chat line (Tab or Enter), the bubbles over the players and the player's own, toalls, PMs and admin lines (Ato gets them too).
   - [x] Sword: S swings (core's swing, the build's combat rules), the player drawn in `sword.gani`, the cut in front of it from the build's `arrays.dat` sent to the server as a board change, and the swing shown to the others (the GANI prop on a GANI build, the sprite otherwise).
-  - [ ] Being hit, health and death, chests and pickups, bombs and arrows, throwing, signs, sitting, ledges.
+  - [x] Mae's actions (`seihai-play::game::actions`, Ato gets them too): the spin attack (S again during a swing, with the server's has-spin STATUS bit), the weapon key D (the built-in Bomb, Superbomb, Joltbomb and Bow run core's scripts and send `PLI_BOMBADD` / `PLI_ARROWADD` and the new counts; a server weapon's GS1 script gets `weaponfired`), the lay mode that drops items (A with S held picks, A lays, sent as `PLI_ITEMADD`), and the item list on Q that picks the weapon D fires. Bombs, blasts, arrows and floor items are drawn from `sprites.png`, `bomb1.png` and `bomb2.png` (`seihai-play::effects`). Not yet: GS2 weapon scripts (6.x), other players' bombs and arrows, and A's lift, throw and chests.
+  - [ ] Being hit, health and death, chests and pickups, throwing, signs, sitting, ledges.
 - [x] The 6.x sound formats, script sounds and music, and a lab check of `WANTFILE` (#446).
 - [ ] GS2 client scripts, clean-room in seihai-core (#447).
 - [x] The 6.00r4 profile row and `resolveHost` (#448).
