@@ -137,6 +137,39 @@ handled before that search. **[bin]**
 - Seihai stops a run after 2 000 000 steps without a yield, which the
   client does not do **[seihai]**.
 
+## The client runtime (`seihai-play::scripts`)
+
+The shared loop runs the server NPCs' scripts (`PLO_NPCBYTECODE`, kept in
+core's `client::level::Arrival::scripts`) with `ClientScripts`, which
+`Game::set_version` turns on for the build (Issho calls it; Ato not yet):
+
+- **Start.** When a level arrives, each script whose NPC is on the level
+  (by server id) gets a `Machine::for_version` and an `EffectHost`. The
+  top-level code runs, then `onCreated`, then `onPlayerEnters`. A level
+  the walk crossed into on a gmap keeps the scripts already running and
+  starts the new ones; any other level stops the old ones. **[seihai]**
+- **Frames.** Every 50 ms (the VM's `TICK`) a sleeping run whose time is
+  up goes on, a `waitfor` whose time is up goes on with 0, and the timers
+  (`onTimeout`, `scheduleevent`) run. **[seihai]**
+- **One run at a time.** The machine holds one run. While it sleeps or
+  waits, the events that come for its NPC are queued and run in order once
+  it ends, as `Machine::tick` already does for the timers. A `waitfor` on
+  an event that comes for its own NPC goes on with 1. **[seihai]**
+- **Events.** `onPlayerTouchsMe` when the player's feet step into the
+  NPC's rectangle (once until they leave), and `onPlayerChats` when the
+  player says a line. **[seihai]**
+- **Effects.** Each NPC with a script has an object in the script world of
+  core's `SessionScripts`, tagged with the NPC's place in the level, so
+  `SessionScripts::apply` puts the effects on that NPC or on the player.
+  The NPC's place goes into `this.x` / `this.y` before each run, so a move
+  by the server is seen. An NPC the server deletes stops its script.
+- **Server.** Player flags that are not `local.` go out as `PLI_FLAGSET` /
+  `PLI_FLAGDEL` (core's `protocol::flagset`) through `Live::send`.
+
+The tests (`crates/seihai-play/src/scripts.rs`, and
+`a_level_runs_its_gs2_scripts` in `game.rs`) compile their own small GS2
+sources with core's compiler; no world's scripts are used.
+
 ## Tests
 
 `crates/seihai-core/tests/gs2_exec.rs` runs four fixtures built with the

@@ -25,6 +25,7 @@ pub mod chars;
 pub mod game;
 pub mod hud;
 pub mod render;
+pub mod scripts;
 pub mod servers;
 pub mod start;
 pub mod view;

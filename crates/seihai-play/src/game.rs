@@ -17,6 +17,7 @@
 use crate::chars::{self, Characters, Figure};
 use crate::hud::{self, HudArt, HudValues};
 use crate::render::{self, Frame, NpcImages, Players, Sheet};
+use crate::scripts::{self, ClientScripts};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
 };
@@ -127,6 +128,11 @@ pub struct Game {
     pub boards_hidden: Arc<std::sync::atomic::AtomicBool>,
     /// What [`Game::boards_hidden`] was on the last tick.
     hidden_drawn: bool,
+    /// The server NPCs' GS2 client scripts, once [`Game::set_version`]
+    /// named the build whose VM runs them.
+    scripts: Option<ClientScripts>,
+    /// When the scripts' clock last ran.
+    script_clock: Instant,
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
@@ -261,6 +267,8 @@ impl Game {
             chat_in: Default::default(),
             chat: Vec::new(),
             own_bubble: None,
+            scripts: None,
+            script_clock: Instant::now(),
             hud: None,
             boards_hidden: Default::default(),
             hidden_drawn: false,
@@ -421,6 +429,8 @@ impl Game {
         for (id, p) in &a.server_npc_props {
             self.session.take_server_npc(*id, p);
         }
+        // The scripts already running go on; new ones start.
+        self.start_scripts(a);
         if let Some(level) = &self.session.current_level {
             for name in render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
             {
@@ -595,6 +605,10 @@ impl Game {
                     for (id, p) in &a.server_npc_props {
                         self.session.take_server_npc(*id, p);
                     }
+                    if let Some(sc) = self.scripts.as_mut() {
+                        sc.clear();
+                    }
+                    self.start_scripts(&a);
                     if let Some(level) = &self.session.current_level {
                         for name in render::load_npc_images(
                             level,
@@ -687,6 +701,7 @@ impl Game {
     /// GANI prop, or the sprite), as `seihai-mae` sets them.
     pub fn set_version(&mut self, version: ClientVersion) {
         let p = version.profile();
+        self.scripts = Some(ClientScripts::new(version));
         self.session.life.set_rules(p.life.death);
         self.session.combat.set_rules(p.life.combat);
         self.session.set_mannerisms(p.mannerisms);
@@ -802,27 +817,94 @@ impl Game {
         self.set_pose(true);
         // A link the feet are now in: ask the server once and wait for the
         // level (no walking meanwhile, core's warp-pending state).
-        if self.session.check_links() {
-            if let Some((dest, x, y)) = self.session.pending_link.take() {
-                if self.offline {
-                    if let Err(e) = self.enter_offline(&dest, Some((x, y))) {
-                        self.status = format!("Link to {dest}: {e}");
-                    }
-                    return;
-                }
-                self.session.begin_warp(&dest);
-                let ask = online::LinkAsk {
-                    dest: dest.clone(),
-                    x,
-                    y,
-                    dir: self.session.player_dir % 4,
-                };
-                *self.link.lock().unwrap_or_else(|e| e.into_inner()) = Some(ask.clone());
-                self.link_to = Some(ask);
-                self.status = format!("Link to {dest}: asking the server.");
-            }
+        if self.session.check_links() && self.follow_link() {
+            return;
         }
         self.dirty = true;
+    }
+
+    /// Go where `session.pending_link` says (a link the feet are in, or a
+    /// script's `setlevel`): offline the level loads now; online the
+    /// server is asked once, and the walk waits for the level. True when
+    /// an offline level was entered (or failed to load).
+    fn follow_link(&mut self) -> bool {
+        let Some((dest, x, y)) = self.session.pending_link.take() else {
+            return false;
+        };
+        if self.offline {
+            if let Err(e) = self.enter_offline(&dest, Some((x, y))) {
+                self.status = format!("Link to {dest}: {e}");
+            }
+            return true;
+        }
+        self.session.begin_warp(&dest);
+        let ask = online::LinkAsk {
+            dest: dest.clone(),
+            x,
+            y,
+            dir: self.session.player_dir % 4,
+        };
+        *self.link.lock().unwrap_or_else(|e| e.into_inner()) = Some(ask.clone());
+        self.link_to = Some(ask);
+        self.status = format!("Link to {dest}: asking the server.");
+        self.dirty = true;
+        false
+    }
+
+    /// Start the GS2 scripts a level brought (with a build set).
+    fn start_scripts(&mut self, a: &Arrival) {
+        let Some(sc) = self.scripts.as_mut() else {
+            return;
+        };
+        if sc.start(&mut self.session, &a.scripts) > 0 {
+            self.script_clock = Instant::now();
+        }
+        self.after_scripts();
+    }
+
+    /// Run the GS2 scripts' clock up to `now`.
+    pub fn tick_scripts(&mut self, now: Instant) {
+        let Some(sc) = self.scripts.as_mut() else {
+            return;
+        };
+        let ms = now.saturating_duration_since(self.script_clock).as_millis() as u64;
+        if ms < scripts::FRAME_MS {
+            return;
+        }
+        self.script_clock = now;
+        if sc.is_empty() || self.session.current_level.is_none() {
+            return;
+        }
+        sc.tick(&mut self.session, ms);
+        self.after_scripts();
+        self.dirty = true;
+    }
+
+    /// What the scripts' effects ask of the game: the server messages for
+    /// the flags they changed, new NPC images, and a `setlevel`.
+    fn after_scripts(&mut self) {
+        let Some(sc) = self.scripts.as_mut() else {
+            return;
+        };
+        let msgs = sc.take_server_messages(&mut self.session);
+        for line in sc.log.drain(..) {
+            eprintln!("gs2: {line}");
+        }
+        let images = std::mem::take(&mut sc.host.images_changed);
+        if !msgs.is_empty() && !self.offline {
+            self.send
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(msgs);
+        }
+        if images {
+            if let Some(level) = &self.session.current_level {
+                render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
+            }
+        }
+        if self.session.pending_link.is_some() {
+            self.follow_link();
+        }
     }
 
     /// The network thread's shared state: hand [`Live`] to
@@ -868,6 +950,10 @@ impl Game {
             .unwrap_or_else(|e| e.into_inner())
             .push(text.to_string());
         self.own_bubble = Some((text.to_string(), now));
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.player_chats(&mut self.session);
+            self.after_scripts();
+        }
     }
 
     /// The player's own bubble, while it lasts.
@@ -921,6 +1007,7 @@ impl Game {
         }
         self.walk(dx, dy, now);
         self.tick_poses(now);
+        self.tick_scripts(now);
         self.play_sounds();
         if self.take_chat_and_counters(now) {
             self.dirty = true;
@@ -1032,6 +1119,24 @@ pub fn bubbles(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(String,
                 let (x, y) = bubble_at(o.x, o.y, cam_x, cam_y);
                 (text.to_string(), x, y)
             })
+        })
+        .collect()
+}
+
+/// The messages of the level's visible NPCs (`message` in a script, or
+/// the server's), as bubbles over each NPC, in view pixels.
+pub fn npc_bubbles(level: &Level, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    let t = render::TILE_PX as f32;
+    level
+        .npcs
+        .iter()
+        .filter(|n| n.visible && !n.message.trim().is_empty())
+        .map(|n| {
+            (
+                n.message.trim().to_string(),
+                (n.x + 1.0) * t - cam_x as f32,
+                n.y * t - cam_y as f32,
+            )
         })
         .collect()
 }
@@ -1178,6 +1283,37 @@ mod tests {
             file_npcs: 0,
             scripts: Vec::new(),
         }
+    }
+
+    /// With a build set, the GS2 scripts a level brings run on arrival
+    /// and tick with the game; their NPC messages show as bubbles.
+    #[test]
+    fn a_level_runs_its_gs2_scripts() {
+        use seihai_core::protocol::npcprops::NpcProps;
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V600R2);
+        let mut a = arrival(Some((30.0, 30.0)));
+        a.server_npc_props = vec![(
+            7,
+            NpcProps {
+                image: Some("block.png".into()),
+                x: Some(10.0),
+                y: Some(10.0),
+                ..Default::default()
+            },
+        )];
+        let src = "function onCreated() { message(\"hi\"); setTimer(0.05); }\n\
+                   function onTimeout() { message(\"later\"); }\n";
+        a.scripts = vec![(7, Ok(compile_gs2(src).unwrap()))];
+        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), a))
+            .unwrap();
+        g.tick(0, 0, Instant::now());
+        let level = g.session.current_level.as_ref().unwrap();
+        assert_eq!(npc_bubbles(level, 0, 0), vec![("hi".into(), 176.0, 160.0)]);
+        g.tick(0, 0, Instant::now() + Duration::from_millis(60));
+        let level = g.session.current_level.as_ref().unwrap();
+        assert_eq!(level.npcs[0].message, "later");
     }
 
     /// Closing the window drops the game, which tells the network thread

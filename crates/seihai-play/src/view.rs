@@ -11,7 +11,7 @@
 //!
 //! S swings the sword ([`Game::swing`]).
 
-use crate::game::{bubble_at, bubbles, name_tags, Game};
+use crate::game::{bubble_at, bubbles, name_tags, npc_bubbles, Game};
 use crate::render::{self, TILE_PX};
 use seihai_core::protocol::ChatKind;
 use std::time::{Duration, Instant};
@@ -143,6 +143,9 @@ impl View {
                 // Bubbles over the players who said something, the
                 // player's own included.
                 let mut said = bubbles(self.game.others(), cam_x, cam_y);
+                if let Some(level) = &self.game.session.current_level {
+                    said.extend(npc_bubbles(level, cam_x, cam_y));
+                }
                 if let Some(text) = self.game.own_bubble(now) {
                     let s = &self.game.session;
                     let (x, y) = bubble_at(s.player_x, s.player_y, cam_x, cam_y);
