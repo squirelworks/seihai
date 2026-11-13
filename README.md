@@ -233,3 +233,15 @@ Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in
 ## macOS builds
 
 `.github/workflows/macos.yml` builds, tests and lints the workspace on GitHub's hosted macOS 15 runners (Apple silicon and Intel), then runs `tools/launcher-smoke.sh`: the release `seihai` start window joins a loopback stand-in with 2.22, 3.04, 5.12, 6.03r7 and Graal3D, runs each client in the same process and comes back to the start window when the connection drops. It runs on demand, weekly, and on a PR that changes the launcher, the smoke or the workflow; `ci.yml` runs Linux and Windows on every PR, and the same smoke on Linux under Xvfb. The lab's Sequoia VM has no Metal device, so Mae's game window cannot open there.
+
+## Licence
+
+Seihai is licensed under either of [Apache License 2.0](LICENSE-APACHE) or
+[MIT](LICENSE-MIT), at your option, the same as
+[seihai-core](https://github.com/squirelworks/seihai-core) and the
+`license = "MIT OR Apache-2.0"` already in `Cargo.toml`. Unless you say
+otherwise, a contribution you submit is licensed the same way.
+
+Seihai is an independent fan project. It is not affiliated with, endorsed by,
+or connected to GraalOnline. "Graal" is used only to identify the games and
+servers Seihai works with.
