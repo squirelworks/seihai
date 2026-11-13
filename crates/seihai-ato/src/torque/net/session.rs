@@ -14,9 +14,10 @@ use super::events::{mission_start_answer, BigDataAssembler, ClassTable, Event, E
 use super::ghosts::{
     ClientGame, GameObjectUpdate, GhostChange, GhostState, Ghosts, Sky, Transform,
 };
-use super::graal_text::{self, GraalText};
+use super::graal_text::{self, Applied, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
+use super::scripts3d::{vm_version, Weapons3d};
 use super::tge::{self, ClientGame19, Control19, Game19Error, Phase, PhaseAcks};
 use crate::torque::TorqueProfile;
 use crate::view3d::{Shared3d, SharedInput3d};
@@ -252,7 +253,25 @@ pub fn run_with_sequence(
     let mut own = GameObjectUpdate::default();
     let mut last_move = Instant::now();
     let mut text = GraalText::default();
+    // The weapons' scripts, and the id of the next `events` text they send.
+    let mut weapons = Weapons3d::new(vm_version(profile.protocol));
+    let mut next_transfer: u32 = 0;
+    let mut last_tick = Instant::now();
     loop {
+        let ms = last_tick.elapsed().as_millis() as u64;
+        if ms > 0 {
+            last_tick += Duration::from_millis(ms);
+            weapons.tick(ms.min(1000));
+        }
+        for line in weapons.log.drain(..) {
+            let _ = writeln!(out, "3d: {line}");
+        }
+        if !weapons.events.is_empty() {
+            for ev in weapons.events.take(next_transfer) {
+                events.send(ev);
+            }
+            next_transfer = (next_transfer + 1) & 0xFFFF;
+        }
         if let Some(f) = files {
             fetch.take_answers(f, world, out);
         }
@@ -300,6 +319,13 @@ pub fn run_with_sequence(
             }
             for line in said {
                 let _ = writeln!(out, "3d: say {line}");
+                if let (Some(w), Some(i)) = (world, game.control) {
+                    w.lock().unwrap_or_else(|e| e.into_inner()).labels_of(
+                        i,
+                        None,
+                        Some(line.as_bytes()),
+                    );
+                }
                 own.chat = Some(line.into_bytes());
             }
         }
@@ -434,6 +460,13 @@ pub fn run_with_sequence(
                     Ok(d) => {
                         for a in text.apply(&d) {
                             let _ = writeln!(out, "3d: {}", a.describe());
+                            let script = match &a {
+                                Applied::WeaponScript { weapon, .. } => {
+                                    text.weapons.get(weapon).and_then(|w| w.script.as_deref())
+                                }
+                                _ => None,
+                            };
+                            weapons.applied(&a, script, &text.flags);
                         }
                     }
                     Err(e) => {
@@ -640,7 +673,7 @@ impl Fetch {
             if let Some(w) = world {
                 w.lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .shape_file(&a.name, a.data.as_deref());
+                    .file(&a.name, a.data.as_deref());
             }
             self.pending.retain(|p| !p.eq_ignore_ascii_case(&a.name));
             self.files.insert(a.name.to_ascii_lowercase(), a.data);
@@ -670,7 +703,14 @@ fn to_world(w: &mut crate::view3d::World3d, i: u32, g: &GhostState) {
         angle: t.angle,
     };
     match g {
-        GhostState::GameObject(u) => w.object(i, u.shape.as_deref(), u.transform.map(place)),
+        GhostState::GameObject(u) => {
+            w.object(i, u.shape.as_deref(), u.transform.map(place));
+            w.labels_of(
+                i,
+                u.nickname.as_ref().map(|(n, c)| (n.as_slice(), *c)),
+                u.chat.as_deref(),
+            );
+        }
         GhostState::Camera(u) => {
             if let Some(t) = u.transform {
                 w.camera = Some(place(t));
@@ -688,6 +728,12 @@ fn to_world(w: &mut crate::view3d::World3d, i: u32, g: &GhostState) {
             }
             if sky.fog_colour.is_some() {
                 w.fog_colour = sky.fog_colour;
+            }
+            if sky.visible_distance.is_some() {
+                w.visible_distance = sky.visible_distance;
+            }
+            if sky.textures.is_some() {
+                w.sky_textures = sky_textures(sky);
             }
         }
         GhostState::Other(_) => {}

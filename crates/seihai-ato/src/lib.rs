@@ -22,6 +22,7 @@
 
 pub mod app;
 pub mod args;
+pub mod dts;
 pub mod fields;
 pub mod game;
 pub mod graal3d;

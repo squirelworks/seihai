@@ -236,7 +236,26 @@ impl View {
                 // Other players' names under their markers, as the clients
                 // write a nickname under the player.
                 let (cam_x, cam_y) = render::camera_origin(&self.game.session, tiles.0, tiles.1);
-                for (nick, x, y) in name_tags(self.game.others(), cam_x, cam_y) {
+                let hidden = self.game.boards_hidden();
+                // In the 3D world: nicknames in their colour and chat over
+                // the objects.
+                for t in self.game.tags3d(tiles) {
+                    let at = origin + egui::vec2(t.x, t.y) * scale;
+                    if t.chat {
+                        outlined(ui.painter(), at, egui::Align2::CENTER_BOTTOM, &t.text);
+                    } else {
+                        let [r, g, b, a] = t.colour;
+                        ui.painter().text(
+                            at,
+                            egui::Align2::CENTER_BOTTOM,
+                            &t.text,
+                            egui::FontId::proportional(11.0),
+                            egui::Color32::from_rgba_unmultiplied(r, g, b, a.max(64)),
+                        );
+                    }
+                }
+                let flat = if hidden { &[][..] } else { self.game.others() };
+                for (nick, x, y) in name_tags(flat, cam_x, cam_y) {
                     ui.painter().text(
                         origin + egui::vec2(x, y) * scale,
                         egui::Align2::CENTER_TOP,
@@ -261,11 +280,11 @@ impl View {
                 }
                 // Bubbles over the players who said something, the
                 // player's own included.
-                let mut said = bubbles(self.game.others(), cam_x, cam_y);
-                if let Some(level) = &self.game.session.current_level {
+                let mut said = bubbles(flat, cam_x, cam_y);
+                if let Some(level) = self.game.session.current_level.as_ref().filter(|_| !hidden) {
                     said.extend(npc_bubbles(level, cam_x, cam_y));
                 }
-                if let Some(text) = self.game.own_bubble(now) {
+                if let Some(text) = self.game.own_bubble(now).filter(|_| !hidden) {
                     let s = &self.game.session;
                     let (x, y) = bubble_at(s.player_x, s.player_y, cam_x, cam_y);
                     said.push((text.to_string(), x, y));

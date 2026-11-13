@@ -19,6 +19,9 @@ path = "src/main.rs"
 seihai-core.workspace = true
 # The game loop and the flat renderer, shared with seihai-issho.
 seihai-play = { path = "../seihai-play" }
+# Its BMP reader, for the Sky's textures (#461). The launcher links it
+# already, so the program does not grow.
+seihai-g3d = { path = "../seihai-g3d", default-features = false }
 # The start window. Same versions as seihai-mae.
 eframe = "0.29"
 egui = "0.29"

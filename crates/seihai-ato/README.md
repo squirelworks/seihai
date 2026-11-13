@@ -54,11 +54,15 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   the TCP level boards, as the real clients do. The shapes and Sky textures
   the ghosts name are asked for over TCP through core's session, and
   login step 6 is logged once every request is answered. Graal text over
-  BigData (`graal_text`) is applied and logged: flags, `events`, weapons
-  and their scripts (kept, not run until the GS2 client VM takes them),
+  BigData (`graal_text`) is applied and logged: flags, `events`, weapons,
   `addnpc`, `setmaterials`, `rpg` and weapon texts; zlib transfers are
-  unpacked. `ClientEvents` builds the client's `events` text (`w`, `s`,
-  `t` lines). Nothing is drawn in 3D yet. 3.153 and 4.04r2 (protocol 19,
+  unpacked. The weapon scripts run on core's GS2 VM (`scripts3d`): the
+  top-level code and `onCreated` when a script comes, `onReceiveText`
+  for a weapon's text, sleeps and timers on the 50 ms frame. Bytecode is
+  run as sent; source text is compiled with core's compiler. What a script
+  sets (`set`, `client.` variables) and its `triggerserver` calls go back
+  as one `events` text (`s` and `t` lines). The world is drawn by `view3d`
+  (below). 3.153 and 4.04r2 (protocol 19,
   the stock Torque game layer, `torque::net::tge`) run as far as the
   static reads go and have not met a real protocol 19 server: the three
   mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
@@ -69,6 +73,16 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   a packet that carries it is skipped. Source: Graal_analysis
   `torque/udp-session.md` (§10 for protocol 19),
   `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
+- `view3d`, `three_ds` and `dts`: the 3D world as the link keeps it, drawn
+  flat shaded by a small software rasteriser. Shapes are `.3ds` and Torque
+  `.dts` (versions 23 to 25; the rest pose of the first detail level that is
+  not a billboard, placed by the nodes' default transforms; skins from their
+  initial vertices). The Sky's six textures (PNG, GIF or BMP) are drawn as a
+  box around the eye, else its solid colour; shapes fade into the fog colour
+  from half the visible distance and are not drawn past it. Nicknames (in
+  their colour) and chat go over each object, written by the window. Not
+  drawn yet: `.dif` interiors, `.ft` shapes, textures on shapes, and
+  terrain (no server sends `TerrainBlock` or terrain chunks yet).
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). Start opens the
   server list; with `--online`, it hands the form straight to Stage 2.
