@@ -15,7 +15,7 @@ pub mod signs;
 mod throw;
 mod tiles;
 
-pub use baddies::{draw_baddies, draw_baddy_verses, BaddyArt};
+pub use baddies::{draw_baddies, draw_baddy_verses, draw_sword_spark, BaddyArt};
 pub use npcs::{draw_npc_messages, draw_npcs, npc_sheets, NpcArt, NpcPass, NPC_DIR};
 pub use others::{look_images, other_blink_off, other_hidden, other_pose, OTHER_STEP_MS};
 pub use throw::{draw_floor_items, draw_sprite, draw_throw_layer, BombSheets};

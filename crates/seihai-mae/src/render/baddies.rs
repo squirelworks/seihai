@@ -78,6 +78,33 @@ pub fn draw_baddies(
     }
 }
 
+/// The spark on the local player's sword after it hit a baddy's sword:
+/// one piece of the sprite sheet, placed from where the player stood at the
+/// clash and picked by the player's facing now (see
+/// `seihai_core::baddies::SwordSpark`).
+pub fn draw_sword_spark(
+    fb: &mut Framebuffer,
+    session: &OfflineSession,
+    sprites: Option<Sheet<'_>>,
+    cam_x: i32,
+    cam_y: i32,
+) {
+    let (Some(spark), Some(sheet)) = (session.sword_spark, sprites) else {
+        return;
+    };
+    let tables = session.object_tables.as_ref();
+    let draw = DrawTables::from_tables(tables);
+    let (sx, sy) = (
+        (spark.x * TILE_PX as f64).round() as i32 - cam_x,
+        (spark.y * TILE_PX as f64).round() as i32 - cam_y,
+    );
+    for p in spark.pieces(&draw, session.player_dir) {
+        if let Some(r) = rect(tables, p.sprite) {
+            blit(fb, sheet, r, sx + p.dx, sy + p.dy);
+        }
+    }
+}
+
 /// The verse each baddy says, centred over `(x + 1, y - 2)`.
 pub fn draw_baddy_verses(
     fb: &mut Framebuffer,

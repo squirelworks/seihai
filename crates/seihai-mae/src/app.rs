@@ -1607,6 +1607,8 @@ pub fn main(args: Vec<String>) {
     session.baddy_image_ext = profile.files.image_ext.to_string();
     // Who drops bush and pot items: the 1.x roll, or the server.
     session.set_drops(profile.drops);
+    // Lava and the swamp soldier's sword window of this build.
+    session.set_world_rules(profile.world);
     let view_w = 40u32;
     let view_h = 30u32;
     let load = |dir: &str, name: &str| {
@@ -1966,6 +1968,14 @@ pub fn main(args: Vec<String>) {
             session,
             &npc_art,
             chat_font.as_ref(),
+            cam_x,
+            cam_y,
+        );
+        // The spark of a sword clash, over the player.
+        seihai::render::draw_sword_spark(
+            &mut fb,
+            session,
+            sprites.as_ref().map(pose_sheet),
             cam_x,
             cam_y,
         );
