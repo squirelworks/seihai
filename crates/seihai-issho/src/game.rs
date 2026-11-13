@@ -4,20 +4,25 @@
 //! the ones not on disk (`WANTFILE`).
 //!
 //! The loop is `seihai-play`'s [`Game`], the one `seihai-ato` runs; Issho
-//! does not depend on Ato. Issho has no start window yet: `--online` and
-//! `--account` log in at once, and `--level` plays level files offline.
+//! does not depend on Ato. Issho has no start window of its own: the
+//! `seihai` program's shared start window hands a 6.x pick over with
+//! `--online` and `--account`, which log in at once, as they do from the
+//! command line. `--level` plays level files offline.
 //!
-//! This is the shared flat stand-in, not the 6.x playfield: no OpenGL
-//! presenter, no `GuiGraalCtrl`, no FMOD and no GS2 (see [`crate::shell`]).
+//! The window is the 6.x size, 1024 x 768, with the 6.x default status
+//! display (`seihai_play::hud`), both from a lab run of the real 6.00r2
+//! and 6.03r7 clients (#444). The level is still drawn by the shared flat
+//! renderer: no OpenGL presenter, no `GuiGraalCtrl`, no FMOD and no GS2
+//! (see [`crate::shell`]).
 
 use crate::cli::Online;
 use seihai_core::protocol::ClientVersion;
 use seihai_play::game::{self, Game};
 use seihai_play::view::View;
 
-/// The window in pixels. The 6.x client opens at 640 x 480 as 3.x does
-/// until a lab run of a 6.x build says otherwise.
-pub const CANVAS: (f32, f32) = (640.0, 480.0);
+/// The window in pixels: 1024 x 768, the client area of the real
+/// Windows 6.00r2 and Linux 6.03r7 (lab, #444). The playfield fills it.
+pub const CANVAS: (f32, f32) = (1024.0, 768.0);
 
 /// The game in the window.
 pub struct IsshoApp {
@@ -60,6 +65,7 @@ pub fn run(o: &Online, sound_on: bool) -> Result<(), String> {
             );
             let mut g = Game::new(rx, resolver.as_ref(), sound_on)?;
             g.attach(live);
+            g.show_hud();
             Ok(Box::new(IsshoApp {
                 view: View::new(g, CANVAS),
             }))
@@ -77,7 +83,8 @@ pub fn run_offline(
     sound_on: bool,
 ) -> Result<(), String> {
     let resolver = game::resolver(assets.as_ref(), version);
-    let g = Game::open_offline(resolver.as_ref(), level, sound_on)?;
+    let mut g = Game::open_offline(resolver.as_ref(), level, sound_on)?;
+    g.show_hud();
     let title = format!("Graal {} (Seihai Issho, offline)", version.label());
     let app = IsshoApp {
         view: View::new(g, CANVAS),
@@ -91,7 +98,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_window_is_40_by_30_tiles() {
-        assert_eq!(seihai_play::view::view_tiles(CANVAS), (40, 30));
+    fn the_window_is_64_by_48_tiles() {
+        assert_eq!(seihai_play::view::view_tiles(CANVAS), (64, 48));
     }
 }

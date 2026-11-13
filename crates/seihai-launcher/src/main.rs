@@ -197,10 +197,6 @@ fn main() -> ExitCode {
         let label = profile.map_or("3.x", |p| p.label);
         eprintln!("seihai: {label} is a Torque (3.x to 5.x) build; Ato draws it with the flat 2D fallback (no Torque 3D yet)");
     }
-    if line == Line::Issho {
-        let label = profile.map_or("6.x", |p| p.label);
-        eprintln!("seihai: {label} is a v6 build; Issho draws it with the flat 2D fallback (no 6.x playfield yet)");
-    }
     if dry_run {
         println!("would run: {} {}", line.subcommand(), shown(&args));
         return ExitCode::SUCCESS;
@@ -231,8 +227,16 @@ fn start_window(mut error: Option<String>, dry_run: bool) -> ExitCode {
         if let Some((var, value)) = h.env() {
             std::env::set_var(var, value);
         }
-        // The start window comes back whatever the game's exit code.
-        let _ = run_line(h.line(), h.args());
+        // The start window comes back whatever the game's exit code; a
+        // client that refused the pick (a 6.x join with no password, say)
+        // says so there as well as on the console.
+        let line = h.line();
+        if run_line(line, h.args()) != ExitCode::SUCCESS {
+            error = Some(format!(
+                "{} stopped with an error (the console has the details).",
+                line.name()
+            ));
+        }
     }
 }
 

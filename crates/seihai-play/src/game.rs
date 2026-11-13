@@ -15,6 +15,7 @@
 //! the egui view ([`crate::view`]), so that Issho runs the same loop.
 
 use crate::chars::{self, Characters, Figure};
+use crate::hud::{self, HudArt, HudValues};
 use crate::render::{self, Frame, NpcImages, Players, Sheet};
 use seihai_core::assets::{
     AssetResolver, AssetRoot, Gani, GaniPlayer, Level, LISTENER_DX, LISTENER_DY,
@@ -23,7 +24,7 @@ use seihai_core::client::level::Arrival;
 use seihai_core::client::{self as online, Live};
 use seihai_core::gmap::Gmap;
 use seihai_core::offline::OfflineSession;
-use seihai_core::protocol::{ClientVersion, SessionState};
+use seihai_core::protocol::{ChatLine, ClientVersion, SessionState};
 use seihai_core::sound::{self, SoundEngine};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
@@ -102,7 +103,30 @@ pub struct Game {
     crossings_sent: u64,
     /// The name of the level `session.current_level` holds (online).
     level_here: Option<String>,
+    /// Where the network thread puts the player's own counters.
+    pub own: online::SharedOwn,
+    /// The counters drawn last frame.
+    drawn_own: online::OwnStats,
+    /// Where typed lines go for the network thread to say.
+    pub say: Arc<Mutex<Vec<String>>>,
+    /// Where the network thread puts the chat lines that come in.
+    pub chat_in: online::SharedChat,
+    /// The chat lines taken so far (toalls, PMs, admin lines and what was
+    /// said in the level), oldest first, with when each came.
+    chat: Vec<(ChatLine, Instant)>,
+    /// The player's own bubble and when it was said.
+    own_bubble: Option<(String, Instant)>,
+    /// The status display's pictures, when the line draws one
+    /// ([`Game::show_hud`]).
+    hud: Option<HudArt>,
 }
+
+/// How many chat lines the game keeps.
+pub const CHAT_KEEP: usize = 100;
+
+/// How long the player's own bubble stays: core's bubble time.
+pub const OWN_BUBBLE: std::time::Duration =
+    std::time::Duration::from_millis(seihai_core::chatlists::BUBBLE_MS as u64);
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
 /// are the footsteps and the water, as in `seihai-mae`.
@@ -178,6 +202,13 @@ impl Game {
             net_world: None,
             crossings_sent: 0,
             level_here: None,
+            own: Default::default(),
+            drawn_own: Default::default(),
+            say: Default::default(),
+            chat_in: Default::default(),
+            chat: Vec::new(),
+            own_bubble: None,
+            hud: None,
         })
     }
 
@@ -685,6 +716,66 @@ impl Game {
         self.board_mods = live.board_mods;
         self.npc_changes = live.npc_changes;
         self.closed = live.closed;
+        self.own = live.own;
+        self.say = live.say;
+        self.chat_in = live.chat;
+    }
+
+    /// Draw the status display over the level (hearts, gralats, bombs,
+    /// arrows, AP and the item slots), from the build's `state.png`.
+    pub fn show_hud(&mut self) {
+        self.hud = Some(HudArt::load(self.resolver.as_ref()));
+        self.dirty = true;
+    }
+
+    /// True when the status display is drawn.
+    pub fn has_hud(&self) -> bool {
+        self.hud.is_some()
+    }
+
+    /// Say `text` in the level: the network thread sends it, and the
+    /// player's own bubble shows it. Blank text says nothing.
+    pub fn say(&mut self, text: &str, now: Instant) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        self.say
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(text.to_string());
+        self.own_bubble = Some((text.to_string(), now));
+    }
+
+    /// The player's own bubble, while it lasts.
+    pub fn own_bubble(&self, now: Instant) -> Option<&str> {
+        self.own_bubble
+            .as_ref()
+            .filter(|(_, at)| now.saturating_duration_since(*at) < OWN_BUBBLE)
+            .map(|(t, _)| t.as_str())
+    }
+
+    /// The chat lines taken so far, oldest first, with when each came.
+    pub fn chat(&self) -> &[(ChatLine, Instant)] {
+        &self.chat
+    }
+
+    /// Take the chat lines and the counters the network thread put out.
+    /// True when either changed.
+    fn take_chat_and_counters(&mut self, now: Instant) -> bool {
+        let lines = std::mem::take(&mut *self.chat_in.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut changed = !lines.is_empty();
+        self.chat.extend(lines.into_iter().map(|l| (l, now)));
+        if self.chat.len() > CHAT_KEEP {
+            let extra = self.chat.len() - CHAT_KEEP;
+            self.chat.drain(..extra);
+        }
+        let own = *self.own.lock().unwrap_or_else(|e| e.into_inner());
+        if own != self.drawn_own {
+            self.drawn_own = own;
+            changed |= self.hud.is_some();
+        }
+        changed
     }
 
     /// One turn of the loop: take what the network thread sent, walk one
@@ -696,6 +787,9 @@ impl Game {
         self.walk(dx, dy, now);
         self.tick_poses(now);
         self.play_sounds();
+        if self.take_chat_and_counters(now) {
+            self.dirty = true;
+        }
         let others = self
             .others
             .lock()
@@ -732,14 +826,18 @@ impl Game {
             others: &others,
             clock_ms: self.started.elapsed().as_millis() as u64,
         };
-        render::draw(
+        let mut f = render::draw(
             &self.session,
             &self.sheet,
             &self.npc_images,
             players,
             view.0,
             view.1,
-        )
+        );
+        if let Some(art) = &self.hud {
+            hud::draw(&mut f, art, &HudValues::of(&self.drawn_own));
+        }
+        f
     }
 
     /// The other players as last taken.
@@ -770,6 +868,28 @@ pub fn name_tags(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(Strin
             })
         })
         .collect()
+}
+
+/// Where each bubble goes, in view pixels: centred over the 48x48 box of
+/// the player who said it, as the clients draw chat over the head.
+pub fn bubbles(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    others
+        .iter()
+        .filter_map(|o| {
+            let text = o.chat.as_deref()?.trim();
+            (!text.is_empty()).then(|| {
+                let (x, y) = bubble_at(o.x, o.y, cam_x, cam_y);
+                (text.to_string(), x, y)
+            })
+        })
+        .collect()
+}
+
+/// Where a bubble for a player at `(x, y)` tiles goes in view pixels: the
+/// middle of the top of the 48x48 box.
+pub fn bubble_at(x: f32, y: f32, cam_x: i32, cam_y: i32) -> (f32, f32) {
+    let t = render::TILE_PX as f32;
+    ((x + 1.5) * t - cam_x as f32, y * t - cam_y as f32)
 }
 
 /// The asset folders for `version`, when `--assets` named one.
@@ -1214,6 +1334,64 @@ mod tests {
             tags,
             vec![("Ann".to_string(), 11.5 * 16.0 - 100.0, 23.0 * 16.0 - 200.0)]
         );
+    }
+
+    /// Bubbles go over the players who said something, and only them.
+    #[test]
+    fn bubbles_go_over_the_players_who_spoke() {
+        let other = |id, chat: Option<&str>| online::Other {
+            id,
+            x: 10.0,
+            y: 20.0,
+            chat: chat.map(Into::into),
+            ..Default::default()
+        };
+        let got = bubbles(&[other(1, Some("hi")), other(2, None)], 100, 200);
+        assert_eq!(
+            got,
+            vec![("hi".to_string(), 11.5 * 16.0 - 100.0, 20.0 * 16.0 - 200.0)]
+        );
+    }
+
+    /// A typed line goes to the network thread and shows as the player's
+    /// own bubble for the bubble time; a blank one does neither.
+    #[test]
+    fn saying_queues_the_line_and_shows_the_bubble() {
+        let (mut g, _tx) = game();
+        let t0 = Instant::now();
+        g.say("  ", t0);
+        assert!(g.say.lock().unwrap().is_empty());
+        assert_eq!(g.own_bubble(t0), None);
+        g.say(" hello ", t0);
+        assert_eq!(*g.say.lock().unwrap(), vec!["hello".to_string()]);
+        assert_eq!(g.own_bubble(t0 + Duration::from_millis(100)), Some("hello"));
+        assert_eq!(g.own_bubble(t0 + OWN_BUBBLE), None);
+    }
+
+    /// Chat lines from the network thread are kept in order, and new
+    /// counters redraw the frame only when the status display is drawn.
+    #[test]
+    fn chat_and_counters_come_in() {
+        use seihai_core::protocol::ChatKind;
+        let (mut g, _tx) = game();
+        let now = Instant::now();
+        let line = |text: &str| ChatLine {
+            kind: ChatKind::Toall,
+            from: "Ann".into(),
+            text: text.into(),
+            born_ms: 0,
+        };
+        g.chat_in.lock().unwrap().extend([line("a"), line("b")]);
+        assert!(g.take_chat_and_counters(now));
+        let texts: Vec<_> = g.chat().iter().map(|(l, _)| l.text.as_str()).collect();
+        assert_eq!(texts, ["a", "b"]);
+        assert!(!g.take_chat_and_counters(now), "taken once");
+        g.own.lock().unwrap().bombs = Some(9);
+        assert!(!g.take_chat_and_counters(now), "no status display");
+        g.show_hud();
+        g.own.lock().unwrap().bombs = Some(8);
+        assert!(g.take_chat_and_counters(now));
+        assert!(g.has_hud());
     }
 
     /// A folder with `levels/a.nw` (a link east to `b.nw`) and `levels/b.nw`.
