@@ -1,0 +1,98 @@
+17:24:55 seihai-listserver 0.1.1 starting, config ./ls.toml
+17:24:55 secure login (SEI00001): made a new key qGwt47+OUouYkymczHyV0OUUZCbQELWz6OtMcNqG+hg, fingerprint SHA256:vl//z7zPNwdvXHQYWf2sz4lEQO7nUfu+HYDhXRWC8BQ
+17:24:55 listening on 127.0.0.1:14900 for gservers and 127.0.0.1:14921, 127.0.0.1:14922, 127.0.0.1:14923 for clients; accounts: open (every account gets in)
+17:24:55 gserver allow-list: off
+17:24:55 login failures: 30 per 60s per address
+17:24:55 silent list (shape S): after 500 ms
+17:25:58 gserver 1 connected from 127.0.0.1
+17:25:58 gserver 1 register 4.0.0-beta (2026-11-13 16:19)
+17:25:58 gserver 1 newserver Lab Modern port 14805 version 4.0.0-beta (2026-11-13 16:19) ip 127.0.0.1
+17:25:58 gserver 1 hq level 1
+17:25:58 gserver 1 sendtext Listserver,settings,allowedversions,G3D17026:G3D0511C
+17:25:58 gserver 2 connected from 127.0.0.1
+17:25:58 gserver 2 register 4.0.0-beta (2026-11-13 16:19)
+17:25:58 gserver 2 newserver Login port 14815 version 4.0.0-beta (2026-11-13 16:19) ip 127.0.0.1
+17:25:58 gserver 2 hq level 1
+17:25:58 gserver 2 sendtext Listserver,settings,allowedversions,G3D17026:G3D0511C
+17:25:58 gserver 3 connected from 127.0.0.1
+17:25:58 gserver 3 register 4.0.0-beta (2026-11-13 16:19)
+17:25:58 gserver 3 newserver Enigma (2005) port 14806 version 4.0.0-beta (2026-11-13 16:19) ip 127.0.0.1
+17:25:58 gserver 3 hq level 1
+17:25:58 gserver 3 sendtext Listserver,settings,allowedversions,GNW24011:GNW28015,G3D03014:G3D28015
+17:26:46 client 4 on 14922 from 127.0.0.1
+17:26:46 client 4 handshake id 7, gen 5, token G3D30123, list newmain
+17:26:46 client 4 account lab400a
+17:26:46 client 4 closed
+17:27:03 gserver 3 veriacc2 lab400a type 32, identity 0 bytes: ok
+17:27:03 gserver 3 player add 3 type 32, now 1
+17:28:21 gserver 3 player rem 3, now 0
+17:28:34 client 5 on 14922 from 127.0.0.1
+17:28:34 client 5 handshake id 7, gen 5, token G3D30123, list newmain
+17:28:34 client 5 account lab400b
+17:28:34 client 5 closed
+17:28:40 gserver 3 veriacc2 lab400b type 32, identity 0 bytes: ok
+17:28:40 gserver 3 player add 3 type 32, now 1
+17:29:01 gserver 3 veriacc2 lab400c type 32, identity 0 bytes: ok
+17:29:01 gserver 3 player add 4 type 32, now 2
+17:29:37 gserver 3 player rem 3, now 1
+17:29:37 gserver 3 player rem 4, now 0
+17:29:45 client 6 on 14922 from 127.0.0.1
+17:29:45 client 6 list name newmain
+17:29:45 client 6 closed
+17:29:56 status: 3 server(s), 0 player(s)
+17:30:03 gserver 1 veriacc2 lab400d type 32, identity 12 bytes: ok
+17:30:03 gserver 1 player add 3 type 32, now 1
+17:30:03 gserver 1 unhandled id 26:  #GraalEngine,pmguilds,\"\"
+17:30:03 gserver 1 unhandled id 26:  #GraalEngine,pmservers,\"\"
+17:30:03 gserver 1 unhandled id 26:  #GraalEngine,lister,verifybuddies,1,0
+17:30:17 client 7 on 14922 from 127.0.0.1
+17:30:17 client 7 list name newmain
+17:30:17 client 7 closed
+17:30:23 gserver 1 veriacc2 lab400e type 32, identity 24 bytes: ok
+17:30:24 gserver 1 player add 4 type 32, now 2
+17:31:00 gserver 1 player rem 3, now 1
+17:31:00 gserver 1 player rem 4, now 0
+17:31:02 gserver 1 veriacc2 lab400k512 type 32, identity 24 bytes: ok
+17:31:02 gserver 1 player add 3 type 32, now 1
+17:31:17 gserver 1 player rem 3, now 0
+17:31:19 gserver 1 veriacc2 lab400k500r7 type 32, identity 12 bytes: ok
+17:31:19 gserver 1 player add 3 type 32, now 1
+17:31:33 gserver 1 player rem 3, now 0
+17:31:45 gserver 3 veriacc2 lab400k3153 type 32, identity 0 bytes: ok
+17:31:45 gserver 3 player add 3 type 32, now 1
+17:32:01 gserver 3 player rem 3, now 0
+17:32:03 gserver 2 veriacc2 lab400w420r8 type 32, identity 12 bytes: ok
+17:32:03 gserver 2 player add 3 type 32, now 1
+17:32:03 gserver 2 serverinfo Lab Modern: 127.0.0.1 14805
+17:32:03 gserver 2 player rem 3, now 0
+17:32:03 gserver 1 veriacc2 lab400w420r8 type 32, identity 12 bytes: ok
+17:32:03 gserver 1 player add 3 type 32, now 1
+17:32:03 gserver 1 unhandled id 26:  #GraalEngine,pmguilds,\"\"
+17:32:03 gserver 1 unhandled id 26:  #GraalEngine,pmservers,\"\"
+17:32:03 gserver 1 unhandled id 26:  #GraalEngine,lister,verifybuddies,1,0
+17:32:28 gserver 1 player rem 3, now 0
+17:32:28 gserver 2 veriacc2 lab400w500r7 type 32, identity 12 bytes: ok
+17:32:28 gserver 2 player add 3 type 32, now 1
+17:32:28 gserver 2 serverinfo Lab Modern: 127.0.0.1 14805
+17:32:28 gserver 2 player rem 3, now 0
+17:32:28 gserver 1 veriacc2 lab400w500r7 type 32, identity 12 bytes: ok
+17:32:28 gserver 1 player add 3 type 32, now 1
+17:32:53 gserver 1 player rem 3, now 0
+17:32:53 gserver 2 veriacc2 lab400w512 type 32, identity 24 bytes: ok
+17:32:53 gserver 2 player add 3 type 32, now 1
+17:32:53 gserver 2 serverinfo Lab Modern: 127.0.0.1 14805
+17:32:53 gserver 2 player rem 3, now 0
+17:32:53 gserver 1 veriacc2 lab400w512 type 32, identity 24 bytes: ok
+17:32:53 gserver 1 player add 3 type 32, now 1
+17:33:18 gserver 1 player rem 3, now 0
+17:33:33 gserver 1 veriacc2 lab400p500 type 32, identity 12 bytes: ok
+17:33:33 gserver 1 player add 3 type 32, now 1
+17:33:39 gserver 1 veriacc2 lab400p404 type 32, identity 12 bytes: ok
+17:33:39 gserver 1 player add 4 type 32, now 2
+17:33:39 gserver 1 unhandled id 26:  $GraalEngine,pmguilds,\"\"
+17:33:39 gserver 1 unhandled id 26:  $GraalEngine,pmservers,\"\"
+17:33:39 gserver 1 unhandled id 26:  $GraalEngine,lister,verifybuddies,1,0
+17:33:55 gserver 1 player rem 4, now 1
+17:33:55 gserver 1 player rem 3, now 0
+17:34:26 gserver 2 closed: Login, entry dropped
+17:34:26 gserver 1 closed: Lab Modern, entry dropped
