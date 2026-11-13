@@ -3,17 +3,19 @@
 //! start.
 //!
 //! Built from §10 of the clean-room note "The Torque UDP session, start
-//! to first ghost" (Graal_analysis `torque/udp-session.md`) and
-//! `graal3d/torque-engine-4x.md`, both static reads of the clients, and
-//! from the open (MIT) Torque3D connection messages. No real 3.153 or
-//! 4.04r2 client or server has been run past the handshake, so what is
-//! here is the part those reads fix:
+//! to first ghost" (Graal_analysis `torque/udp-session.md`),
+//! `graal3d/torque-engine-4x.md` and the later static read of the 4.04r2
+//! `Graal3DEngine.dll` behind the protocol 19 lab server (connection
+//! message numbers, moves, `Camera` packet data). No real 3.153 or
+//! 4.04r2 client has been run past the handshake, so what is here is the
+//! part those reads fix:
 //!
-//! - the server's game section up to the control object's or camera's
-//!   own packet data, which is stock `Player` / `Camera` data with no
-//!   length prefix and not read yet ([`Game19Error::PacketData`]);
-//! - the client's game section with **no moves** (a move count of 0)
-//!   until the move layout is traced;
+//! - the server's game section, with a `Camera` control object's or
+//!   camera's packet data read ([`CameraPacket`]); any other class's
+//!   packet data (stock `Player`) has no length prefix and is not read
+//!   yet ([`Game19Error::PacketData`]);
+//! - the client's game section with moves ([`Move`]): only the walk
+//!   axes are filled, the angles and triggers stay clear;
 //! - `SimDataBlockEvent` headers, each datablock's fields skipped by the
 //!   event's length;
 //! - the mission start answers: 4.04r2 acks each phase with the bare
@@ -30,22 +32,171 @@ use super::ghosts::{read_vec3, write_vec3, GhostState, Ghosts, Vec3};
 /// The most moves one client packet may carry (`int5`).
 pub const MAX_MOVES: usize = 30;
 
-/// Stock Torque connection messages (`ConnectionMessageEvent`), with
-/// `GameConnection`'s two datablock messages after them. The six stock
-/// names are listed in every Graal build (`open-source-lineage.md`); the
-/// numbering and the datablock pair follow Torque3D (MIT) and are not
-/// traced on a Graal client yet.
+/// Connection messages (`ConnectionMessageEvent`) as the 4.04r2 client
+/// numbers them: TGE 1.x's five `NetConnection` messages, then
+/// `GameConnection`'s datablock pair at 5 and 6. (Torque3D has a sixth
+/// `NetConnection` message and numbers the pair 6 and 7.) Static read of
+/// the 4.04r2 client, not traced yet.
 pub mod message {
     pub const GHOST_ALWAYS_DONE: u32 = 0;
     pub const READY_FOR_NORMAL_GHOSTS: u32 = 1;
     pub const END_GHOSTING: u32 = 2;
     pub const GHOST_ALWAYS_STARTING: u32 = 3;
     pub const SEND_NEXT_DOWNLOAD_REQUEST: u32 = 4;
-    pub const FILE_DOWNLOAD_SIZE: u32 = 5;
     /// Server: every datablock of this sequence has been sent.
-    pub const DATA_BLOCKS_DONE: u32 = 6;
+    pub const DATA_BLOCKS_DONE: u32 = 5;
     /// Client: the datablocks of this sequence are loaded.
-    pub const DATA_BLOCKS_DOWNLOAD_DONE: u32 = 7;
+    pub const DATA_BLOCKS_DOWNLOAD_DONE: u32 = 6;
+}
+
+/// A `Camera`'s packet data, as the control object or camera in the
+/// server's game section:
+///
+/// ```text
+/// f32 energy, f32 recharge rate   (ShapeBase)
+/// 3 × f32 position, f32 rot.x (pitch), f32 rot.z (yaw)
+/// int3 mode: 0 stationary, 1 free rotate, 2 fly, 3 orbit object, 4 orbit point
+///   3 and 4: 3 × f32 orbit distances (min, max, current)
+///   3: flag, int12 the orbited ghost; 4: a compressed point (not read)
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct CameraPacket {
+    pub position: Vec3,
+    pub pitch: f32,
+    pub yaw: f32,
+    pub mode: u32,
+}
+
+impl CameraPacket {
+    /// `None` for a mode this reader cannot get past (orbit point, or a
+    /// value above 4).
+    pub fn read(r: &mut BitReader<'_>) -> Result<Option<Self>, OutOfBits> {
+        r.f32()?;
+        r.f32()?;
+        let position = read_vec3(r)?;
+        let pitch = r.f32()?;
+        let yaw = r.f32()?;
+        let mode = r.int(3)?;
+        match mode {
+            0..=2 => {}
+            3 => {
+                read_vec3(r)?;
+                r.flag()?;
+                r.int(12)?;
+            }
+            _ => return Ok(None),
+        }
+        Ok(Some(CameraPacket {
+            position,
+            pitch,
+            yaw,
+            mode,
+        }))
+    }
+
+    /// Writes it with zero energy and recharge (orbit modes not written).
+    pub fn write(&self, w: &mut BitWriter) {
+        w.f32(0.0);
+        w.f32(0.0);
+        write_vec3(w, self.position);
+        w.f32(self.pitch);
+        w.f32(self.yaw);
+        w.int(self.mode.min(2), 3);
+    }
+}
+
+/// One move, as the 4.04r2 client packs it:
+///
+/// ```text
+/// flag → int16 yaw, flag → int16 pitch, flag → int16 roll
+/// int6 x, int6 y, int6 z     (16 is no movement)
+/// flag free look, 10 trigger flags
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Move {
+    pub yaw: Option<u16>,
+    pub pitch: Option<u16>,
+    pub roll: Option<u16>,
+    pub x: u8,
+    pub y: u8,
+    pub z: u8,
+    pub free_look: bool,
+    pub triggers: [bool; 10],
+}
+
+impl Default for Move {
+    fn default() -> Self {
+        Move {
+            yaw: None,
+            pitch: None,
+            roll: None,
+            x: Move::STILL,
+            y: Move::STILL,
+            z: Move::STILL,
+            free_look: false,
+            triggers: [false; 10],
+        }
+    }
+}
+
+impl Move {
+    /// An axis value meaning no movement.
+    pub const STILL: u8 = 16;
+
+    /// A walk: `forward` and `strafe` from -1 to 1 (keys held), no turn.
+    pub fn walk(forward: i8, strafe: i8) -> Self {
+        let axis = |v: i8| (i32::from(Move::STILL) + 16 * i32::from(v.signum())) as u8;
+        Move {
+            x: axis(strafe),
+            y: axis(forward),
+            ..Move::default()
+        }
+    }
+
+    pub fn write(&self, w: &mut BitWriter) {
+        for a in [self.yaw, self.pitch, self.roll] {
+            if let Some(v) = a {
+                w.flag(true);
+                w.int(v.into(), 16);
+            } else {
+                w.flag(false);
+            }
+        }
+        for v in [self.x, self.y, self.z] {
+            w.int(u32::from(v) & 0x3f, 6);
+        }
+        w.flag(self.free_look);
+        for t in self.triggers {
+            w.flag(t);
+        }
+    }
+
+    pub fn read(r: &mut BitReader<'_>) -> Result<Self, OutOfBits> {
+        let mut angle = || -> Result<Option<u16>, OutOfBits> {
+            Ok(if r.flag()? {
+                Some(r.int(16)? as u16)
+            } else {
+                None
+            })
+        };
+        let (yaw, pitch, roll) = (angle()?, angle()?, angle()?);
+        let (x, y, z) = (r.int(6)? as u8, r.int(6)? as u8, r.int(6)? as u8);
+        let free_look = r.flag()?;
+        let mut triggers = [false; 10];
+        for t in &mut triggers {
+            *t = r.flag()?;
+        }
+        Ok(Move {
+            yaw,
+            pitch,
+            roll,
+            x,
+            y,
+            z,
+            free_look,
+            triggers,
+        })
+    }
 }
 
 /// The client's answer to a connection message, if it needs one: after
@@ -142,7 +293,11 @@ pub struct ServerGame19 {
     pub damage_flash: Option<f32>,
     pub white_out: Option<f32>,
     pub control: Control19,
+    /// The control object's packet data, when it is a `Camera`.
+    pub control_camera: Option<CameraPacket>,
     pub camera: Option<u32>,
+    /// The camera's packet data, when sent and the camera is a `Camera`.
+    pub camera_data: Option<CameraPacket>,
     pub field_of_view: Option<u8>,
 }
 
@@ -159,7 +314,7 @@ pub enum Game19Error {
     PacketData {
         index: u32,
         class: Option<String>,
-        game: ServerGame19,
+        game: Box<ServerGame19>,
     },
 }
 
@@ -179,6 +334,26 @@ fn class_of(ghosts: &Ghosts, index: u32) -> Result<Option<String>, Game19Error> 
         Some(_) => Ok(None),
         None => Err(Game19Error::UnknownGhost(index)),
     }
+}
+
+/// Reads a ghost's packet data: a `Camera`'s, or the error that stops
+/// the packet for any other class.
+fn camera_packet(
+    r: &mut BitReader<'_>,
+    index: u32,
+    class: Option<String>,
+    g: &ServerGame19,
+) -> Result<Option<CameraPacket>, Game19Error> {
+    if class.as_deref() == Some("Camera") {
+        if let Some(c) = CameraPacket::read(r)? {
+            return Ok(Some(c));
+        }
+    }
+    Err(Game19Error::PacketData {
+        index,
+        class,
+        game: Box::new(g.clone()),
+    })
 }
 
 /// Reads the server's game section (§10):
@@ -214,13 +389,10 @@ pub fn read_server_game(
             let class = class_of(ghosts, index)?;
             ghosts.control = Some(index);
             g.control = Control19::Object { server_time, index };
-            return Err(Game19Error::PacketData {
-                index,
-                class,
-                game: g,
-            });
+            g.control_camera = camera_packet(r, index, class, &g)?;
+        } else {
+            g.control = Control19::CompressionPoint(read_vec3(r)?);
         }
-        g.control = Control19::CompressionPoint(read_vec3(r)?);
     }
     if r.flag()? {
         let index = r.int(12)?;
@@ -228,11 +400,7 @@ pub fn read_server_game(
         ghosts.camera = Some(index);
         g.camera = Some(index);
         if r.flag()? {
-            return Err(Game19Error::PacketData {
-                index,
-                class,
-                game: g,
-            });
+            g.camera_data = camera_packet(r, index, class, &g)?;
         }
     }
     if r.flag()? {
@@ -251,15 +419,16 @@ pub fn read_server_game(
 /// flag → int8 field of view
 /// ```
 ///
-/// This client never sends its own state and sends no moves (the layouts
-/// of both are not read yet): the first move index is the server's last
-/// move ack and the count is 0.
+/// This client never sends its own state (only vehicles do): it sends
+/// moves, numbered from `first_move`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ClientGame19 {
     pub first_person: bool,
     pub position: Vec3,
     pub control: Option<u32>,
     pub first_move: u32,
+    /// At most [`MAX_MOVES`] are written.
+    pub moves: Vec<Move>,
     pub field_of_view: Option<u8>,
 }
 
@@ -284,7 +453,11 @@ impl ClientGame19 {
         }
         w.flag(false); // not its own state: moves
         w.u32(self.first_move);
-        w.int(0, 5); // no moves
+        let moves = &self.moves[..self.moves.len().min(MAX_MOVES)];
+        w.int(moves.len() as u32, 5);
+        for m in moves {
+            m.write(w);
+        }
         if let Some(f) = self.field_of_view {
             w.flag(true);
             w.u8(f);
@@ -293,41 +466,43 @@ impl ClientGame19 {
         }
     }
 
-    /// Reads what [`write`](Self::write) wrote (for a server or a test).
-    /// Moves, when a packet carries any, are not read.
-    pub fn read(r: &mut BitReader<'_>) -> Result<(Self, usize), OutOfBits> {
+    /// Reads a client game section (for a server or a test). `None` when
+    /// the client sent its own state, which has no length to skip by.
+    pub fn read(r: &mut BitReader<'_>) -> Result<Option<Self>, OutOfBits> {
         let first_person = r.flag()?;
         let position = read_vec3(r)?;
         let control = if r.flag()? { Some(r.int(12)?) } else { None };
-        let own_state = r.flag()?;
-        let (first_move, moves) = if own_state {
-            (0, 0)
-        } else {
-            (r.u32()?, r.int(5)? as usize)
-        };
-        let field_of_view = if moves == 0 && !own_state && r.flag()? {
-            Some(r.u8()?)
-        } else {
-            None
-        };
-        Ok((
-            ClientGame19 {
-                first_person,
-                position,
-                control,
-                first_move,
-                field_of_view,
-            },
+        if r.flag()? {
+            return Ok(None);
+        }
+        let first_move = r.u32()?;
+        let count = r.int(5)?;
+        let moves = (0..count)
+            .map(|_| Move::read(r))
+            .collect::<Result<Vec<_>, _>>()?;
+        let field_of_view = if r.flag()? { Some(r.u8()?) } else { None };
+        Ok(Some(ClientGame19 {
+            first_person,
+            position,
+            control,
+            first_move,
             moves,
-        ))
+            field_of_view,
+        }))
     }
 }
 
-/// Writes a server game section with no packet data (for a server or a
-/// test): the move ack, no flash, the control part as given (an
-/// [`Control19::Object`] is written without packet data, so only a
-/// reader that stops there can take it), no camera and no field of view.
-pub fn write_server_game(w: &mut BitWriter, last_move_ack: u32, control: Control19) {
+/// Writes a server game section (for a server or a test): the move ack,
+/// no flash, the control part as given, no camera and no field of view.
+/// An [`Control19::Object`] is followed by `data` (a `Camera`'s packet
+/// data); with no data the section stops there, as for a class whose
+/// packet data this module cannot write.
+pub fn write_server_game(
+    w: &mut BitWriter,
+    last_move_ack: u32,
+    control: Control19,
+    data: Option<&CameraPacket>,
+) {
     w.u32(last_move_ack);
     w.flag(false);
     match control {
@@ -339,7 +514,8 @@ pub fn write_server_game(w: &mut BitWriter, last_move_ack: u32, control: Control
             w.flag(true);
             w.u32(server_time);
             w.int(index, 12);
-            return;
+            let Some(d) = data else { return };
+            d.write(w);
         }
         Control19::CompressionPoint(p) => {
             w.flag(true);
@@ -358,12 +534,13 @@ mod tests {
     use crate::torque::net::handshake::ClassEntry;
 
     #[test]
-    fn the_client_game_section_carries_no_moves() {
-        let g = ClientGame19 {
+    fn the_client_game_section_carries_moves() {
+        let mut g = ClientGame19 {
             first_person: true,
             position: [1.0, 2.0, 3.0],
             control: Some(7),
             first_move: 42,
+            moves: Vec::new(),
             field_of_view: Some(90),
         };
         let mut w = BitWriter::new();
@@ -371,8 +548,30 @@ mod tests {
         // 1 + 96 + 13 + 1 + 32 + 5 + 9 bits.
         assert_eq!(w.bit_len(), 157);
         let bytes = w.into_bytes();
-        let (back, moves) = ClientGame19::read(&mut BitReader::new(&bytes)).unwrap();
-        assert_eq!((back, moves), (g, 0));
+        assert_eq!(
+            ClientGame19::read(&mut BitReader::new(&bytes)).unwrap(),
+            Some(g.clone())
+        );
+
+        // A still move is 3 + 18 + 11 bits; a turn adds 16.
+        g.moves = vec![
+            Move::walk(1, 0),
+            Move {
+                yaw: Some(0x1234),
+                triggers: [true; 10],
+                ..Move::walk(-1, 1)
+            },
+        ];
+        let mut w = BitWriter::new();
+        g.write(&mut w);
+        assert_eq!(w.bit_len(), 157 + 32 + 48);
+        let bytes = w.into_bytes();
+        let back = ClientGame19::read(&mut BitReader::new(&bytes))
+            .unwrap()
+            .unwrap();
+        assert_eq!(back, g);
+        assert_eq!((back.moves[0].x, back.moves[0].y), (16, 32));
+        assert_eq!((back.moves[1].x, back.moves[1].y), (32, 0));
 
         let mut w = BitWriter::new();
         ClientGame19::before_control().write(&mut w);
@@ -403,13 +602,15 @@ mod tests {
                 damage_flash: Some(1.0),
                 white_out: None,
                 control: Control19::CompressionPoint([4.0, 5.0, 6.0]),
+                control_camera: None,
                 camera: None,
+                camera_data: None,
                 field_of_view: Some(75),
             }
         );
 
         let mut w = BitWriter::new();
-        write_server_game(&mut w, 3, Control19::Unchanged);
+        write_server_game(&mut w, 3, Control19::Unchanged, None);
         let bytes = w.into_bytes();
         let g = read_server_game(&mut BitReader::new(&bytes), &mut ghosts).unwrap();
         assert_eq!(g.last_move_ack, 3);
@@ -427,6 +628,7 @@ mod tests {
                 server_time: 1000,
                 index: 2,
             },
+            None,
         );
         let bytes = w.into_bytes();
         assert_eq!(
@@ -450,6 +652,60 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(ghosts.control, Some(2));
+    }
+
+    #[test]
+    fn a_camera_control_object_is_read_and_the_packet_goes_on() {
+        let mut ghosts = Ghosts::opaque();
+        ghosts
+            .ghosts
+            .insert(0, GhostState::Other(Some("Camera".into())));
+        let cam = CameraPacket {
+            position: [1.0, 2.0, 3.0],
+            pitch: 0.5,
+            yaw: -1.0,
+            mode: 2,
+        };
+        let mut w = BitWriter::new();
+        write_server_game(
+            &mut w,
+            4,
+            Control19::Object {
+                server_time: 7,
+                index: 0,
+            },
+            Some(&cam),
+        );
+        w.flag(true); // a marker after the game section
+        let bytes = w.into_bytes();
+        let mut r = BitReader::new(&bytes);
+        let g = read_server_game(&mut r, &mut ghosts).unwrap();
+        assert_eq!(g.control_camera, Some(cam));
+        assert_eq!(g.last_move_ack, 4);
+        assert!(r.flag().unwrap());
+
+        // Orbiting an object carries three distances and the object.
+        let mut w = BitWriter::new();
+        for v in [0.0, 0.0, 1.0, 2.0, 3.0, 0.5, -1.0] {
+            w.f32(v);
+        }
+        w.int(3, 3);
+        for v in [1.0, 9.0, 5.0] {
+            w.f32(v);
+        }
+        w.flag(true);
+        w.int(12, 12);
+        let bytes = w.into_bytes();
+        let c = CameraPacket::read(&mut BitReader::new(&bytes)).unwrap();
+        assert_eq!(c.map(|c| c.mode), Some(3));
+        // Orbiting a point is not read.
+        let mut w = BitWriter::new();
+        for _ in 0..7 {
+            w.f32(0.0);
+        }
+        w.int(4, 3);
+        let bytes = w.into_bytes();
+        assert_eq!(CameraPacket::read(&mut BitReader::new(&bytes)), Ok(None));
     }
 
     fn cmd(name: &[u8], args: Vec<Arg>) -> Command {

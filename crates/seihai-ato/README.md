@@ -67,11 +67,14 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   static reads go and have not met a real protocol 19 server: the three
   mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
   not), datablocks are counted by class, the stock ghosting and
-  datablocks-done connection messages are answered, ghosts are kept by
-  class name, and the client sends its position with no moves. The control
-  object's own packet data (stock `Player`) is not read yet, so the rest of
-  a packet that carries it is skipped. Source: Graal_analysis
-  `torque/udp-session.md` (§10 for protocol 19),
+  datablocks-done connection messages are answered (TGE 1.x numbering,
+  5 and 6), ghosts are kept by class name, a `Camera` control object's
+  packet data is read (it places the view), and the up and down keys go
+  out as moves numbered from the server's move ack. A `Player` control
+  object's packet data is not read yet, so the rest of a packet that
+  carries one is skipped. Source: Graal_analysis `torque/udp-session.md`
+  (§10 for protocol 19), `torque/protocol19-server.md` (the 4.04r2
+  static read behind the protocol 19 lab server: messages, moves, Camera),
   `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
 - `view3d`, `three_ds` and `dts`: the 3D world as the link keeps it, drawn
   flat shaded by a small software rasteriser. Shapes are `.3ds` and Torque
