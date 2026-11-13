@@ -1,0 +1,27 @@
+[2026-11-14 03:52:15] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: *lab509five | 2b 2a 6c 61 62 35 30 39 66 69 76 65
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+--
+[2026-11-14 03:52:16] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: *lab509five | 2b 2a 6c 61 62 35 30 39 66 69 76 65
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+--
+[2026-11-14 03:52:40] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: *lab509fivezero | 2f 2a 6c 61 62 35 30 39 66 69 76 65 7a 65 72 6f
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
+--
+[2026-11-14 03:52:40] PlayerProps::getPropsPacketFromList:
+  PlayerProp::ID: value: 3
+  PlayerProp::NICKNAME: value: *lab509fivezero | 2f 2a 6c 61 62 35 30 39 66 69 76 65 7a 65 72 6f
+  PlayerProp::SWORDIMAGE: image: sword1.png, power: 1 | 3f 2a 73 77 6f 72 64 31 2e 70 6e 67
+  PlayerProp::SHIELDIMAGE: image: shield1.png, power: 1 | 2b 2b 73 68 69 65 6c 64 31 2e 70 6e 67
+  PlayerProp::GANI: gani: idle | 24 69 64 6c 65
