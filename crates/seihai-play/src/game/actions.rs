@@ -165,6 +165,15 @@ impl Game {
         if self.drawn_own.rupees.is_some() {
             v.rupees = s.rupees;
         }
+        // On a level, once the build runs the life rules, the hearts are
+        // the session's: a hit taken here lowers them at once, and
+        // gserver-v2 does not echo the CURPOWER back (Windows lab,
+        // 2026-11-13). The server's values reach the session through
+        // `take_own_power`.
+        if s.current_level.is_some() && self.life.version.is_some() {
+            v.half_hearts = s.hearts_half();
+            v.max_half_hearts = s.max_hearts;
+        }
         v
     }
 
