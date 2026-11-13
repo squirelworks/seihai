@@ -9,9 +9,15 @@
 //! plain fills. Start opens the server list ([`crate::server_list`]), or
 //! logs in at once when `--online` names a game server. Tutorial (offline
 //! mode) and Options only say they are not in Ato yet.
+//!
+//! Run on its own (`seihai ato`), the window starts from the account,
+//! nickname and typed listserver the `seihai` start window saved
+//! (`seihai_play::start::Saved`, `launcher.conf`) and saves them back on
+//! Start, never the password.
 
 use crate::online::Login;
 use seihai_core::protocol::ClientVersion;
+use seihai_play::start::Saved;
 use std::sync::{Arc, Mutex};
 
 /// A control's place inside the login panel, in the client's 640×480
@@ -197,6 +203,38 @@ impl StartWindow {
         }
     }
 
+    /// Fill the fields the command line left empty from the shared start
+    /// window's saved form (`launcher.conf`), so `seihai ato` and the
+    /// `seihai` start window remember the same account. A listserver is
+    /// taken only when the user typed one there.
+    pub fn fill_from(&mut self, saved: &Saved) {
+        if self.account.is_empty() {
+            if let Some(a) = &saved.account {
+                self.account = a.clone();
+            }
+        }
+        if self.nick.is_empty() {
+            // The saved nickname goes with the saved account only.
+            self.nick = saved
+                .nick
+                .clone()
+                .filter(|_| saved.account.as_deref() == Some(self.account.as_str()))
+                .unwrap_or_else(|| self.account.clone());
+        }
+        if let Some(ls) = &saved.listserver {
+            self.listserver = ls.clone();
+        }
+    }
+
+    /// The shared form with this window's account and nickname in it. The
+    /// password is never saved.
+    pub fn remembered(&self, mut saved: Saved) -> Saved {
+        let some = |s: &str| Some(s.to_string()).filter(|s| !s.is_empty());
+        saved.account = some(&self.account).or(saved.account);
+        saved.nick = some(&self.nick).or(saved.nick);
+        saved
+    }
+
     pub fn press_tutorial(&mut self) {
         self.status = format!(
             "{}: 3.x offline mode is not in Ato yet.",
@@ -321,6 +359,52 @@ impl StartWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn saved(account: &str, nick: &str, listserver: Option<&str>) -> Saved {
+        Saved {
+            account: Some(account.into()),
+            nick: Some(nick.into()),
+            listserver: listserver.map(String::from),
+            ..Saved::default()
+        }
+    }
+
+    #[test]
+    fn the_saved_form_fills_only_what_the_command_line_left_empty() {
+        let mut w = StartWindow::new(ClientVersion::V304, "".into(), "".into(), "".into());
+        let default_ls = w.listserver.clone();
+        w.fill_from(&saved("lab", "Lab Nick", None));
+        assert_eq!((w.account.as_str(), w.nick.as_str()), ("lab", "Lab Nick"));
+        assert_eq!(
+            w.listserver, default_ls,
+            "no typed listserver: follow the version"
+        );
+
+        let mut w = StartWindow::new(ClientVersion::V304, "".into(), "me".into(), "".into());
+        w.fill_from(&saved("lab", "Lab Nick", Some("127.0.0.1:14922")));
+        assert_eq!(w.account, "me");
+        assert_eq!(w.nick, "me", "another account's nickname is not borrowed");
+        assert_eq!(w.listserver, "127.0.0.1:14922");
+    }
+
+    #[test]
+    fn start_remembers_the_account_and_nickname_but_not_the_password() {
+        let w = StartWindow::new(
+            ClientVersion::V3153,
+            "N".into(),
+            "acc".into(),
+            "secret".into(),
+        );
+        let s = w.remembered(saved("old", "Old", Some("h:1")));
+        assert_eq!(s.account.as_deref(), Some("acc"));
+        assert_eq!(s.nick.as_deref(), Some("N"));
+        assert_eq!(s.listserver.as_deref(), Some("h:1"));
+        assert!(!s.text().contains("secret"));
+
+        let empty = StartWindow::new(ClientVersion::V3153, "".into(), "".into(), "".into());
+        let s = empty.remembered(saved("old", "Old", None));
+        assert_eq!(s.account.as_deref(), Some("old"));
+    }
 
     #[test]
     fn controls_fit_in_the_panel() {

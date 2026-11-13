@@ -47,11 +47,14 @@ impl AtoApp {
         }
     }
 
-    /// As [`AtoApp::new`], but log in at once with the form as given when it
-    /// names a server and an account (`--online` and `--account`), as if
-    /// Start had been pressed. For lab runs that cannot press Start.
-    pub fn new_skipping_start(start: StartWindow, assets: Option<PathBuf>) -> AtoApp {
-        let skip_start = skips_start(&start);
+    /// As [`AtoApp::new`], but with `skip_start` log in at once with the
+    /// form as given, as if Start had been pressed. For lab runs that cannot
+    /// press Start (see [`skips_start`]).
+    pub fn new_skipping_start(
+        start: StartWindow,
+        assets: Option<PathBuf>,
+        skip_start: bool,
+    ) -> AtoApp {
         AtoApp {
             start,
             game: None,
@@ -95,6 +98,11 @@ impl AtoApp {
 impl AtoApp {
     /// Act on where Start went.
     fn next(&mut self, next: Next, ctx: &egui::Context) {
+        if next != Next::Stay {
+            self.start
+                .remembered(seihai_play::start::Saved::load())
+                .save();
+        }
         match next {
             Next::Stay => {}
             Next::Login(addr) => self.login_at(addr, ctx),
@@ -176,19 +184,21 @@ pub fn run_offline(
         .map_err(|e| e.to_string())
 }
 
-/// True when the form names a server and an account, so the start window
-/// can be skipped.
+/// True when the command line names a server and an account, so the start
+/// window can be skipped. Decided before the saved form fills the window,
+/// so a remembered account never logs in on its own.
 pub fn skips_start(start: &StartWindow) -> bool {
     start.online.is_some() && !start.account.is_empty()
 }
 
-/// Open the window and block until it is closed. With a server and an
-/// account given, the start window is skipped (see [`skips_start`]).
+/// Open the window and block until it is closed. With `skip_start` the
+/// start window is skipped (see [`skips_start`]).
 pub fn run(
     version: ClientVersion,
     start: StartWindow,
     assets: Option<PathBuf>,
     sound_on: bool,
+    skip_start: bool,
 ) -> Result<(), String> {
     let title = format!("Graal {} (Seihai Ato)", version.label());
     let options = eframe::NativeOptions {
@@ -197,7 +207,7 @@ pub fn run(
             .with_resizable(false),
         ..Default::default()
     };
-    let mut app = AtoApp::new_skipping_start(start, assets);
+    let mut app = AtoApp::new_skipping_start(start, assets, skip_start);
     app.sound_on = sound_on;
     seihai_play::window::run_native(&title, options, Box::new(move |_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())

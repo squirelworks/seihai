@@ -50,7 +50,7 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         None => String::new(),
     };
     let account = a.account.unwrap_or_default();
-    let nick = a.nick.unwrap_or_else(|| account.clone());
+    let nick = a.nick.unwrap_or_default();
     // `--level` with no server: play the level files offline.
     if let (Some(level), None) = (a.level.as_deref(), a.online.as_deref()) {
         return match game::run_offline(version, level, a.assets.map(Into::into), !a.no_sound) {
@@ -65,10 +65,18 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
         w.graal3d = a.graal3d;
+        let skip_start = game::skips_start(&w);
+        w.fill_from(&seihai_play::start::Saved::load());
         if let Some(ls) = a.listserver.clone() {
             w.listserver = ls;
         }
-        return match game::run(version, w, a.assets.map(Into::into), !a.no_sound) {
+        return match game::run(
+            version,
+            w,
+            a.assets.map(Into::into),
+            !a.no_sound,
+            skip_start,
+        ) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("seihai-ato: could not open the window: {e}");
@@ -79,6 +87,11 @@ pub fn main(argv: Vec<String>) -> ExitCode {
     let Some(addr) = a.online else {
         eprintln!("seihai-ato: --no-window needs --online host:port");
         return ExitCode::from(2);
+    };
+    let nick = if nick.is_empty() {
+        account.clone()
+    } else {
+        nick
     };
     let login = online::Login {
         account,
