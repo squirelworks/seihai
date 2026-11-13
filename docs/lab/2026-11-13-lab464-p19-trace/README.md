@@ -144,3 +144,16 @@ The three scripts were decoded from the 2005 Linux payload's `scripts\*.cs.dso` 
 
 - `decoded/missionDownload.cs.txt`, `missionDownload2.cs.txt`, `serverConnection.cs.txt`, `main3D.cs.txt`, `message.cs.txt`: decompiled source view, plus `*.dis.txt` disassembly
 - `graalexe-2005-server-strings.txt`: the server-related strings from the unpacked 2005 engine, with line numbers in the full strings dump
+
+## 5. Re-check, 2026-11-14
+
+- I re-decoded `missionDownload.cs.dso`, `missionDownload2.cs.dso` and `serverConnection.cs.dso` from fresh scratch copies. The output is byte-for-byte the same as `decoded/` (CRLF aside).
+- Source sha256 values:
+  - `missionDownload.cs.dso` `eb6966928f483c2b9422ab1a6d3d2cd2fe921ca40508100e094afea57afe45c9`
+  - `missionDownload2.cs.dso` `1a498bda44049fd76c3d83e5df3317d9e54fc1f0cd289fc580af37cfc2671e96`
+  - `serverConnection.cs.dso` `c10f51d2d4737a183d840436d2f6d5277c414ba3069fea9193b0578ef2238097`
+- `setSnowBallPosition` has a `?:` that `dsodec.py` shows as an empty `goto`. From the disassembly (offsets 46-77) it is `%snowprogress = %progress > 0.2 ? 0.05 + (%progress - 0.2) * 0.95 / 0.8 : %progress / 4.0`. It is GUI only.
+- Both `%screenw` and `%screenh` read `getWord(LoadingGui.extent, 0)`. That is in the original bytecode, not a decode error.
+- `clientCmdClearCenterPrint` and `clientCmdclearBottomPrint`, called from `disconnectedCleanup()`, are defined in `centerPrint.cs.dso` (checked).
+- `disconnectedCleanup()` order: `HudMessageVector.clear()`, `alxStopAll()`, `MusicPlayer.stop()` if it exists, hide `LagIcon`, clear bottom and center print, `clearTextureHolds()`, `purgeResources()`, `Canvas.setContent(MainMenuGui2D)`.
+- The UPX step was skipped again. Section 4 uses the copy that an earlier lab unpacked.
