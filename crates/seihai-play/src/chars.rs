@@ -24,9 +24,12 @@ use std::collections::HashMap;
 pub const STEP_MS: u64 = 50;
 /// The dead bit of the STATUS prop (18).
 pub const STATUS_DEAD: u8 = 0x08;
+/// The hidden bit of the STATUS prop (18): the player hides under what
+/// they carry (core's `HIDDEN_STATUS`).
+pub const STATUS_HIDDEN: u8 = seihai_core::offline::HIDDEN_STATUS;
 
 /// The poses drawn, by the GANI file's stem.
-const POSES: [&str; 11] = [
+const POSES: [&str; 17] = [
     "idle",
     "walk",
     "swim",
@@ -38,7 +41,25 @@ const POSES: [&str; 11] = [
     "carry",
     "carrystill",
     "dead",
+    "push",
+    "pull",
+    "grab",
+    "lift",
+    "hidden",
+    "hiddenstill",
 ];
+
+/// The pose drawn in place of one whose GANI is in neither the asset
+/// folders nor core's built-in set: a push, pull or grab stands, a lift
+/// holds the object up. `hidden` and `hiddenstill` have none: without
+/// them nothing of the figure is drawn (core's `current_pose`).
+fn stand_in(pose: &str) -> Option<&'static str> {
+    match pose {
+        "push" | "pull" | "grab" => Some("idle"),
+        "lift" => Some("carrystill"),
+        _ => None,
+    }
+}
 
 /// The default sword and shield when the server has not named one.
 const DEFAULT_SWORD: &str = "sword1.png";
@@ -62,6 +83,12 @@ pub struct Figure {
     pub sword: Option<String>,
     pub shield: Option<String>,
     pub attrs: [Option<String>; 5],
+    /// What another player holds over the head (CARRYSPRITE, 19), drawn
+    /// with them. The player's own is drawn with the effects.
+    pub carry: Option<u16>,
+    /// The STATUS hidden bit: the player hides under what they carry, so
+    /// only the object is drawn, at their feet (2.05's watcher).
+    pub hidden: bool,
 }
 
 /// Which step of the pose GANI.
@@ -170,6 +197,18 @@ impl Characters {
         self.ganis.get(pose)
     }
 
+    /// A figure in `pose` can be drawn: its GANI or its stand-in's is here.
+    pub fn can_draw(&self, pose: &str) -> bool {
+        self.drawn_gani(pose).is_some()
+    }
+
+    /// The GANI a figure in `pose` is drawn from: its own, else its stand-in.
+    fn drawn_gani(&self, pose: &str) -> Option<&Gani> {
+        self.ganis
+            .get(pose)
+            .or_else(|| stand_in(pose).and_then(|p| self.ganis.get(p)))
+    }
+
     /// Read the pictures these figures need that were not looked for yet.
     /// True if any was added.
     pub fn load_pictures(&mut self, resolver: Option<&AssetResolver>, figures: &[Figure]) -> bool {
@@ -207,7 +246,7 @@ impl Characters {
                 out.push((dir, name.to_string(), None));
             }
         }
-        if let Some(g) = self.ganis.get(f.pose) {
+        if let Some(g) = self.drawn_gani(f.pose) {
             for i in 0..5 {
                 if let Some(a) = looks::attr_image(&f.attrs, g, i) {
                     out.push((looks::attr_dir(i), a.to_string(), None));
@@ -225,7 +264,7 @@ impl Characters {
     /// steps a pose that runs on the clock. Nothing is drawn when the
     /// pose GANI is missing.
     pub fn draw(&self, dst: &mut PixelBuffer, f: &Figure, clock_ms: u64, dx: i32, dy: i32) {
-        let Some(gani) = self.ganis.get(f.pose) else {
+        let Some(gani) = self.drawn_gani(f.pose) else {
             return;
         };
         let n = gani.frame_count();
@@ -284,8 +323,14 @@ pub fn other_pose(o: &Other) -> (&'static str, Step) {
             "hurt" => Some(("hurt", Step::Clock)),
             "sit" => Some(("sit", Step::At(0))),
             "sleep" => Some(("sleep", Step::At(0))),
-            "carrystill" | "lift" => Some(("carrystill", Step::At(0))),
+            "carrystill" => Some(("carrystill", Step::At(0))),
+            "lift" => Some(("lift", Step::Clock)),
             "carry" => Some(("carry", Step::Clock)),
+            "push" => Some(("push", Step::Clock)),
+            "pull" => Some(("pull", Step::Clock)),
+            "grab" => Some(("grab", Step::At(0))),
+            "hidden" => Some(("hidden", Step::Clock)),
+            "hiddenstill" => Some(("hiddenstill", Step::At(0))),
             "dead" => Some(("dead", Step::At(usize::MAX))),
             _ => None,
         };
@@ -300,6 +345,11 @@ pub fn other_pose(o: &Other) -> (&'static str, Step) {
             Step::At(WALK_S.iter().position(|&w| w == s).unwrap_or(0)),
         ),
         6..=10 => ("sword", Step::At(usize::from(s - 6))),
+        // The 2.05 push, grab and pull numbers (core's `PUSH_SPRITE_S`,
+        // `GRAB_SPRITE_S`, `PULL_SPRITE_S`).
+        11..=13 => ("push", Step::At(usize::from(s - 11))),
+        14 => ("grab", Step::At(0)),
+        15..=17 => ("pull", Step::At(usize::from(s - 15))),
         18 => ("carrystill", Step::At(0)),
         19 | 20 => ("carry", Step::At(usize::from(s - 19))),
         28 => ("sit", Step::At(0)),
@@ -312,6 +362,7 @@ pub fn other_pose(o: &Other) -> (&'static str, Step) {
 pub fn other_figure(o: &Other) -> Figure {
     let l = &o.looks;
     let (pose, step) = other_pose(o);
+    let dead = o.status.is_some_and(|s| s & STATUS_DEAD != 0);
     let named = |n: &Option<String>, d: &str| {
         n.as_deref()
             .filter(|n| !n.is_empty())
@@ -330,6 +381,8 @@ pub fn other_figure(o: &Other) -> Figure {
         sword: l.sword.clone(),
         shield: l.shield.clone(),
         attrs: l.attrs.clone(),
+        carry: o.carry.filter(|_| !dead),
+        hidden: !dead && o.status.is_some_and(|s| s & STATUS_HIDDEN != 0),
     }
 }
 
@@ -364,6 +417,8 @@ pub fn own_figure(
         sword: None,
         shield: None,
         attrs: looks.attrs.clone(),
+        carry: None,
+        hidden: false,
     }
 }
 
@@ -405,6 +460,27 @@ mod tests {
             other_pose(&other(Some(4 * 32), Some("dance"))),
             ("hurt", Step::At(0))
         );
+        // Pushing, grabbing and pulling, by name or by the 2.05 numbers.
+        assert_eq!(
+            other_pose(&other(None, Some("push"))),
+            ("push", Step::Clock)
+        );
+        assert_eq!(
+            other_pose(&other(Some(4 * 12), None)),
+            ("push", Step::At(1))
+        );
+        assert_eq!(
+            other_pose(&other(Some(4 * 14 + 3), None)),
+            ("grab", Step::At(0))
+        );
+        assert_eq!(
+            other_pose(&other(Some(4 * 17), None)),
+            ("pull", Step::At(2))
+        );
+        assert_eq!(
+            other_pose(&other(None, Some("hiddenstill"))),
+            ("hiddenstill", Step::At(0))
+        );
         let mut dead = other(Some(4 * 2), Some("walk"));
         dead.status = Some(STATUS_DEAD);
         assert_eq!(other_pose(&dead).0, "dead");
@@ -428,6 +504,34 @@ mod tests {
         assert!(c.picture("", "sprites.png", None).is_some());
         // Looked for once.
         assert!(!c.load_pictures(None, &[f]));
+    }
+
+    /// With no push, pull, grab or lift GANI in the asset folders, the
+    /// figure stands (or holds the object up) instead of vanishing; with no
+    /// `hidden` GANI nothing of a hidden figure is drawn.
+    #[test]
+    fn a_pose_with_no_gani_stands_in_or_draws_nothing() {
+        let mut c = Characters::load(None);
+        let mut o = other(None, None);
+        o.x = 1.0;
+        o.y = 1.0;
+        let stand = other_figure(&o);
+        c.load_pictures(None, std::slice::from_ref(&stand));
+        let draw = |pose: &'static str| {
+            let mut f = stand.clone();
+            f.pose = pose;
+            let mut buf = PixelBuffer::filled(96, 96, [0, 0, 0, 255]);
+            c.draw(&mut buf, &f, 0, 16, 16);
+            buf.rgba
+        };
+        let idle = draw("idle");
+        assert!(c.gani("push").is_none(), "no built-in push.gani");
+        for pose in ["push", "pull", "grab"] {
+            assert_eq!(draw(pose), idle, "{pose} stands");
+        }
+        assert_eq!(draw("lift"), draw("carrystill"));
+        let blank = PixelBuffer::filled(96, 96, [0, 0, 0, 255]).rgba;
+        assert_eq!(draw("hidden"), blank);
     }
 
     #[test]

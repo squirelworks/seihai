@@ -1,0 +1,66 @@
+name: macOS
+
+# macOS 15 on GitHub's hosted runners (#401, #469): the CI build, tests and
+# lints, then the one-program smoke (tools/launcher-smoke.sh): the start
+# window joins a loopback stand-in with one version of each line, runs the
+# client in the same process and comes back when the connection drops.
+# On demand, once a week, and on a PR that changes this workflow or the
+# smoke, so ordinary PRs do not wait on a macOS runner.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 5 * * 1'
+  pull_request:
+    paths:
+      - .github/workflows/macos.yml
+      - tools/launcher-smoke.sh
+      - crates/seihai-launcher/**
+
+concurrency:
+  group: macos-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        # arm64 (Apple silicon, Metal through the runner's paravirtual GPU)
+        # and Intel, the two macOS builds release.yml ships.
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --workspace
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+      - name: Format
+        if: ${{ !cancelled() }}
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Release seihai
+        if: ${{ !cancelled() }}
+        run: cargo build --release -p seihai --bin seihai
+      - name: One program, each line, back to the start window
+        if: ${{ !cancelled() }}
+        env:
+          SCREENSHOT: screencapture -x
+        run: |
+          tools/launcher-smoke.sh "$PWD/target/release/seihai" "$RUNNER_TEMP/smoke" \
+            2.22 3.04 5.12 6.03r7 graal3d
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: launcher-smoke-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/smoke/*.log
+            ${{ runner.temp }}/smoke/*.png
+          if-no-files-found: ignore

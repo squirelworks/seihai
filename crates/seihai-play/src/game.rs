@@ -157,6 +157,9 @@ pub struct Game {
     /// Draws the view while [`Game::boards_hidden`] is set (Ato's Graal3D
     /// world), given the frame's size in pixels; black without one.
     pub view3d: Option<View3d>,
+    /// The texts over the 3D world's objects while [`Game::boards_hidden`]
+    /// is set (Ato's nicknames and chat), for the frame's size in pixels.
+    pub tags3d: Option<Tags3d>,
     /// Takes the arrows (`dx`, `dy`) while [`Game::boards_hidden`] is set,
     /// in place of the flat walk (Ato's Graal3D walk).
     pub keys3d: Option<Keys3d>,
@@ -172,6 +175,9 @@ pub struct Game {
     /// Where the network thread puts the server's floor item changes
     /// (other players' drops, the items the server rolls).
     pub items: online::SharedItems,
+    /// Set by the network thread while the player leads the level: the
+    /// leader runs the level's baddies.
+    pub leader: Arc<std::sync::atomic::AtomicBool>,
     /// The spin, the weapon key, the lay mode and the item list
     /// ([`actions`]).
     actions: actions::Actions,
@@ -194,6 +200,21 @@ pub const OWN_BUBBLE: std::time::Duration =
 
 /// [`Game::view3d`].
 pub type View3d = Box<dyn Fn(u32, u32) -> Frame + Send>;
+
+/// One text over the 3D world, in frame pixels: its bottom centre.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tag3d {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    /// R, G, B, A.
+    pub colour: [u8; 4],
+    /// A chat bubble (outlined), not a nickname.
+    pub chat: bool,
+}
+
+/// [`Game::tags3d`].
+pub type Tags3d = Box<dyn Fn(u32, u32) -> Vec<Tag3d> + Send>;
 
 /// `walk.gani` and `swim.gani` into the session: their `PLAYSOUND` cues
 /// are the footsteps and the water, as in `seihai-mae`.
@@ -325,12 +346,14 @@ impl Game {
             boards_hidden: Default::default(),
             hidden_drawn: false,
             view3d: None,
+            tags3d: None,
             keys3d: None,
             say3d: None,
             weapons: Default::default(),
             level_objects: Default::default(),
             throws: Default::default(),
             items: Default::default(),
+            leader: Default::default(),
             actions: actions::Actions::new(),
             effect_sheets: EffectSheets::load(resolver),
         })
@@ -771,6 +794,8 @@ impl Game {
         self.session.combat.set_rules(p.life.combat);
         self.session.set_mannerisms(p.mannerisms);
         self.session.walk_sprite = !p.ui.ganis;
+        // Baddy pictures by the build's extension (2.0x names `.gif`).
+        self.session.baddy_image_ext = p.files.image_ext.to_string();
         self.session.gani_swing = matches!(version, ClientVersion::V222 | ClientVersion::V304)
             || seihai_core::protocol::lobby::LobbyBurst::for_version(version).is_some();
         self.set_action_version(version);
@@ -1072,6 +1097,7 @@ impl Game {
         self.level_objects = live.level_objects;
         self.throws = live.throws;
         self.items = live.items;
+        self.leader = live.leader;
     }
 
     /// Draw the status display over the level (hearts, gralats, bombs,
@@ -1242,6 +1268,15 @@ impl Game {
         f
     }
 
+    /// The texts over the 3D world for a `view` tiles wide and high, while
+    /// the 3D world is drawn; empty otherwise.
+    pub fn tags3d(&self, view: (u32, u32)) -> Vec<Tag3d> {
+        match (&self.tags3d, self.boards_hidden()) {
+            (Some(t), true) => t(view.0 * render::TILE_PX, view.1 * render::TILE_PX),
+            _ => Vec::new(),
+        }
+    }
+
     /// True while a Graal3D link is up and the TCP boards are not drawn.
     pub fn boards_hidden(&self) -> bool {
         self.boards_hidden
@@ -1265,6 +1300,8 @@ pub fn name_tags(others: &[online::Other], cam_x: i32, cam_y: i32) -> Vec<(Strin
     let t = render::TILE_PX as f32;
     others
         .iter()
+        // A hidden player's name is left out with the figure (2.05).
+        .filter(|o| o.status.is_none_or(|s| s & chars::STATUS_HIDDEN == 0))
         .filter_map(|o| {
             let nick = o.nick.as_deref()?.trim();
             (!nick.is_empty()).then(|| {
@@ -1309,6 +1346,12 @@ pub fn npc_bubbles(level: &Level, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f
             )
         })
         .collect()
+}
+
+/// The verse each baddy says, in view pixels: the top of the text centred
+/// over `(x + 1, y - 2)`, as Mae draws it.
+pub fn baddy_verses(s: &OfflineSession, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    crate::baddies::verses(s, cam_x, cam_y)
 }
 
 /// Where a bubble for a player at `(x, y)` tiles goes in view pixels: the

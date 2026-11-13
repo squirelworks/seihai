@@ -271,3 +271,49 @@ than an account-less 2.05-style request.
 The 2.05 list login answering on 14923 was already known from earlier runs;
 this run only matches it. 14922 was not tried with that login, and no real
 3.x, 4.x or 5.x client was captured against the public service.
+
+### Every list login, and the 4.x to 6.x Login server (2026-11-13)
+
+The owner ran `list_probe`'s double-click mode twice per pass, with two of
+their own real accounts, on their own machine (password typed, nothing
+kept). One connection per line, 10 s apart, no retries; the run would have
+stopped at a reply that looked like throttling. The two accounts got the
+same answers except for the list size noted below.
+
+**Listserver, every distinct list login** (21: the builds with no listserver
+of their own borrow 2.05's and are asked once under it):
+
+| Login (shape) | Builds | 14922 | 14923 |
+|---|---|---|---|
+| id 0 only (A) | 1.42, 2.00 to 2.05 | silent (no reply in 5 s) | accepted, 2 or 4 servers |
+| silent, then id 0 + id 1 (S, B fallback) | 1.41 | accepted, 2 servers | accepted, 4 servers |
+| id 0 + id 1 (B) | 2.1, 2.12 to 2.17 | accepted, 2 servers | accepted, 2 servers |
+| gen-5, `GNW30123` | 2.22, 2.3, 2.31 | accepted, 8 servers | accepted, 8 servers |
+| gen-5 one frame, `G3D30123` | 3.04, 3.153 | accepted, 8 servers | accepted, 8 servers |
+
+- 14923 answers every login Seihai sends. 14922 stays silent to the
+  id-0-only frame, as before, but now answers the classic id 0 + id 1 login
+  (2.1 to 2.17, and 1.41's fallback), which the 2026-10-25 matrix saw it
+  ignore. The port defaults are unchanged: 14923 still answers all of them.
+- The list grows with the login: 2 servers for the classic logins, up to 4
+  for the id-0-only frame on 14923 (2 or 4 between runs: the port sends an
+  old list and then the current one, and the count is the last one read in
+  the wait), and 8 for the gen-5 logins.
+
+**Login game server** (16 lobby builds, 4.04r2 to 6.03r7; the host is the
+one their license file names, on 14900; Seihai's game login with the three
+machine fields empty, `lobby.rs`):
+
+| Builds | Reply (PLO_DISCMESSAGE) |
+|---|---|
+| 4.04r2, 4.04r2 Mac, 4.20r6, 4.20r8, 5.00r7 | "You need Graal version Graal 5.1-6.04 to play on this server." |
+| 5.12, 5.12 Mac, 5.24r4, 5.30r3, 5.31r4, 6.00r2, 6.00r4, 6.015, 6.034, 6.03r7, 6.03r7 Linux | "An account with the name you typed in does not exist." |
+
+- That server checks the version first and accepts the 5.12 to 6.03r7
+  tokens, so their login reaches the account check. 4.x and 5.00r7 are
+  turned away by version.
+- Both accounts work on the public listserver but "do not exist" at this
+  Login server, which suggests it checks accounts against a different service than the
+  listserver. That would account for the rejection; nothing here shows the login
+  line itself is malformed. A run with an account of that service would
+  settle it.

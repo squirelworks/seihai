@@ -109,6 +109,26 @@ pub fn draw_floor_items(f: &mut Frame, s: &OfflineSession, sheets: &EffectSheets
     }
 }
 
+/// A held object, sprite `id`, with its top-left at `at` (tiles): over
+/// the head ([`t::carry_origin`]) or at the feet ([`t::hide_origin`]).
+pub fn draw_held(
+    f: &mut Frame,
+    s: &OfflineSession,
+    sheets: &EffectSheets,
+    id: u16,
+    at: (f32, f32),
+    cam: (i32, i32),
+) {
+    sprite(
+        f,
+        sheets.for_sprite(id),
+        s,
+        id,
+        px(at.0) - cam.0,
+        px(at.1) - cam.1,
+    );
+}
+
 /// The bombs, the item held in the lay mode, the blasts, the arrows and
 /// the break effects, over the players.
 pub fn draw_effects(f: &mut Frame, s: &OfflineSession, sheets: &EffectSheets, cam: (i32, i32)) {
@@ -157,17 +177,15 @@ pub fn draw_effects(f: &mut Frame, s: &OfflineSession, sheets: &EffectSheets, ca
             px(o.ground + 1.25) - cam_y,
         );
     }
-    // The carried object above the head.
+    // The carried object above the head; hidden under it (2.05 on), where
+    // the player stands.
     if let Some(id) = s.carried.as_ref().and_then(|c| t::carry_sprite(c.kind)) {
-        let (x, y) = t::carry_origin(s.player_x, s.player_y);
-        sprite(
-            f,
-            sheets.for_sprite(id),
-            s,
-            id,
-            px(x) - cam_x,
-            px(y) - cam_y,
-        );
+        let at = if s.figure_hidden() {
+            t::hide_origin(s.player_x, s.player_y)
+        } else {
+            t::carry_origin(s.player_x, s.player_y)
+        };
+        draw_held(f, s, sheets, id, at, cam);
     }
     // The item picked in the lay mode, centred above the head.
     if let Some(id) = s.laying.and_then(|i| {

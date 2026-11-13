@@ -217,11 +217,39 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         f.pose = "sit";
         f.step = chars::Step::At(0);
     }
-    // Lifting and carrying hold the object up (the lift shows as the
-    // still carry, as `lift.gani` is not among the poses drawn).
+    // Pushing against a wall (core's push tick), over the walk and the sit.
+    if let Some(t) = s.push_tick().filter(|_| !s.in_water) {
+        f.pose = "push";
+        f.step = chars::Step::At(gani_step(s.poses.push.as_ref(), t));
+    }
+    // Lifting and carrying hold the object up: the lift once, then the
+    // carry poses. Hidden under it (2.05 on), `hidden` / `hiddenstill`,
+    // which draw only a shadow; the object sits at the player's feet.
     if s.carried.is_some() && !s.in_water {
         f.pose = if s.walking { "carry" } else { "carrystill" };
         f.step = chars::Step::Clock;
+        if let Some(t) = s.lift_ticks {
+            f.pose = "lift";
+            f.step = chars::Step::At(t as usize);
+        }
+        if s.figure_hidden() {
+            f.pose = if s.walking { "hidden" } else { "hiddenstill" };
+            f.step = chars::Step::Clock;
+        }
+    }
+    // Holding a wall with A: the grab, or the pull once the arrow away
+    // from it was pressed; over carrying, as in core's pose order.
+    if !s.in_water {
+        if s.pushpull.pull_pose() {
+            f.pose = "pull";
+            f.step = chars::Step::At(gani_step(
+                s.poses.pull.as_ref(),
+                s.pushpull.pull_ticks as usize,
+            ));
+        } else if s.pushpull.grab.is_some() || s.pushpull.grab_shown {
+            f.pose = "grab";
+            f.step = chars::Step::At(0);
+        }
     }
     // A sword swing wins over the walk (core's pose order), and the spin
     // over both.
@@ -250,6 +278,11 @@ pub fn own_figure(s: &OfflineSession) -> Figure {
         f.step = chars::Step::At(usize::MAX);
     }
     f
+}
+
+/// The step of a looping pose GANI at `tick` 50 ms ticks; 0 without it.
+fn gani_step(g: Option<&seihai_core::assets::Gani>, tick: usize) -> usize {
+    g.map_or(0, |g| g.frame_at_tick(tick, true))
 }
 
 /// Draw the session's level around the player, `view_w` x `view_h` tiles,
@@ -367,6 +400,15 @@ pub fn draw(
     if let Some(sheets) = players.effects {
         crate::effects::draw_floor_items(&mut f, s, sheets, (cam_x, cam_y));
     }
+    // The baddies, under the players as in Mae.
+    crate::baddies::draw(
+        &mut f,
+        s,
+        npc_images,
+        players.effects.and_then(|e| e.sprites.as_ref()),
+        (cam_x, cam_y),
+        players.clock_ms / seihai_core::baddies::PLAYER_TICK_MS,
+    );
     // Other players, then the player over them: their GANI's frame, or a
     // marker where the pose GANI is missing.
     let figure = |f: &mut Frame, fig: &Figure, marker: [u8; 3]| {
@@ -374,15 +416,29 @@ pub fn draw(
             (fig.x * t as f32) as i32 - cam_x,
             (fig.y * t as f32) as i32 - cam_y,
         );
-        if players.chars.gani(fig.pose).is_some() {
+        if players.chars.can_draw(fig.pose) {
             players.chars.draw(f, fig, players.clock_ms, bx, by);
+        } else if matches!(fig.pose, "hidden" | "hiddenstill") {
+            // Hidden with no `hidden.gani`: nothing of the figure shows.
         } else {
             // The marker sits where the body would be.
             f.fill_rect(bx + 16, by + 24, 16, 16, rgba(marker));
         }
     };
+    // Another player's carried object goes over their head, or at their
+    // feet in place of the figure while they hide under it.
     for o in players.others {
-        figure(&mut f, o, MARKER_OTHER);
+        if !o.hidden {
+            figure(&mut f, o, MARKER_OTHER);
+        }
+        if let (Some(id), Some(sheets)) = (o.carry, players.effects) {
+            let at = if o.hidden {
+                seihai_core::throwing::hide_origin(o.x, o.y)
+            } else {
+                seihai_core::throwing::carry_origin(o.x, o.y)
+            };
+            crate::effects::draw_held(&mut f, s, sheets, id, at, (cam_x, cam_y));
+        }
     }
     let mut own = own_figure(s);
     // Without `spin.gani` (it is not built in) the spin shows as the swing.
@@ -717,6 +773,78 @@ mod tests {
         s.gmap.as_mut().unwrap().levels.clear();
         let f = draw(&s, &sheet, &images, none(), 40, 30);
         assert_ne!(px(&f, nx, ny), NPC_MISSING);
+    }
+
+    /// Holding a wall with A: the grab pose; the lift once, then the still
+    /// carry; hidden under a bush on 2.05, `hiddenstill`, and `hidden` on the
+    /// move.
+    #[test]
+    fn the_player_grabs_lifts_and_hides() {
+        let mut s = session(0);
+        s.pushpull.grab_shown = true;
+        assert_eq!(own_figure(&s).pose, "grab");
+        s.pushpull.grab_shown = false;
+        s.carried = Some(seihai_core::offline::Carried {
+            kind: 0,
+            tiles: [[0, 0], [0, 0]],
+        });
+        s.lift_ticks = Some(1);
+        let f = own_figure(&s);
+        assert_eq!((f.pose, f.step), ("lift", chars::Step::At(1)));
+        s.lift_ticks = None;
+        assert_eq!(own_figure(&s).pose, "carrystill");
+        s.set_mannerisms(
+            seihai_core::protocol::ClientVersion::V205
+                .profile()
+                .mannerisms,
+        );
+        assert!(s.toggle_hide());
+        assert_eq!(own_figure(&s).pose, "hiddenstill");
+        s.walking = true;
+        assert_eq!(own_figure(&s).pose, "hidden");
+    }
+
+    /// Another player's carried object is drawn over their head; hidden
+    /// under it, only the object shows, at their feet, and no marker.
+    #[test]
+    fn another_players_carried_object_is_drawn_and_hides_them() {
+        let sheet = Sheet::load(None).unwrap();
+        let mut s = session(0);
+        s.object_tables = Some(seihai_core::assets::ObjectTables {
+            sprites: vec![(8 << 6) | 6; 400],
+            ..Default::default()
+        });
+        let sheets = crate::effects::EffectSheets::load(None);
+        let (ox, oy) = (s.player_x + 6.0, s.player_y);
+        let mut o = seihai_core::client::Other {
+            x: ox,
+            y: oy,
+            carry: Some(261),
+            ..Default::default()
+        };
+        let frame = |o: &seihai_core::client::Other| {
+            let others = [chars::other_figure(o)];
+            let mut players = Players::markers(&others);
+            players.effects = Some(&sheets);
+            draw(&s, &sheet, &NpcImages::new(), players, 40, 30)
+        };
+        let (cam_x, cam_y) = camera_origin(&s, 40, 30);
+        let at = |(x, y): (f32, f32)| {
+            (
+                ((x * 16.0) as i32 - cam_x + 2) as u32,
+                ((y * 16.0) as i32 - cam_y + 2) as u32,
+            )
+        };
+        let marker = at((ox + 1.25, oy + 1.75));
+        let head = at(seihai_core::throwing::carry_origin(ox, oy));
+        let feet = at(seihai_core::throwing::hide_origin(ox, oy));
+        let f = frame(&o);
+        assert_eq!(px(&f, marker.0, marker.1), MARKER_OTHER);
+        assert_ne!(px(&f, head.0, head.1), [0, 0, 0], "over the head");
+        o.status = Some(chars::STATUS_HIDDEN);
+        let f = frame(&o);
+        assert_ne!(px(&f, marker.0, marker.1), MARKER_OTHER, "no figure");
+        assert_ne!(px(&f, feet.0, feet.1), [0, 0, 0], "at the feet");
     }
 
     /// On a chair the player is drawn sitting; walking off it, walking.
