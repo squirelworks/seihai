@@ -1,0 +1,6 @@
+onsets refined: 22.6616, 23.0456; level change 22.998 = 0.336 s into the first splash
+  model first splash FULL 0.438 s          : gains [0.853, 0.871], residual/signal energy 0.3054
+  model first splash CUT at level change   : gains [0.846, 0.87], residual/signal energy 0.3420
+onsets refined: 23.3443, 23.5149; level change 23.505 = 0.161 s into the first splash
+  model first splash FULL 0.438 s          : gains [0.852, 0.857, 0.813, 0.239], residual/signal energy 0.2411
+  model first splash CUT at level change   : gains [0.655, 0.848, 0.812, 0.239], residual/signal energy 0.5384

@@ -1,0 +1,161 @@
+beep found at 2.048 s into the recording (gain 0.50); times below are seconds after the beep event
+recording 38.3 s at 44100 Hz; peak abs 0.5014
+
+events (s after the beep):
+    -3.03 gserver-up
+     0.00 beep
+     0.17 rec-start
+     0.77 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+     4.49 focus Seihai Ato
+     4.49 focus 0x600004
+     4.49 shot /home/brian-hack/Claude/labs/lab466-levelchange-2026-11-14/out/r2/0-start.png
+     4.68 hold Down 0.2
+     4.68 down Down
+     4.88 up Down
+     4.88 wait 0.3
+     5.19 hold Down 3.3
+     5.19 down Down
+     5.52 ato: link to egk-10.graal at 54.5 19
+     5.84 ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs
+     8.49 up Down
+     8.49 wait 3
+    11.49 shot /home/brian-hack/Claude/labs/lab466-levelchange-2026-11-14/out/r2/1-egk10.png
+    11.80 hold Left 0.2
+    11.80 down Left
+    12.00 up Left
+    12.00 wait 0.3
+    12.30 hold Left 2.5
+    12.30 down Left
+    14.80 up Left
+    14.81 wait 3
+    17.81 hold Left 1.6
+    17.81 down Left
+    19.41 up Left
+    19.41 wait 1
+    20.41 shot /home/brian-hack/Claude/labs/lab466-levelchange-2026-11-14/out/r2/2-in-water.png
+    20.54 wait 1.75
+    22.30 hold Left 1.5
+    22.30 down Left
+    22.69 ato: link to onlinestartlocal.graal at 23.5 30.5
+    23.00 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+    23.80 up Left
+    23.80 wait 0.3
+    24.10 shot /home/brian-hack/Claude/labs/lab466-levelchange-2026-11-14/out/r2/3-arrived.png
+    24.22 wait 3
+    27.22 hold Down 1.0
+    27.23 down Down
+    28.23 up Down
+    28.23 wait 2
+    30.23 shot /home/brian-hack/Claude/labs/lab466-levelchange-2026-11-14/out/r2/4-end.png
+    30.48 stop
+    50.96 done
+
+water.wav onsets (7):
+    18.48  ncc 0.91  (after: down Left)
+    19.29  ncc 0.93  (after: down Left)
+    20.23  ncc 0.93  (after: wait 1)
+    21.04  ncc 0.93  (after: wait 1.75)
+    21.85  ncc 0.93  (after: wait 1.75)
+    22.66  ncc 0.86  (after: down Left)
+    23.05  ncc 0.83  (after: ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30)
+
+steps2.wav onsets (36):
+     4.89  ncc 0.99  (after: wait 0.3)
+     5.49  ncc 0.99  (after: down Down)
+     6.04  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     6.21  ncc 0.98  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     6.43  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     6.64  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     6.81  ncc 0.98  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     7.02  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     7.24  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     7.45  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     7.62  ncc 0.98  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     7.83  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     8.05  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     8.26  ncc 0.99  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+     8.43  ncc 0.98  (after: ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs)
+    11.93  ncc 0.99  (after: down Left)
+    12.36  ncc 0.99  (after: down Left)
+    12.53  ncc 0.95  (after: down Left)
+    12.74  ncc 0.99  (after: down Left)
+    12.95  ncc 0.99  (after: down Left)
+    13.17  ncc 0.99  (after: down Left)
+    13.34  ncc 0.98  (after: down Left)
+    13.55  ncc 0.99  (after: down Left)
+    13.76  ncc 0.99  (after: down Left)
+    13.94  ncc 0.98  (after: down Left)
+    14.15  ncc 0.99  (after: down Left)
+    14.36  ncc 0.99  (after: down Left)
+    14.53  ncc 0.98  (after: down Left)
+    14.75  ncc 0.99  (after: down Left)
+    17.95  ncc 0.99  (after: down Left)
+    18.16  ncc 0.99  (after: down Left)
+    23.41  ncc 0.89  (after: ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30)
+    23.58  ncc 0.98  (after: ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30)
+    23.79  ncc 0.99  (after: ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30)
+    27.42  ncc 0.99  (after: down Down)
+    27.63  ncc 0.99  (after: down Down)
+
+RMS per second (dBFS):
+    0    -43.8
+    1   -180.0
+    2   -180.0
+    3   -180.0
+    4    -40.7
+    5    -35.4
+    6    -33.3
+    7    -33.4
+    8    -35.4
+    9   -180.0
+   10   -180.0
+   11   -180.0
+   12    -32.2
+   13    -33.3
+   14    -33.3
+   15   -180.0
+   16   -180.0
+   17   -180.0
+   18    -32.0
+   19    -34.2
+   20    -34.2
+   21    -33.3
+   22    -32.0
+   23    -31.0
+   24   -180.0
+   25   -180.0
+   26   -180.0
+   27    -37.3
+   28   -180.0
+   29   -180.0
+   30   -180.0
+   31   -180.0
+   32   -180.0
+   33   -180.0
+   34   -180.0
+   35   -180.0
+
+level-change check (water.wav template 0.438 s):
+    0.770 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+    5.517 ato: link to egk-10.graal at 54.5 19
+    5.840 ato: level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs
+   22.692 ato: link to onlinestartlocal.graal at 23.5 30.5
+   22.998 ato: level onlinestartlocal.graal: from the server's board, start (23.5, 30
+
+  crossing: link 5.517, new level 5.840
+    water.wav head-only (0.1 s) onsets within 2 s of the link: []
+    water onsets after the link: 18.48, 19.29, 20.23, 21.04, 21.85, 22.66, 23.05
+    footstep onsets after the link: 6.04, 6.21, 6.43, 6.64, 6.81, 7.02, 7.24, 7.45, 7.62, 7.83, 8.05, 8.26, 8.43, 11.93, 12.36, 12.53, 12.74, 12.95, 13.17, 13.34, 13.55, 13.76, 13.94, 14.15, 14.36, 14.53, 14.75, 17.95, 18.16, 23.41, 23.58, 23.79, 27.42, 27.63
+
+  crossing: link 22.692, new level 22.998
+    water.wav head-only (0.1 s) onsets within 2 s of the link: []
+    last water onset 22.662 (ncc 0.86); nominal end 23.100; in progress at link: YES; in progress at level: YES
+    audio above -60 dBFS until 23.047 (searched to 23.046) -> played 0.385 s of 0.438 s
+    water onsets after the link: 23.05
+    footstep onsets after the link: 23.41, 23.58, 23.79, 27.42, 27.63
+
+envelope check: rec RMS / (fitted gain x template RMS) per 50 ms bin; footstep onsets marked *
+  onset 22.662 (link 22.692, level 22.998) gain 0.852:
+    0.00:0.98L 0.05:1.12 0.10:1.15 0.15:1.13 0.20:1.15 0.25:1.12 0.30:1.02V 0.35:1.12 0.40:4.50 0.45:inf 0.50:inf 0.55:inf
+  onset 23.046 (link 22.692, level 22.998) gain 0.870:
+    0.00:0.99 0.05:1.11 0.10:1.13 0.15:1.10 0.20:2.43 0.25:1.14 0.30:1.08 0.35:1.10* 0.40:0.96 0.45:inf 0.50:inf* 0.55:0.00

@@ -1,0 +1,224 @@
+1794621513.864 logged in at 127.0.0.1:14806 as lab466r5 (3.153)
+1794621513.921 sent the post-login frame (10 messages)
+1794621514.209 level onlinestartlocal.graal: from the server's board, start (23.5, 30.5), 4 NPCs (4 from the server, 0 in the file)
+1794621514.209 board: 4096 tiles, 86 distinct [131, 132, 135, 148, 151, 160, 161, 163, ...], 2 links, 2 chests, 0 signs
+1794621514.209   link to egk-10.graal at (24, 42) 2x1
+1794621514.209   link to onlinestartlocal-up.graal at (36, 19) 2x1
+1794621514.209   chest at (23, 19): lizardshield, sign 0
+1794621514.209   chest at (25, 19): glove1, sign 0
+1794621514.209 player props: 57
+1794621514.209   0 NICKNAME: 292a6c61623436367235 "*lab466r5"
+1794621514.209   1 MAXPOWER: 23 = 3
+1794621514.209   2 CURPOWER: 26 = 6
+1794621514.209   3 RUPEESCOUNT: 202020
+1794621514.209   4 ARROWSCOUNT: 2a = 10
+1794621514.209   5 BOMBSCOUNT: 25 = 5
+1794621514.209   6 GLOVEPOWER: 21 = 1
+1794621514.209   8 SWORDPOWER: 3f2a73776f7264312e706e67
+1794621514.209   9 SHIELDPOWER: 2b2b736869656c64312e706e67
+1794621514.209   10 GANI: 2469646c65 "idle"
+1794621514.209   11 HEADGIF: 8d68656164302e706e67
+1794621514.209   13 COLORS: 22202a2432
+1794621514.209   17 SPRITE: 22 = 2
+1794621514.209   18 STATUS: 34 = 20
+1794621514.209   21 HORSEGIF: 20 = 0
+1794621514.209   22 HORSEBUSHES: 20 = 0
+1794621514.209   23 EFFECTCOLORS: 20 = 0
+1794621514.209   25 APCOUNTER: 205c
+1794621514.209   26 MAGICPOINTS: 20 = 0
+1794621514.209   32 ALIGNMENT: 52 = 50
+1794621514.209   34 ACCOUNTNAME: 286c61623436367235 "lab466r5"
+1794621514.209   35 BODYIMG: 28626f64792e706e67 "body.png"
+1794621514.209   36 RATING: 4e927e
+1794621514.209   37 ?: 20 = 0
+1794621514.209   38 ?: 20 = 0
+1794621514.209   39 ?: 20 = 0
+1794621514.209   40 ?: 20 = 0
+1794621514.209   41 ?: 20 = 0
+1794621514.209   45 Z: 52 = 50
+1794621514.209   46 ?: 20 = 0
+1794621514.209   47 ?: 20 = 0
+1794621514.209   48 ?: 20 = 0
+1794621514.209   49 ?: 20 = 0
+1794621514.209   54 ?: 20 = 0
+1794621514.209   55 ?: 20 = 0
+1794621514.209   56 ?: 20 = 0
+1794621514.209   57 ?: 20 = 0
+1794621514.209   58 ?: 20 = 0
+1794621514.209   59 ?: 20 = 0
+1794621514.209   60 ?: 20 = 0
+1794621514.209   61 ?: 20 = 0
+1794621514.209   62 ?: 20 = 0
+1794621514.209   63 ?: 20 = 0
+1794621514.209   64 ?: 20 = 0
+1794621514.209   65 ?: 20 = 0
+1794621514.209   66 ?: 20 = 0
+1794621514.209   67 ?: 20 = 0
+1794621514.209   68 ?: 20 = 0
+1794621514.209   69 ?: 20 = 0
+1794621514.209   70 ?: 20 = 0
+1794621514.209   71 ?: 20 = 0
+1794621514.209   72 ?: 20 = 0
+1794621514.209   73 ?: 20 = 0
+1794621514.209   74 ?: 20 = 0
+1794621514.209   78 X2: 2590
+1794621514.209   79 Y2: 2770
+1794621514.209   80 Z2: 2020
+1794621514.209 npc 300 props: at (26, 36), image "candle.gif", sprite 2, vis 1, message "", GS1 script 45 bytes
+1794621514.209 npc 301 props: at (22, 36), image "candle.gif", sprite 2, vis 1, message "", GS1 script 45 bytes
+1794621514.209 npc 302 props: at (23, 28), image "", sprite 2, vis 1, message "", GS1 script 134 bytes
+1794621514.209 npc 303 props: at (36, 19), image "night.gif", sprite 2, vis 1, message "", GS1 script 98 bytes
+1794621518.900 link to egk-10.graal at 54.5 19
+1794621519.219 level egk-10.graal: from the server's board, start (54.5, 19), 13 NPCs (13 from the server, 0 in the file)
+1794621519.219 board: 4096 tiles, 226 distinct [0, 1, 2, 3, 8, 15, 16, 18, ...], 7 links, 0 chests, 3 signs
+1794621519.219   link to onlinestartlocal.graal at (4, 40) 1x10
+1794621519.219   link to egj-10.graal at (0, 0) 1x64
+1794621519.219   link to egl-10.graal at (63, 0) 1x64
+1794621519.219   link to egk-09.graal at (0, 0) 64x1
+1794621519.219   link to egk-11.graal at (0, 63) 64x1
+1794621519.219   link to onlinestartlocal.graal at (55, 20) 2x1
+1794621519.219   link to onlinestartlocal-up.graal at (53, 12) 2x1
+1794621519.219   sign at (0, 0): 25 bytes
+1794621519.219   sign at (59, 21): 494 bytes
+1794621519.219   sign at (46, 39): 121 bytes
+1794621519.219 player props: 57
+1794621519.219   0 NICKNAME: 292a6c61623436367235 "*lab466r5"
+1794621519.219   1 MAXPOWER: 23 = 3
+1794621519.219   2 CURPOWER: 26 = 6
+1794621519.219   3 RUPEESCOUNT: 202020
+1794621519.219   4 ARROWSCOUNT: 2a = 10
+1794621519.219   5 BOMBSCOUNT: 25 = 5
+1794621519.219   6 GLOVEPOWER: 21 = 1
+1794621519.219   8 SWORDPOWER: 3f2a73776f7264312e706e67
+1794621519.219   9 SHIELDPOWER: 2b2b736869656c64312e706e67
+1794621519.219   10 GANI: 2469646c65 "idle"
+1794621519.219   11 HEADGIF: 8d68656164302e706e67
+1794621519.219   13 COLORS: 22202a2432
+1794621519.219   17 SPRITE: 22 = 2
+1794621519.219   18 STATUS: 34 = 20
+1794621519.219   21 HORSEGIF: 20 = 0
+1794621519.219   22 HORSEBUSHES: 20 = 0
+1794621519.219   23 EFFECTCOLORS: 20 = 0
+1794621519.219   25 APCOUNTER: 205c
+1794621519.219   26 MAGICPOINTS: 20 = 0
+1794621519.219   32 ALIGNMENT: 52 = 50
+1794621519.219   34 ACCOUNTNAME: 286c61623436367235 "lab466r5"
+1794621519.219   35 BODYIMG: 28626f64792e706e67 "body.png"
+1794621519.219   36 RATING: 4e927e
+1794621519.219   37 ?: 20 = 0
+1794621519.219   38 ?: 20 = 0
+1794621519.219   39 ?: 20 = 0
+1794621519.219   40 ?: 20 = 0
+1794621519.219   41 ?: 20 = 0
+1794621519.219   45 Z: 52 = 50
+1794621519.219   46 ?: 20 = 0
+1794621519.219   47 ?: 20 = 0
+1794621519.219   48 ?: 20 = 0
+1794621519.219   49 ?: 20 = 0
+1794621519.219   54 ?: 20 = 0
+1794621519.219   55 ?: 20 = 0
+1794621519.219   56 ?: 20 = 0
+1794621519.219   57 ?: 20 = 0
+1794621519.219   58 ?: 20 = 0
+1794621519.219   59 ?: 20 = 0
+1794621519.219   60 ?: 20 = 0
+1794621519.219   61 ?: 20 = 0
+1794621519.219   62 ?: 20 = 0
+1794621519.219   63 ?: 20 = 0
+1794621519.219   64 ?: 20 = 0
+1794621519.219   65 ?: 20 = 0
+1794621519.219   66 ?: 20 = 0
+1794621519.219   67 ?: 20 = 0
+1794621519.219   68 ?: 20 = 0
+1794621519.219   69 ?: 20 = 0
+1794621519.219   70 ?: 20 = 0
+1794621519.219   71 ?: 20 = 0
+1794621519.219   72 ?: 20 = 0
+1794621519.219   73 ?: 20 = 0
+1794621519.219   74 ?: 20 = 0
+1794621519.219   78 X2: 2590
+1794621519.219   79 Y2: 2770
+1794621519.219   80 Z2: 2020
+1794621519.219 npc 304 props: at (49, 6), image "", sprite 2, vis 1, message "", GS1 script 14 bytes
+1794621519.219 npc 305 props: at (46, 36), image "", sprite 2, vis 1, message "", GS1 script 1342 bytes
+1794621519.219 npc 306 props: at (46, 36), image "chair.gif", sprite 2, vis 1, message "", GS1 script 16 bytes
+1794621519.219 npc 307 props: at (52, 19), image "cyanidepoletop.gif", sprite 2, vis 1, message "", GS1 script 16 bytes
+1794621519.219 npc 308 props: at (53, 40), image "bluelampout.gif", sprite 2, vis 1, message "", GS1 script 90 bytes
+1794621519.219 npc 309 props: at (57, 44), image "bluelampout.gif", sprite 2, vis 1, message "", GS1 script 90 bytes
+1794621519.219 npc 310 props: at (58, 19), image "cyanidepoletop.gif", sprite 2, vis 1, message "", GS1 script 16 bytes
+1794621519.219 npc 311 props: at (50, 16), image "smokeani.gif", sprite 2, vis 1, message "", GS1 script 137 bytes
+1794621519.219 npc 312 props: at (55, 16), image "smokeani.gif", sprite 2, vis 1, message "", GS1 script 137 bytes
+1794621519.219 npc 313 props: at (51, 17), image "night.gif", sprite 2, vis 1, message "", GS1 script 97 bytes
+1794621519.219 npc 314 props: at (50, 21), image "", sprite 2, vis 1, message "", GS1 script 262 bytes
+1794621519.219 npc 315 props: at (2, 47), image "", sprite 2, vis 1, message "", GS1 script 67 bytes
+1794621519.219 npc 316 props: at (46, 39), image "ropestairs.png", sprite 2, vis 1, message "", GS1 script 75 bytes
+1794621536.902 link to onlinestartlocal.graal at 23.5 30.5
+1794621537.210 level onlinestartlocal.graal: from the server's board, start (23.5, 30.5), 4 NPCs (4 from the server, 0 in the file)
+1794621537.211 board: 4096 tiles, 86 distinct [131, 132, 135, 148, 151, 160, 161, 163, ...], 2 links, 2 chests, 0 signs
+1794621537.211   link to egk-10.graal at (24, 42) 2x1
+1794621537.211   link to onlinestartlocal-up.graal at (36, 19) 2x1
+1794621537.211   chest at (23, 19): lizardshield, sign 0
+1794621537.211   chest at (25, 19): glove1, sign 0
+1794621537.211 player props: 57
+1794621537.211   0 NICKNAME: 292a6c61623436367235 "*lab466r5"
+1794621537.211   1 MAXPOWER: 23 = 3
+1794621537.211   2 CURPOWER: 26 = 6
+1794621537.211   3 RUPEESCOUNT: 202020
+1794621537.211   4 ARROWSCOUNT: 2a = 10
+1794621537.211   5 BOMBSCOUNT: 25 = 5
+1794621537.211   6 GLOVEPOWER: 21 = 1
+1794621537.211   8 SWORDPOWER: 3f2a73776f7264312e706e67
+1794621537.211   9 SHIELDPOWER: 2b2b736869656c64312e706e67
+1794621537.211   10 GANI: 2469646c65 "idle"
+1794621537.211   11 HEADGIF: 8d68656164302e706e67
+1794621537.211   13 COLORS: 22202a2432
+1794621537.211   17 SPRITE: 22 = 2
+1794621537.211   18 STATUS: 34 = 20
+1794621537.211   21 HORSEGIF: 20 = 0
+1794621537.211   22 HORSEBUSHES: 20 = 0
+1794621537.211   23 EFFECTCOLORS: 20 = 0
+1794621537.211   25 APCOUNTER: 205c
+1794621537.211   26 MAGICPOINTS: 20 = 0
+1794621537.211   32 ALIGNMENT: 52 = 50
+1794621537.211   34 ACCOUNTNAME: 286c61623436367235 "lab466r5"
+1794621537.211   35 BODYIMG: 28626f64792e706e67 "body.png"
+1794621537.211   36 RATING: 4e927e
+1794621537.211   37 ?: 20 = 0
+1794621537.211   38 ?: 20 = 0
+1794621537.211   39 ?: 20 = 0
+1794621537.211   40 ?: 20 = 0
+1794621537.211   41 ?: 20 = 0
+1794621537.211   45 Z: 52 = 50
+1794621537.211   46 ?: 20 = 0
+1794621537.211   47 ?: 20 = 0
+1794621537.211   48 ?: 20 = 0
+1794621537.211   49 ?: 20 = 0
+1794621537.211   54 ?: 20 = 0
+1794621537.211   55 ?: 20 = 0
+1794621537.211   56 ?: 20 = 0
+1794621537.211   57 ?: 20 = 0
+1794621537.211   58 ?: 20 = 0
+1794621537.211   59 ?: 20 = 0
+1794621537.211   60 ?: 20 = 0
+1794621537.211   61 ?: 20 = 0
+1794621537.211   62 ?: 20 = 0
+1794621537.211   63 ?: 20 = 0
+1794621537.211   64 ?: 20 = 0
+1794621537.211   65 ?: 20 = 0
+1794621537.211   66 ?: 20 = 0
+1794621537.211   67 ?: 20 = 0
+1794621537.211   68 ?: 20 = 0
+1794621537.211   69 ?: 20 = 0
+1794621537.211   70 ?: 20 = 0
+1794621537.211   71 ?: 20 = 0
+1794621537.211   72 ?: 20 = 0
+1794621537.211   73 ?: 20 = 0
+1794621537.211   74 ?: 20 = 0
+1794621537.211   78 X2: 2590
+1794621537.211   79 Y2: 2770
+1794621537.211   80 Z2: 2020
+1794621537.211 npc 300 props: at (26, 36), image "candle.gif", sprite 2, vis 1, message "", GS1 script 45 bytes
+1794621537.211 npc 301 props: at (22, 36), image "candle.gif", sprite 2, vis 1, message "", GS1 script 45 bytes
+1794621537.211 npc 302 props: at (23, 28), image "", sprite 2, vis 1, message "", GS1 script 134 bytes
+1794621537.211 npc 303 props: at (36, 19), image "night.gif", sprite 2, vis 1, message "", GS1 script 98 bytes
+1794621556.971 connection closed: Server is shutting down.
