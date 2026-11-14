@@ -215,7 +215,16 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
 - 3.04, 3.153, 4.04r2, 4.20r8 and 5.12 passed the server list and Connect.
 - 4.20r8, 5.00r7 and 5.12 passed the Login warp (`PLO_SERVERWARP`).
 - 5.12's Graal3D link reaches login step 6 (#458).
-- The water sound and `--no-sound` pass on 3.153 (#466).
+- The water sound and `--no-sound` pass on 3.153 (#466). The water-to-dry
+  follow-up reported five Ato runs at client `4d1a28d` against gserver-v2
+  `c851b4e`: a splash already playing ran to completion; one new splash
+  occurred within 50 ms of the dry level arriving; footsteps resumed
+  0.39–0.44 s later. This is a recorded Seihai result, not a new run or proof
+  of original 3.x warp behaviour. The later
+  [issue clarification](https://github.com/squirelworks/seihai/issues/466#issuecomment-6870036493)
+  identifies the arrival splash as the exit-water path, superseding the
+  report's tentative swim-animation-restart explanation. Real 3.x behaviour
+  when a warp leaves water remains unmeasured.
 
 ## Not in yet
 
