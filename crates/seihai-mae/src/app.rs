@@ -1785,7 +1785,7 @@ pub fn main(args: Vec<String>) {
                         },
                         shield: own(&l.shield),
                         attrs: if gani_attrs {
-                            attr_sheets(&l.attrs, gani, npc_imgs)
+                            attr_sheets(&l.attrs, npc_imgs)
                         } else {
                             Default::default()
                         },
@@ -1894,10 +1894,11 @@ pub fn main(args: Vec<String>) {
                     shield: npc_imgs
                         .get(&local_shield_image(session.shield_power))
                         .map(pose_sheet),
-                    attrs: pose
-                        .filter(|_| gani_attrs)
-                        .map(|p| attr_sheets(&looks.attrs, p.gani, npc_imgs))
-                        .unwrap_or_default(),
+                    attrs: if pose.is_some() && gani_attrs {
+                        attr_sheets(&looks.attrs, npc_imgs)
+                    } else {
+                        Default::default()
+                    },
                 };
                 // The hurt blink: on its off ticks only the shadow (the
                 // SPRITES sheet's placements) is drawn.
@@ -1971,6 +1972,7 @@ pub fn main(args: Vec<String>) {
             cam_x,
             cam_y,
         );
+        seihai::render::draw_npc_names(&mut fb, session, chat_font.as_ref(), cam_x, cam_y);
         // The spark of a sword clash, over the player.
         seihai::render::draw_sword_spark(
             &mut fb,
@@ -5361,7 +5363,9 @@ pub fn main(args: Vec<String>) {
                 .map(|n| {
                     (
                         seihai::looks::npc_looks(n),
-                        n.shield.clone(),
+                        n.shield
+                            .clone()
+                            .or_else(|| Some(seihai::render::NPC_SHIELD.into())),
                         n.props.get("#1").cloned(),
                     )
                 })
@@ -5378,8 +5382,8 @@ pub fn main(args: Vec<String>) {
                     }
                 }
             }
-            // GANI attribute pictures (the hat): everyone's own, and the
-            // defaults of the player GANIs, for a build that has them.
+            // GANI attribute pictures (the hat): everyone's own, for a build
+            // that has them (a GANI's DEFAULTATTR is not drawn).
             if gani_attrs {
                 for attrs in net_state
                     .others
@@ -5389,18 +5393,6 @@ pub fn main(args: Vec<String>) {
                     .chain(npc_looks.iter().map(|l| &l.0.attrs))
                 {
                     for (i, a) in attrs.iter().enumerate() {
-                        if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
-                            wanted.push((seihai::looks::attr_dir(i), a.to_string()));
-                        }
-                    }
-                }
-                for g in session
-                    .poses
-                    .all()
-                    .chain(session.walk_gani.as_ref().map(|w| &w.gani))
-                    .chain(session.npc_ganis.values())
-                {
-                    for (i, a) in g.default_attrs.iter().enumerate() {
                         if let Some(a) = a.as_deref().filter(|a| !a.is_empty()) {
                             wanted.push((seihai::looks::attr_dir(i), a.to_string()));
                         }
@@ -6015,15 +6007,15 @@ fn apply_chat_look(session: &mut OfflineSession, cmd: &seihai::looks::ChatLook) 
     }
 }
 
-/// The `ATTR1` … `ATTR5` sheets of `gani` for a player with `attrs`: their
-/// pictures, else the GANI's defaults, when loaded.
+/// The `ATTR1` … `ATTR5` sheets for a player with `attrs`: their own
+/// pictures, when loaded. A GANI's `DEFAULTATTR` is not drawn
+/// ([`seihai::render::attr_picture`]).
 fn attr_sheets<'a>(
     attrs: &[Option<String>; 5],
-    gani: &Gani,
     images: &'a HashMap<String, (u32, Vec<u8>)>,
 ) -> [Option<seihai::render::Sheet<'a>>; 5] {
     [0, 1, 2, 3, 4].map(|i| {
-        seihai::looks::attr_image(attrs, gani, i)
+        seihai::render::attr_picture(attrs, i)
             .and_then(|n| images.get(n))
             .map(pose_sheet)
     })
