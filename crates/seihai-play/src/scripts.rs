@@ -367,12 +367,12 @@ impl ClientScripts {
                     self.running[i].wait = Wait::Idle;
                     self.ended(i, out);
                 }
-                if self.running[i].wait == Wait::Idle {
-                    let r = &mut self.running[i];
-                    let ran = r.machine.tick(&mut r.host);
-                    for (_, out) in ran {
-                        self.ended(i, out);
-                    }
+                // Count every elapsed frame, even while a run sleeps or waits.
+                // The VM queues due timers and dispatches only when its run ends.
+                let r = &mut self.running[i];
+                let ran = r.machine.tick(&mut r.host);
+                for (_, out) in ran {
+                    self.ended(i, out);
                 }
                 self.drain_queue(i);
             }
@@ -584,6 +584,91 @@ mod tests {
     use seihai_core::scripting::gs2::compile::compile_gs2;
 
     const V: ClientVersion = ClientVersion::V600R2;
+
+    /// Timers count elapsed frames while the run is suspended, then dispatch
+    /// after it ends. This is the pinned VM contract, not native-client evidence.
+    #[test]
+    fn timers_due_during_sleep_and_waitfor_dispatch_on_resume() {
+        let mut resumed_messages = Vec::new();
+        for suspension in [
+            "sleep(0.15);",
+            "waitfor(this, \"playerchats\", 0.15);",
+            "sleep(0.05); sleep(0.1);",
+            "sleep(0.05); waitfor(this, \"playerchats\", 0.1);",
+        ] {
+            let mut s = session_with_npc(7);
+            let mut sc = ClientScripts::new(V);
+            let src = format!(
+                "function onCreated() {{ this.order = \"\"; setTimer(0.1); scheduleevent(0.1, \"Probe\"); {suspension} }}\n\
+                 function onTimeout() {{ this.order @= \"timeout,\"; }}\n\
+                 function onProbe() {{ message(this.order @ \"probe\"); }}"
+            );
+            sc.start(&mut s, &script(&src));
+            sc.tick(&mut s, 100);
+            assert_eq!(
+                npc(&s).message,
+                "",
+                "{suspension}: no dispatch while suspended"
+            );
+            sc.tick(&mut s, 50);
+            resumed_messages.push((suspension, npc(&s).message.clone()));
+        }
+        assert!(
+            resumed_messages
+                .iter()
+                .all(|(_, msg)| msg == "timeout,probe"),
+            "{resumed_messages:?}"
+        );
+    }
+
+    #[test]
+    fn a_successful_waitfor_keeps_elapsed_timer_frames() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onCreated() { setTimer(0.1); scheduleevent(0.1, \"Probe\"); this.caught = waitfor(this, \"playerchats\", 0.5); }\n\
+                   function onTimeout() { this.order = \"timeout,\"; }\n\
+                   function onProbe() { message(this.order @ this.caught); }";
+        sc.start(&mut s, &script(src));
+        sc.tick(&mut s, 50);
+        sc.player_chats(&mut s, "wake");
+        assert_eq!(npc(&s).message, "");
+        sc.tick(&mut s, 50);
+        assert_eq!(npc(&s).message, "timeout,1");
+    }
+
+    #[test]
+    fn due_timers_do_not_interrupt_a_sleeping_event_or_reorder_queued_events() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onCreated() { this.order = \"\"; setTimer(0.1); scheduleevent(0.1, \"Probe\"); }\n\
+                   function onTimeout() { sleep(0.1); this.order @= \"timeout,\"; }\n\
+                   function onProbe() { this.order @= \"probe,\"; }\n\
+                   function onPlayerChats() { message(this.order @ \"chat\"); }";
+        sc.start(&mut s, &script(src));
+        sc.tick(&mut s, 100);
+        sc.player_chats(&mut s, "queued");
+        sc.tick(&mut s, 50);
+        assert_eq!(npc(&s).message, "");
+        sc.tick(&mut s, 50);
+        assert_eq!(npc(&s).message, "timeout,probe,chat");
+    }
+
+    #[test]
+    fn elapsed_frames_are_counted_once_and_keep_fractional_time() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onCreated() { this.n = 0; setTimer(0.1); }\n\
+                   function onTimeout() { this.n++; message(this.n); setTimer(0.1); }";
+        sc.start(&mut s, &script(src));
+        sc.tick(&mut s, 49);
+        assert_eq!(npc(&s).message, "");
+        sc.tick(&mut s, 50);
+        assert_eq!(npc(&s).message, "");
+        sc.tick(&mut s, 1);
+        assert_eq!(npc(&s).message, "1");
+        sc.tick(&mut s, 100);
+        assert_eq!(npc(&s).message, "2");
+    }
 
     /// A level with server NPC `id` at (10, 10), 2 by 2 tiles.
     fn session_with_npc(id: u32) -> OfflineSession {
