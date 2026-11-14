@@ -59,6 +59,11 @@ Single code path. Versions are profile rows, not branches.
 - [x] Baseline lab run against the lab server stack (#441, #507): Windows and Linux results are recorded in `docs/lab/issho-6x-lab-run-2026-11-13.md`. This does not validate the later GS2/music additions in #502/#519 or subsequent NPC rendering changes.
 - [x] Start window and server list; the launcher and mae hand 6.x picks to Issho (#442). Issho has no start window of its own: the shared one hands a 6.x pick over, logged in at once; a pick Issho refuses comes back to the start window with a note.
 - [x] Characters from ganis, and the renderer moved to `seihai-draw` (#443).
+- [x] Character NPC looks reach the shared GANI renderer (#523): retained
+  head/body/colours/attributes, animation and nickname, including late server
+  changes. Checked with synthetic state-to-pixels tests, not a real 6.x run.
+  Default equipment and GANI DEFAULTATTR behavior retain the shared player's
+  existing conventions; exact-build comparison is outstanding.
 - [x] The 6.x window size and HUD (#444): 1024 x 768, and the default status display (`seihai-play::hud`), the 2.05 routine on the 6.x window, which a lab run of the real 6.00r2 and 6.03r7 put on the same pixels. Counters from the server's player props (core's `client::OwnStats`).
 - [x] Chat, sword, items and the rest of mae's flat play, in the shared loop (#445). The leftovers are in #497.
   - [x] Chat: a chat line (Tab or Enter), the bubbles over the players and the player's own, toalls, PMs and admin lines (Ato gets them too).

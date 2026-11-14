@@ -906,6 +906,9 @@ impl Game {
         if self.session.tick_poses(ms) {
             self.dirty = true;
         }
+        if self.session.tick_npc_anis(ms) {
+            self.dirty = true;
+        }
         // A ledge jump in the air, a pull that brought a block along, or a
         // hit's knockback: the new position goes out like a step.
         let moved = self.session.tick_pushpull(ms);
@@ -1303,6 +1306,12 @@ impl Game {
         }
         self.tick_poses(now);
         self.tick_scripts(now);
+        if self
+            .chars
+            .load_npcs(self.resolver.as_ref(), &mut self.session)
+        {
+            self.dirty = true;
+        }
         if self.take_hits() {
             self.dirty = true;
         }
@@ -1449,6 +1458,26 @@ pub fn npc_bubbles(level: &Level, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f
                 (n.x + 1.0) * t - cam_x as f32,
                 n.y * t - cam_y as f32,
             )
+        })
+        .collect()
+}
+
+/// Character NPC nicknames, using the view's existing player-label style.
+/// This is a Seihai presentation choice, not a measured 6.x text style.
+pub fn npc_names(level: &Level, cam_x: i32, cam_y: i32) -> Vec<(String, f32, f32)> {
+    level
+        .npcs
+        .iter()
+        .filter(|n| n.visible && n.ani.is_some())
+        .filter_map(|n| {
+            let name = n.props.get("#n")?.trim();
+            (!name.is_empty()).then(|| {
+                (
+                    name.to_string(),
+                    (n.x + 1.5) * render::TILE_PX as f32 - cam_x as f32,
+                    (n.y + 3.0) * render::TILE_PX as f32 - cam_y as f32,
+                )
+            })
         })
         .collect()
 }

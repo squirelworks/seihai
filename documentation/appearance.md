@@ -108,6 +108,28 @@ These are server commands, not client ones.
   and both come out pixel-equal in any colours. That a real `.gif` body uses
   the same entries is inferred: no old body GIF was in the corpus to check.
 
+## Shared play loop (Ato and Issho)
+
+`seihai-play` now loads character NPC GANIs and their own head, recoloured
+body, sword, shield and attributes from the retained NPC state (#523).
+The level and gmap neighbours draw them instead of treating `#c#` as an
+image filename. Hidden NPCs draw nothing; an explicit over-player layer
+draws after players. Current-level animations use core's existing NPC
+clock (100 ms per step, a Seihai convention); neighbour animations retain
+their stored frame. Custom GANIs can use the character sheets supported
+by `seihai-draw`; literal image sheets, GANI parameters and TEXT actors
+are not added by this change. Missing animation files keep the existing
+image fallback. Pictures and GANIs must be local or built in; this does
+not implement downloading missing character assets.
+
+Visible current-level character NPCs also get nickname labels using the
+view's existing white player-label style. This is Seihai presentation,
+not a measured 6.x font, colour or placement. Default sword/shield and
+DEFAULTATTR behavior keep the shared player's existing conventions;
+Mae's 2.22 evidence does not establish them for 6.x. Synthetic state-to-
+pixels, visibility, nickname and custom-animation regressions pass; no
+original 6.x client or real-fork session was run for this change.
+
 ## Not done
 
 - Bodies drawn without a GANI (the plain fallback with no pose loaded) are
