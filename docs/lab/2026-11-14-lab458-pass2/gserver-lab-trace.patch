@@ -1,0 +1,36 @@
+diff --git a/server/src/graal3d/Graal3DService.cpp b/server/src/graal3d/Graal3DService.cpp
+index 93653be..c812fe4 100644
+--- a/server/src/graal3d/Graal3DService.cpp
++++ b/server/src/graal3d/Graal3DService.cpp
+@@ -4,6 +4,7 @@
+ #include <graal3d/Graal3DService.h>
+ 
+ #include <chrono>
++#include <cstdlib>
+ #include <cmath>
+ #include <cstring>
+ #include <format>
+@@ -471,6 +472,23 @@ namespace graal3d
+ 			if (state.changed & GameObjectBits::Velocity)
+ 				object.velocity = state.object.velocity;
+ 		}
++		// LAB458 trace (lab build only, not for upstream): every client section the
++		// gserver takes, with a millisecond clock, when SEIHAI_G3D_TRACE is set.
++		static const bool trace = std::getenv("SEIHAI_G3D_TRACE") != nullptr;
++		if (trace && state.controlling && state.changed != 0)
++		{
++			const auto& o = state.object;
++			std::string line = std::format("G3DTRACE t={} pid={} mask=0x{:x} pos=({:.3f},{:.3f},{:.3f})", nowMs(), playerId, state.changed,
++				state.position[0], state.position[1], state.position[2]);
++			if (state.changed & GameObjectBits::Transform)
++				line += std::format(" s5 xf=({:.3f},{:.3f},{:.3f}) axis=({:.3f},{:.3f},{:.3f}) angle={:.4f}", o.transform.position[0], o.transform.position[1],
++					o.transform.position[2], o.transform.axis[0], o.transform.axis[1], o.transform.axis[2], o.transform.angle);
++			if (state.changed & GameObjectBits::Velocity)
++				line += std::format(" s2 vel=({:.3f},{:.3f},{:.3f})", o.velocity[0], o.velocity[1], o.velocity[2]);
++			if (state.changed & GameObjectBits::Chat)
++				line += " s9 chat=\"" + o.chat + "\"";
++			log::printLine(log::server, "{}", line);
++		}
+ 		if (object == before)
+ 			return;
+ 		forEachOtherConnection(playerId, [&](Connection& other) { other.setGhost(avatarKey(playerId), it->second); });

@@ -1,0 +1,598 @@
+1794618394.651 +0.069 seq 1 fp 1 pos (0.000, 0.000, 0.000)
+1794618394.707 +0.125 seq 2 fp 1 pos (0.000, 0.000, 0.000)
+1794618394.759 +0.176 seq 3 fp 1 pos (0.000, 0.000, 0.000)
+1794618395.760 +1.178 seq 4 fp 1 pos (0.000, 0.000, 1.000) control 4 update: [3 shape labcube.3ds] [5 transform pos 0.000 0.000 1.000 axis 1.000 0.000 0.000 angle 0.0000] [13 flags 0x10]
+1794618396.763 +2.181 seq 5 fp 1 pos (0.000, 0.000, 1.000) control 4 update: empty
+1794618397.765 +3.183 seq 6 fp 1 pos (0.000, 0.000, 1.000) control 4 update: empty
+1794618398.660 +4.078 seq 7 fp 1 pos (0.000, 0.030, 1.000) control 4 update: [5 transform pos 0.000 0.030 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.693 +4.111 seq 8 fp 1 pos (0.000, 0.228, 1.000) control 4 update: [5 transform pos 0.000 0.228 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.725 +4.143 seq 9 fp 1 pos (0.000, 0.421, 1.000) control 4 update: [5 transform pos 0.000 0.421 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.759 +4.177 seq 10 fp 1 pos (0.000, 0.623, 1.000) control 4 update: [5 transform pos 0.000 0.623 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.794 +4.212 seq 11 fp 1 pos (0.000, 0.837, 1.000) control 4 update: [5 transform pos 0.000 0.837 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.828 +4.245 seq 12 fp 1 pos (0.000, 1.037, 1.000) control 4 update: [5 transform pos 0.000 1.037 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.864 +4.282 seq 13 fp 1 pos (0.000, 1.255, 1.000) control 4 update: [5 transform pos 0.000 1.255 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.900 +4.317 seq 14 fp 1 pos (0.000, 1.469, 1.000) control 4 update: [5 transform pos 0.000 1.469 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.937 +4.355 seq 15 fp 1 pos (0.000, 1.695, 1.000) control 4 update: [5 transform pos 0.000 1.695 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618398.969 +4.387 seq 16 fp 1 pos (0.000, 1.888, 1.000) control 4 update: [5 transform pos 0.000 1.888 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.005 +4.423 seq 17 fp 1 pos (0.000, 2.102, 1.000) control 4 update: [5 transform pos 0.000 2.102 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.039 +4.457 seq 18 fp 1 pos (0.000, 2.307, 1.000) control 4 update: [5 transform pos 0.000 2.307 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.072 +4.490 seq 19 fp 1 pos (0.000, 2.506, 1.000) control 4 update: [5 transform pos 0.000 2.506 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.108 +4.526 seq 20 fp 1 pos (0.000, 2.720, 1.000) control 4 update: [5 transform pos 0.000 2.720 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.144 +4.562 seq 21 fp 1 pos (0.000, 2.934, 1.000) control 4 update: [5 transform pos 0.000 2.934 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.177 +4.595 seq 22 fp 1 pos (0.000, 3.133, 1.000) control 4 update: [5 transform pos 0.000 3.133 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.213 +4.631 seq 23 fp 1 pos (0.000, 3.347, 1.000) control 4 update: [5 transform pos 0.000 3.347 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.251 +4.668 seq 24 fp 1 pos (0.000, 3.575, 1.000) control 4 update: [5 transform pos 0.000 3.575 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.289 +4.707 seq 25 fp 1 pos (0.000, 3.804, 1.000) control 4 update: [5 transform pos 0.000 3.804 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.325 +4.743 seq 26 fp 1 pos (0.000, 4.022, 1.000) control 4 update: [5 transform pos 0.000 4.022 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.362 +4.780 seq 27 fp 1 pos (0.000, 4.243, 1.000) control 4 update: [5 transform pos 0.000 4.243 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.398 +4.815 seq 28 fp 1 pos (0.000, 4.456, 1.000) control 4 update: [5 transform pos 0.000 4.456 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.430 +4.848 seq 29 fp 1 pos (0.000, 4.652, 1.000) control 4 update: [5 transform pos 0.000 4.652 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.466 +4.884 seq 30 fp 1 pos (0.000, 4.869, 1.000) control 4 update: [5 transform pos 0.000 4.869 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.502 +4.920 seq 31 fp 1 pos (0.000, 5.082, 1.000) control 4 update: [5 transform pos 0.000 5.082 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.537 +4.955 seq 32 fp 1 pos (0.000, 5.296, 1.000) control 4 update: [5 transform pos 0.000 5.296 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.570 +4.988 seq 33 fp 1 pos (0.000, 5.489, 1.000) control 4 update: [5 transform pos 0.000 5.489 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.605 +5.023 seq 34 fp 1 pos (0.000, 5.703, 1.000) control 4 update: [5 transform pos 0.000 5.703 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.641 +5.059 seq 35 fp 1 pos (0.000, 5.915, 1.000) control 4 update: [5 transform pos 0.000 5.915 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.674 +5.092 seq 36 fp 1 pos (0.000, 6.114, 1.000) control 4 update: [5 transform pos 0.000 6.114 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.710 +5.127 seq 37 fp 1 pos (0.000, 6.329, 1.000) control 4 update: [5 transform pos 0.000 6.329 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.746 +5.163 seq 38 fp 1 pos (0.000, 6.544, 1.000) control 4 update: [5 transform pos 0.000 6.544 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.781 +5.199 seq 39 fp 1 pos (0.000, 6.756, 1.000) control 4 update: [5 transform pos 0.000 6.756 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.816 +5.234 seq 40 fp 1 pos (0.000, 6.970, 1.000) control 4 update: [5 transform pos 0.000 6.970 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.853 +5.271 seq 41 fp 1 pos (0.000, 7.188, 1.000) control 4 update: [5 transform pos 0.000 7.188 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.889 +5.307 seq 42 fp 1 pos (0.000, 7.406, 1.000) control 4 update: [5 transform pos 0.000 7.406 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.922 +5.340 seq 43 fp 1 pos (0.000, 7.604, 1.000) control 4 update: [5 transform pos 0.000 7.604 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.958 +5.376 seq 44 fp 1 pos (0.000, 7.820, 1.000) control 4 update: [5 transform pos 0.000 7.820 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618399.994 +5.412 seq 45 fp 1 pos (0.000, 8.034, 1.000) control 4 update: [5 transform pos 0.000 8.034 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.031 +5.449 seq 46 fp 1 pos (0.000, 8.256, 1.000) control 4 update: [5 transform pos 0.000 8.256 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.065 +5.483 seq 47 fp 1 pos (0.000, 8.460, 1.000) control 4 update: [5 transform pos 0.000 8.460 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.101 +5.519 seq 48 fp 1 pos (0.000, 8.675, 1.000) control 4 update: [5 transform pos 0.000 8.675 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.137 +5.554 seq 49 fp 1 pos (0.000, 8.891, 1.000) control 4 update: [5 transform pos 0.000 8.891 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.173 +5.591 seq 50 fp 1 pos (0.000, 9.111, 1.000) control 4 update: [5 transform pos 0.000 9.111 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.212 +5.630 seq 51 fp 1 pos (0.000, 9.342, 1.000) control 4 update: [5 transform pos 0.000 9.342 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.248 +5.666 seq 52 fp 1 pos (0.000, 9.559, 1.000) control 4 update: [5 transform pos 0.000 9.559 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.284 +5.701 seq 53 fp 1 pos (0.000, 9.773, 1.000) control 4 update: [5 transform pos 0.000 9.773 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.319 +5.737 seq 54 fp 1 pos (0.000, 9.987, 1.000) control 4 update: [5 transform pos 0.000 9.987 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.353 +5.770 seq 55 fp 1 pos (0.000, 10.187, 1.000) control 4 update: [5 transform pos 0.000 10.187 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.385 +5.803 seq 56 fp 1 pos (0.000, 10.380, 1.000) control 4 update: [5 transform pos 0.000 10.380 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.417 +5.835 seq 57 fp 1 pos (0.000, 10.575, 1.000) control 4 update: [5 transform pos 0.000 10.575 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.453 +5.871 seq 58 fp 1 pos (0.000, 10.790, 1.000) control 4 update: [5 transform pos 0.000 10.790 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.489 +5.907 seq 59 fp 1 pos (0.000, 11.003, 1.000) control 4 update: [5 transform pos 0.000 11.003 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.522 +5.940 seq 60 fp 1 pos (0.000, 11.202, 1.000) control 4 update: [5 transform pos 0.000 11.202 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.555 +5.973 seq 61 fp 1 pos (0.000, 11.400, 1.000) control 4 update: [5 transform pos 0.000 11.400 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.590 +6.008 seq 62 fp 1 pos (0.000, 11.612, 1.000) control 4 update: [5 transform pos 0.000 11.612 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.627 +6.044 seq 63 fp 1 pos (0.000, 11.830, 1.000) control 4 update: [5 transform pos 0.000 11.830 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.662 +6.080 seq 64 fp 1 pos (0.000, 12.043, 1.000) control 4 update: [5 transform pos 0.000 12.043 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.696 +6.114 seq 65 fp 1 pos (0.000, 12.246, 1.000) control 4 update: [5 transform pos 0.000 12.246 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.730 +6.148 seq 66 fp 1 pos (0.000, 12.451, 1.000) control 4 update: [5 transform pos 0.000 12.451 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.763 +6.180 seq 67 fp 1 pos (0.000, 12.647, 1.000) control 4 update: [5 transform pos 0.000 12.647 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.798 +6.216 seq 68 fp 1 pos (0.000, 12.860, 1.000) control 4 update: [5 transform pos 0.000 12.860 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.834 +6.252 seq 69 fp 1 pos (0.000, 13.074, 1.000) control 4 update: [5 transform pos 0.000 13.074 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.870 +6.287 seq 70 fp 1 pos (0.000, 13.288, 1.000) control 4 update: [5 transform pos 0.000 13.288 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.905 +6.323 seq 71 fp 1 pos (0.000, 13.502, 1.000) control 4 update: [5 transform pos 0.000 13.502 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.940 +6.358 seq 72 fp 1 pos (0.000, 13.710, 1.000) control 4 update: [5 transform pos 0.000 13.710 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618400.975 +6.393 seq 73 fp 1 pos (0.000, 13.921, 1.000) control 4 update: [5 transform pos 0.000 13.921 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.007 +6.425 seq 74 fp 1 pos (0.000, 14.114, 1.000) control 4 update: [5 transform pos 0.000 14.114 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.040 +6.458 seq 75 fp 1 pos (0.000, 14.313, 1.000) control 4 update: [5 transform pos 0.000 14.313 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.076 +6.494 seq 76 fp 1 pos (0.000, 14.528, 1.000) control 4 update: [5 transform pos 0.000 14.528 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.112 +6.530 seq 77 fp 1 pos (0.000, 14.742, 1.000) control 4 update: [5 transform pos 0.000 14.742 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.147 +6.565 seq 78 fp 1 pos (0.000, 14.952, 1.000) control 4 update: [5 transform pos 0.000 14.952 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.184 +6.602 seq 79 fp 1 pos (0.000, 15.177, 1.000) control 4 update: [5 transform pos 0.000 15.177 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.217 +6.635 seq 80 fp 1 pos (0.000, 15.374, 1.000) control 4 update: [5 transform pos 0.000 15.374 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.253 +6.671 seq 81 fp 1 pos (0.000, 15.587, 1.000) control 4 update: [5 transform pos 0.000 15.587 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.288 +6.706 seq 82 fp 1 pos (0.000, 15.801, 1.000) control 4 update: [5 transform pos 0.000 15.801 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.325 +6.743 seq 83 fp 1 pos (0.000, 16.023, 1.000) control 4 update: [5 transform pos 0.000 16.023 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.361 +6.779 seq 84 fp 1 pos (0.000, 16.237, 1.000) control 4 update: [5 transform pos 0.000 16.237 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.396 +6.813 seq 85 fp 1 pos (0.000, 16.445, 1.000) control 4 update: [5 transform pos 0.000 16.445 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.431 +6.849 seq 86 fp 1 pos (0.000, 16.657, 1.000) control 4 update: [5 transform pos 0.000 16.657 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.467 +6.885 seq 87 fp 1 pos (0.000, 16.871, 1.000) control 4 update: [5 transform pos 0.000 16.871 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.502 +6.920 seq 88 fp 1 pos (0.000, 17.085, 1.000) control 4 update: [5 transform pos 0.000 17.085 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.535 +6.953 seq 89 fp 1 pos (0.000, 17.279, 1.000) control 4 update: [5 transform pos 0.000 17.279 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.572 +6.990 seq 90 fp 1 pos (0.000, 17.502, 1.000) control 4 update: [5 transform pos 0.000 17.502 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.606 +7.024 seq 91 fp 1 pos (0.000, 17.705, 1.000) control 4 update: [5 transform pos 0.000 17.705 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.639 +7.057 seq 92 fp 1 pos (0.000, 17.904, 1.000) control 4 update: [5 transform pos 0.000 17.904 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.673 +7.091 seq 93 fp 1 pos (0.000, 18.109, 1.000) control 4 update: [5 transform pos 0.000 18.109 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.706 +7.123 seq 94 fp 1 pos (0.000, 18.305, 1.000) control 4 update: [5 transform pos 0.000 18.305 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.740 +7.158 seq 95 fp 1 pos (0.000, 18.511, 1.000) control 4 update: [5 transform pos 0.000 18.511 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.776 +7.194 seq 96 fp 1 pos (0.000, 18.729, 1.000) control 4 update: [5 transform pos 0.000 18.729 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.812 +7.230 seq 97 fp 1 pos (0.000, 18.943, 1.000) control 4 update: [5 transform pos 0.000 18.943 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.848 +7.265 seq 98 fp 1 pos (0.000, 19.157, 1.000) control 4 update: [5 transform pos 0.000 19.157 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.883 +7.301 seq 99 fp 1 pos (0.000, 19.370, 1.000) control 4 update: [5 transform pos 0.000 19.370 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.917 +7.334 seq 100 fp 1 pos (0.000, 19.571, 1.000) control 4 update: [5 transform pos 0.000 19.571 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.953 +7.371 seq 101 fp 1 pos (0.000, 19.790, 1.000) control 4 update: [5 transform pos 0.000 19.790 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618401.991 +7.409 seq 102 fp 1 pos (0.000, 20.016, 1.000) control 4 update: [5 transform pos 0.000 20.016 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.027 +7.445 seq 103 fp 1 pos (0.000, 20.236, 1.000) control 4 update: [5 transform pos 0.000 20.236 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.063 +7.481 seq 104 fp 1 pos (0.000, 20.450, 1.000) control 4 update: [5 transform pos 0.000 20.450 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.099 +7.517 seq 105 fp 1 pos (0.000, 20.665, 1.000) control 4 update: [5 transform pos 0.000 20.665 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.142 +7.560 seq 106 fp 1 pos (0.000, 20.926, 1.000) control 4 update: [5 transform pos 0.000 20.926 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.179 +7.597 seq 107 fp 1 pos (0.000, 21.146, 1.000) control 4 update: [5 transform pos 0.000 21.146 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.215 +7.633 seq 108 fp 1 pos (0.000, 21.360, 1.000) control 4 update: [5 transform pos 0.000 21.360 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.251 +7.669 seq 109 fp 1 pos (0.000, 21.578, 1.000) control 4 update: [5 transform pos 0.000 21.578 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.287 +7.705 seq 110 fp 1 pos (0.000, 21.794, 1.000) control 4 update: [5 transform pos 0.000 21.794 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.320 +7.738 seq 111 fp 1 pos (0.000, 21.992, 1.000) control 4 update: [5 transform pos 0.000 21.992 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.353 +7.771 seq 112 fp 1 pos (0.000, 22.189, 1.000) control 4 update: [5 transform pos 0.000 22.189 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.387 +7.805 seq 113 fp 1 pos (0.000, 22.393, 1.000) control 4 update: [5 transform pos 0.000 22.393 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.422 +7.840 seq 114 fp 1 pos (0.000, 22.606, 1.000) control 4 update: [5 transform pos 0.000 22.606 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.458 +7.876 seq 115 fp 1 pos (0.000, 22.821, 1.000) control 4 update: [5 transform pos 0.000 22.821 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.493 +7.911 seq 116 fp 1 pos (0.000, 23.032, 1.000) control 4 update: [5 transform pos 0.000 23.032 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.529 +7.947 seq 117 fp 1 pos (0.000, 23.247, 1.000) control 4 update: [5 transform pos 0.000 23.247 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.565 +7.983 seq 118 fp 1 pos (0.000, 23.460, 1.000) control 4 update: [5 transform pos 0.000 23.460 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.601 +8.019 seq 119 fp 1 pos (0.000, 23.675, 1.000) control 4 update: [5 transform pos 0.000 23.675 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.637 +8.055 seq 120 fp 1 pos (0.000, 23.892, 1.000) control 4 update: [5 transform pos 0.000 23.892 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.672 +8.090 seq 121 fp 1 pos (0.000, 24.106, 1.000) control 4 update: [5 transform pos 0.000 24.106 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.705 +8.123 seq 122 fp 1 pos (0.000, 24.301, 1.000) control 4 update: [5 transform pos 0.000 24.301 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.742 +8.159 seq 123 fp 1 pos (0.000, 24.521, 1.000) control 4 update: [5 transform pos 0.000 24.521 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.774 +8.192 seq 124 fp 1 pos (0.000, 24.716, 1.000) control 4 update: [5 transform pos 0.000 24.716 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.810 +8.228 seq 125 fp 1 pos (0.000, 24.930, 1.000) control 4 update: [5 transform pos 0.000 24.930 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.844 +8.262 seq 126 fp 1 pos (0.000, 25.135, 1.000) control 4 update: [5 transform pos 0.000 25.135 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.884 +8.302 seq 127 fp 1 pos (0.000, 25.377, 1.000) control 4 update: [5 transform pos 0.000 25.377 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.923 +8.341 seq 128 fp 1 pos (0.000, 25.610, 1.000) control 4 update: [5 transform pos 0.000 25.610 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.957 +8.375 seq 129 fp 1 pos (0.000, 25.814, 1.000) control 4 update: [5 transform pos 0.000 25.814 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618402.990 +8.408 seq 130 fp 1 pos (0.000, 26.012, 1.000) control 4 update: [5 transform pos 0.000 26.012 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.026 +8.444 seq 131 fp 1 pos (0.000, 26.225, 1.000) control 4 update: [5 transform pos 0.000 26.225 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.061 +8.479 seq 132 fp 1 pos (0.000, 26.440, 1.000) control 4 update: [5 transform pos 0.000 26.440 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.094 +8.512 seq 133 fp 1 pos (0.000, 26.635, 1.000) control 4 update: [5 transform pos 0.000 26.635 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.130 +8.548 seq 134 fp 1 pos (0.000, 26.850, 1.000) control 4 update: [5 transform pos 0.000 26.850 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.167 +8.585 seq 135 fp 1 pos (0.000, 27.072, 1.000) control 4 update: [5 transform pos 0.000 27.072 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.204 +8.621 seq 136 fp 1 pos (0.000, 27.292, 1.000) control 4 update: [5 transform pos 0.000 27.292 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.240 +8.658 seq 137 fp 1 pos (0.000, 27.513, 1.000) control 4 update: [5 transform pos 0.000 27.513 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.276 +8.694 seq 138 fp 1 pos (0.000, 27.727, 1.000) control 4 update: [5 transform pos 0.000 27.727 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.308 +8.726 seq 139 fp 1 pos (0.000, 27.920, 1.000) control 4 update: [5 transform pos 0.000 27.920 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.341 +8.759 seq 140 fp 1 pos (0.000, 28.118, 1.000) control 4 update: [5 transform pos 0.000 28.118 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.377 +8.795 seq 141 fp 1 pos (0.000, 28.333, 1.000) control 4 update: [5 transform pos 0.000 28.333 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.413 +8.830 seq 142 fp 1 pos (0.000, 28.547, 1.000) control 4 update: [5 transform pos 0.000 28.547 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.448 +8.866 seq 143 fp 1 pos (0.000, 28.761, 1.000) control 4 update: [5 transform pos 0.000 28.761 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.482 +8.900 seq 144 fp 1 pos (0.000, 28.962, 1.000) control 4 update: [5 transform pos 0.000 28.962 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.519 +8.936 seq 145 fp 1 pos (0.000, 29.182, 1.000) control 4 update: [5 transform pos 0.000 29.182 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.555 +8.972 seq 146 fp 1 pos (0.000, 29.399, 1.000) control 4 update: [5 transform pos 0.000 29.399 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.587 +9.005 seq 147 fp 1 pos (0.000, 29.594, 1.000) control 4 update: [5 transform pos 0.000 29.594 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.621 +9.039 seq 148 fp 1 pos (0.000, 29.797, 1.000) control 4 update: [5 transform pos 0.000 29.797 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.653 +9.071 seq 149 fp 1 pos (0.000, 29.991, 1.000) control 4 update: [5 transform pos 0.000 29.991 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.689 +9.107 seq 150 fp 1 pos (0.000, 30.205, 1.000) control 4 update: [5 transform pos 0.000 30.205 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.725 +9.142 seq 151 fp 1 pos (0.000, 30.419, 1.000) control 4 update: [5 transform pos 0.000 30.419 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.759 +9.177 seq 152 fp 1 pos (0.000, 30.626, 1.000) control 4 update: [5 transform pos 0.000 30.626 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.794 +9.212 seq 153 fp 1 pos (0.000, 30.835, 1.000) control 4 update: [5 transform pos 0.000 30.835 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.829 +9.247 seq 154 fp 1 pos (0.000, 31.047, 1.000) control 4 update: [5 transform pos 0.000 31.047 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.865 +9.283 seq 155 fp 1 pos (0.000, 31.261, 1.000) control 4 update: [5 transform pos 0.000 31.261 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.899 +9.317 seq 156 fp 1 pos (0.000, 31.468, 1.000) control 4 update: [5 transform pos 0.000 31.468 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.933 +9.351 seq 157 fp 1 pos (0.000, 31.671, 1.000) control 4 update: [5 transform pos 0.000 31.671 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618403.969 +9.387 seq 158 fp 1 pos (0.000, 31.884, 1.000) control 4 update: [5 transform pos 0.000 31.884 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.006 +9.424 seq 159 fp 1 pos (0.000, 32.105, 1.000) control 4 update: [5 transform pos 0.000 32.105 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.044 +9.461 seq 160 fp 1 pos (0.000, 32.332, 1.000) control 4 update: [5 transform pos 0.000 32.332 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.081 +9.499 seq 161 fp 1 pos (0.000, 32.556, 1.000) control 4 update: [5 transform pos 0.000 32.556 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.116 +9.534 seq 162 fp 1 pos (0.000, 32.770, 1.000) control 4 update: [5 transform pos 0.000 32.770 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.153 +9.571 seq 163 fp 1 pos (0.000, 32.990, 1.000) control 4 update: [5 transform pos 0.000 32.990 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.187 +9.604 seq 164 fp 1 pos (0.000, 33.191, 1.000) control 4 update: [5 transform pos 0.000 33.191 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.222 +9.640 seq 165 fp 1 pos (0.000, 33.404, 1.000) control 4 update: [5 transform pos 0.000 33.404 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.259 +9.677 seq 166 fp 1 pos (0.000, 33.624, 1.000) control 4 update: [5 transform pos 0.000 33.624 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.292 +9.709 seq 167 fp 1 pos (0.000, 33.821, 1.000) control 4 update: [5 transform pos 0.000 33.821 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.325 +9.743 seq 168 fp 1 pos (0.000, 34.020, 1.000) control 4 update: [5 transform pos 0.000 34.020 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.363 +9.781 seq 169 fp 1 pos (0.000, 34.250, 1.000) control 4 update: [5 transform pos 0.000 34.250 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.399 +9.817 seq 170 fp 1 pos (0.000, 34.465, 1.000) control 4 update: [5 transform pos 0.000 34.465 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.432 +9.850 seq 171 fp 1 pos (0.000, 34.661, 1.000) control 4 update: [5 transform pos 0.000 34.661 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.465 +9.883 seq 172 fp 1 pos (0.000, 34.861, 1.000) control 4 update: [5 transform pos 0.000 34.861 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.501 +9.919 seq 173 fp 1 pos (0.000, 35.077, 1.000) control 4 update: [5 transform pos 0.000 35.077 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.534 +9.952 seq 174 fp 1 pos (0.000, 35.273, 1.000) control 4 update: [5 transform pos 0.000 35.273 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.568 +9.985 seq 175 fp 1 pos (0.000, 35.476, 1.000) control 4 update: [5 transform pos 0.000 35.476 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.601 +10.019 seq 176 fp 1 pos (0.000, 35.679, 1.000) control 4 update: [5 transform pos 0.000 35.679 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.636 +10.054 seq 177 fp 1 pos (0.000, 35.886, 1.000) control 4 update: [5 transform pos 0.000 35.886 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.674 +10.091 seq 178 fp 1 pos (0.000, 36.113, 1.000) control 4 update: [5 transform pos 0.000 36.113 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.706 +10.124 seq 179 fp 1 pos (0.000, 36.305, 1.000) control 4 update: [5 transform pos 0.000 36.305 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.741 +10.159 seq 180 fp 1 pos (0.000, 36.519, 1.000) control 4 update: [5 transform pos 0.000 36.519 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.774 +10.192 seq 181 fp 1 pos (0.000, 36.713, 1.000) control 4 update: [5 transform pos 0.000 36.713 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.807 +10.225 seq 182 fp 1 pos (0.000, 36.911, 1.000) control 4 update: [5 transform pos 0.000 36.911 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.843 +10.261 seq 183 fp 1 pos (0.000, 37.128, 1.000) control 4 update: [5 transform pos 0.000 37.128 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.878 +10.296 seq 184 fp 1 pos (0.000, 37.342, 1.000) control 4 update: [5 transform pos 0.000 37.342 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.911 +10.329 seq 185 fp 1 pos (0.000, 37.536, 1.000) control 4 update: [5 transform pos 0.000 37.536 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.947 +10.365 seq 186 fp 1 pos (0.000, 37.752, 1.000) control 4 update: [5 transform pos 0.000 37.752 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618404.983 +10.401 seq 187 fp 1 pos (0.000, 37.970, 1.000) control 4 update: [5 transform pos 0.000 37.970 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.020 +10.438 seq 188 fp 1 pos (0.000, 38.193, 1.000) control 4 update: [5 transform pos 0.000 38.193 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.053 +10.471 seq 189 fp 1 pos (0.000, 38.390, 1.000) control 4 update: [5 transform pos 0.000 38.390 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.091 +10.509 seq 190 fp 1 pos (0.000, 38.619, 1.000) control 4 update: [5 transform pos 0.000 38.619 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.125 +10.543 seq 191 fp 1 pos (0.000, 38.819, 1.000) control 4 update: [5 transform pos 0.000 38.819 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.161 +10.579 seq 192 fp 1 pos (0.000, 39.038, 1.000) control 4 update: [5 transform pos 0.000 39.038 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.194 +10.611 seq 193 fp 1 pos (0.000, 39.232, 1.000) control 4 update: [5 transform pos 0.000 39.232 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.229 +10.647 seq 194 fp 1 pos (0.000, 39.447, 1.000) control 4 update: [5 transform pos 0.000 39.447 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.266 +10.684 seq 195 fp 1 pos (0.000, 39.667, 1.000) control 4 update: [5 transform pos 0.000 39.667 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.302 +10.720 seq 196 fp 1 pos (0.000, 39.885, 1.000) control 4 update: [5 transform pos 0.000 39.885 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.343 +10.761 seq 197 fp 1 pos (0.000, 40.128, 1.000) control 4 update: [5 transform pos 0.000 40.128 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.380 +10.798 seq 198 fp 1 pos (0.000, 40.349, 1.000) control 4 update: [5 transform pos 0.000 40.349 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.414 +10.832 seq 199 fp 1 pos (0.000, 40.556, 1.000) control 4 update: [5 transform pos 0.000 40.556 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.450 +10.868 seq 200 fp 1 pos (0.000, 40.770, 1.000) control 4 update: [5 transform pos 0.000 40.770 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.482 +10.900 seq 201 fp 1 pos (0.000, 40.963, 1.000) control 4 update: [5 transform pos 0.000 40.963 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.518 +10.935 seq 202 fp 1 pos (0.000, 41.177, 1.000) control 4 update: [5 transform pos 0.000 41.177 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.550 +10.968 seq 203 fp 1 pos (0.000, 41.369, 1.000) control 4 update: [5 transform pos 0.000 41.369 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.586 +11.004 seq 204 fp 1 pos (0.000, 41.589, 1.000) control 4 update: [5 transform pos 0.000 41.589 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.623 +11.041 seq 205 fp 1 pos (0.000, 41.807, 1.000) control 4 update: [5 transform pos 0.000 41.807 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.659 +11.076 seq 206 fp 1 pos (0.000, 42.023, 1.000) control 4 update: [5 transform pos 0.000 42.023 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.697 +11.115 seq 207 fp 1 pos (0.000, 42.253, 1.000) control 4 update: [5 transform pos 0.000 42.253 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.729 +11.147 seq 208 fp 1 pos (0.000, 42.445, 1.000) control 4 update: [5 transform pos 0.000 42.445 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.765 +11.183 seq 209 fp 1 pos (0.000, 42.660, 1.000) control 4 update: [5 transform pos 0.000 42.660 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.800 +11.218 seq 210 fp 1 pos (0.000, 42.873, 1.000) control 4 update: [5 transform pos 0.000 42.873 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.833 +11.251 seq 211 fp 1 pos (0.000, 43.069, 1.000) control 4 update: [5 transform pos 0.000 43.069 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.869 +11.287 seq 212 fp 1 pos (0.000, 43.286, 1.000) control 4 update: [5 transform pos 0.000 43.286 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.906 +11.324 seq 213 fp 1 pos (0.000, 43.507, 1.000) control 4 update: [5 transform pos 0.000 43.507 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.939 +11.357 seq 214 fp 1 pos (0.000, 43.703, 1.000) control 4 update: [5 transform pos 0.000 43.703 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618405.971 +11.389 seq 215 fp 1 pos (0.000, 43.897, 1.000) control 4 update: [5 transform pos 0.000 43.897 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.007 +11.424 seq 216 fp 1 pos (0.000, 44.111, 1.000) control 4 update: [5 transform pos 0.000 44.111 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.040 +11.458 seq 217 fp 1 pos (0.000, 44.310, 1.000) control 4 update: [5 transform pos 0.000 44.310 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.074 +11.491 seq 218 fp 1 pos (0.000, 44.513, 1.000) control 4 update: [5 transform pos 0.000 44.513 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.110 +11.528 seq 219 fp 1 pos (0.000, 44.732, 1.000) control 4 update: [5 transform pos 0.000 44.732 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.146 +11.564 seq 220 fp 1 pos (0.000, 44.947, 1.000) control 4 update: [5 transform pos 0.000 44.947 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.182 +11.600 seq 221 fp 1 pos (0.000, 45.163, 1.000) control 4 update: [5 transform pos 0.000 45.163 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.216 +11.634 seq 222 fp 1 pos (0.000, 45.366, 1.000) control 4 update: [5 transform pos 0.000 45.366 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.250 +11.668 seq 223 fp 1 pos (0.000, 45.569, 1.000) control 4 update: [5 transform pos 0.000 45.569 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.288 +11.706 seq 224 fp 1 pos (0.000, 45.801, 1.000) control 4 update: [5 transform pos 0.000 45.801 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.323 +11.741 seq 225 fp 1 pos (0.000, 46.012, 1.000) control 4 update: [5 transform pos 0.000 46.012 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.358 +11.776 seq 226 fp 1 pos (0.000, 46.218, 1.000) control 4 update: [5 transform pos 0.000 46.218 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.393 +11.811 seq 227 fp 1 pos (0.000, 46.432, 1.000) control 4 update: [5 transform pos 0.000 46.432 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.430 +11.848 seq 228 fp 1 pos (0.000, 46.652, 1.000) control 4 update: [5 transform pos 0.000 46.652 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.467 +11.884 seq 229 fp 1 pos (0.000, 46.870, 1.000) control 4 update: [5 transform pos 0.000 46.870 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.499 +11.917 seq 230 fp 1 pos (0.000, 47.064, 1.000) control 4 update: [5 transform pos 0.000 47.064 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.532 +11.949 seq 231 fp 1 pos (0.000, 47.260, 1.000) control 4 update: [5 transform pos 0.000 47.260 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.567 +11.985 seq 232 fp 1 pos (0.000, 47.474, 1.000) control 4 update: [5 transform pos 0.000 47.474 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.604 +12.022 seq 233 fp 1 pos (0.000, 47.694, 1.000) control 4 update: [5 transform pos 0.000 47.694 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.639 +12.057 seq 234 fp 1 pos (0.000, 47.907, 1.000) control 4 update: [5 transform pos 0.000 47.907 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.675 +12.093 seq 235 fp 1 pos (0.000, 48.121, 1.000) control 4 update: [5 transform pos 0.000 48.121 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.712 +12.130 seq 236 fp 1 pos (0.000, 48.342, 1.000) control 4 update: [5 transform pos 0.000 48.342 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.748 +12.165 seq 237 fp 1 pos (0.000, 48.557, 1.000) control 4 update: [5 transform pos 0.000 48.557 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.780 +12.198 seq 238 fp 1 pos (0.000, 48.753, 1.000) control 4 update: [5 transform pos 0.000 48.753 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.813 +12.231 seq 239 fp 1 pos (0.000, 48.950, 1.000) control 4 update: [5 transform pos 0.000 48.950 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.849 +12.267 seq 240 fp 1 pos (0.000, 49.163, 1.000) control 4 update: [5 transform pos 0.000 49.163 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.881 +12.299 seq 241 fp 1 pos (0.000, 49.357, 1.000) control 4 update: [5 transform pos 0.000 49.357 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.918 +12.336 seq 242 fp 1 pos (0.000, 49.579, 1.000) control 4 update: [5 transform pos 0.000 49.579 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.951 +12.369 seq 243 fp 1 pos (0.000, 49.777, 1.000) control 4 update: [5 transform pos 0.000 49.777 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618406.987 +12.405 seq 244 fp 1 pos (0.000, 49.995, 1.000) control 4 update: [5 transform pos 0.000 49.995 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.024 +12.442 seq 245 fp 1 pos (0.000, 50.214, 1.000) control 4 update: [5 transform pos 0.000 50.214 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.061 +12.479 seq 246 fp 1 pos (0.000, 50.435, 1.000) control 4 update: [5 transform pos 0.000 50.435 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.093 +12.511 seq 247 fp 1 pos (0.000, 50.628, 1.000) control 4 update: [5 transform pos 0.000 50.628 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.126 +12.544 seq 248 fp 1 pos (0.000, 50.826, 1.000) control 4 update: [5 transform pos 0.000 50.826 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.162 +12.580 seq 249 fp 1 pos (0.000, 51.044, 1.000) control 4 update: [5 transform pos 0.000 51.044 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.194 +12.612 seq 250 fp 1 pos (0.000, 51.237, 1.000) control 4 update: [5 transform pos 0.000 51.237 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.232 +12.650 seq 251 fp 1 pos (0.000, 51.463, 1.000) control 4 update: [5 transform pos 0.000 51.463 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.268 +12.686 seq 252 fp 1 pos (0.000, 51.680, 1.000) control 4 update: [5 transform pos 0.000 51.680 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.304 +12.722 seq 253 fp 1 pos (0.000, 51.893, 1.000) control 4 update: [5 transform pos 0.000 51.893 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.337 +12.754 seq 254 fp 1 pos (0.000, 52.091, 1.000) control 4 update: [5 transform pos 0.000 52.091 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.370 +12.788 seq 255 fp 1 pos (0.000, 52.291, 1.000) control 4 update: [5 transform pos 0.000 52.291 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.406 +12.824 seq 256 fp 1 pos (0.000, 52.507, 1.000) control 4 update: [5 transform pos 0.000 52.507 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.440 +12.858 seq 257 fp 1 pos (0.000, 52.712, 1.000) control 4 update: [5 transform pos 0.000 52.712 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.477 +12.895 seq 258 fp 1 pos (0.000, 52.934, 1.000) control 4 update: [5 transform pos 0.000 52.934 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.513 +12.931 seq 259 fp 1 pos (0.000, 53.149, 1.000) control 4 update: [5 transform pos 0.000 53.149 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.549 +12.967 seq 260 fp 1 pos (0.000, 53.367, 1.000) control 4 update: [5 transform pos 0.000 53.367 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.586 +13.004 seq 261 fp 1 pos (0.000, 53.586, 1.000) control 4 update: [5 transform pos 0.000 53.586 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.621 +13.039 seq 262 fp 1 pos (0.000, 53.800, 1.000) control 4 update: [5 transform pos 0.000 53.800 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.660 +13.078 seq 263 fp 1 pos (0.000, 54.030, 1.000) control 4 update: [5 transform pos 0.000 54.030 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.695 +13.113 seq 264 fp 1 pos (0.000, 54.243, 1.000) control 4 update: [5 transform pos 0.000 54.243 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.731 +13.149 seq 265 fp 1 pos (0.000, 54.457, 1.000) control 4 update: [5 transform pos 0.000 54.457 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.767 +13.185 seq 266 fp 1 pos (0.000, 54.672, 1.000) control 4 update: [5 transform pos 0.000 54.672 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.801 +13.219 seq 267 fp 1 pos (0.000, 54.877, 1.000) control 4 update: [5 transform pos 0.000 54.877 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.837 +13.255 seq 268 fp 1 pos (0.000, 55.091, 1.000) control 4 update: [5 transform pos 0.000 55.091 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.873 +13.291 seq 269 fp 1 pos (0.000, 55.308, 1.000) control 4 update: [5 transform pos 0.000 55.308 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.908 +13.325 seq 270 fp 1 pos (0.000, 55.517, 1.000) control 4 update: [5 transform pos 0.000 55.517 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.941 +13.359 seq 271 fp 1 pos (0.000, 55.719, 1.000) control 4 update: [5 transform pos 0.000 55.719 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618407.980 +13.398 seq 272 fp 1 pos (0.000, 55.949, 1.000) control 4 update: [5 transform pos 0.000 55.949 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.015 +13.433 seq 273 fp 1 pos (0.000, 56.164, 1.000) control 4 update: [5 transform pos 0.000 56.164 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.048 +13.466 seq 274 fp 1 pos (0.000, 56.361, 1.000) control 4 update: [5 transform pos 0.000 56.361 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.081 +13.499 seq 275 fp 1 pos (0.000, 56.556, 1.000) control 4 update: [5 transform pos 0.000 56.556 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.113 +13.531 seq 276 fp 1 pos (0.000, 56.751, 1.000) control 4 update: [5 transform pos 0.000 56.751 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.149 +13.567 seq 277 fp 1 pos (0.000, 56.965, 1.000) control 4 update: [5 transform pos 0.000 56.965 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.186 +13.603 seq 278 fp 1 pos (0.000, 57.185, 1.000) control 4 update: [5 transform pos 0.000 57.185 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.224 +13.642 seq 279 fp 1 pos (0.000, 57.414, 1.000) control 4 update: [5 transform pos 0.000 57.414 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.259 +13.677 seq 280 fp 1 pos (0.000, 57.628, 1.000) control 4 update: [5 transform pos 0.000 57.628 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.297 +13.714 seq 281 fp 1 pos (0.000, 57.850, 1.000) control 4 update: [5 transform pos 0.000 57.850 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.332 +13.750 seq 282 fp 1 pos (0.000, 58.064, 1.000) control 4 update: [5 transform pos 0.000 58.064 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.368 +13.786 seq 283 fp 1 pos (0.000, 58.282, 1.000) control 4 update: [5 transform pos 0.000 58.282 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.402 +13.820 seq 284 fp 1 pos (0.000, 58.481, 1.000) control 4 update: [5 transform pos 0.000 58.481 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.437 +13.854 seq 285 fp 1 pos (0.000, 58.691, 1.000) control 4 update: [5 transform pos 0.000 58.691 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.469 +13.887 seq 286 fp 1 pos (0.000, 58.884, 1.000) control 4 update: [5 transform pos 0.000 58.884 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.506 +13.924 seq 287 fp 1 pos (0.000, 59.105, 1.000) control 4 update: [5 transform pos 0.000 59.105 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.544 +13.962 seq 288 fp 1 pos (0.000, 59.336, 1.000) control 4 update: [5 transform pos 0.000 59.336 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.578 +13.996 seq 289 fp 1 pos (0.000, 59.539, 1.000) control 4 update: [5 transform pos 0.000 59.539 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.614 +14.032 seq 290 fp 1 pos (0.000, 59.757, 1.000) control 4 update: [5 transform pos 0.000 59.757 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.653 +14.071 seq 291 fp 1 pos (0.000, 59.988, 1.000) control 4 update: [5 transform pos 0.000 59.988 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618408.687 +14.105 seq 292 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.0000]
+1794618409.689 +15.107 seq 293 fp 1 pos (0.000, 60.094, 1.000) control 4 update: empty
+1794618409.745 +15.163 seq 294 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.0127]
+1794618409.779 +15.197 seq 295 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.0970]
+1794618409.812 +15.230 seq 296 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.1789]
+1794618409.847 +15.265 seq 297 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.2680]
+1794618409.884 +15.302 seq 298 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.3600]
+1794618409.921 +15.338 seq 299 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.4513]
+1794618409.954 +15.371 seq 300 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.5337]
+1794618409.990 +15.408 seq 301 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.6239]
+1794618410.025 +15.443 seq 302 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.7128]
+1794618410.061 +15.479 seq 303 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.8016]
+1794618410.093 +15.511 seq 304 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.8833]
+1794618410.126 +15.544 seq 305 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 0.9644]
+1794618410.162 +15.580 seq 306 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.0547]
+1794618410.198 +15.616 seq 307 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.1439]
+1794618410.232 +15.650 seq 308 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.2301]
+1794618410.269 +15.687 seq 309 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.3217]
+1794618410.304 +15.722 seq 310 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.4106]
+1794618410.340 +15.758 seq 311 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.4996]
+1794618410.377 +15.795 seq 312 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.5928]
+1794618410.413 +15.831 seq 313 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.6822]
+1794618410.450 +15.868 seq 314 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.7746]
+1794618410.486 +15.904 seq 315 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.8639]
+1794618410.522 +15.940 seq 316 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 1.9546]
+1794618410.558 +15.975 seq 317 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.0437]
+1794618410.593 +16.011 seq 318 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.1326]
+1794618410.628 +16.046 seq 319 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.2195]
+1794618410.662 +16.080 seq 320 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.3039]
+1794618410.695 +16.113 seq 321 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.3864]
+1794618410.733 +16.150 seq 322 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.4808]
+1794618410.765 +16.183 seq 323 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.5620]
+1794618410.801 +16.219 seq 324 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.6513]
+1794618410.836 +16.254 seq 325 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.7406]
+1794618410.869 +16.286 seq 326 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.8210]
+1794618410.905 +16.323 seq 327 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 2.9123]
+1794618410.941 +16.359 seq 328 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.0023]
+1794618410.977 +16.395 seq 329 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.0914]
+1794618411.010 +16.428 seq 330 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.1746]
+1794618411.046 +16.464 seq 331 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.2645]
+1794618411.078 +16.496 seq 332 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.3451]
+1794618411.110 +16.528 seq 333 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.4255]
+1794618411.146 +16.564 seq 334 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.5146]
+1794618411.178 +16.596 seq 335 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.5951]
+1794618411.216 +16.634 seq 336 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.6898]
+1794618411.252 +16.670 seq 337 fp 1 pos (0.000, 60.094, 1.000) control 4 update: [5 transform pos 0.000 60.094 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.748 +17.166 seq 338 fp 1 pos (0.018, 60.070, 1.000) control 4 update: [5 transform pos 0.018 60.070 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.784 +17.201 seq 339 fp 1 pos (0.145, 59.898, 1.000) control 4 update: [5 transform pos 0.145 59.898 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.819 +17.237 seq 340 fp 1 pos (0.273, 59.725, 1.000) control 4 update: [5 transform pos 0.273 59.725 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.855 +17.273 seq 341 fp 1 pos (0.400, 59.554, 1.000) control 4 update: [5 transform pos 0.400 59.554 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.889 +17.307 seq 342 fp 1 pos (0.521, 59.390, 1.000) control 4 update: [5 transform pos 0.521 59.390 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.929 +17.347 seq 343 fp 1 pos (0.664, 59.198, 1.000) control 4 update: [5 transform pos 0.664 59.198 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618411.965 +17.383 seq 344 fp 1 pos (0.794, 59.022, 1.000) control 4 update: [5 transform pos 0.794 59.022 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.001 +17.419 seq 345 fp 1 pos (0.921, 58.850, 1.000) control 4 update: [5 transform pos 0.921 58.850 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.038 +17.456 seq 346 fp 1 pos (1.053, 58.672, 1.000) control 4 update: [5 transform pos 1.053 58.672 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.073 +17.491 seq 347 fp 1 pos (1.180, 58.501, 1.000) control 4 update: [5 transform pos 1.180 58.501 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.111 +17.529 seq 348 fp 1 pos (1.316, 58.318, 1.000) control 4 update: [5 transform pos 1.316 58.318 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.149 +17.567 seq 349 fp 1 pos (1.450, 58.136, 1.000) control 4 update: [5 transform pos 1.450 58.136 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.182 +17.600 seq 350 fp 1 pos (1.568, 57.978, 1.000) control 4 update: [5 transform pos 1.568 57.978 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.219 +17.637 seq 351 fp 1 pos (1.700, 57.799, 1.000) control 4 update: [5 transform pos 1.700 57.799 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.255 +17.673 seq 352 fp 1 pos (1.829, 57.625, 1.000) control 4 update: [5 transform pos 1.829 57.625 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.288 +17.706 seq 353 fp 1 pos (1.946, 57.466, 1.000) control 4 update: [5 transform pos 1.946 57.466 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.323 +17.741 seq 354 fp 1 pos (2.074, 57.295, 1.000) control 4 update: [5 transform pos 2.074 57.295 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.359 +17.777 seq 355 fp 1 pos (2.202, 57.121, 1.000) control 4 update: [5 transform pos 2.202 57.121 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.395 +17.813 seq 356 fp 1 pos (2.329, 56.949, 1.000) control 4 update: [5 transform pos 2.329 56.949 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.430 +17.848 seq 357 fp 1 pos (2.454, 56.782, 1.000) control 4 update: [5 transform pos 2.454 56.782 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.466 +17.883 seq 358 fp 1 pos (2.581, 56.610, 1.000) control 4 update: [5 transform pos 2.581 56.610 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.501 +17.919 seq 359 fp 1 pos (2.708, 56.438, 1.000) control 4 update: [5 transform pos 2.708 56.438 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.540 +17.958 seq 360 fp 1 pos (2.848, 56.250, 1.000) control 4 update: [5 transform pos 2.848 56.250 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.575 +17.993 seq 361 fp 1 pos (2.972, 56.082, 1.000) control 4 update: [5 transform pos 2.972 56.082 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.612 +18.030 seq 362 fp 1 pos (3.104, 55.903, 1.000) control 4 update: [5 transform pos 3.104 55.903 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.644 +18.062 seq 363 fp 1 pos (3.219, 55.748, 1.000) control 4 update: [5 transform pos 3.219 55.748 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.677 +18.095 seq 364 fp 1 pos (3.335, 55.591, 1.000) control 4 update: [5 transform pos 3.335 55.591 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.713 +18.131 seq 365 fp 1 pos (3.466, 55.415, 1.000) control 4 update: [5 transform pos 3.466 55.415 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.746 +18.164 seq 366 fp 1 pos (3.583, 55.257, 1.000) control 4 update: [5 transform pos 3.583 55.257 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.779 +18.197 seq 367 fp 1 pos (3.701, 55.098, 1.000) control 4 update: [5 transform pos 3.701 55.098 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.816 +18.234 seq 368 fp 1 pos (3.832, 54.920, 1.000) control 4 update: [5 transform pos 3.832 54.920 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.849 +18.267 seq 369 fp 1 pos (3.950, 54.761, 1.000) control 4 update: [5 transform pos 3.950 54.761 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.891 +18.309 seq 370 fp 1 pos (4.099, 54.559, 1.000) control 4 update: [5 transform pos 4.099 54.559 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.928 +18.346 seq 371 fp 1 pos (4.233, 54.379, 1.000) control 4 update: [5 transform pos 4.233 54.379 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618412.968 +18.385 seq 372 fp 1 pos (4.374, 54.189, 1.000) control 4 update: [5 transform pos 4.374 54.189 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.002 +18.419 seq 373 fp 1 pos (4.495, 54.025, 1.000) control 4 update: [5 transform pos 4.495 54.025 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.035 +18.453 seq 374 fp 1 pos (4.614, 53.865, 1.000) control 4 update: [5 transform pos 4.614 53.865 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.069 +18.487 seq 375 fp 1 pos (4.736, 53.700, 1.000) control 4 update: [5 transform pos 4.736 53.700 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.105 +18.523 seq 376 fp 1 pos (4.864, 53.527, 1.000) control 4 update: [5 transform pos 4.864 53.527 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.141 +18.558 seq 377 fp 1 pos (4.991, 53.355, 1.000) control 4 update: [5 transform pos 4.991 53.355 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.177 +18.594 seq 378 fp 1 pos (5.120, 53.182, 1.000) control 4 update: [5 transform pos 5.120 53.182 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.210 +18.627 seq 379 fp 1 pos (5.238, 53.022, 1.000) control 4 update: [5 transform pos 5.238 53.022 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.246 +18.664 seq 380 fp 1 pos (5.368, 52.846, 1.000) control 4 update: [5 transform pos 5.368 52.846 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.283 +18.701 seq 381 fp 1 pos (5.499, 52.670, 1.000) control 4 update: [5 transform pos 5.499 52.670 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.319 +18.736 seq 382 fp 1 pos (5.627, 52.497, 1.000) control 4 update: [5 transform pos 5.627 52.497 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.351 +18.769 seq 383 fp 1 pos (5.743, 52.340, 1.000) control 4 update: [5 transform pos 5.743 52.340 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.388 +18.806 seq 384 fp 1 pos (5.875, 52.163, 1.000) control 4 update: [5 transform pos 5.875 52.163 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.424 +18.842 seq 385 fp 1 pos (6.004, 51.988, 1.000) control 4 update: [5 transform pos 6.004 51.988 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.460 +18.878 seq 386 fp 1 pos (6.132, 51.816, 1.000) control 4 update: [5 transform pos 6.132 51.816 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.496 +18.914 seq 387 fp 1 pos (6.262, 51.640, 1.000) control 4 update: [5 transform pos 6.262 51.640 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.532 +18.950 seq 388 fp 1 pos (6.389, 51.468, 1.000) control 4 update: [5 transform pos 6.389 51.468 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.565 +18.983 seq 389 fp 1 pos (6.508, 51.307, 1.000) control 4 update: [5 transform pos 6.508 51.307 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.601 +19.019 seq 390 fp 1 pos (6.637, 51.133, 1.000) control 4 update: [5 transform pos 6.637 51.133 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.636 +19.053 seq 391 fp 1 pos (6.759, 50.968, 1.000) control 4 update: [5 transform pos 6.759 50.968 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.671 +19.089 seq 392 fp 1 pos (6.887, 50.796, 1.000) control 4 update: [5 transform pos 6.887 50.796 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.708 +19.126 seq 393 fp 1 pos (7.017, 50.620, 1.000) control 4 update: [5 transform pos 7.017 50.620 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.745 +19.163 seq 394 fp 1 pos (7.150, 50.441, 1.000) control 4 update: [5 transform pos 7.150 50.441 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618413.781 +19.198 seq 395 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.7791]
+1794618414.249 +19.666 seq 396 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.7664]
+1794618414.282 +19.700 seq 397 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.6834]
+1794618414.318 +19.735 seq 398 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.5939]
+1794618414.353 +19.771 seq 399 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.5045]
+1794618414.387 +19.804 seq 400 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.4215]
+1794618414.426 +19.844 seq 401 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.3222]
+1794618414.460 +19.878 seq 402 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.2375]
+1794618414.496 +19.914 seq 403 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.1480]
+1794618414.529 +19.947 seq 404 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 3.0651]
+1794618414.566 +19.984 seq 405 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.9727]
+1794618414.602 +20.020 seq 406 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.8831]
+1794618414.641 +20.059 seq 407 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.7853]
+1794618414.676 +20.094 seq 408 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.6983]
+1794618414.712 +20.130 seq 409 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.6086]
+1794618414.746 +20.164 seq 410 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.5232]
+1794618414.783 +20.201 seq 411 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.4310]
+1794618414.818 +20.236 seq 412 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.3419]
+1794618414.855 +20.273 seq 413 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.2509]
+1794618414.892 +20.310 seq 414 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.1581]
+1794618414.925 +20.343 seq 415 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 2.0758]
+1794618414.960 +20.378 seq 416 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.9869]
+1794618414.997 +20.414 seq 417 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.8966]
+1794618415.032 +20.450 seq 418 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.8077]
+1794618415.066 +20.484 seq 419 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.7233]
+1794618415.103 +20.520 seq 420 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.6313]
+1794618415.142 +20.560 seq 421 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.5335]
+1794618415.178 +20.596 seq 422 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.4432]
+1794618415.214 +20.631 seq 423 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.3538]
+1794618415.249 +20.667 seq 424 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.2650]
+1794618415.282 +20.700 seq 425 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.1830]
+1794618415.316 +20.734 seq 426 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.0975]
+1794618415.353 +20.771 seq 427 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 1.0054]
+1794618415.394 +20.812 seq 428 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.9037]
+1794618415.427 +20.845 seq 429 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.8198]
+1794618415.460 +20.878 seq 430 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.7385]
+1794618415.496 +20.914 seq 431 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.6479]
+1794618415.530 +20.948 seq 432 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.5635]
+1794618415.568 +20.986 seq 433 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.4686]
+1794618415.604 +21.021 seq 434 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.3790]
+1794618415.637 +21.055 seq 435 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.2958]
+1794618415.670 +21.088 seq 436 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.2135]
+1794618415.708 +21.126 seq 437 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.1186]
+1794618415.741 +21.159 seq 438 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle 0.0348]
+1794618415.777 +21.195 seq 439 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.0542]
+1794618415.813 +21.231 seq 440 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.1444]
+1794618415.850 +21.268 seq 441 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.2370]
+1794618415.883 +21.301 seq 442 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.3194]
+1794618415.915 +21.333 seq 443 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.4002]
+1794618415.948 +21.366 seq 444 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.4814]
+1794618415.982 +21.400 seq 445 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.5664]
+1794618416.017 +21.435 seq 446 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.6553]
+1794618416.050 +21.468 seq 447 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.7373]
+1794618416.083 +21.501 seq 448 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.8190]
+1794618416.116 +21.534 seq 449 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.9021]
+1794618416.151 +21.569 seq 450 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -0.9905]
+1794618416.184 +21.602 seq 451 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.0724]
+1794618416.221 +21.639 seq 452 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.1638]
+1794618416.257 +21.675 seq 453 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.2541]
+1794618416.293 +21.711 seq 454 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.3450]
+1794618416.327 +21.745 seq 455 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.4288]
+1794618416.362 +21.780 seq 456 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.5180]
+1794618416.395 +21.813 seq 457 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.5994]
+1794618416.429 +21.846 seq 458 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.6835]
+1794618416.466 +21.884 seq 459 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.7764]
+1794618416.502 +21.920 seq 460 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.8663]
+1794618416.538 +21.955 seq 461 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -1.9561]
+1794618416.573 +21.991 seq 462 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.0447]
+1794618416.606 +22.024 seq 463 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.1279]
+1794618416.642 +22.060 seq 464 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.2168]
+1794618416.677 +22.095 seq 465 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.3058]
+1794618416.714 +22.132 seq 466 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.3982]
+1794618416.750 +22.168 seq 467 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.4871]
+1794618416.787 +22.204 seq 468 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.5787]
+1794618416.822 +22.240 seq 469 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.6677]
+1794618416.858 +22.276 seq 470 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.7577]
+1794618416.894 +22.312 seq 471 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.8467]
+1794618416.930 +22.348 seq 472 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -2.9365]
+1794618416.964 +22.382 seq 473 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.0224]
+1794618416.997 +22.415 seq 474 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.1047]
+1794618417.029 +22.447 seq 475 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.1850]
+1794618417.065 +22.483 seq 476 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.2738]
+1794618417.101 +22.519 seq 477 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.3639]
+1794618417.136 +22.554 seq 478 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.4532]
+1794618417.172 +22.590 seq 479 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.5432]
+1794618417.205 +22.623 seq 480 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.6256]
+1794618417.239 +22.657 seq 481 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.7107]
+1794618417.278 +22.696 seq 482 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [5 transform pos 7.168 50.416 1.000 axis 0.000 0.000 1.000 angle -3.7489]
+1794618418.279 +23.696 seq 483 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618419.283 +24.701 seq 484 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618419.969 +25.387 seq 485 fp 1 pos (7.168, 50.416, 1.000) control 4 update: [9 chat "hi e:smile"]
+1794618420.970 +26.388 seq 486 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618421.972 +27.390 seq 487 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618422.975 +28.393 seq 488 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618423.977 +29.395 seq 489 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618424.980 +30.397 seq 490 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618425.980 +31.398 seq 491 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618426.984 +32.401 seq 492 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618427.988 +33.406 seq 493 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618428.988 +34.406 seq 494 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618429.993 +35.411 seq 495 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618430.993 +36.411 seq 496 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618431.995 +37.413 seq 497 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618432.996 +38.414 seq 498 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618434.000 +39.418 seq 499 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618435.000 +40.418 seq 500 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618436.003 +41.421 seq 501 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618437.007 +42.425 seq 502 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618438.010 +43.428 seq 503 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618439.015 +44.433 seq 504 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618440.017 +45.435 seq 505 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618441.017 +46.435 seq 506 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618442.019 +47.437 seq 507 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618443.024 +48.442 seq 508 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618444.027 +49.445 seq 509 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618445.031 +50.449 seq 510 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618446.036 +51.453 seq 511 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618447.037 +52.455 seq 0 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618448.038 +53.456 seq 1 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618449.039 +54.457 seq 2 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618450.044 +55.461 seq 3 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618451.046 +56.463 seq 4 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618452.048 +57.466 seq 5 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618453.052 +58.470 seq 6 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618454.056 +59.474 seq 7 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618455.061 +60.479 seq 8 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618456.064 +61.482 seq 9 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618457.065 +62.483 seq 10 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618458.066 +63.484 seq 11 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618459.071 +64.489 seq 12 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618460.072 +65.490 seq 13 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618461.075 +66.493 seq 14 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618462.076 +67.494 seq 15 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618463.080 +68.498 seq 16 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618464.083 +69.501 seq 17 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618465.084 +70.502 seq 18 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618466.085 +71.502 seq 19 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618467.090 +72.507 seq 20 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618468.095 +73.512 seq 21 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618469.095 +74.513 seq 22 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618470.099 +75.516 seq 23 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618471.103 +76.521 seq 24 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618472.105 +77.523 seq 25 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618473.108 +78.525 seq 26 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618474.110 +79.528 seq 27 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618475.113 +80.531 seq 28 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618476.118 +81.536 seq 29 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618477.122 +82.540 seq 30 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618478.126 +83.544 seq 31 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618479.127 +84.544 seq 32 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618480.129 +85.547 seq 33 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618481.132 +86.549 seq 34 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618482.133 +87.551 seq 35 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618483.135 +88.553 seq 36 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618484.139 +89.556 seq 37 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618485.139 +90.557 seq 38 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618486.139 +91.557 seq 39 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618487.143 +92.561 seq 40 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618488.148 +93.566 seq 41 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618489.153 +94.570 seq 42 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618490.154 +95.571 seq 43 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618491.156 +96.574 seq 44 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618492.161 +97.579 seq 45 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618493.163 +98.581 seq 46 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618494.167 +99.585 seq 47 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618495.172 +100.590 seq 48 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618496.173 +101.591 seq 49 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618497.177 +102.595 seq 50 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618498.179 +103.597 seq 51 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618499.179 +104.597 seq 52 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618500.183 +105.601 seq 53 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618501.185 +106.603 seq 54 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618502.186 +107.604 seq 55 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618503.191 +108.609 seq 56 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618504.195 +109.612 seq 57 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618505.197 +110.614 seq 58 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618506.198 +111.616 seq 59 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618507.201 +112.619 seq 60 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618508.205 +113.623 seq 61 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618509.208 +114.626 seq 62 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618510.211 +115.628 seq 63 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618511.211 +116.629 seq 64 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618512.213 +117.630 seq 65 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618513.217 +118.634 seq 66 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618514.222 +119.640 seq 67 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618515.222 +120.640 seq 68 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618516.223 +121.641 seq 69 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618517.225 +122.643 seq 70 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618518.228 +123.646 seq 71 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618519.231 +124.649 seq 72 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618520.232 +125.649 seq 73 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618521.232 +126.650 seq 74 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618522.234 +127.652 seq 75 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618523.237 +128.655 seq 76 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618524.240 +129.658 seq 77 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618525.243 +130.661 seq 78 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618526.244 +131.662 seq 79 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618527.247 +132.665 seq 80 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618528.248 +133.666 seq 81 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618529.248 +134.666 seq 82 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618530.253 +135.670 seq 83 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618531.253 +136.671 seq 84 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618532.254 +137.672 seq 85 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
+1794618533.254 +138.672 seq 86 fp 1 pos (7.168, 50.416, 1.000) control 4 update: empty
