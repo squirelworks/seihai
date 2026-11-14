@@ -306,6 +306,63 @@ mod tests {
         assert_eq!(g.hud_values().max_half_hearts, g.session.max_hearts);
     }
 
+    /// The shared loop takes the build's lava rule. 1.21 does not burn.
+    /// 1.28 beta 2 does, and so does 6.00r2, which this loop runs. The
+    /// 101st 50 ms tick on lava takes half a heart.
+    #[test]
+    fn the_builds_lava_rule_runs_on_the_life_clock() {
+        use seihai_core::assets::TileTypes;
+        let (mut g, _live, _tx) = game();
+        let mut types = [0u8; 4096];
+        // Type byte 12 is lava (`TileTypes::is_lava`).
+        types[3] = 12;
+        g.session.tiletypes = Some(TileTypes::from_types(types));
+        g.session.current_level = Some(Level::from_board(&[3; 4096]));
+        g.session.arrive(30.0, 30.0);
+        assert!(g.session.on_lava());
+
+        g.set_version(ClientVersion::V121);
+        assert!(!g.session.world.lava_burns);
+        assert!(g.session.drops.client_roll, "1.21 rolls its own drops");
+        let full = g.session.hearts_half();
+        let t0 = Instant::now();
+        g.life.clock = t0;
+        g.tick_life(t0 + Duration::from_millis(101 * 50));
+        assert_eq!(g.session.hearts_half(), full, "1.21: lava does not burn");
+
+        for version in [ClientVersion::V128B2, ClientVersion::V600R2] {
+            g.set_version(version);
+            assert!(g.session.world.lava_burns, "{}", version.label());
+            g.session.set_hearts_half(full);
+            let t0 = Instant::now();
+            g.life.clock = t0;
+            g.tick_life(t0 + Duration::from_millis(100 * 50));
+            assert_eq!(
+                g.session.hearts_half(),
+                full,
+                "{}: 100 ticks do not burn yet",
+                version.label()
+            );
+            g.tick_life(t0 + Duration::from_millis(101 * 50));
+            assert_eq!(
+                g.session.hearts_half(),
+                full - 1,
+                "{}: the 101st tick burns",
+                version.label()
+            );
+        }
+
+        g.set_version(ClientVersion::V200);
+        assert_eq!(g.session.knock_send_steps, 2);
+        assert!(!g.session.drops.client_roll);
+        g.set_version(ClientVersion::V600R2);
+        assert_eq!(g.session.knock_send_steps, 1);
+        assert!(
+            !g.session.drops.client_roll,
+            "6.00r2: the server drops bush and pot items"
+        );
+    }
+
     /// Before the build is set nothing is judged.
     #[test]
     fn no_build_no_hits() {

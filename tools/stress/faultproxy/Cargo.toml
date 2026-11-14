@@ -9,7 +9,7 @@ publish = false
 [workspace]
 
 [dependencies]
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.1.0", default-features = false }
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", tag = "v0.2.16", default-features = false }
 flate2 = "1"
 bzip2 = "0.5"
 
