@@ -636,6 +636,48 @@ mod tests {
         assert_eq!(npc(&s).message, "timeout,1");
     }
 
+    /// Internal adapter/VM ordering: an event satisfies the wait without
+    /// dispatching already-due timers or replacing the suspended continuation.
+    #[test]
+    fn a_successful_waitfor_preserves_overdue_timers_and_queued_events() {
+        for continuation in ["", "sleep(0.05);"] {
+            let mut s = session_with_npc(7);
+            let mut sc = ClientScripts::new(V);
+            let src = format!(
+                "function onCreated() {{ setTimer(0.1); scheduleevent(0.1, \"Probe\");
+                   temp.caught = waitfor(this, \"playerchats\", 0.5);
+                   this.order = \"resume\" @ temp.caught @ \",\"; message(this.order);
+                   {continuation} this.order @= \"continued,\"; }}
+                 function onTimeout() {{ this.order @= \"timeout,\"; message(this.order); }}
+                 function onProbe() {{ this.order @= \"probe,\"; message(this.order); }}
+                 function onPlayerEnters() {{ message(this.order @ \"enters\"); }}
+                 function onPlayerChats() {{ message(\"unexpected chat handler\"); }}"
+            );
+            sc.start(&mut s, &script(&src));
+            // Both VM timers are due, but onCreated still waits and the
+            // adapter's startup PlayerEnters event is queued behind it.
+            sc.tick(&mut s, 100);
+            assert_eq!(npc(&s).message, "", "{continuation}");
+            sc.player_chats(&mut s, "wake");
+            assert_eq!(npc(&s).message, "resume1,", "{continuation}");
+            // The next frame finishes any resumed sleep, dispatches overdue
+            // VM timers, then drains the adapter's queued event. The matching
+            // chat satisfied waitfor and must not also run its event handler.
+            sc.tick(&mut s, 50);
+            assert_eq!(
+                npc(&s).message,
+                "resume1,continued,timeout,probe,enters",
+                "{continuation}"
+            );
+            sc.tick(&mut s, 50);
+            assert_eq!(
+                npc(&s).message,
+                "resume1,continued,timeout,probe,enters",
+                "{continuation}: nothing should replay"
+            );
+        }
+    }
+
     #[test]
     fn due_timers_do_not_interrupt_a_sleeping_event_or_reorder_queued_events() {
         let mut s = session_with_npc(7);
