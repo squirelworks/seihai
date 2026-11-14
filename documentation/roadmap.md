@@ -84,7 +84,7 @@ Single code path. Versions are profile rows, not branches.
   - [x] Scripts sent after the level (an NPC that comes later, or a script sent again) start or restart on their NPC; the gmap neighbours' scripts are kept by level and start when the walk crosses into the cell (core's `Live::npc_scripts`). A cell's scripts start again on re-entry rather than keeping the state they had.
   - [x] `player.chat`, `player.x` and the player's counters read in GS2; `player.chat = …` says it (bubble and server), and writes to the place, direction and counters reach the player.
   - [ ] The rest of the events (`onActionProjectile`, key events, GUI scripts such as the 6.x Q list), and `PLO_LOADSCRIPT` (197) cache hits: Seihai keeps no script cache yet (#497).
-  - [ ] Validate the GS2 additions in #502/#519 with real clients. The completed baseline run (#441, #507) predates these changes; keeping script bodies across gmap crossings does not preserve their execution state.
+  - [ ] Validate the GS2 additions in #502/#519 with real clients. The baseline record (#441, #507) does not establish coverage of these changes; keeping script bodies across gmap crossings does not preserve their execution state.
 - [x] The 6.00r4 profile row and `resolveHost` (#448).
 
 ## Remaining
