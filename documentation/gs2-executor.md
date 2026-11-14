@@ -144,8 +144,10 @@ core's `client::level::Arrival::scripts`) with `ClientScripts`, which
 `Game::set_version` turns on for the selected build. Both Issho and Ato's
 flat game path call it; Ato's wiring is in `crates/seihai-ato/src/game.rs`.
 This source wiring is not evidence of complete Ato 3.x execution or native
-fidelity: Ato's online loopback test checks 3.153 bytecode parsing/opcode
-logging, while the shared execution tests use 6.x profiles.
+fidelity. Ato's synthetic loopback tests check 3.153 bytecode parsing and
+execute self-authored `onCreated` and timer effects through the shared
+game. The same wire delivery under 3.04 is ignored by its profile, with no
+script effect. These tests do not establish original-client behavior.
 
 - **Start.** When a level arrives, each script whose NPC is on the level
   (by server id) gets a `Machine::for_version` and an `EffectHost`. The

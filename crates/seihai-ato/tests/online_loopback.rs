@@ -56,6 +56,16 @@ fn serve_warping(
     warp_to: Option<u16>,
     warp_name: &str,
 ) {
+    serve_script(version, listener, warp_to, warp_name, SCRIPT);
+}
+
+fn serve_script(
+    version: ClientVersion,
+    listener: TcpListener,
+    warp_to: Option<u16>,
+    warp_name: &str,
+    script: &[u8],
+) {
     let (mut s, _) = listener.accept().unwrap();
     s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     // The login frame: u16 length, plain zlib, the login line first.
@@ -95,9 +105,12 @@ fn serve_warping(
     // PLO_NPCPROPS (3) for NPC 1, in its own frame, then its GS2 script
     // (PLO_NPCBYTECODE, 131) behind PLO_RAWDATA, as GServer-v2's
     // `TLevel::getNpcsPacket` sends it.
-    let mut npc = msg(3, &[gc(0), gc(0), gc(1)]);
+    let mut props = vec![gc(0), gc(0), gc(1), gc(0), gc(9)];
+    props.extend_from_slice(b"block.png");
+    props.extend([gc(2), gc(20), gc(3), gc(20)]);
+    let mut npc = msg(3, &props);
     let mut code = vec![gc(131), gc(0), gc(0), gc(1)];
-    code.extend_from_slice(SCRIPT);
+    code.extend_from_slice(script);
     let n = code.len();
     npc.extend(msg(
         100,
@@ -168,6 +181,95 @@ fn each_3x_build_logs_in_and_logs_the_level() {
         // Only 3.153 handles 131: it reads the script and logs its opcodes.
         let read = out.contains("npc 1: GS2 script, ") && out.contains("OP_CALL");
         assert_eq!(read, v == ClientVersion::V3153, "{}: {out}", v.label());
+    }
+}
+
+/// Self-authored bytecode crosses the socket, profile dispatch, level
+/// arrival and shared game runtime. This is synthetic integration coverage,
+/// not acceptance against an original 3.x client.
+#[test]
+fn received_gs2_runs_created_and_timer_only_for_the_3153_profile() {
+    use seihai_core::client::{self, Live};
+    use seihai_core::scripting::gs2::compile::compile_gs2;
+    use seihai_play::game::{Event, Game};
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    for version in [ClientVersion::V304, ClientVersion::V3153] {
+        let code = compile_gs2(
+            "function onCreated() { message(\"created over wire\"); setTimer(0.1); }\n\
+             function onTimeout() { message(\"timer over wire\"); }",
+        )
+        .unwrap()
+        .write();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server =
+            std::thread::spawn(move || serve_script(version, listener, None, "Lab Server", &code));
+        let (tx, rx) = mpsc::channel();
+        let live = Live::default();
+        let net_live = live.clone();
+        let network = std::thread::spawn(move || {
+            let login = Login {
+                account: "lab".into(),
+                password: "pw".into(),
+                nick: "lab".into(),
+                language: "English".into(),
+            };
+            let mut out = Vec::new();
+            client::run_with(
+                &addr,
+                version,
+                &login,
+                None,
+                true,
+                &mut out,
+                &mut |level, arrival| {
+                    tx.send(Event::Level(Box::new(level.clone()), arrival.clone()))
+                        .unwrap();
+                },
+                Some(net_live),
+                &|_, _, state| {
+                    // Observe the real profile dispatch, rather than injecting
+                    // a parsed script into an unsupported profile's arrival.
+                    vec![format!(
+                        "wire scripts={} ignored131={}",
+                        state.npc_bytecode.len(),
+                        state.ignored.get(&131).copied().unwrap_or(0)
+                    )]
+                },
+            )
+            .unwrap();
+            String::from_utf8(out).unwrap()
+        });
+        let mut game = Game::new(rx, None, false).unwrap();
+        game.attach(live);
+        game.set_version(version);
+        let out = network.join().unwrap();
+        server.join().unwrap();
+        game.poll();
+        let level = game.session.current_level.as_ref().unwrap();
+        assert_eq!(level.npcs.len(), 1, "{}: {out}", version.label());
+        let created = &level.npcs[0].message;
+        if version == ClientVersion::V3153 {
+            assert!(out.contains("wire scripts=1 ignored131=0"), "{out}");
+            assert_eq!(created, "created over wire");
+        } else {
+            assert!(out.contains("wire scripts=0 ignored131=1"), "{out}");
+            assert!(created.is_empty(), "3.04 must not execute packet 131");
+        }
+        game.tick(0, 0, Instant::now() + Duration::from_millis(200));
+        let message = &game.session.current_level.as_ref().unwrap().npcs[0].message;
+        assert_eq!(
+            message,
+            if version == ClientVersion::V3153 {
+                "timer over wire"
+            } else {
+                ""
+            },
+            "{}: {out}",
+            version.label()
+        );
     }
 }
 

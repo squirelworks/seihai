@@ -241,8 +241,10 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
 
 The flat Ato path initializes the shared GS2 runtime through
 `Game::set_version`. This is source wiring, not complete Ato 3.x execution
-acceptance: the Ato loopback tests check 3.153 bytecode parsing/opcode
-logging, and shared execution tests use 6.x profiles. Gmap crossings restart
+acceptance: synthetic loopback tests check 3.153 bytecode parsing and
+self-authored `onCreated` and timer effects through the shared game, with
+a 3.04 control that ignores the same wire bytecode. Original-client
+execution behavior remains unverified by these tests. Gmap crossings restart
 NPC runtimes from retained bytecode; preserving their execution state,
 including suspended runs, remains open. GUI scripts and remaining events
 also remain open (#497).
