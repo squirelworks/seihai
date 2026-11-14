@@ -74,16 +74,17 @@ objects; it logs and skips any other target.
 
 ## Seen in the archives, still refused
 
-- `players[i].x`, `.y` and `.dir` are common in level scripts (about 1,350
-  occurrences across the client archives and the NPC library, many of them
-  the same script in several versions). The parser records
-  them as a field after an index, and no fixture shows a member read on an
-  array element, so they stay errors until one does.
-- `board[...]` is read and written in level scripts, followed by
-  `updateboard`. GS2 has neither `board` nor `updateboard` in the fixtures,
-  so both stay errors. `tiles[x, y]` appears only in the 2.1 feature notes.
-- `npcs[i].x` and lists inside array literals: no script in the archives
-  uses them.
+- `players[i].x`, `.y` and `.dir` (about 1,350 occurrences across the
+  client archives and the NPC library) and the same reads on `npcs[i]` are
+  lowered since seihai-core 0.2.1, from `members.gs2bc`: the element, then
+  the member, with no conversion between. Writes to them and other fields
+  after an index stay errors.
+- `tiles[x, y]`, read and written, and `updateboard` are lowered since
+  0.2.1 (`tiles.gs2bc`). `board[...]`, read and written in level scripts,
+  stays an error: GS2 has no `board`.
+- Lists inside array literals (when nothing in the literal calls a
+  function) and a list stored into an array element are lowered since
+  0.2.1 (`nested.gs2bc`, `elemlist.gs2bc`).
 
 ## Rejected with a compile error
 
@@ -102,13 +103,14 @@ objects; it logs and skips any other target.
   block (in either front end).
 - `x in {a, b, c}`, `a[i] += v` and `a[i]++` when `x` or the index calls a
   function (the rewrite above would call it more than once).
-- Array literals with nested lists, and array literals where the order of
+- Array literals with nested lists where an element calls a function, and
+  array literals where the order of
   the elements could matter: the GS1 interpreter evaluates them left to
   right and the GS2 encoding pushes them right to left. A literal is
   lowered when no element calls script or host code or `random`, or when
   exactly one does and the others are constants (`{next(), 1}`); any other
   mix (`{next(), next()}`, `{next(), this.v}`) needs the values in
   variables first.
-- A list stored into an array element (`a[0] = {1}`).
-- A field after an index (`npcs[i].x`), and three or more indexes.
-- `board[...]` and `tiles[...]`: no fixture shows how GS2 encodes them.
+- A field after an index other than a `players[i]` / `npcs[i]` read of
+  `x`, `y` or `dir`, any write to one, and three or more indexes.
+- `board[...]`: GS2 has no `board` (use `tiles[x, y]`).
