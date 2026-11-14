@@ -19,6 +19,14 @@ use seihai::protocol::ClientVersion;
 use seihai::render::{Framebuffer, TILE_PX};
 use seihai::sound::decode_wav;
 
+fn placement_sprite_id(p: &seihai::assets::GaniPlacement) -> u32 {
+    match p.reference {
+        seihai::assets::GaniPlacementReference::Sprite(id) => id,
+        seihai::assets::GaniPlacementReference::Param1 => {
+            panic!("built-in assets require numeric GANI placement references")
+        }
+    }
+}
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -474,8 +482,10 @@ fn ganis_parse_with_the_documented_structure() {
                     let s = g
                         .sprites
                         .iter()
-                        .find(|s| s.id == p.sprite_id)
-                        .unwrap_or_else(|| panic!("{name}: sprite {} undefined", p.sprite_id));
+                        .find(|s| s.id == placement_sprite_id(p))
+                        .unwrap_or_else(|| {
+                            panic!("{name}: sprite {} undefined", placement_sprite_id(p))
+                        });
                     let (w, h) = sheet_size(&s.sheet);
                     assert!(
                         s.x >= 0 && s.y >= 0 && (s.x + s.w) as u32 <= w && (s.y + s.h) as u32 <= h,
@@ -486,9 +496,9 @@ fn ganis_parse_with_the_documented_structure() {
                     // the hat comes right after its head, at the stock offset for the head's facing
                     if s.sheet == "ATTR1" {
                         let head = &row[k - 1];
-                        let facing = (head.sprite_id - 100) as usize;
+                        let facing = (placement_sprite_id(head) - 100) as usize;
                         assert_eq!(
-                            p.sprite_id,
+                            placement_sprite_id(p),
                             40 + facing as u32,
                             "{name}: hat of the head's facing"
                         );
@@ -542,7 +552,7 @@ fn ganis_parse_with_the_documented_structure() {
     let shield_at = [(36, 16), (6, 16), (8, 24), (34, 16)];
     for (dir, position) in shield_at.iter().enumerate() {
         let row = &idle.frames[0].rows[dir];
-        let ids: Vec<u32> = row.iter().map(|p| p.sprite_id).collect();
+        let ids: Vec<u32> = row.iter().map(placement_sprite_id).collect();
         let (d, s) = (dir as u32, 10 + dir as u32);
         let want = if dir == 2 {
             vec![0, 200 + d, 100 + d, 40 + d, s]
@@ -550,7 +560,7 @@ fn ganis_parse_with_the_documented_structure() {
             vec![0, s, 200 + d, 100 + d, 40 + d]
         };
         assert_eq!(ids, want);
-        let sh = row.iter().find(|p| p.sprite_id == s).unwrap();
+        let sh = row.iter().find(|p| placement_sprite_id(p) == s).unwrap();
         assert_eq!((sh.x, sh.y), *position);
     }
     // the shield is in idle, walk and sword only, as in the stock GANIs
@@ -570,7 +580,7 @@ fn ganis_parse_with_the_documented_structure() {
             .iter()
             .flat_map(|f| &f.rows)
             .flatten()
-            .any(|p| (10..14).contains(&p.sprite_id));
+            .any(|p| (10..14).contains(&placement_sprite_id(p)));
         assert_eq!(any, has, "{name} shield");
     }
     // sword.gani: five steps that play once and go back to idle; every step has
@@ -584,11 +594,13 @@ fn ganis_parse_with_the_documented_structure() {
     for step in &sword.frames {
         for row in &step.rows {
             assert!(
-                row.iter().any(|p| (236..244).contains(&p.sprite_id)),
+                row.iter()
+                    .any(|p| (236..244).contains(&placement_sprite_id(p))),
                 "a swing body pose (ids 236..243)"
             );
             assert!(
-                row.iter().any(|p| (300..312).contains(&p.sprite_id)),
+                row.iter()
+                    .any(|p| (300..312).contains(&placement_sprite_id(p))),
                 "a sword sprite (ids 300..311)"
             );
         }
@@ -596,7 +608,7 @@ fn ganis_parse_with_the_documented_structure() {
     let ids = |name: &str, dir: usize| -> Vec<u32> {
         Gani::load(root().join("gani").join(name)).unwrap().frames[0].rows[dir]
             .iter()
-            .map(|p| p.sprite_id)
+            .map(placement_sprite_id)
             .collect()
     };
     for dir in 0..4usize {
@@ -611,10 +623,9 @@ fn ganis_parse_with_the_documented_structure() {
     }
     // swim places no body
     let swim = Gani::load(root().join("gani/swim.gani")).unwrap();
-    assert!(swim.frames.iter().all(|f| f
-        .rows
+    assert!(swim.frames.iter().all(|f| f.rows.iter().all(|r| r
         .iter()
-        .all(|r| r.iter().all(|p| !(200..300).contains(&p.sprite_id)))));
+        .all(|p| !(200..300).contains(&placement_sprite_id(p))))));
 }
 
 #[test]

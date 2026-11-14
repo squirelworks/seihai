@@ -7,7 +7,7 @@
 //! 16-column blocks of 512 tiles. Tile id `n` lives at column
 //! `n % 16 + (n / 512) * 16`, row `(n / 16) % 32`.
 
-use crate::assets::{tile_id, Gani, Level};
+use crate::assets::{tile_id, Gani, GaniPlacementReference, Level};
 use crate::offline::OfflineSession;
 use std::collections::HashSet;
 
@@ -697,7 +697,10 @@ pub fn draw_gani_frame(
         return;
     };
     for pl in row {
-        let Some(sp) = gani.sprites.iter().find(|s| s.id == pl.sprite_id) else {
+        let GaniPlacementReference::Sprite(id) = pl.reference else {
+            continue;
+        };
+        let Some(sp) = gani.sprites.iter().find(|s| s.id == id) else {
             continue;
         };
         let sheet = match sp.sheet.to_ascii_uppercase().as_str() {
@@ -747,7 +750,10 @@ pub fn compose_gani_frame(
     let placed: Vec<_> = row
         .iter()
         .filter_map(|pl| {
-            let sp = gani.sprites.iter().find(|s| s.id == pl.sprite_id)?;
+            let GaniPlacementReference::Sprite(id) = pl.reference else {
+                return None;
+            };
+            let sp = gani.sprites.iter().find(|s| s.id == id)?;
             let sheet = match sp.sheet.to_ascii_uppercase().as_str() {
                 "BODY" => sheets.body,
                 "HEAD" => sheets.head,
@@ -803,6 +809,39 @@ fn tile_at(level: &Level, x: i32, y: i32) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_zero_draws_and_unresolved_param1_does_not_draw_or_expand_bounds() {
+        let g = Gani::parse(
+            "SPRITE 0 BODY 0 0 1 1\nSINGLEDIRECTION\nANI\n0 0 0, PARAM1 10 10\nANIEND\n",
+        )
+        .unwrap();
+        let pixels = [12, 34, 56, 255];
+        let sheets = PoseSheets {
+            body: Some(Sheet {
+                px: &pixels,
+                w: 1,
+                bpp: 4,
+            }),
+            ..Default::default()
+        };
+        let mut fb = Framebuffer::new(16, 16);
+        draw_gani_frame(&mut fb, &g, 0, 0, &sheets, 0, 0);
+        assert_eq!(&fb.pixels[..3], &[12, 34, 56]);
+        assert!(fb.pixels[3..].iter().all(|&v| v == 0));
+        assert_eq!(
+            compose_gani_frame(&g, 0, 0, &sheets),
+            Some((0, 0, 1, pixels.to_vec()))
+        );
+
+        let unresolved =
+            Gani::parse("SPRITE 0 BODY 0 0 1 1\nSINGLEDIRECTION\nANI\nPARAM1 10 10\nANIEND\n")
+                .unwrap();
+        let mut fb = Framebuffer::new(16, 16);
+        draw_gani_frame(&mut fb, &unresolved, 0, 0, &sheets, 0, 0);
+        assert!(fb.pixels.iter().all(|&v| v == 0));
+        assert_eq!(compose_gani_frame(&unresolved, 0, 0, &sheets), None);
+    }
 
     #[test]
     fn local_player_box_matches_other_players() {
