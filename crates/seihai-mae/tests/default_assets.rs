@@ -552,7 +552,7 @@ fn ganis_parse_with_the_documented_structure() {
     let shield_at = [(36, 16), (6, 16), (8, 24), (34, 16)];
     for (dir, position) in shield_at.iter().enumerate() {
         let row = &idle.frames[0].rows[dir];
-        let ids: Vec<u32> = row.iter().map(|p| placement_sprite_id(p)).collect();
+        let ids: Vec<u32> = row.iter().map(placement_sprite_id).collect();
         let (d, s) = (dir as u32, 10 + dir as u32);
         let want = if dir == 2 {
             vec![0, 200 + d, 100 + d, 40 + d, s]
@@ -608,7 +608,7 @@ fn ganis_parse_with_the_documented_structure() {
     let ids = |name: &str, dir: usize| -> Vec<u32> {
         Gani::load(root().join("gani").join(name)).unwrap().frames[0].rows[dir]
             .iter()
-            .map(|p| placement_sprite_id(p))
+            .map(placement_sprite_id)
             .collect()
     };
     for dir in 0..4usize {
