@@ -155,7 +155,43 @@ impl ClientScripts {
 
     /// Stop NPC `npc_id`'s script, so a new one can start.
     pub fn stop(&mut self, npc_id: u32) {
+        let removed: Vec<ObjId> = self
+            .running
+            .iter()
+            .filter(|r| r.owner == Owner::Npc(npc_id))
+            .map(|r| r.obj)
+            .collect();
+        for obj in removed {
+            self.remove_npc_object(obj);
+        }
         self.running.retain(|r| r.owner != Owner::Npc(npc_id));
+    }
+
+    /// Core's remove_npc closes a deleted level-list gap. Stopping or
+    /// replacing a runtime does not change that list, so restore the
+    /// surviving tags after releasing its object and queued ID events.
+    fn remove_npc_object(&mut self, obj: ObjId) {
+        Self::release_npc_object(&mut self.host.world, obj);
+    }
+
+    fn release_npc_object(
+        world: &mut seihai_core::scripting::engine::world::ScriptWorld,
+        obj: ObjId,
+    ) {
+        let Some(tag) = world.obj(obj).map(|o| o.tag) else {
+            return;
+        };
+        let tags: Vec<_> = world
+            .ids()
+            .into_iter()
+            .filter_map(|id| world.obj(id).map(|o| (id, o.tag)))
+            .collect();
+        world.remove_npc(tag);
+        for (id, tag) in tags {
+            if let Some(o) = world.obj_mut(id) {
+                o.tag = tag;
+            }
+        }
     }
 
     /// The new level is in: `onPlayerEnters` on each weapon.
@@ -177,10 +213,17 @@ impl ClientScripts {
     /// again with other bytes starts again, and one that is gone stops.
     /// Returns how many started.
     pub fn set_weapons(&mut self, session: &mut OfflineSession, weapons: &[GsWeapon]) -> usize {
+        let world = &mut self.host.world;
         self.running.retain(|r| match &r.owner {
-            Owner::Weapon(w) => weapons
-                .iter()
-                .any(|(n, _, code, _)| n == w && r.code.as_ref() == Some(code)),
+            Owner::Weapon(w) => {
+                let keep = weapons
+                    .iter()
+                    .any(|(n, _, code, _)| n == w && r.code.as_ref() == Some(code));
+                if !keep {
+                    world.remove_weapon(w);
+                }
+                keep
+            }
             Owner::Npc(_) => true,
         });
         let mut started = 0;
@@ -258,6 +301,7 @@ impl ClientScripts {
         session: &mut OfflineSession,
         scripts: &[(u32, Result<Script, String>)],
     ) -> usize {
+        self.retag(session);
         let mut started = 0;
         for (id, script) in scripts {
             let Ok(script) = script else { continue };
@@ -486,7 +530,7 @@ impl ClientScripts {
     /// The level's NPC list changed (an NPC came or went): each script's
     /// object follows its NPC's new place, and a script whose NPC is gone
     /// stops.
-    fn retag(&mut self, session: &OfflineSession) {
+    pub(crate) fn retag(&mut self, session: &OfflineSession) {
         let Some(level) = session.current_level.as_ref() else {
             return;
         };
@@ -495,14 +539,15 @@ impl ClientScripts {
             let Owner::Npc(id) = r.owner else {
                 return true;
             };
-            let at = level.npcs.iter().position(|n| n.server_id == Some(id));
-            match (at, world.obj_mut(r.obj)) {
-                (Some(index), Some(o)) => {
-                    o.tag = index;
-                    true
-                }
-                _ => false,
-            }
+            let Some(index) = level.npcs.iter().position(|n| n.server_id == Some(id)) else {
+                Self::release_npc_object(world, r.obj);
+                return false;
+            };
+            let Some(o) = world.obj_mut(r.obj) else {
+                return false;
+            };
+            o.tag = index;
+            true
         });
     }
 
@@ -704,5 +749,75 @@ mod tests {
         s.drop_server_npc(7);
         sc.tick(&mut s, 50);
         assert!(sc.is_empty());
+        assert!(
+            sc.host.world.ids().is_empty(),
+            "a deleted runtime must release its live host object"
+        );
+    }
+
+    #[test]
+    fn replacing_a_script_keeps_one_live_object() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        for _ in 0..5 {
+            sc.stop(7);
+            sc.start(&mut s, &script("function onCreated() {}"));
+        }
+        assert_eq!(
+            sc.host.world.ids().len(),
+            1,
+            "replacement must not orphan world objects"
+        );
+    }
+
+    #[test]
+    fn replacing_and_removing_weapons_releases_live_objects() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        for code in 0..5 {
+            sc.set_weapons(
+                &mut s,
+                &[(
+                    "Tool".into(),
+                    String::new(),
+                    vec![code],
+                    Ok(compile_gs2("function onCreated() {}").unwrap()),
+                )],
+            );
+            assert_eq!(sc.host.world.ids().len(), 1);
+        }
+        sc.clear();
+        assert_eq!(
+            sc.host.world.ids().len(),
+            1,
+            "level changes preserve the weapon"
+        );
+        sc.set_weapons(&mut s, &[]);
+        assert!(sc.host.world.ids().is_empty());
+    }
+
+    #[test]
+    fn stopping_an_earlier_npc_keeps_later_tags_and_effects_aligned() {
+        let mut s = session_with_npc(7);
+        s.take_server_npc(
+            8,
+            &NpcProps {
+                image: Some("b.png".into()),
+                x: Some(20.0),
+                y: Some(20.0),
+                ..Default::default()
+            },
+        );
+        let mut sc = ClientScripts::new(V);
+        let script = compile_gs2("function onPlayerChats() { message(\"B only\"); }").unwrap();
+        sc.start(&mut s, &[(7, Ok(script.clone())), (8, Ok(script))]);
+        sc.stop(7);
+        let ids = sc.host.world.ids();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(sc.host.world.obj(ids[0]).unwrap().tag, 1);
+        sc.player_chats(&mut s, "hi");
+        let npcs = &s.current_level.as_ref().unwrap().npcs;
+        assert!(npcs[0].message.is_empty());
+        assert_eq!(npcs[1].message, "B only");
     }
 }

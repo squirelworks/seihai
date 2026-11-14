@@ -86,7 +86,12 @@ fn serve_with(version: ClientVersion, listener: TcpListener, warp_to: Option<u16
     // PLO_NPCPROPS (3) for NPC 1, in its own frame, then its GS2 script
     // (PLO_NPCBYTECODE, 131) behind PLO_RAWDATA, as GServer-v2's
     // `TLevel::getNpcsPacket` sends it.
-    let mut npc = msg(3, &[gc(0), gc(0), gc(1)]);
+    // A complete NPC record is needed for its script to own a level
+    // object, rather than merely testing receipt of parsed bytecode.
+    let mut props = vec![gc(0), gc(0), gc(1), gc(0), gc(9)];
+    props.extend_from_slice(b"block.png");
+    props.extend([gc(2), gc(20), gc(3), gc(20)]);
+    let mut npc = msg(3, &props);
     let mut code = vec![gc(131), gc(0), gc(0), gc(1)];
     code.extend_from_slice(SCRIPT);
     let n = code.len();
@@ -197,12 +202,18 @@ fn the_v6_game_loop_takes_the_level_and_walks_it() {
     let pose = live.pose.clone();
     let mut g = Game::new(rx, None, false).unwrap();
     g.attach(live);
+    g.set_version(v);
     let deadline = Instant::now() + Duration::from_secs(10);
-    while g.session.current_level.is_none() && Instant::now() < deadline {
+    while !g.session.flags.get("gs2seen").copied().unwrap_or(false) && Instant::now() < deadline {
         g.tick(0, 0, Instant::now());
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(g.status.starts_with("level lab3x.nw"), "{}", g.status);
+    assert_eq!(
+        g.session.flags.get("gs2seen"),
+        Some(&true),
+        "the received fixture must execute onCreated"
+    );
     assert_eq!((g.session.player_x, g.session.player_y), (30.5, 31.0));
     let frame = g.draw((40, 30));
     assert_eq!((frame.width, frame.height), (640, 480));

@@ -172,6 +172,23 @@ sources with core's compiler; no world's scripts are used.
 
 ## Tests
 
+### Shared client ownership
+
+The shared Ato/Issho client retains NPC bytecode by level for gmap re-entry.
+That cache is invalidated when a server deletes the NPC, including deletes
+for another cell; a fresh arrival drops retained IDs absent from the new
+level. Reusing an ID without new bytecode does not resurrect its old script.
+
+Stopping/replacing an NPC or weapon runtime releases its live host object.
+Replacing a runtime does not remove a level-list entry, so surviving NPC
+tags keep their indices; an actual NPC deletion retags survivors to the
+updated level. Weapons survive level changes until explicitly removed.
+Core's underlying object-slot reuse policy is unchanged. Regressions check
+live IDs, object contents and effects, not allocated vector length. These
+are Seihai ownership rules, not new original-client or timer fidelity claims.
+
+### Existing fixture coverage
+
 `crates/seihai-core/tests/gs2_exec.rs` runs four fixtures built with the
 compiler:
 

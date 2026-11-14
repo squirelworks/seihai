@@ -760,6 +760,13 @@ impl Game {
     fn apply_npc_changes(&mut self) {
         let changes =
             std::mem::take(&mut *self.npc_changes.lock().unwrap_or_else(|e| e.into_inner()));
+        // Bytecode retained for a gmap cell belongs to that NPC lifetime,
+        // including deletes for cells not currently on screen.
+        for c in changes.iter().filter(|c| c.props.is_none()) {
+            if let Some(kept) = self.level_scripts.get_mut(&c.level.to_ascii_lowercase()) {
+                kept.remove(&c.id);
+            }
+        }
         let Some(here) = self.level_here.as_deref() else {
             return;
         };
@@ -773,6 +780,9 @@ impl Game {
                     self.session.take_server_npc(c.id, p);
                 }
                 None => {
+                    if let Some(sc) = self.scripts.as_mut() {
+                        sc.stop(c.id);
+                    }
                     self.session.drop_server_npc(c.id);
                 }
             }
@@ -780,6 +790,9 @@ impl Game {
         }
         if !applied {
             return;
+        }
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.retag(&self.session);
         }
         if let Some(level) = &self.session.current_level {
             for name in render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images)
@@ -1054,6 +1067,12 @@ impl Game {
             .level_scripts
             .entry(a.name.to_ascii_lowercase())
             .or_default();
+        kept.retain(|id, _| {
+            self.session
+                .current_level
+                .as_ref()
+                .is_some_and(|l| l.npcs.iter().any(|n| n.server_id == Some(*id)))
+        });
         for (id, script) in &a.scripts {
             kept.insert(*id, script.clone());
         }
@@ -1561,9 +1580,80 @@ pub fn spawn_online_hooked(
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_deleted_npc_id_does_not_restart_its_retained_script() {
+        use seihai_core::protocol::npcprops::NpcProps;
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V603R7);
+        let props = NpcProps {
+            image: Some("block.png".into()),
+            x: Some(10.0),
+            y: Some(10.0),
+            ..Default::default()
+        };
+        let mut a = arrival(Some((30.0, 30.0)));
+        a.server_npc_props = vec![(7, props.clone())];
+        a.scripts = vec![(
+            7,
+            Ok(compile_gs2("function onCreated() { message(\"old A\"); }").unwrap()),
+        )];
+        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), a))
+            .unwrap();
+        g.poll();
+        assert!(g.scripts.as_ref().unwrap().runs(7));
+        g.npc_changes.lock().unwrap().push(online::NpcChange {
+            level: "lab3x.nw".into(),
+            id: 7,
+            props: None,
+        });
+        g.poll();
+        g.scripts.as_mut().unwrap().tick(&mut g.session, 50);
+        g.npc_changes.lock().unwrap().push(online::NpcChange {
+            level: "lab3x.nw".into(),
+            id: 7,
+            props: Some(props),
+        });
+        g.poll();
+        assert!(
+            !g.scripts.as_ref().unwrap().runs(7),
+            "ID reuse without bytecode must not execute old A"
+        );
+    }
+
     fn game() -> (Game, mpsc::Sender<Event>) {
         let (tx, rx) = mpsc::channel();
         (Game::new(rx, None, true).unwrap(), tx)
+    }
+
+    #[test]
+    fn a_neighbour_delete_and_a_fresh_arrival_drop_obsolete_bytecode() {
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V603R7);
+        let script = Ok(compile_gs2("function onCreated() {}").unwrap());
+        g.level_scripts
+            .entry("elsewhere.nw".into())
+            .or_default()
+            .insert(7, script.clone());
+        g.npc_changes.lock().unwrap().push(online::NpcChange {
+            level: "Elsewhere.NW".into(),
+            id: 7,
+            props: None,
+        });
+        g.poll();
+        assert!(!g.level_scripts["elsewhere.nw"].contains_key(&7));
+        g.level_scripts
+            .entry("lab3x.nw".into())
+            .or_default()
+            .insert(7, script);
+        tx.send(Event::Level(
+            Box::new(Level::from_board(&[0; 4096])),
+            arrival(Some((30.0, 30.0))),
+        ))
+        .unwrap();
+        g.poll();
+        assert!(!g.level_scripts["lab3x.nw"].contains_key(&7));
     }
 
     /// While a Graal3D link is up the TCP board is not drawn, and the
