@@ -75,7 +75,7 @@ objects; it logs and skips any other target.
 ## Seen in the archives, still refused
 
 - `players[i].x`, `.y` and `.dir` (about 1,350 occurrences across the
-  client archives and the NPC library) and the same reads on `npcs[i]` are
+  client builds we hold and the NPC library) and the same reads on `npcs[i]` are
   lowered since seihai-core 0.2.1, from `members.gs2bc`: the element, then
   the member, with no conversion between. Writes to them and other fields
   after an index stay errors.
