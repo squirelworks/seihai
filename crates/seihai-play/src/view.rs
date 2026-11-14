@@ -18,7 +18,8 @@
 //! chest or grabs ([`Game::interact`]); S while carrying throws.
 
 use crate::game::{
-    baddy_verses, bubble_at, bubbles, name_tags, npc_bubbles, Game, ItemList, ListKey, SignKey,
+    baddy_verses, bubble_at, bubbles, name_tags, npc_bubbles, npc_names, Game, ItemList, ListKey,
+    SignKey,
 };
 use crate::render::{self, TILE_PX};
 use seihai_core::protocol::ChatKind;
@@ -255,7 +256,11 @@ impl View {
                     }
                 }
                 let flat = if hidden { &[][..] } else { self.game.others() };
-                for (nick, x, y) in name_tags(flat, cam_x, cam_y) {
+                let mut names = name_tags(flat, cam_x, cam_y);
+                if let Some(level) = self.game.session.current_level.as_ref().filter(|_| !hidden) {
+                    names.extend(npc_names(level, cam_x, cam_y));
+                }
+                for (nick, x, y) in names {
                     ui.painter().text(
                         origin + egui::vec2(x, y) * scale,
                         egui::Align2::CENTER_TOP,

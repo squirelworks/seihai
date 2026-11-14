@@ -13,9 +13,10 @@
 //! standing. Dead players show the last step of `dead.gani`.
 
 use crate::render::Image;
-use seihai_core::assets::{builtin, AssetResolver, Gani};
+use seihai_core::assets::{builtin, AssetResolver, Gani, Npc};
 use seihai_core::client::Other;
 use seihai_core::looks::{self, Looks};
+use seihai_core::offline::OfflineSession;
 use seihai_core::pose::WALK_S;
 use seihai_draw::{draw_gani_frame, PixelBuffer, SpriteSheets};
 use std::collections::HashMap;
@@ -170,6 +171,46 @@ fn decode_body(file: &str, data: &[u8], colors: &[u8; 5]) -> Option<Image> {
 }
 
 impl Characters {
+    /// Prepare the GANIs and pictures of visible and hidden NPCs so a
+    /// later show or appearance update can use the retained state.
+    pub fn load_npcs(
+        &mut self,
+        resolver: Option<&AssetResolver>,
+        session: &mut OfflineSession,
+    ) -> bool {
+        let names: Vec<String> = npc_levels(session)
+            .flat_map(|l| &l.npcs)
+            .filter_map(|n| n.ani.as_deref())
+            .map(|n| seihai_core::npcart::ani_file(n).to_string())
+            .collect();
+        let mut changed = false;
+        for name in names {
+            if session.npc_gani(&name).is_some() {
+                continue;
+            }
+            let file = format!("{name}.gani");
+            let gani = resolver
+                .and_then(|r| r.pose_gani(&file))
+                .and_then(|p| Gani::load(p).ok())
+                .or_else(|| {
+                    Gani::parse(&String::from_utf8_lossy(builtin::bytes(&format!(
+                        "gani/{file}"
+                    ))?))
+                    .ok()
+                });
+            if let Some(gani) = gani {
+                session.set_npc_gani(&name, gani);
+                changed = true;
+            }
+        }
+        for npc in npc_levels(session).flat_map(|l| &l.npcs) {
+            if let Some(gani) = npc.ani.as_deref().and_then(|n| session.npc_gani(n)) {
+                changed |= self.load_npc_pictures(resolver, npc, gani);
+            }
+        }
+        changed
+    }
+
     /// The pose GANIs from the asset folders, else the built-in ones.
     pub fn load(resolver: Option<&AssetResolver>) -> Characters {
         let mut ganis = HashMap::new();
@@ -212,21 +253,38 @@ impl Characters {
     /// Read the pictures these figures need that were not looked for yet.
     /// True if any was added.
     pub fn load_pictures(&mut self, resolver: Option<&AssetResolver>, figures: &[Figure]) -> bool {
+        let wanted = figures.iter().flat_map(|f| self.wanted(f)).collect();
+        self.load_wanted(resolver, wanted)
+    }
+
+    /// Load a character NPC's own pictures using its actual GANI, which
+    /// need not be one of the fixed player poses.
+    pub fn load_npc_pictures(
+        &mut self,
+        resolver: Option<&AssetResolver>,
+        npc: &Npc,
+        gani: &Gani,
+    ) -> bool {
+        self.load_wanted(resolver, Self::wanted_gani(&npc_figure(npc), Some(gani)))
+    }
+
+    fn load_wanted(
+        &mut self,
+        resolver: Option<&AssetResolver>,
+        wanted: Vec<(&'static str, String, Option<[u8; 5]>)>,
+    ) -> bool {
         let mut added = false;
-        for f in figures {
-            for (dir, name, colors) in self.wanted(f) {
-                let key = picture_key(dir, &name, colors.as_ref());
-                if self.pictures.contains_key(&key) {
-                    continue;
-                }
-                let image =
-                    picture_bytes(resolver, dir, &name).and_then(|(file, data)| match colors {
-                        Some(c) => decode_body(&file, &data, &c),
-                        None => Image::decode(&file, &data),
-                    });
-                added |= image.is_some();
-                self.pictures.insert(key, image);
+        for (dir, name, colors) in wanted {
+            let key = picture_key(dir, &name, colors.as_ref());
+            if self.pictures.contains_key(&key) {
+                continue;
             }
+            let image = picture_bytes(resolver, dir, &name).and_then(|(file, data)| match colors {
+                Some(c) => decode_body(&file, &data, &c),
+                None => Image::decode(&file, &data),
+            });
+            added |= image.is_some();
+            self.pictures.insert(key, image);
         }
         added
     }
@@ -234,6 +292,13 @@ impl Characters {
     /// The pictures one figure is drawn with: folder, name and, for the
     /// body, its colours.
     fn wanted(&self, f: &Figure) -> Vec<(&'static str, String, Option<[u8; 5]>)> {
+        Self::wanted_gani(f, self.drawn_gani(f.pose))
+    }
+
+    fn wanted_gani(
+        f: &Figure,
+        gani: Option<&Gani>,
+    ) -> Vec<(&'static str, String, Option<[u8; 5]>)> {
         let mut out = vec![
             ("bodies", f.body.clone(), Some(f.colors)),
             ("heads", f.head.clone(), None),
@@ -246,7 +311,7 @@ impl Characters {
                 out.push((dir, name.to_string(), None));
             }
         }
-        if let Some(g) = self.drawn_gani(f.pose) {
+        if let Some(g) = gani {
             for i in 0..5 {
                 if let Some(a) = looks::attr_image(&f.attrs, g, i) {
                     out.push((looks::attr_dir(i), a.to_string(), None));
@@ -267,6 +332,22 @@ impl Characters {
         let Some(gani) = self.drawn_gani(f.pose) else {
             return;
         };
+        self.draw_gani(dst, f, gani, clock_ms, (dx, dy));
+    }
+
+    /// Draw the NPC's current animation step in its own looks.
+    pub fn draw_npc(&self, dst: &mut PixelBuffer, npc: &Npc, gani: &Gani, at: (i32, i32)) {
+        self.draw_gani(dst, &npc_figure(npc), gani, 0, at);
+    }
+
+    fn draw_gani(
+        &self,
+        dst: &mut PixelBuffer,
+        f: &Figure,
+        gani: &Gani,
+        clock_ms: u64,
+        (dx, dy): (i32, i32),
+    ) {
         let n = gani.frame_count();
         if n == 0 {
             return;
@@ -291,6 +372,33 @@ impl Characters {
             attrs,
         };
         draw_gani_frame(dst, gani, step, f.dir, &sheets, dx, dy);
+    }
+}
+
+fn npc_levels(s: &OfflineSession) -> impl Iterator<Item = &seihai_core::assets::Level> {
+    s.current_level
+        .iter()
+        .chain(s.gmap.iter().flat_map(|w| w.levels.values()))
+}
+
+/// The state already retained from server props or script effects. The
+/// pose name is supplied separately for NPCs, including custom GANIs.
+fn npc_figure(npc: &Npc) -> Figure {
+    let l = looks::npc_looks(npc);
+    Figure {
+        x: npc.x,
+        y: npc.y,
+        dir: npc.dir % 4,
+        pose: "idle",
+        step: Step::At(npc.ani_frame),
+        head: l.head_name().into(),
+        body: l.body_name().into(),
+        colors: l.colors,
+        sword: npc.props.get("#1").cloned(),
+        shield: npc.shield.clone(),
+        attrs: l.attrs,
+        carry: None,
+        hidden: false,
     }
 }
 
@@ -425,6 +533,45 @@ pub fn own_figure(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_custom_npc_gani_uses_its_own_head_and_current_frame() {
+        let gani = Gani::parse(
+            "SPRITE 0 HEAD 0 0 1 1\nSINGLEDIRECTION\nLOOP\nANI\n0 0 0\n0 2 0\nANIEND\n",
+        )
+        .unwrap();
+        let mut chars = Characters::default();
+        chars.pictures.insert(
+            picture_key("heads", "test.png", None),
+            Some(Image {
+                w: 1,
+                h: 1,
+                rgba: vec![255, 0, 0, 255],
+            }),
+        );
+        let mut npc = Npc::new("#c#".into(), 0.0, 0.0, String::new());
+        npc.head = Some("test.png".into());
+        npc.ani = Some("custom,parameter".into());
+        let mut first = PixelBuffer::filled(8, 8, [0, 0, 0, 255]);
+        chars.draw_npc(&mut first, &npc, &gani, (1, 1));
+        assert_eq!(first.pixel(1, 1).unwrap(), [255, 0, 0, 255]);
+        let mut s = OfflineSession::default();
+        let mut level = seihai_core::assets::Level::from_board(&[0; 4096]);
+        level.npcs.push(npc);
+        s.current_level = Some(level);
+        s.set_npc_gani("custom", gani);
+        assert!(s.tick_npc_anis(seihai_core::npcart::NPC_ANI_STEP_MS));
+        let npc = &s.current_level.as_ref().unwrap().npcs[0];
+        let mut next = PixelBuffer::filled(8, 8, [0, 0, 0, 255]);
+        chars.draw_npc(
+            &mut next,
+            npc,
+            s.npc_gani("custom,parameter").unwrap(),
+            (1, 1),
+        );
+        assert_eq!(next.pixel(1, 1).unwrap(), [0, 0, 0, 255]);
+        assert_eq!(next.pixel(3, 1).unwrap(), [255, 0, 0, 255]);
+    }
 
     fn other(sprite: Option<u8>, gani: Option<&str>) -> Other {
         let mut o = Other {

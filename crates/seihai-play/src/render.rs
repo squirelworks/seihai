@@ -77,6 +77,9 @@ pub fn load_npc_images(
 ) -> Vec<String> {
     let mut missing = Vec::new();
     for npc in &level.npcs {
+        if npc.image == seihai_core::protocol::npcprops::CHARACTER_IMAGE {
+            continue;
+        }
         let name = npc.image.trim();
         if name.is_empty() || images.contains_key(name) {
             continue;
@@ -376,9 +379,25 @@ pub fn draw(
         levels.extend(near);
     }
     levels.push(((0, 0), level));
-    for (off, from) in levels {
+    for (off, from) in &levels {
         let (bx, by) = (off.0 * 64 * t - cam_x, off.1 * 64 * t - cam_y);
         for npc in from.npcs.iter().filter(|n| n.visible) {
+            if let Some(ani) = npc.ani.as_deref() {
+                if let Some(gani) = s.npc_gani(ani) {
+                    if npc.layer != seihai_core::assets::DrawLayer::Over {
+                        players.chars.draw_npc(
+                            &mut f,
+                            npc,
+                            gani,
+                            (
+                                (npc.x * t as f32) as i32 + bx,
+                                (npc.y * t as f32) as i32 + by,
+                            ),
+                        );
+                    }
+                    continue;
+                }
+            }
             let name = npc.image.trim();
             if name.is_empty() {
                 continue;
@@ -447,6 +466,27 @@ pub fn draw(
         own.step = chars::Step::Clock;
     }
     figure(&mut f, &own, if s.in_water { MARKER_WATER } else { MARKER });
+    // Character NPCs explicitly placed above players use the same sheets
+    // and animation state as the lower pass.
+    for ((ox, oy), level) in levels {
+        for npc in level
+            .npcs
+            .iter()
+            .filter(|n| n.visible && n.layer == seihai_core::assets::DrawLayer::Over)
+        {
+            if let Some(gani) = npc.ani.as_deref().and_then(|a| s.npc_gani(a)) {
+                players.chars.draw_npc(
+                    &mut f,
+                    npc,
+                    gani,
+                    (
+                        (npc.x * t as f32) as i32 + ox * 64 * t - cam_x,
+                        (npc.y * t as f32) as i32 + oy * 64 * t - cam_y,
+                    ),
+                );
+            }
+        }
+    }
     // Bombs, blasts and arrows over them.
     if let Some(sheets) = players.effects {
         crate::effects::draw_effects(&mut f, s, sheets, (cam_x, cam_y));
