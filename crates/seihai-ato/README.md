@@ -239,7 +239,17 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
 
 ## Not in yet
 
-The server NPCs of neighbouring gmap levels (their file NPCs are drawn), NPC scripts and NPC animations, `PLO_NPCDEL` and `PLO_HIDENPCS`,
+The flat Ato path initializes the shared GS2 runtime through
+`Game::set_version`. This is source wiring, not complete Ato 3.x execution
+acceptance: the Ato loopback tests check 3.153 bytecode parsing/opcode
+logging, and shared execution tests use 6.x profiles. Gmap crossings restart
+NPC runtimes from retained bytecode; preserving their execution state,
+including suspended runs, remains open. GUI scripts and remaining events
+also remain open (#497).
+
+Other outstanding work includes the server NPCs of neighbouring gmap
+levels (their file NPCs are drawn), complete per-build NPC animation
+acceptance, `PLO_NPCDEL` and `PLO_HIDENPCS`,
 other players' looks (they show as plain markers),
 GANI art, and, on the Torque UDP side, textures and the other shape formats, and the 3.153/4.04r2 game layer past the handshake against a real server (no lab server runs it yet, #464). The clients' background images are not shipped,
 so the start window's panel is a plain fill.
