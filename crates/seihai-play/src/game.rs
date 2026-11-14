@@ -823,7 +823,9 @@ impl Game {
 
     /// Take the build's rules: combat (the swing and being hit), death,
     /// the knockback and how the build shows a swing to the others (its
-    /// GANI prop, or the sprite), as `seihai-mae` sets them.
+    /// GANI prop, or the sprite), as `seihai-mae` sets them. Lava, the
+    /// swamp soldier's sword window, who drops bush and pot items, and
+    /// the 2.00 knockback send step come from the same profile.
     pub fn set_version(&mut self, version: ClientVersion) {
         let p = version.profile();
         self.scripts = Some(ClientScripts::new(version));
@@ -831,6 +833,11 @@ impl Game {
         self.session.life.set_rules(p.life.death);
         self.session.combat.set_rules(p.life.combat);
         self.session.set_mannerisms(p.mannerisms);
+        self.session.set_world_rules(p.world);
+        self.session.set_drops(p.drops);
+        // The real 2.00's props carry the knockback position every 100 ms,
+        // every other step (lab, 2026-10-30 lan-200j).
+        self.session.knock_send_steps = if version == ClientVersion::V200 { 2 } else { 1 };
         self.session.walk_sprite = !p.ui.ganis;
         // Baddy pictures by the build's extension (2.0x names `.gif`).
         self.session.baddy_image_ext = p.files.image_ext.to_string();
