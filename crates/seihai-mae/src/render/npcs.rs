@@ -5,13 +5,18 @@
 use std::collections::HashMap;
 
 use super::tiles::{compose_gani_frame, draw_gani_frame, Framebuffer, PoseSheets, Sheet, TILE_PX};
-use crate::assets::{DrawLayer, Gani, ImageEffect, Npc, SCREEN_HEIGHT};
+use crate::assets::{DrawLayer, ImageEffect, Npc, SCREEN_HEIGHT};
 use crate::looks;
 use crate::offline::OfflineSession;
 
 /// The facing an NPC starts with (down) until its script or the server
 /// turns it (`Npc::dir`).
 pub const NPC_DIR: u8 = 2;
+
+/// The shield a character NPC holds until its script sets one (`#2`): the
+/// real 2.22 draws `shield1.png` on a `showcharacter` NPC whose script sets
+/// only its name (npcserver sample-world lab, 2026-11-14).
+pub const NPC_SHIELD: &str = "shield1.png";
 
 /// What the NPC drawing reads from: the decoded NPC images by file name
 /// (`width`, RGBA pixels) and the sheets a GANI names (`BODY`, `HEAD`, ...).
@@ -25,9 +30,10 @@ pub struct NpcArt<'a> {
 
 /// The sheets a character NPC is drawn with: the head, body, shield, sword
 /// and attributes its `setcharprop` set, when those pictures are loaded,
-/// else `art.sheets`. The body is the one recoloured in the NPC's colours
-/// (`looks::colored_body_key`) when that is loaded.
-pub fn npc_sheets<'a>(npc: &Npc, gani: &Gani, art: &NpcArt<'a>) -> PoseSheets<'a> {
+/// else `art.sheets` ([`NPC_SHIELD`] for a shield it has not set; no
+/// attribute it has not set). The body is the one recoloured in the NPC's
+/// colours (`looks::colored_body_key`) when that is loaded.
+pub fn npc_sheets<'a>(npc: &Npc, art: &NpcArt<'a>) -> PoseSheets<'a> {
     let images = art.images;
     let sheet = |n: Option<&str>| {
         n.and_then(|n| images.get(n)).map(|i| Sheet {
@@ -41,7 +47,7 @@ pub fn npc_sheets<'a>(npc: &Npc, gani: &Gani, art: &NpcArt<'a>) -> PoseSheets<'a
     let mut attrs = PoseSheets::default().attrs;
     if art.gani_attrs {
         for (i, a) in attrs.iter_mut().enumerate() {
-            *a = sheet(looks::attr_image(&l.attrs, gani, i));
+            *a = sheet(attr_picture(&l.attrs, i));
         }
     }
     PoseSheets {
@@ -49,9 +55,23 @@ pub fn npc_sheets<'a>(npc: &Npc, gani: &Gani, art: &NpcArt<'a>) -> PoseSheets<'a
         head: sheet(l.head.as_deref()).or(art.sheets.head),
         sprites: art.sheets.sprites,
         sword: sheet(npc.props.get("#1").map(String::as_str)).or(art.sheets.sword),
-        shield: sheet(npc.shield.as_deref()).or(art.sheets.shield),
+        shield: match npc.shield.as_deref() {
+            Some("") => None,
+            n => sheet(Some(n.unwrap_or(NPC_SHIELD))).or(art.sheets.shield),
+        },
         attrs,
     }
+}
+
+/// The picture an `ATTR1` … `ATTR5` sprite (`i` 0 to 4) is drawn with: the
+/// character's own attribute, else none. A GANI's `DEFAULTATTR1` …
+/// `DEFAULTATTR5` is not drawn: with the stock `idle.gani` (whose
+/// `DEFAULTATTR1` is `hat0.png`, the knight helmet) and `hats/hat0.png`
+/// in its folder, the real 2.22 draws no hat on a player or a
+/// `showcharacter` NPC that has none (npcserver sample-world lab,
+/// 2026-11-14). An attribute set to an empty text draws nothing.
+pub fn attr_picture(attrs: &[Option<String>; 5], i: usize) -> Option<&str> {
+    attrs.get(i)?.as_deref().filter(|a| !a.is_empty())
 }
 
 /// Blit an RGBA image, or a part `(x, y, w, h)` of it, with its top-left at
@@ -306,6 +326,36 @@ pub fn draw_npc_messages(
     }
 }
 
+/// Draw the nickname (`#n`) of each visible character NPC of the
+/// session's level under it, as a player's nickname
+/// ([`super::chattext::draw_nick_text`]) in the AP 50 colour. An image NPC
+/// shows no name, nor a character with an empty one.
+pub fn draw_npc_names(
+    fb: &mut Framebuffer,
+    session: &OfflineSession,
+    font: Option<&super::chattext::ChatFont>,
+    cam_x: i32,
+    cam_y: i32,
+) {
+    let Some(level) = &session.current_level else {
+        return;
+    };
+    for npc in level.npcs.iter().filter(|n| n.visible && n.ani.is_some()) {
+        let Some(nick) = npc_name(npc) else { continue };
+        let dx = (npc.x * TILE_PX as f32) as i32 - cam_x;
+        let dy = (npc.y * TILE_PX as f32) as i32 - cam_y;
+        super::chattext::draw_nick_text(fb, font, nick, 50, dx, dy);
+    }
+}
+
+/// The name drawn under a character NPC: its `#n`, trimmed, if any.
+fn npc_name(npc: &Npc) -> Option<&str> {
+    npc.props
+        .get("#n")
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty())
+}
+
 /// The width the NPC's message is centred over.
 fn message_width(npc: &Npc, art: &NpcArt) -> i32 {
     if npc.ani.is_some() {
@@ -334,7 +384,7 @@ fn draw_animation(
     let Some(gani) = session.npc_gani(name) else {
         return false;
     };
-    let sheets = npc_sheets(npc, gani, art);
+    let sheets = npc_sheets(npc, art);
     if gani.frame_count() == 0 || sheets.body.is_none() || sheets.head.is_none() {
         return false;
     }
@@ -363,6 +413,50 @@ fn draw_animation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_character_npc_wears_no_default_hat_and_holds_shield1() {
+        let mut images = HashMap::new();
+        images.insert("shield1.png".to_string(), (38u32, vec![0u8; 38 * 20 * 4]));
+        images.insert("hat0.png".to_string(), (192u32, vec![0u8; 192 * 144 * 4]));
+        images.insert("shield2.png".to_string(), (38u32, vec![1u8; 38 * 20 * 4]));
+        let art = NpcArt {
+            images: &images,
+            sheets: PoseSheets::default(),
+            gani_attrs: true,
+        };
+        let mut npc = Npc::new("#c#".into(), 30.0, 25.0, String::new());
+        let s = npc_sheets(&npc, &art);
+        assert!(s.attrs.iter().all(Option::is_none), "no DEFAULTATTR hat");
+        assert_eq!(s.shield.map(|s| s.w), Some(38));
+        npc.shield = Some("shield2.png".into());
+        assert_eq!(npc_sheets(&npc, &art).shield.map(|s| s.px[0]), Some(1));
+        npc.shield = Some(String::new());
+        assert!(npc_sheets(&npc, &art).shield.is_none());
+        npc.props.insert("#P1".into(), "hat0.png".into());
+        assert!(npc_sheets(&npc, &art).attrs[0].is_some());
+    }
+
+    #[test]
+    fn only_own_attributes_are_drawn() {
+        let mut attrs: [Option<String>; 5] = Default::default();
+        assert_eq!(attr_picture(&attrs, 0), None);
+        attrs[0] = Some(String::new());
+        assert_eq!(attr_picture(&attrs, 0), None);
+        attrs[0] = Some("hat2.png".into());
+        assert_eq!(attr_picture(&attrs, 0), Some("hat2.png"));
+        assert_eq!(attr_picture(&attrs, 7), None);
+    }
+
+    #[test]
+    fn a_character_npc_shows_its_nickname() {
+        let mut npc = Npc::new("#c#".into(), 30.0, 25.0, String::new());
+        assert_eq!(npc_name(&npc), None);
+        npc.props.insert("#n".into(), "  ".into());
+        assert_eq!(npc_name(&npc), None);
+        npc.props.insert("#n".into(), "Greeter ".into());
+        assert_eq!(npc_name(&npc), Some("Greeter"));
+    }
 
     #[test]
     fn message_centres_over_the_image_part_or_the_character_box() {

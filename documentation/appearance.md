@@ -40,10 +40,13 @@ These are server commands, not client ones.
   2.05 defaults until one arrives). A picture not here yet is asked for
   from the server and the default is drawn meanwhile.
 - **GANI attributes (hats).** A GANI's `ATTR1` … `ATTR5` sprites draw
-  from the player's attributes 1 to 5, or from the GANI's `DEFAULTATTR1` …
-  `DEFAULTATTR5` while the player has none. Attribute 1 is the hat and is
-  looked for in `hats/`; the stock `idle.gani` names `hat0.png` as its
-  default. An attribute set to nothing draws no picture. They come from
+  from the player's attributes 1 to 5, and draw nothing while the player
+  has none. Attribute 1 is the hat and is looked for in `hats/`. The
+  GANI's `DEFAULTATTR1` … `DEFAULTATTR5` are not drawn: the stock
+  `idle.gani` names `hat0.png` (a knight helmet) there, and the real 2.22,
+  with `hats/hat0.png` in its folder, draws no hat on a player or NPC that
+  has none (npcserver sample-world lab, 2026-11-14). An attribute set to
+  nothing draws no picture. They come from
   props 37 to 41 (GATTRIB1 to 5, which 2.05 reads for other players), for
   us and for others, and from `setplayerprop #P1,<image>` … `#P5`. Online,
   the attributes we have set go out as props 37 and up with the looks.
@@ -52,7 +55,12 @@ These are server commands, not client ones.
   `#C0` … `#C4` colours (name or number) and `#P1` … `#P5` attributes.
   The body is recoloured in the NPC's colours. A colour the NPC has not set
   is the new-player one (`DEFAULT_COLORS`). A picture not here yet is
-  asked for from the server, and the default is drawn meanwhile.
+  asked for from the server, and the default is drawn meanwhile. A
+  character whose script sets no shield holds `shield1.png`, and one with
+  a nickname (`#n`) has it drawn under it as a player's is, in the AP 50
+  colour: the real 2.22 draws both on NPCs whose script is only
+  `showcharacter; setcharprop #n,<name>` (npcserver sample-world lab,
+  2026-11-14).
 - **Checked in the Wine lab (2.05 rev 2, offline, 2026-10-30).** A level
   with three `showcharacter` NPCs, run in the real client and in Seihai:
   - No `setcharprop`: the body is orange skin, dark red coat and shoes,
