@@ -64,12 +64,12 @@ pub fn npc_sheets<'a>(npc: &Npc, art: &NpcArt<'a>) -> PoseSheets<'a> {
 }
 
 /// The picture an `ATTR1` … `ATTR5` sprite (`i` 0 to 4) is drawn with: the
-/// character's own attribute, else none. A GANI's `DEFAULTATTR1` …
-/// `DEFAULTATTR5` is not drawn: with the stock `idle.gani` (whose
-/// `DEFAULTATTR1` is `hat0.png`, the knight helmet) and `hats/hat0.png`
-/// in its folder, the real 2.22 draws no hat on a player or a
-/// `showcharacter` NPC that has none (npcserver sample-world lab,
-/// 2026-11-14). An attribute set to an empty text draws nothing.
+/// character's own attribute, else none. Issue #521 reports the real
+/// 2.22 idle-hat comparison: no helmet, unlike Seihai using the stock
+/// `idle.gani` with `DEFAULTATTR1 hat0.png`. Applying no default fallback
+/// across attributes 1 to 5, and drawing nothing for an empty attribute,
+/// are Seihai implementation rules covered by synthetic tests. A
+/// controlled native absent/empty matrix for all five is unverified.
 pub fn attr_picture(attrs: &[Option<String>; 5], i: usize) -> Option<&str> {
     attrs.get(i)?.as_deref().filter(|a| !a.is_empty())
 }
