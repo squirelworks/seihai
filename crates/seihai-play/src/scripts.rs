@@ -176,11 +176,7 @@ impl ClientScripts {
     /// (`onCreated`, then `onPlayerEnters` if a level is in), one sent
     /// again with other bytes starts again, and one that is gone stops.
     /// Returns how many started.
-    pub fn set_weapons(
-        &mut self,
-        session: &mut OfflineSession,
-        weapons: &[GsWeapon],
-    ) -> usize {
+    pub fn set_weapons(&mut self, session: &mut OfflineSession, weapons: &[GsWeapon]) -> usize {
         self.running.retain(|r| match &r.owner {
             Owner::Weapon(w) => weapons
                 .iter()
