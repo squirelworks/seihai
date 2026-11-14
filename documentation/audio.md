@@ -64,8 +64,12 @@ Sources: `client-internals/sound-and-music.md` (the 2.05 sound path) and
 
 - A leading `+` means looped and is stripped. Leaving a level stops looped
   effects (`stop_all_loops`, called when the level changes).
-- `.wav` is an effect. Any other extension is music: "music skipped" is logged
-  once, nothing plays. MIDI is not emulated.
+- `.wav` is an effect (and, for 6.x, `.ogg`). `.mp3` and `.mid` are music:
+  one piece at a time on a music slot of its own, outside the eight voices
+  (seihai-core 0.1.7 and 0.2.0). `.mid` is rendered by core's small built-in
+  synthesizer (`sound::render_midi`): the file's notes, timing, volumes and
+  drums, with simple waveforms, not a General MIDI sound set. Any other
+  extension: "music skipped" is logged once, nothing plays.
 - At most 8 effects at once; a ninth is dropped. A one-shot occupies a voice
   for its length, a loop until stopped.
 - Pan is `(sound x - listener x) * 150`, clamped to +/-10000 DirectSound

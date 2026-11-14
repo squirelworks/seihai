@@ -10,6 +10,17 @@
 //! props, `setlevel`). Player flags that are not `local.` go to the server
 //! as the clients send them (`PLI_FLAGSET` / `PLI_FLAGDEL`).
 //!
+//! The player's GS2 weapons (6.x: `PLO_NPCWEAPONSCRIPT`, core's
+//! `OwnWeapons::bytecode`) run here too, each on an object of its own that
+//! stands at the player and acts as the player (a bomb or arrow a weapon
+//! makes is the player's). A weapon starts with `onCreated` when the
+//! server gives it, gets `onPlayerEnters` on each level, `onWeaponFired`
+//! when D fires it, and `onPlayerChats`; it stops when the server takes
+//! it away. Level changes leave weapons running.
+//!
+//! Every run reads the player through core's `PlayerSnap` (`player.x`,
+//! `player.chat`, the counters), and `player.chat = …` says it.
+//!
 //! A machine runs one thing at a time: while a run sleeps (`sleep`) or
 //! waits (`waitfor`), the events that come for its NPC wait for it to end,
 //! in the order they came. A `waitfor` on an event of the NPC's own that
@@ -22,11 +33,15 @@ use seihai_core::protocol::ClientVersion;
 use seihai_core::scripting::engine::host::SessionScripts;
 use seihai_core::scripting::engine::world::{ObjId, ObjSpec};
 use seihai_core::scripting::engine::{Era, Val};
-use seihai_core::scripting::gs2::exec::{EffectHost, Machine, Outcome};
+use seihai_core::scripting::gs2::exec::{EffectHost, Machine, Outcome, PlayerSnap};
 use seihai_core::scripting::gs2::Script;
 
 /// The VM's frame, in milliseconds (core's `TICK`).
 pub const FRAME_MS: u64 = 50;
+
+/// A GS2 weapon for [`ClientScripts::set_weapons`]: its name, image, the
+/// script's bytes and the script as read.
+pub type GsWeapon = (String, String, Vec<u8>, Result<Script, String>);
 
 /// What a machine's current run is waiting for.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,10 +54,21 @@ enum Wait {
     Event { event: String, left: f64 },
 }
 
-/// One NPC's script.
+/// Whose script a run is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Owner {
+    /// A server NPC, by its id, which finds it in the level's list.
+    Npc(u32),
+    /// One of the player's weapons, by name.
+    Weapon(String),
+}
+
+/// One NPC's or weapon's script.
 struct Running {
-    /// The NPC's id on the server, which finds it in the level's list.
-    npc_id: u32,
+    owner: Owner,
+    /// The bytes the script came from, so a script sent again with other
+    /// bytes restarts.
+    code: Option<Vec<u8>>,
     obj: ObjId,
     machine: Machine,
     host: EffectHost,
@@ -65,6 +91,12 @@ pub struct ClientScripts {
     /// Lines a run logged (calls with no command behind them), for the
     /// caller to show or drop.
     pub log: Vec<String>,
+    /// What the player said last, for `player.chat`.
+    pub chat: String,
+    /// The player's nickname and account, for `player.nick` and
+    /// `player.account`.
+    pub nick: String,
+    pub account: String,
 }
 
 impl ClientScripts {
@@ -75,6 +107,9 @@ impl ClientScripts {
             running: Vec::new(),
             acc_ms: 0,
             log: Vec::new(),
+            chat: String::new(),
+            nick: String::new(),
+            account: String::new(),
         }
     }
 
@@ -89,14 +124,130 @@ impl ClientScripts {
 
     /// True if NPC `npc_id` has a script running.
     pub fn runs(&self, npc_id: u32) -> bool {
-        self.running.iter().any(|r| r.npc_id == npc_id)
+        self.running.iter().any(|r| r.owner == Owner::Npc(npc_id))
     }
 
-    /// A new level is on screen: the old level's scripts stop.
+    /// True if weapon `name` has a GS2 script running.
+    pub fn runs_weapon(&self, name: &str) -> bool {
+        self.running
+            .iter()
+            .any(|r| matches!(&r.owner, Owner::Weapon(w) if w == name))
+    }
+
+    /// The weapons with a GS2 script running, by name.
+    pub fn weapons(&self) -> Vec<&str> {
+        self.running
+            .iter()
+            .filter_map(|r| match &r.owner {
+                Owner::Weapon(w) => Some(w.as_str()),
+                Owner::Npc(_) => None,
+            })
+            .collect()
+    }
+
+    /// A new level is on screen: the old level's scripts stop. The
+    /// weapons go on.
     pub fn clear(&mut self) {
-        self.running.clear();
+        self.running.retain(|r| matches!(r.owner, Owner::Weapon(_)));
         self.host.world.clear_level();
         self.acc_ms = 0;
+    }
+
+    /// Stop NPC `npc_id`'s script, so a new one can start.
+    pub fn stop(&mut self, npc_id: u32) {
+        self.running.retain(|r| r.owner != Owner::Npc(npc_id));
+    }
+
+    /// The new level is in: `onPlayerEnters` on each weapon.
+    pub fn level_entered(&mut self, session: &mut OfflineSession) {
+        self.host.sync_player(session);
+        for i in 0..self.running.len() {
+            if matches!(self.running[i].owner, Owner::Weapon(_)) {
+                self.sync(i, session);
+                self.seed_flags(i);
+                self.event(i, "PlayerEnters", &[]);
+            }
+        }
+        self.apply(session);
+    }
+
+    /// The player's GS2 weapons are now `weapons` (name, image, the
+    /// script's bytes and the script as read): a new one starts
+    /// (`onCreated`, then `onPlayerEnters` if a level is in), one sent
+    /// again with other bytes starts again, and one that is gone stops.
+    /// Returns how many started.
+    pub fn set_weapons(&mut self, session: &mut OfflineSession, weapons: &[GsWeapon]) -> usize {
+        self.running.retain(|r| match &r.owner {
+            Owner::Weapon(w) => weapons
+                .iter()
+                .any(|(n, _, code, _)| n == w && r.code.as_ref() == Some(code)),
+            Owner::Npc(_) => true,
+        });
+        let mut started = 0;
+        for (name, image, code, script) in weapons {
+            let Ok(script) = script else {
+                self.log.push(format!(
+                    "weapon {name}: script not read: {}",
+                    script.as_ref().err().map_or("", |e| e)
+                ));
+                continue;
+            };
+            if self.runs_weapon(name) {
+                continue;
+            }
+            let obj = self.host.world.add(ObjSpec::weapon(name, image, ""));
+            let i = self.push(Owner::Weapon(name.clone()), Some(code.clone()), obj, script);
+            self.host.sync_player(session);
+            self.sync(i, session);
+            self.seed_flags(i);
+            let out = {
+                let r = &mut self.running[i];
+                r.machine.run_top_level(&mut r.host)
+            };
+            self.ended(i, out);
+            self.event(i, "Created", &[]);
+            if session.current_level.is_some() {
+                self.event(i, "PlayerEnters", &[]);
+            }
+            started += 1;
+        }
+        self.apply(session);
+        started
+    }
+
+    /// D fired weapon `name`: `onWeaponFired` on its script. False if it
+    /// has no GS2 script running.
+    pub fn weapon_fired(&mut self, session: &mut OfflineSession, name: &str) -> bool {
+        let Some(i) = self
+            .running
+            .iter()
+            .position(|r| matches!(&r.owner, Owner::Weapon(w) if w == name))
+        else {
+            return false;
+        };
+        self.host.sync_player(session);
+        self.sync(i, session);
+        self.seed_flags(i);
+        self.event(i, "WeaponFired", &[]);
+        self.apply(session);
+        true
+    }
+
+    /// A machine for `owner` on world object `obj`.
+    fn push(&mut self, owner: Owner, code: Option<Vec<u8>>, obj: ObjId, script: &Script) -> usize {
+        let mut host = EffectHost::new(Era::for_version(self.version), obj);
+        host.resolve_host = self.version.profile().scripts.resolve_host;
+        self.running.push(Running {
+            owner,
+            code,
+            obj,
+            machine: Machine::for_version(script.clone(), self.version),
+            host,
+            wait: Wait::Idle,
+            queued: VecDeque::new(),
+            touching: false,
+        });
+        self.running.len() - 1
     }
 
     /// Start the scripts a level brought, by the NPC's server id. A script
@@ -127,18 +278,7 @@ impl ClientScripts {
             if let Some(o) = self.host.world.obj_mut(obj) {
                 o.visible = visible;
             }
-            let mut host = EffectHost::new(Era::for_version(self.version), obj);
-            host.resolve_host = self.version.profile().scripts.resolve_host;
-            self.running.push(Running {
-                npc_id: *id,
-                obj,
-                machine: Machine::for_version(script.clone(), self.version),
-                host,
-                wait: Wait::Idle,
-                queued: VecDeque::new(),
-                touching: false,
-            });
-            let i = self.running.len() - 1;
+            let i = self.push(Owner::Npc(*id), None, obj, script);
             self.host.sync_player(session);
             self.sync(i, session);
             self.seed_flags(i);
@@ -197,8 +337,10 @@ impl ClientScripts {
         self.touch(session);
     }
 
-    /// The player said something: `onPlayerChats` on every script.
-    pub fn player_chats(&mut self, session: &mut OfflineSession) {
+    /// The player said `text`: `onPlayerChats` on every script, with
+    /// `player.chat` reading it.
+    pub fn player_chats(&mut self, session: &mut OfflineSession, text: &str) {
+        self.chat = text.to_string();
         self.retag(session);
         self.host.sync_player(session);
         for i in 0..self.running.len() {
@@ -218,6 +360,9 @@ impl ClientScripts {
         );
         let mut any = false;
         for i in 0..self.running.len() {
+            if !matches!(self.running[i].owner, Owner::Npc(_)) {
+                continue;
+            }
             let inside = self.host.world.obj(self.running[i].obj).is_some_and(|o| {
                 let (x, y, w, h) = o.rect();
                 o.visible && fx >= x && fx < x + w && fy >= y && fy < y + h
@@ -279,7 +424,13 @@ impl ClientScripts {
                     left: timeout,
                 }
             }
-            Outcome::Stopped(why) => self.log.push(format!("npc {}: {why}", r.npc_id)),
+            Outcome::Stopped(why) => {
+                let who = match &r.owner {
+                    Owner::Npc(id) => format!("npc {id}"),
+                    Owner::Weapon(w) => format!("weapon {w}"),
+                };
+                self.log.push(format!("{who}: {why}"))
+            }
             Outcome::Done | Outcome::NoSuchEvent => {}
         }
         self.log.append(&mut r.host.log);
@@ -287,18 +438,40 @@ impl ClientScripts {
 
     /// Copy the NPC's place into script `i` before a run: the level's
     /// NPC is where the scripts' last moves and the server's updates put it.
+    /// A weapon stands at the player. The player goes in too.
     fn sync(&mut self, i: usize, session: &OfflineSession) {
         let r = &mut self.running[i];
+        r.host.player = PlayerSnap {
+            x: f64::from(session.player_x),
+            y: f64::from(session.player_y),
+            dir: f64::from(session.player_dir % 4),
+            chat: self.chat.clone(),
+            nick: self.nick.clone(),
+            account: self.account.clone(),
+            hearts: f64::from(session.player_health) / 100.0 * f64::from(session.max_hearts) / 2.0,
+            fullhearts: f64::from(session.max_hearts) / 2.0,
+            rupees: f64::from(session.rupees),
+            bombs: f64::from(session.bombs),
+            darts: f64::from(session.darts),
+        };
         let Some(o) = self.host.world.obj_mut(r.obj) else {
             return;
         };
-        if let Some(n) = session
-            .current_level
-            .as_ref()
-            .and_then(|l| l.npcs.get(o.tag))
-        {
-            o.x = f64::from(n.x);
-            o.y = f64::from(n.y);
+        match r.owner {
+            Owner::Weapon(_) => {
+                o.x = f64::from(session.player_x);
+                o.y = f64::from(session.player_y);
+            }
+            Owner::Npc(_) => {
+                if let Some(n) = session
+                    .current_level
+                    .as_ref()
+                    .and_then(|l| l.npcs.get(o.tag))
+                {
+                    o.x = f64::from(n.x);
+                    o.y = f64::from(n.y);
+                }
+            }
         }
         r.host.x = o.x;
         r.host.y = o.y;
@@ -319,10 +492,10 @@ impl ClientScripts {
         };
         let world = &mut self.host.world;
         self.running.retain(|r| {
-            let at = level
-                .npcs
-                .iter()
-                .position(|n| n.server_id == Some(r.npc_id));
+            let Owner::Npc(id) = r.owner else {
+                return true;
+            };
+            let at = level.npcs.iter().position(|n| n.server_id == Some(id));
             match (at, world.obj_mut(r.obj)) {
                 (Some(index), Some(o)) => {
                     o.tag = index;
@@ -337,7 +510,7 @@ impl ClientScripts {
     /// changed to `send` for the server.
     fn apply(&mut self, session: &mut OfflineSession) {
         for r in &mut self.running {
-            if let Some(o) = self.host.world.obj_mut(r.obj) {
+            if let (Some(o), Owner::Npc(_)) = (self.host.world.obj_mut(r.obj), &r.owner) {
                 o.x = r.host.x;
                 o.y = r.host.y;
             }
@@ -455,7 +628,7 @@ mod tests {
         let src = "function onCreated() { this.n = 0; sleep(0.1); this.n = 1; }\n\
                    function onPlayerChats() { message(\"n=\" @ this.n); }\n";
         sc.start(&mut s, &script(src));
-        sc.player_chats(&mut s);
+        sc.player_chats(&mut s, "hi");
         assert_eq!(npc(&s).message, "");
         sc.tick(&mut s, 100);
         assert_eq!(npc(&s).message, "n=1");
@@ -517,7 +690,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        sc.player_chats(&mut s);
+        sc.player_chats(&mut s, "hi");
         assert_eq!((npc(&s).x, npc(&s).y), (20.0, 21.0));
     }
 

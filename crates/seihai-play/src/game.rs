@@ -33,7 +33,9 @@ use seihai_core::client::{self as online, Live};
 use seihai_core::gmap::Gmap;
 use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::{ChatLine, ClientVersion, SessionState};
+use seihai_core::scripting::gs2::Script;
 use seihai_core::sound::{self, SoundEngine};
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
@@ -108,6 +110,13 @@ pub struct Game {
     pub board_mods: online::SharedBoardMods,
     /// Where the network thread puts the server's NPC updates.
     pub npc_changes: online::SharedNpcChanges,
+    /// Where the network thread puts the NPC scripts a level's arrival did
+    /// not carry (sent later, or a gmap neighbour's).
+    pub npc_scripts: online::SharedNpcScripts,
+    /// Every NPC script the server sent on this connection, by lower-case
+    /// level and NPC id: a gmap cell's scripts start from here when the
+    /// walk crosses into it, as the server does not send them again.
+    level_scripts: HashMap<String, BTreeMap<u32, Result<Script, String>>>,
     /// Set when the game is dropped (its window closed): the network
     /// thread logs out instead of keeping the player on the server.
     closed: Arc<std::sync::atomic::AtomicBool>,
@@ -325,6 +334,8 @@ impl Game {
             crossings: Default::default(),
             board_mods: Default::default(),
             npc_changes: Default::default(),
+            npc_scripts: Default::default(),
+            level_scripts: HashMap::new(),
             closed: Default::default(),
             net_world: None,
             crossings_sent: 0,
@@ -552,6 +563,15 @@ impl Game {
         if let Some(level) = &self.session.current_level {
             render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
         }
+        // The cell left takes its scripts with it; the new cell's start
+        // from what the server sent earlier (it does not send them again).
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.clear();
+        }
+        if let Some(here) = self.level_here.clone() {
+            self.start_kept_scripts(&here);
+        }
+        self.scripts_level_entered();
         self.apply_world();
     }
 
@@ -692,6 +712,7 @@ impl Game {
                         sc.clear();
                     }
                     self.start_scripts(&a);
+                    self.scripts_level_entered();
                     if let Some(level) = &self.session.current_level {
                         for name in render::load_npc_images(
                             level,
@@ -726,6 +747,7 @@ impl Game {
             self.dirty = true;
         }
         self.apply_npc_changes();
+        self.take_npc_scripts();
     }
 
     /// The server's NPC updates since the level arrived (`PLO_NPCPROPS`),
@@ -765,6 +787,9 @@ impl Game {
                 eprintln!("npc image {name}: not in the asset folders; outlined");
             }
         }
+        // An NPC that came after its script (or after the level) starts it.
+        let here = here.to_string();
+        self.start_kept_scripts(&here);
         self.dirty = true;
     }
 
@@ -1019,15 +1044,74 @@ impl Game {
         self.dirty = true;
     }
 
-    /// Start the GS2 scripts a level brought (with a build set).
+    /// Start the GS2 scripts a level brought (with a build set), and keep
+    /// them for when the walk comes back to the level's gmap cell.
     fn start_scripts(&mut self, a: &Arrival) {
+        if self.scripts.is_none() {
+            return;
+        }
+        let kept = self
+            .level_scripts
+            .entry(a.name.to_ascii_lowercase())
+            .or_default();
+        for (id, script) in &a.scripts {
+            kept.insert(*id, script.clone());
+        }
+        self.start_kept_scripts(a.name.as_str());
+    }
+
+    /// Start the kept scripts of level `name` whose NPCs are on the level
+    /// on screen and not running yet.
+    fn start_kept_scripts(&mut self, name: &str) {
         let Some(sc) = self.scripts.as_mut() else {
             return;
         };
-        if sc.start(&mut self.session, &a.scripts) > 0 {
+        let Some(kept) = self.level_scripts.get(&name.to_ascii_lowercase()) else {
+            return;
+        };
+        let scripts: Vec<(u32, Result<Script, String>)> =
+            kept.iter().map(|(id, s)| (*id, s.clone())).collect();
+        if sc.start(&mut self.session, &scripts) > 0 {
             self.script_clock = Instant::now();
         }
         self.after_scripts();
+    }
+
+    /// The NPC scripts the network thread sent apart from an arrival: kept
+    /// by level, and those of the level on screen start (a script sent
+    /// again replaces the running one).
+    fn take_npc_scripts(&mut self) {
+        let new = std::mem::take(&mut *self.npc_scripts.lock().unwrap_or_else(|e| e.into_inner()));
+        if new.is_empty() || self.scripts.is_none() {
+            return;
+        }
+        let here = self.level_here.clone().unwrap_or_default();
+        let mut any_here = false;
+        for n in new {
+            if n.level.eq_ignore_ascii_case(&here) {
+                any_here = true;
+                if let Some(sc) = self.scripts.as_mut() {
+                    sc.stop(n.id);
+                }
+            }
+            self.level_scripts
+                .entry(n.level.to_ascii_lowercase())
+                .or_default()
+                .insert(n.id, n.script);
+        }
+        if any_here {
+            self.start_kept_scripts(&here);
+            self.dirty = true;
+        }
+    }
+
+    /// The level on screen changed (a new level, or a gmap crossing): the
+    /// weapons get `onPlayerEnters`.
+    fn scripts_level_entered(&mut self) {
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.level_entered(&mut self.session);
+            self.after_scripts();
+        }
     }
 
     /// Run the GS2 scripts' clock up to `now`.
@@ -1050,7 +1134,7 @@ impl Game {
 
     /// What the scripts' effects ask of the game: the server messages for
     /// the flags they changed, new NPC images, and a `setlevel`.
-    fn after_scripts(&mut self) {
+    pub(super) fn after_scripts(&mut self) {
         let Some(sc) = self.scripts.as_mut() else {
             return;
         };
@@ -1070,9 +1154,29 @@ impl Game {
                 render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
             }
         }
+        // `player.chat = …` (or GS1's `setplayerprop #c`) says it.
+        if let Some(text) = self.session.chat_out.take() {
+            self.say_quietly(&text);
+        }
+        // Bombs and arrows a weapon made go to the server.
+        self.after_actions();
         if self.session.pending_link.is_some() {
             self.follow_link();
         }
+    }
+
+    /// Say `text` as the player, for a script: the bubble and the server
+    /// get it, and no `onPlayerChats` runs for it.
+    fn say_quietly(&mut self, text: &str) {
+        let now = Instant::now();
+        if !self.offline {
+            self.say
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(text.to_string());
+        }
+        self.own_bubble = (!text.trim().is_empty()).then(|| (text.to_string(), now));
+        self.dirty = true;
     }
 
     /// The network thread's shared state: hand [`Live`] to
@@ -1087,6 +1191,7 @@ impl Game {
         self.crossings = live.crossings;
         self.board_mods = live.board_mods;
         self.npc_changes = live.npc_changes;
+        self.npc_scripts = live.npc_scripts;
         self.closed = live.closed;
         self.own = live.own;
         self.say = live.say;
@@ -1130,7 +1235,7 @@ impl Game {
             .push(text.to_string());
         self.own_bubble = Some((text.to_string(), now));
         if let Some(sc) = self.scripts.as_mut() {
-            sc.player_chats(&mut self.session);
+            sc.player_chats(&mut self.session, text);
             self.after_scripts();
         }
     }
@@ -1543,6 +1648,125 @@ mod tests {
         g.tick(0, 0, Instant::now() + Duration::from_millis(60));
         let level = g.session.current_level.as_ref().unwrap();
         assert_eq!(level.npcs[0].message, "later");
+    }
+
+    /// A level with server NPC 7 at (10, 10) and no scripts, for the
+    /// script tests below.
+    fn level_with_npc_7(g: &mut Game, tx: &mpsc::Sender<Event>) {
+        use seihai_core::protocol::npcprops::NpcProps;
+        let mut a = arrival(Some((30.0, 30.0)));
+        a.server_npc_props = vec![(
+            7,
+            NpcProps {
+                image: Some("block.png".into()),
+                x: Some(10.0),
+                y: Some(10.0),
+                ..Default::default()
+            },
+        )];
+        tx.send(Event::Level(Box::new(Level::from_board(&[0; 4096])), a))
+            .unwrap();
+        g.tick(0, 0, Instant::now());
+    }
+
+    /// #497: a script the server sends after the level has settled (and
+    /// one it sends again) starts on the NPC; a neighbour's waits for its
+    /// level.
+    #[test]
+    fn a_script_that_comes_after_the_level_starts() {
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V600R2);
+        level_with_npc_7(&mut g, &tx);
+        let script = |src: &str| online::NpcScript {
+            level: "lab3x.nw".into(),
+            id: 7,
+            script: Ok(compile_gs2(src).unwrap()),
+        };
+        g.npc_scripts.lock().unwrap().extend([
+            script("function onCreated() { message(\"late\"); }"),
+            online::NpcScript {
+                level: "next.nw".into(),
+                ..script("function onCreated() { message(\"next\"); }")
+            },
+        ]);
+        g.tick(0, 0, Instant::now());
+        assert_eq!(
+            g.session.current_level.as_ref().unwrap().npcs[0].message,
+            "late"
+        );
+        g.npc_scripts
+            .lock()
+            .unwrap()
+            .push(script("function onCreated() { message(\"again\"); }"));
+        g.tick(0, 0, Instant::now());
+        assert_eq!(
+            g.session.current_level.as_ref().unwrap().npcs[0].message,
+            "again"
+        );
+        assert!(g.level_scripts.contains_key("next.nw"));
+    }
+
+    /// #497: a 6.x weapon with compiled GS2 runs: `onCreated` when the
+    /// server gives it, `onWeaponFired` on D, and `player.chat = …` says
+    /// it (the bubble, and the line goes to the server).
+    #[test]
+    fn a_gs2_weapon_fires_and_its_chat_is_said() {
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V600R2);
+        level_with_npc_7(&mut g, &tx);
+        let src = "function onCreated() { this.n = 0; }\n\
+                   function onWeaponFired() { this.n++; player.chat = \"fired \" @ this.n; }\n";
+        let code = compile_gs2(src).unwrap().write();
+        let mut w = online::OwnWeapons::default();
+        w.named.push(seihai_core::protocol::Weapon {
+            name: "Gun".into(),
+            image: Some("wbow1.png".into()),
+            script: None,
+        });
+        w.bytecode.insert("Gun".into(), code);
+        *g.weapons.lock().unwrap() = w;
+        g.tick(0, 0, Instant::now());
+        assert_eq!(g.weapon(), Some("Gun"));
+        assert!(g.fire());
+        let now = Instant::now();
+        assert_eq!(g.own_bubble(now), Some("fired 1"));
+        assert_eq!(g.say.lock().unwrap().as_slice(), ["fired 1".to_string()]);
+        assert!(g.fire());
+        assert_eq!(g.own_bubble(Instant::now()), Some("fired 2"));
+        // The server takes the weapon away: its script stops.
+        *g.weapons.lock().unwrap() = online::OwnWeapons::default();
+        g.tick(0, 0, Instant::now());
+        assert!(g.scripts.as_ref().unwrap().weapons().is_empty());
+    }
+
+    /// #497: `onPlayerChats` reads what the player said as `player.chat`.
+    #[test]
+    fn player_chat_reads_what_was_said() {
+        use seihai_core::scripting::gs2::compile::compile_gs2;
+        let (mut g, tx) = game();
+        g.set_version(ClientVersion::V600R2);
+        level_with_npc_7(&mut g, &tx);
+        g.npc_scripts.lock().unwrap().push(online::NpcScript {
+            level: "lab3x.nw".into(),
+            id: 7,
+            script: Ok(compile_gs2(
+                "function onPlayerChats() { if (player.chat == \"open\") message(\"opened\"); }",
+            )
+            .unwrap()),
+        });
+        g.tick(0, 0, Instant::now());
+        g.say("hello", Instant::now());
+        assert_eq!(
+            g.session.current_level.as_ref().unwrap().npcs[0].message,
+            ""
+        );
+        g.say("open", Instant::now());
+        assert_eq!(
+            g.session.current_level.as_ref().unwrap().npcs[0].message,
+            "opened"
+        );
     }
 
     /// Closing the window drops the game, which tells the network thread
