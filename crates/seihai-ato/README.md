@@ -215,6 +215,17 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
 - 3.04, 3.153, 4.04r2, 4.20r8 and 5.12 passed the server list and Connect.
 - 4.20r8, 5.00r7 and 5.12 passed the Login warp (`PLO_SERVERWARP`).
 - 5.12's Graal3D link reaches login step 6 (#458).
+  The [2026-11-14 Ato-only pass 2](https://github.com/squirelworks/seihai/issues/458#issuecomment-6869133395)
+  reported movement, turning and chat at client `4462cf5` against gserver-v2
+  `c851b4e` with a lab-only trace: 476 transform sections, one chat section
+  and no velocity sections. Source: the authored
+  [pass-2 report at `aab03f9`](https://github.com/squirelworks/seihai/blob/aab03f9502bed88d064b8d1dcf69084764411b52/docs/lab/2026-11-14-lab458-pass2/README.md).
+  Ato's 6.0 units/s walk and 2.5 rad/s turn are implementation placeholders,
+  not measured native speeds. Synthetic key-hold time and server arrival
+  time differed: the 10 s walk's updates arrived over 12.9 s under software
+  rendering. This records historical Ato behaviour, not a new run.
+  Real 5.12 movement speeds and whether it sends velocity remain unknown;
+  the original client was not run in this pass.
 - The water sound and `--no-sound` pass on 3.153 (#466). The water-to-dry
   follow-up reported five Ato runs at client `4d1a28d` against gserver-v2
   `c851b4e`: a splash already playing ran to completion; one new splash
