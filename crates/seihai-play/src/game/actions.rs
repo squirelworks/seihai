@@ -12,7 +12,8 @@
 //!   the Bomb (and Superbomb, Joltbomb) puts a bomb in front, the Bow
 //!   shoots an arrow. `PLI_BOMBADD` and `PLI_ARROWADD` go to the server,
 //!   then the new BOMBSCOUNT or ARROWSCOUNT, as the real 2.05 sends them.
-//!   A server weapon with a GS2 script (6.x) does not run here yet.
+//!   A server weapon with a GS2 script (6.x, `PLO_NPCWEAPONSCRIPT`) runs
+//!   in [`crate::scripts`] and gets `onWeaponFired`.
 //! - **Lay mode.** A with S held picks the first item the player has, A
 //!   with S held again picks the next, A alone lays it in front (rupees,
 //!   bombs, arrows, a heart, or a glove, sword, shield or the spin), and
@@ -201,6 +202,25 @@ impl Game {
                 .collect();
             sc.sync_weapons(&mut self.session, &refs);
         }
+        // The GS2 weapons: a server weapon with compiled GS2 and no GS1
+        // text runs on the build's VM.
+        if let Some(sc) = self.scripts.as_mut() {
+            let gs2: Vec<_> = now
+                .named
+                .iter()
+                .filter(|w| w.script.as_ref().is_none_or(|t| t.trim().is_empty()))
+                .filter_map(|w| {
+                    let code = now.bytecode.get(&w.name)?;
+                    Some((
+                        w.name.clone(),
+                        w.image.clone().unwrap_or_default(),
+                        code.clone(),
+                        seihai_core::scripting::gs2::Script::parse(code),
+                    ))
+                })
+                .collect();
+            sc.set_weapons(&mut self.session, &gs2);
+        }
         self.actions.weapons = now;
         // A weapon that is gone is not fired; with none picked, the last
         // one added is, as each add selects it in 2.05.
@@ -295,6 +315,15 @@ impl Game {
         let Some(name) = self.actions.weapon.clone() else {
             return false;
         };
+        if self
+            .scripts
+            .as_mut()
+            .is_some_and(|sc| sc.weapon_fired(&mut self.session, &name))
+        {
+            self.after_scripts();
+            self.dirty = true;
+            return true;
+        }
         let Some(sc) = self.actions.scripts.as_mut() else {
             return false;
         };
@@ -525,7 +554,7 @@ impl Game {
 
     /// What the actions send: the bombs and arrows put, the items laid,
     /// then the new counts.
-    fn after_actions(&mut self) {
+    pub(super) fn after_actions(&mut self) {
         let mut msgs = self.session.take_bomb_sends();
         msgs.extend(self.session.take_arrow_sends());
         msgs.extend(self.session.take_item_messages(!self.offline));
@@ -601,7 +630,7 @@ mod tests {
     fn weapons(g: &mut Game, defaults: &[u8]) {
         *g.weapons.lock().unwrap() = OwnWeapons {
             defaults: defaults.to_vec(),
-            named: Vec::new(),
+            ..Default::default()
         };
         g.tick(0, 0, Instant::now());
     }
