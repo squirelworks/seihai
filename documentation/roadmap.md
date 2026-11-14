@@ -56,7 +56,7 @@ Single code path. Versions are profile rows, not branches.
 `seihai-issho` is the 6.x client line (the `quattro_lib` builds). It runs the game loop Ato runs, from `seihai-play`, and does not depend on Ato. Tracking issue: #440.
 
 - [x] Game loop. Log in with core's client session, draw the level the server sends flat, walk it with the arrows, cross links and gmap edges, show the other players and the server's board and NPC changes, and play the walk's sounds through core's `SoundEngine`, asking the server for missing ones with `WANTFILE` (`--no-sound` turns it off). `--level` plays level files offline; `--no-window` only logs. Ato's `game` and `render` moved to `seihai-play` so both lines share them.
-- [ ] Lab run against the lab server stack, every 6.x row, in a headless VM (#441).
+- [x] Baseline lab run against the lab server stack (#441, #507): Windows and Linux results are recorded in `docs/lab/issho-6x-lab-run-2026-11-13.md`. This does not validate the later GS2/music additions in #502/#519 or subsequent NPC rendering changes.
 - [x] Start window and server list; the launcher and mae hand 6.x picks to Issho (#442). Issho has no start window of its own: the shared one hands a 6.x pick over, logged in at once; a pick Issho refuses comes back to the start window with a note.
 - [x] Characters from ganis, and the renderer moved to `seihai-draw` (#443).
 - [x] The 6.x window size and HUD (#444): 1024 x 768, and the default status display (`seihai-play::hud`), the 2.05 routine on the 6.x window, which a lab run of the real 6.00r2 and 6.03r7 put on the same pixels. Counters from the server's player props (core's `client::OwnStats`).
@@ -76,14 +76,15 @@ Single code path. Versions are profile rows, not branches.
   - [x] GS2 script `play`, `playlooped`, `play2` and `stopsound`: core's GS2 `EffectHost` makes them the GS1 engine's sound effects (0.1.7), so the 6.x NPC scripts sound.
   - [x] `.mp3` music on one music slot of core's `SoundEngine` (0.1.7), asked for with `WANTFILE` when missing.
   - [x] `.mid` music on the same slot, rendered by core's small synthesizer (0.2.0): the file's notes and timing, simple timbres.
-  - [ ] A lab listen of the 6.x music with #441.
+  - [ ] A lab listen of the 6.x music after #502/#519. The completed baseline run (#441, #507) does not establish music parity.
 - [x] GS2 client scripts, clean-room in seihai-core (#447).
   - [x] The VM in seihai-core, one profile per build (`scripting::gs2::exec::Machine::for_version`).
   - [x] The client runtime in `seihai-play::scripts`: the server NPCs' scripts start when their level arrives (top level, `onCreated`, `onPlayerEnters`), tick on the 50 ms frame (`onTimeout`, `scheduleevent`, `sleep`, `waitfor`), and run `onPlayerTouchsMe` and `onPlayerChats`. Their effects land through core's `SessionScripts` (NPC image, visibility, place, `message` drawn as a bubble, `setlevel`, player props), and player flags go to the server as `PLI_FLAGSET` / `PLI_FLAGDEL`. Issho and Ato (since #487) turn it on through `Game::set_version`.
   - [x] Weapon scripts (#497): a server weapon with compiled GS2 (`PLO_NPCWEAPONSCRIPT`, 140, core 0.2.0) runs on the build's VM as the player: `onCreated` when given, `onPlayerEnters` on each level, `onWeaponFired` on D, `onPlayerChats`; it stops when the server takes it away.
   - [x] Scripts sent after the level (an NPC that comes later, or a script sent again) start or restart on their NPC; the gmap neighbours' scripts are kept by level and start when the walk crosses into the cell (core's `Live::npc_scripts`). A cell's scripts start again on re-entry rather than keeping the state they had.
   - [x] `player.chat`, `player.x` and the player's counters read in GS2; `player.chat = …` says it (bubble and server), and writes to the place, direction and counters reach the player.
-  - [ ] The rest of the events (`onActionProjectile`, key events, GUI scripts such as the 6.x Q list), and `PLO_LOADSCRIPT` (197) cache hits: Seihai keeps no script cache yet. A lab run with #441.
+  - [ ] The rest of the events (`onActionProjectile`, key events, GUI scripts such as the 6.x Q list), and `PLO_LOADSCRIPT` (197) cache hits: Seihai keeps no script cache yet (#497).
+  - [ ] Validate the GS2 additions in #502/#519 with real clients. The baseline record (#441, #507) does not establish coverage of these changes; keeping script bodies across gmap crossings does not preserve their execution state.
 - [x] The 6.00r4 profile row and `resolveHost` (#448).
 
 ## Remaining
@@ -92,7 +93,7 @@ Single code path. Versions are profile rows, not branches.
 - Level editor: notes in Graal_analysis `tools/level-editor/` (2.22 reference, version deltas, Seihai tracking checklist); the checklist, the first CLI slice (open, list, paint, save) and a window (palette, layers 0 and 1, stamps, object markers, gmap grid, save) are in `documentation/level-editor.md` and `tools/level-editor/`.
 - Public-server checks: list checks done from the user's machine (2026-10-25); game-server checks still to do. Results and checklist in `documentation/public-checks.md`.
 - Early builds: real 2.00-era listserver reply still unobserved.
-- Graal3D (February 2000): planned as its own track in `documentation/plannedmilestones.md` (M1 client fidelity G3D-1/2/4/6/7, M2 admin + real-client lab G3D-5/8, M3 Rust host G3D-9, M4 `.x`+BMP world content, M5 servertools lab knock-on). `seihai-g3d` already plays against the original / reference servers (#331, #332). Worlds are DirectX `.x` + local BMPs, not 2D levels; `seihai-gserver` does not speak `GR3DV002`. Torque 3D (3.x–5.x) stays held as G3D-3 / Ato Stage 4. Task detail: `crates/seihai-g3d/ARCHITECTURE.md`.
+- Graal3D (February 2000): planned as its own track in `documentation/plannedmilestones.md` (M1 client fidelity G3D-1/2/4/6/7, M2 admin + real-client lab G3D-5/8, M3 Rust host G3D-9, M4 `.x`+BMP world content, M5 servertools lab knock-on). `seihai-g3d` already plays against the original / reference servers (#331, #332). Worlds are DirectX `.x` + local BMPs, not 2D levels; `seihai-gserver` does not speak `GR3DV002`. Torque 3D (3.x–5.x) is tracked separately by #457: the link, flat-shaded `.3ds`/`.dts` view, sky box, fog, nicknames and GS2 weapons are implemented (#485, #487, #503). Remaining work includes `.dif`/`.ft` and terrain rendering (#461), protocol-19 completion (#464), and real-client movement comparison (#458). Task detail: `crates/seihai-g3d/ARCHITECTURE.md`.
 - Walking collision: the real six-probe body-box routine is documented in `documentation/walking-collision-note.md` (cross-link). The earlier SDL single-point test is superseded.
 
 ## Completed (prior phases)
