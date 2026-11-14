@@ -141,13 +141,19 @@ handled before that search. **[bin]**
 
 The shared loop runs the server NPCs' scripts (`PLO_NPCBYTECODE`, kept in
 core's `client::level::Arrival::scripts`) with `ClientScripts`, which
-`Game::set_version` turns on for the build (Issho calls it; Ato not yet):
+`Game::set_version` turns on for the selected build. Both Issho and Ato's
+flat game path call it; Ato's wiring is in `crates/seihai-ato/src/game.rs`.
+This source wiring is not evidence of complete Ato 3.x execution or native
+fidelity: Ato's online loopback test checks 3.153 bytecode parsing/opcode
+logging, while the shared execution tests use 6.x profiles.
 
 - **Start.** When a level arrives, each script whose NPC is on the level
   (by server id) gets a `Machine::for_version` and an `EffectHost`. The
-  top-level code runs, then `onCreated`, then `onPlayerEnters`. A level
-  the walk crossed into on a gmap keeps the scripts already running and
-  starts the new ones; any other level stops the old ones. **[seihai]**
+  top-level code runs, then `onCreated`, then `onPlayerEnters`. On a gmap
+  crossing, the shared game clears the old cell's NPC runtimes and starts
+  the destination cell's scripts from retained bytecode. Returning to a
+  cell restarts its NPC execution state; retaining bytes does not preserve
+  a suspended run. Weapons survive level changes. **[seihai]**
 - **Frames.** Every 50 ms (the VM's `TICK`) a sleeping run whose time is
   up goes on, a `waitfor` whose time is up goes on with 0, and the timers
   (`onTimeout`, `scheduleevent`) run. **[seihai]**
