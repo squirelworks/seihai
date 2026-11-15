@@ -19,6 +19,7 @@ pub mod inventory;
 pub mod keys;
 pub mod mapscreen;
 pub mod present;
+pub mod receive_build;
 pub mod render;
 pub mod settings;
 pub mod sound;

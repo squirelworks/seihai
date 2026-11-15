@@ -101,6 +101,11 @@ enum Pick {
 /// The line to start for these arguments. An unknown version goes to
 /// `seihai-mae`, which says so and falls back to 2.05. A v7 label does not.
 fn pick(args: &[String]) -> Pick {
+    // Mae validates the exact receive-build selector and its baseline even
+    // when an incompatible --version would normally route to another line.
+    if args.iter().any(|arg| arg == "--receive-build") {
+        return Pick::Start(Line::Mae, None);
+    }
     if version_arg(args).is_some_and(is_v7_label) {
         return Pick::UnsupportedV7;
     }
@@ -413,6 +418,13 @@ mod tests {
         assert_eq!(line("--version 1.39 --online h:14923"), Line::Mae);
         assert_eq!(line(""), Line::Mae);
         assert_eq!(line("--assets dir"), Line::Mae);
+    }
+
+    #[test]
+    fn receive_build_selection_stays_with_mae_for_validation() {
+        assert_eq!(line("--version 2.1 --receive-build v22"), Line::Mae);
+        assert_eq!(line("--version 3.153 --receive-build v22"), Line::Mae);
+        assert_eq!(line("--receive-build GNW31101"), Line::Mae);
     }
 
     #[test]
