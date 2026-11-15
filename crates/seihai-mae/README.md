@@ -23,6 +23,30 @@ belong to [`seihai-core`](../seihai-core), rather than a second copy here.
 The standalone `seihai-draw` compositor (in the seihai-core repo) serves
 tools that should not depend on the full playable client.
 
+## Explicit 1.1.9 relay play
+
+The development CLI can join an explicitly named relay with a supplied local
+level:
+
+```sh
+seihai-mae --version "1.1.9 Gold Edition" --online 127.0.0.1:14801 --level generated.graal --assets ./owned-assets --nick Player
+```
+
+This uses the separate `Graal8` and `G8<level>` TCP rooms, automatic pairing,
+initial player position/name/colours, walking updates, chat and peer removal.
+The existing local simulation and renderer supply play; neither a version
+token nor account credentials are sent to the relay. An explicit host and
+port and a successfully loaded local level are required. The server-list UI
+does not yet offer this route, and other relay dialects remain offline.
+
+This is a partial networking implementation: HTTP level loading and shared
+board, NPC, item, combat and equipment synchronization are not implemented.
+Room-mode notifications do not replace the user's explicit local-level
+selection. It does not reproduce a complete native 1.1.9 session. The wire
+facts come from the published [relay study](https://github.com/squirelworks/Graal_analysis/blob/main/protocol/relay-1998.md)
+and qualified original-client captures in [the early trace](https://github.com/squirelworks/Graal_analysis/blob/main/client-internals/live-trace-early.md).
+The earlier Zelda Online 1 build, which has no networking, stays separate.
+
 ## Boundaries and current routing
 
 [`seihai-launcher`](../seihai-launcher/src/main.rs) starts Mae by default.

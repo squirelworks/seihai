@@ -964,7 +964,13 @@ pub fn main(args: Vec<String>) {
     version = settings.version_with(version_given.then_some(version));
     // `--online host:port` is used as given. A listserver host with no port
     // gets the selected version's default port.
-    if let Some(a) = online.as_mut() {
+    if offline_build.is_some_and(|b| b.label == "1.1.9 Gold Edition") && online.is_some() {
+        if online.as_ref().is_some_and(|a| !a.contains(':')) || list_only || secure_login.is_some()
+        {
+            eprintln!("1.1.9 relay needs an explicit host:port, has no listserver or secure account login");
+            std::process::exit(2);
+        }
+    } else if let Some(a) = online.as_mut() {
         *a = version.complete_list_addr(a);
     }
     // Check the data folder for one version or the five main ones, print, exit.
@@ -1096,6 +1102,17 @@ pub fn main(args: Vec<String>) {
     // lost connection goes back to it even after a `--online` start.
     let in_program = in_seihai_program();
     let windowed = !cli_mode || in_program;
+    // The relay is a separate transport, with locally supplied levels and
+    // no account/token login. Do not pass its endpoint to the gen-2 path.
+    let relay_endpoint = if offline_build.is_some_and(|b| b.label == "1.1.9 Gold Edition") {
+        online.take()
+    } else {
+        None
+    };
+    if relay_endpoint.is_some() && level_name.is_none() {
+        eprintln!("1.1.9 relay needs --level naming a locally supplied level; HTTP levels are not implemented");
+        std::process::exit(2);
+    }
     if let Some(b) = offline_build {
         if online.take().is_some() {
             eprintln!("{} is offline-only: {}", b.label, b.reason());
@@ -1296,13 +1313,22 @@ pub fn main(args: Vec<String>) {
         break;
     }
 
-    // An offline-only build (picked here or in the launcher) never goes online.
+    // These builds use the local simulation. The explicit 1.1.9 relay
+    // transport additionally exchanges peer position/chat below.
     if let Some(b) = offline_build {
-        eprintln!(
-            "{}: offline, with the {} rules",
-            b.display(),
-            version.label()
-        );
+        if relay_endpoint.is_some() {
+            eprintln!(
+                "{}: relay peer position/chat with local levels and {} simulation rules",
+                b.label,
+                version.label()
+            );
+        } else {
+            eprintln!(
+                "{}: offline, with the {} rules",
+                b.display(),
+                version.label()
+            );
+        }
         if level_name.is_none() {
             level_name = b.start_level.map(str::to_string);
         }
@@ -2356,7 +2382,94 @@ pub fn main(args: Vec<String>) {
     };
     // Set when the connection ends with an error: shown after the loop.
     let mut exit_error: Option<String> = None;
+    let mut relay = if let Some(endpoint) = relay_endpoint {
+        if session.current_level.is_none() {
+            eprintln!("relay: cannot join without a successfully loaded local level");
+            std::process::exit(1);
+        }
+        let player = seihai::relay::Player {
+            nickname: nickname_setting.clone().unwrap_or_else(|| account.clone()),
+            level: session.level_name().unwrap_or_default(),
+            x: session.player_x,
+            y: session.player_y,
+            sprite: sent_sprite(&session, version, false),
+            colors: session.looks.colors,
+        };
+        match seihai::relay::Client::connect(&endpoint, player) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                eprintln!("relay connect: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+    let mut relay_sent_at = Instant::now();
     'game: while window.is_open() {
+        if let Some(c) = relay.as_mut() {
+            let result = c.poll().and_then(|()| {
+                if relay_sent_at.elapsed() >= Duration::from_millis(100) {
+                    relay_sent_at = Instant::now();
+                    c.update(
+                        &session.level_name().unwrap_or_default(),
+                        session.player_x,
+                        session.player_y,
+                        sent_sprite(&session, version, false),
+                    )?;
+                }
+                Ok(())
+            });
+            if let Err(e) = result {
+                eprintln!("relay disconnected: {e}");
+                net_state.others.clear();
+                break 'game;
+            }
+            net_state.others = c
+                .peers()
+                .map(|p| seihai::protocol::OtherPlayer {
+                    id: p.id,
+                    x: p.x,
+                    y: p.y,
+                    dir: p.sprite % 4,
+                    nick: Some(p.nickname.clone()),
+                    chat: Some(p.chat.clone()),
+                    chat_timer: net_state
+                        .others
+                        .iter()
+                        .find(|old| old.id == p.id && old.chat.as_deref() == Some(&p.chat))
+                        .map_or_else(seihai::chatlists::BubbleTimer::start, |old| {
+                            old.chat_timer.clone()
+                        }),
+                    account: None,
+                    cell: None,
+                    sprite: Some(p.sprite),
+                    status: None,
+                    ap: None,
+                    sword_power: None,
+                    carry: None,
+                    looks: seihai::protocol::OtherLooks {
+                        colors: Some(p.colors),
+                        ..Default::default()
+                    },
+                })
+                .collect();
+            for (id, line) in c.take_chats() {
+                // A repeated identical line is still a new bubble. Ordinary
+                // frames retain the timer instead of restarting it forever.
+                if let Some(peer) = net_state.others.iter_mut().find(|p| p.id == id) {
+                    peer.chat_timer = seihai::chatlists::BubbleTimer::start();
+                }
+                let who = net_state
+                    .others
+                    .iter()
+                    .find(|p| p.id == id)
+                    .and_then(|p| p.nick.clone())
+                    .unwrap_or_else(|| format!("#{id}"));
+                net_state.push_chat(ChatKind::Say, who, line);
+            }
+            dirty = true;
+        }
         let mut ft = FrameTimes::start(&stall);
         let typed_now: Vec<char> = std::mem::take(&mut *typed.lock().unwrap());
         if !input.is_open() {
@@ -4890,7 +5003,11 @@ pub fn main(args: Vec<String>) {
                             ui::own_say(&mut net_state, &who, &t, &mut my_chat, &mut my_chat_timer);
                             dirty = true;
                             let online = conn.is_some();
-                            let r = conn.as_mut().map(|c| c.send_chat(&t));
+                            let r = if let Some(c) = relay.as_mut() {
+                                Some(c.chat(&t))
+                            } else {
+                                conn.as_mut().map(|c| c.send_chat(&t))
+                            };
                             match &r {
                                 Some(Ok(())) => eprintln!("chat: sent {} characters as chat (CURCHAT), bubble and log set", t.chars().count()),
                                 Some(Err(_)) => {}

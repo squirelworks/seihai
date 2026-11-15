@@ -8,7 +8,7 @@ extern crate self as seihai;
 // still resolve.
 pub use seihai_core::{
     arrows, assets, baddies, bombs, chatlists, combat, dev, difftest, filecache, gmap, items, life,
-    looks, net, npcart, offline, pose, protocol, scripting, servercache, throwing, viewer,
+    looks, net, npcart, offline, pose, protocol, relay, scripting, servercache, throwing, viewer,
 };
 
 pub mod app;
