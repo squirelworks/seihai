@@ -2465,7 +2465,7 @@ pub fn main(args: Vec<String>) {
                         .iter()
                         .find(|old| old.id == p.id && old.chat.as_deref() == Some(&p.chat))
                         .map_or_else(seihai::chatlists::BubbleTimer::start, |old| {
-                            old.chat_timer.clone()
+                            old.chat_timer
                         }),
                     account: None,
                     cell: None,
