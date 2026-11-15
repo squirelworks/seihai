@@ -219,7 +219,7 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
   reported movement, turning and chat at client `4462cf5` against gserver-v2
   `c851b4e` with a lab-only trace: 476 transform sections, one chat section
   and no velocity sections. Source: the authored
-  [pass-2 report at `aab03f9`](https://github.com/squirelworks/seihai/blob/aab03f9502bed88d064b8d1dcf69084764411b52/docs/lab/2026-11-14-lab458-pass2/README.md).
+  [pass-2 report](../../docs/lab/2026-11-14-lab458-pass2/README.md).
   Ato's 6.0 units/s walk and 2.5 rad/s turn are implementation placeholders,
   not measured native speeds. Synthetic key-hold time and server arrival
   time differed: the 10 s walk's updates arrived over 12.9 s under software
