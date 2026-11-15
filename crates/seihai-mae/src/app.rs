@@ -2406,6 +2406,8 @@ pub fn main(args: Vec<String>) {
         None
     };
     let mut relay_sent_at = Instant::now();
+    let mut pending_relay_chat = crate::relay_chat::PendingRelayChat::default();
+    let mut relay_chat_error: Option<String> = None;
     'game: while window.is_open() {
         if let Some(c) = relay.as_mut() {
             let result = c.poll().and_then(|()| {
@@ -2421,9 +2423,33 @@ pub fn main(args: Vec<String>) {
                 Ok(())
             });
             if let Err(e) = result {
-                eprintln!("relay disconnected: {e}");
+                eprintln!(
+                    "relay disconnected: {e}; {} queued chat messages were not submitted",
+                    pending_relay_chat.len()
+                );
                 net_state.others.clear();
                 break 'game;
+            }
+            // Identity may not have arrived when the user pressed Enter.
+            // Retry in order after poll; identical text remains distinct.
+            let before = pending_relay_chat.len();
+            let result = pending_relay_chat.flush(|text| c.chat(text));
+            let submitted = before - pending_relay_chat.len();
+            if submitted > 0 {
+                eprintln!(
+                    "chat: submitted {submitted} queued messages as relay C; {} remain pending",
+                    pending_relay_chat.len()
+                );
+            }
+            match result {
+                Ok(()) => relay_chat_error = None,
+                Err(e) => {
+                    let error = e.to_string();
+                    if relay_chat_error.as_ref() != Some(&error) {
+                        eprintln!("chat: relay C submission failed: {e}; {} queued messages retained for retry", pending_relay_chat.len());
+                    }
+                    relay_chat_error = Some(error);
+                }
             }
             net_state.others = c
                 .peers()
@@ -5002,18 +5028,23 @@ pub fn main(args: Vec<String>) {
                             let who = me(&net_state, &account);
                             ui::own_say(&mut net_state, &who, &t, &mut my_chat, &mut my_chat_timer);
                             dirty = true;
-                            let online = conn.is_some();
-                            let r = if let Some(c) = relay.as_mut() {
-                                Some(c.chat(&t))
+                            if relay.is_some() {
+                                match pending_relay_chat.enqueue(&t) {
+                                    Ok(()) => eprintln!("chat: queued {} characters for relay C; {} messages pending (bubble and local log set)", t.chars().count(), pending_relay_chat.len()),
+                                    Err(crate::relay_chat::QueueError::Full) => eprintln!("chat: relay queue is full; message not queued or submitted (shown locally only)"),
+                                    Err(crate::relay_chat::QueueError::InvalidText) => eprintln!("chat: relay message exceeds 512 bytes or contains controls; not queued or submitted (shown locally only)"),
+                                }
+                                None
                             } else {
-                                conn.as_mut().map(|c| c.send_chat(&t))
-                            };
-                            match &r {
-                                Some(Ok(())) => eprintln!("chat: sent {} characters as chat (CURCHAT), bubble and log set", t.chars().count()),
-                                Some(Err(_)) => {}
-                                None => eprintln!("chat: not sent, not connected (shown in the bubble and log only; online: {online})"),
+                                let online = conn.is_some();
+                                let r = conn.as_mut().map(|c| c.send_chat(&t));
+                                match &r {
+                                    Some(Ok(())) => eprintln!("chat: sent {} characters as chat (CURCHAT), bubble and log set", t.chars().count()),
+                                    Some(Err(_)) => {}
+                                    None => eprintln!("chat: not sent, not connected (shown in the bubble and log only; online: {online})"),
+                                }
+                                r
                             }
-                            r
                         }
                         ui::ChatSend::Toall(t) if !t.is_empty() => {
                             net_state.push_chat(

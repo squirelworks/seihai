@@ -39,6 +39,13 @@ token nor account credentials are sent to the relay. An explicit host and
 port and a successfully loaded local level are required. The server-list UI
 does not yet offer this route, and other relay dialects remain offline.
 
+Chat entered before the relay identity is ready stays in an ordered pending
+queue and is retried after each connection poll. Identical repeated lines are
+separate messages. Mae's queue policy allows 32 messages of at most 512 bytes
+each; full or invalid input is reported as local-only rather than sent.
+Transport errors retain unsent messages for retry. Logs distinguish queued
+chat from submission as relay `C`; submission is not a delivery acknowledgement.
+
 This is a partial networking implementation: HTTP level loading and shared
 board, NPC, item, combat and equipment synchronization are not implemented.
 Room-mode notifications do not replace the user's explicit local-level
