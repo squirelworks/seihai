@@ -557,6 +557,7 @@ pub fn main(args: Vec<String>) {
     let mut account = String::from("player");
     let mut password = String::new();
     let mut version = ClientVersion::V205;
+    let mut receive_build = None;
     // An offline-only build (`protocol::offline_builds`): played offline
     // with `version` set to its `plays_as` row.
     let mut offline_build: Option<&'static seihai::protocol::offline_builds::OfflineBuild> = None;
@@ -724,6 +725,19 @@ pub fn main(args: Vec<String>) {
                     eprintln!("warning: --password-env needs a variable name");
                 }
             }
+            "--receive-build" => {
+                i += 1;
+                receive_build = Some(
+                    args.get(i)
+                        .ok_or_else(|| "--receive-build needs an exact build label".to_string())
+                        .and_then(|label| crate::receive_build::parse(label))
+                        .unwrap_or_else(|why| {
+                            eprintln!("{why}");
+                            std::process::exit(2);
+                        }),
+                );
+                cli_mode = true;
+            }
             "--version" => {
                 version_given = true;
                 i += 1;
@@ -748,6 +762,9 @@ pub fn main(args: Vec<String>) {
                 println!("                             <settings dir>/cache is only read; settings file: cache_dir=)");
                 println!("                             search order: server cache, --assets, built-in set");
                 println!("       seihai --assets <dir> --online host:port --account A --password P [--version 2.05]");
+                println!("       seihai --version 2.1 --receive-build BUILD --online host:port");
+                println!("         BUILD: public-2001-11-13, ver7, ver8, ver9, ver10, ver13, v22");
+                println!("         Receive-table override only; baseline login/send/script rules remain 2.1.");
                 println!("       seihai --assets <dir> --online host:port --account A --password-env VAR [--version 2.05]");
                 println!(
                     "         --password-env VAR  read the password from environment variable VAR"
@@ -901,6 +918,16 @@ pub fn main(args: Vec<String>) {
             }
         }
         std::process::exit(i32::from(failed));
+    }
+    if receive_build.is_some() && (!version_given || version != ClientVersion::V210) {
+        eprintln!("--receive-build requires an explicitly selected --version 2.1 baseline");
+        std::process::exit(2);
+    }
+    if let Some(build) = receive_build {
+        eprintln!(
+            "receive build: {} (receive tables only; baseline 2.1 login/send/script settings remain inferred)",
+            build.label()
+        );
     }
     // Load settings and fill defaults.
     let mut settings = Settings::load();
@@ -1125,7 +1152,8 @@ pub fn main(args: Vec<String>) {
             }
         }
         // Read server traffic the way the chosen version does.
-        net_state = SessionState::for_version(version);
+        net_state = crate::receive_build::session(version, receive_build)
+            .expect("receive-build baseline checked before starting a session");
         lists = seihai::chatlists::ChatLists::load_default();
         net_state.set_filter(lists.filter(&version.profile().protocol.pli));
         scripts = SessionScripts::new(version);
@@ -4710,7 +4738,8 @@ pub fn main(args: Vec<String>) {
                             eprintln!("{m}");
                         }
                         // A fresh session on the new server.
-                        net_state = SessionState::for_version(version);
+                        net_state = crate::receive_build::session(version, receive_build)
+                            .expect("receive-build baseline checked before starting a session");
                         // The new server has seen no mute messages yet.
                         lists.mute_sent = 0;
                         net_state.set_filter(lists.filter(&version.profile().protocol.pli));
@@ -5017,7 +5046,13 @@ pub fn main(args: Vec<String>) {
                                     link_arrival = None;
                                     session.cancel_warp();
                                     session.leave_gmap();
-                                    net_state = SessionState::for_version(version);
+                                    net_state = crate::receive_build::session(
+                                        version,
+                                        receive_build,
+                                    )
+                                    .expect(
+                                        "receive-build baseline checked before starting a session",
+                                    );
                                     net_state
                                         .set_filter(lists.filter(&version.profile().protocol.pli));
                                     loaded_level = None;
