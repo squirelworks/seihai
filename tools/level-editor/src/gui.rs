@@ -25,7 +25,7 @@ use egui::{
     Vec2,
 };
 use seihai::render::{Framebuffer, TILE_PX};
-use seihai_core::assets::{read_png_rgb, tile_id, ObjectSet, Stamp};
+use seihai_core::assets::{read_png_rgb, tile_id, ObjectSet, Stamp, CHEST_ITEMS};
 use seihai_core::gmap::Gmap;
 use std::path::{Path, PathBuf};
 
@@ -745,6 +745,9 @@ struct ObjectFields {
     /// Baddy type 0 to 9 (the combo box index).
     baddy_kind: usize,
     verses: [String; BADDY_VERSE_LINES],
+    /// Chest item index into `CHEST_ITEMS`.
+    chest_item: usize,
+    sign_index: i32,
     x: f32,
     y: f32,
     w: i32,
@@ -1527,6 +1530,10 @@ impl EditorApp {
                 .ok()
                 .filter(|n| *n < BADDY_TYPE_NAMES.len())
                 .unwrap_or(0);
+            let chest_item = CHEST_ITEMS
+                .iter()
+                .position(|n| *n == o.name.as_str())
+                .unwrap_or(0);
             self.fields = ObjectFields {
                 id: Some(o.id),
                 dest: o.name.clone(),
@@ -1535,6 +1542,8 @@ impl EditorApp {
                 first_line: o.first_line.clone(),
                 baddy_kind,
                 verses,
+                chest_item,
+                sign_index: o.sign_index,
                 x: o.x,
                 y: o.y,
                 w: o.w as i32,
@@ -1615,7 +1624,27 @@ impl EditorApp {
                 }
             }
             ObjectKind::Chest => {
-                ui.label(format!("Item: {}", o.name));
+                ui.horizontal(|ui| {
+                    ui.label("Item");
+                    egui::ComboBox::from_id_salt("chest-item")
+                        .selected_text(CHEST_ITEMS[self.fields.chest_item])
+                        .show_ui(ui, |ui| {
+                            for (i, name) in CHEST_ITEMS.iter().enumerate() {
+                                ui.selectable_value(&mut self.fields.chest_item, i, *name);
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Sign index");
+                    ui.add(egui::DragValue::new(&mut self.fields.sign_index).speed(1.0));
+                    ui.label("(-1 for none)");
+                });
+                if ui.button("Apply item and sign").clicked() {
+                    edits.push(ObjectEdit::ChestItem(
+                        CHEST_ITEMS[self.fields.chest_item].to_string(),
+                    ));
+                    edits.push(ObjectEdit::ChestSign(self.fields.sign_index));
+                }
             }
             ObjectKind::Baddy => {
                 ui.horizontal(|ui| {

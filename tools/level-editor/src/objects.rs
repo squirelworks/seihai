@@ -4,7 +4,7 @@
 //! stays as it was.
 
 use crate::{Document, EditError, SIZE};
-use seihai_core::assets::Level;
+use seihai_core::assets::{Level, CHEST_ITEMS};
 
 /// What a record is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +83,8 @@ pub struct Object {
     /// Baddy: the verse lines between the header and `BADDYEND` (at most
     /// [`BADDY_VERSE_LINES`] are edited; any further lines are kept).
     pub verses: Vec<String>,
+    /// Chest: the sign index on the `CHEST` line (`-1` for none).
+    pub sign_index: i32,
     /// The record could not be read by the client's parser (shown, not editable).
     pub unreadable: bool,
 }
@@ -115,6 +117,10 @@ pub enum ObjectEdit {
     /// after them are kept. Types 4 to 6 (swamp, hare, octopus) have no
     /// verses in the classic editor; the pane still accepts an empty list.
     BaddyVerses(Vec<String>),
+    /// A chest's item name (one of the 25 classic names, no spaces).
+    ChestItem(String),
+    /// A chest's sign index (`-1` for none).
+    ChestSign(i32),
 }
 
 /// How many rows the script / sign text pane prefers to show at once.
@@ -179,6 +185,7 @@ impl Document {
             arrival: (String::new(), String::new()),
             first_line: String::new(),
             verses: Vec::new(),
+            sign_index: -1,
             unreadable: false,
         };
         let head = lines
@@ -208,6 +215,7 @@ impl Document {
                 o.x = c.x as f32;
                 o.y = c.y as f32;
                 o.name = c.item.clone();
+                o.sign_index = c.sign_index;
             }),
             ObjectKind::Npc => lv.npcs.first().map(|n| {
                 o.x = n.x;
@@ -464,6 +472,33 @@ impl Document {
                     ));
                 }
                 head[3] = kind.to_string();
+            }
+            ObjectEdit::ChestItem(item) => {
+                let item = item.trim();
+                if r.kind != ObjectKind::Chest
+                    || item.is_empty()
+                    || item.contains(char::is_whitespace)
+                    || !CHEST_ITEMS.contains(&item)
+                {
+                    return Err(bad(
+                        "a chest item is one of the 25 classic names (for example greenrupee)",
+                    ));
+                }
+                if head.len() < 5 {
+                    return Err(bad("this chest line is incomplete, so it is left as it is"));
+                }
+                head[3] = item.to_string();
+            }
+            ObjectEdit::ChestSign(sign) => {
+                if r.kind != ObjectKind::Chest || sign < -1 {
+                    return Err(bad(
+                        "a chest sign index is -1 for none, or 0 and up for a sign",
+                    ));
+                }
+                if head.len() < 5 {
+                    return Err(bad("this chest line is incomplete, so it is left as it is"));
+                }
+                head[4] = sign.to_string();
             }
             ObjectEdit::Script(_) | ObjectEdit::SignText(_) | ObjectEdit::BaddyVerses(_) => {
                 unreachable!("handled above")
