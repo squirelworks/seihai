@@ -969,7 +969,6 @@ impl Document {
             }
         }
     }
-    }
 
     /// Copy a rectangle of `layer` (0 or 1) into a block. Empty layer-1 cells
     /// are `None`; layer 0 is always filled.

@@ -1264,6 +1264,7 @@ impl EditorApp {
                         Ok(n) => self.status = format!("Saved {n} level(s)"),
                         Err(e) => self.status = e.to_string(),
                     }
+                }
                 if ui
                     .add_enabled(self.editor.can_undo(), egui::Button::new("Undo"))
                     .on_hover_text("Ctrl+Z — board paints and erases")
