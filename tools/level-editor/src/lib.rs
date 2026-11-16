@@ -25,8 +25,8 @@
 //!
 //! **Objects.** Links, signs, chests, baddies and NPCs are records of lines
 //! (`objects`), read with the client's level parser. Moving one, or changing
-//! a link's destination and arrival or the first line of an NPC script or a
-//! sign, rewrites only that record's lines (`edit_object`).
+//! a link's destination and arrival or the body of an NPC script or a sign,
+//! rewrites only that record's lines (`edit_object`).
 //!
 //! **Profiles.** The user picks a [`VersionProfile`] (2.22 text, GR-V1.03,
 //! GR-V1.05, Z3-V1.04, …). Only the text profiles open and save today;

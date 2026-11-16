@@ -394,6 +394,11 @@ impl Editor {
         self.doc().map(|d| d.objects()).unwrap_or_default()
     }
 
+    /// One object by id.
+    pub fn object(&self, id: usize) -> Option<Object> {
+        self.doc.as_ref()?.object(id)
+    }
+
     /// The topmost object whose marker covers the point (in tiles).
     pub fn object_at(&self, x: f32, y: f32) -> Option<Object> {
         self.objects()
@@ -410,9 +415,14 @@ impl Editor {
         Ok(())
     }
 
-    /// The first script lines of an NPC, for the script pane.
+    /// Every line of an NPC script, for the text pane.
     pub fn script_head(&self, id: usize) -> Result<ScriptHead, EditError> {
         self.doc().ok_or_else(no_level)?.script_head(id)
+    }
+
+    /// Every line of a sign's text, for the text pane.
+    pub fn sign_text(&self, id: usize) -> Result<ScriptHead, EditError> {
+        self.doc.as_ref().ok_or_else(no_level)?.sign_text(id)
     }
 
     /// Add a link, sign, chest or NPC at (x, y) and select it.
@@ -567,13 +577,12 @@ struct ObjectFields {
     h: i32,
 }
 
-/// The NPC script pane: which NPC, the text being edited, and how many
-/// script lines there are past the ones shown (they are kept on save).
+/// The NPC script or sign text pane: which object and the text being edited.
 #[derive(Debug, Clone)]
 pub struct ScriptPane {
     pub id: usize,
+    pub kind: ObjectKind,
     pub text: String,
-    pub shown: usize,
     pub total: usize,
 }
 
@@ -600,7 +609,7 @@ pub struct EditorApp {
     /// The cell new objects go to (the last empty cell clicked with the Objects tool).
     add_cell: (i32, i32),
     fields: ObjectFields,
-    /// The open NPC script pane (double-click an NPC marker).
+    /// The open NPC script or sign text pane (double-click a marker).
     pub script: Option<ScriptPane>,
     pending: Option<Pending>,
     title: String,
@@ -805,15 +814,30 @@ impl EditorApp {
         self.prompt(ctx);
     }
 
-    /// Open the script pane for an NPC (what a double-click on its marker does).
+    /// Open the text pane for an NPC script or a sign (what a double-click does).
     pub fn open_script(&mut self, id: usize) {
-        match self.editor.script_head(id) {
+        let kind = match self.editor.object(id) {
+            Some(o) => o.kind,
+            None => {
+                self.status = format!("there is no object {id}");
+                return;
+            }
+        };
+        let body = match kind {
+            ObjectKind::Npc => self.editor.script_head(id),
+            ObjectKind::Sign => self.editor.sign_text(id),
+            other => {
+                self.status = format!("a {} has no text pane", other.name());
+                return;
+            }
+        };
+        match body {
             Ok(head) => {
                 self.editor.set_selected(Some(id));
                 self.script = Some(ScriptPane {
                     id,
+                    kind,
                     text: head.lines.join("\n"),
-                    shown: head.lines.len(),
                     total: head.total,
                 });
             }
@@ -821,7 +845,7 @@ impl EditorApp {
         }
     }
 
-    /// Put the pane's text into the level in place of the lines it showed.
+    /// Put the pane's text into the level as the whole body.
     /// Returns true when the level took it.
     pub fn apply_script(&mut self) -> bool {
         let Some(pane) = self.script.clone() else {
@@ -835,12 +859,21 @@ impl EditorApp {
                 .map(|l| l.trim_end_matches('\r').to_string())
                 .collect()
         };
-        match self
-            .editor
-            .edit_object(pane.id, ObjectEdit::ScriptHead(lines))
-        {
+        let edit = match pane.kind {
+            ObjectKind::Npc => ObjectEdit::Script(lines),
+            ObjectKind::Sign => ObjectEdit::SignText(lines),
+            other => {
+                self.status = format!("a {} has no text pane", other.name());
+                return false;
+            }
+        };
+        match self.editor.edit_object(pane.id, edit) {
             Ok(()) => {
-                self.status = format!("Changed the script of NPC {}", pane.id);
+                self.status = match pane.kind {
+                    ObjectKind::Npc => format!("Changed the script of NPC {}", pane.id),
+                    ObjectKind::Sign => format!("Changed the text of sign {}", pane.id),
+                    _ => unreachable!(),
+                };
                 self.script = None;
                 true
             }
@@ -858,55 +891,36 @@ impl EditorApp {
         let mut open = true;
         let mut cancel = false;
         let mut action = None;
-        let count = if pane.text.is_empty() {
-            0
-        } else {
-            pane.text.split('\n').count()
+        let title = match pane.kind {
+            ObjectKind::Npc => format!("NPC {} script", pane.id),
+            ObjectKind::Sign => format!("Sign {} text", pane.id),
+            other => format!("{} {} text", other.name(), pane.id),
         };
-        egui::Window::new(format!("NPC {} script", pane.id))
+        let what = match pane.kind {
+            ObjectKind::Sign => "text",
+            _ => "script",
+        };
+        egui::Window::new(title)
             .open(&mut open)
             .collapsible(false)
             .default_width(520.0)
             .show(ctx, |ui| {
-                let rest = pane.total - pane.shown;
-                ui.label(if rest > 0 {
-                    format!(
-                        "Lines 1 to {} of {}. The {rest} lines after them are kept as they are.",
-                        pane.shown, pane.total
-                    )
-                } else {
-                    format!(
-                        "The whole script ({} lines). The pane edits up to {SCRIPT_PANE_LINES}.",
-                        pane.total
-                    )
-                });
+                ui.label(format!("The whole {what} ({} lines).", pane.total));
                 ui.add(
                     egui::TextEdit::multiline(&mut pane.text)
                         .code_editor()
                         .desired_rows(SCRIPT_PANE_LINES)
                         .desired_width(f32::INFINITY),
                 );
-                if count > SCRIPT_PANE_LINES {
-                    ui.colored_label(
-                        Color32::LIGHT_RED,
-                        format!("{count} lines: the pane saves {SCRIPT_PANE_LINES} at most."),
-                    );
-                }
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(count <= SCRIPT_PANE_LINES, egui::Button::new("Apply"))
+                        .button("Apply")
                         .on_hover_text("Into the level; save the level to write it")
                         .clicked()
                     {
                         action = Some(false);
                     }
-                    if ui
-                        .add_enabled(
-                            count <= SCRIPT_PANE_LINES,
-                            egui::Button::new("Apply and save level"),
-                        )
-                        .clicked()
-                    {
+                    if ui.button("Apply and save level").clicked() {
                         action = Some(true);
                     }
                     if ui.button("Cancel").clicked() {
@@ -1292,11 +1306,15 @@ impl EditorApp {
                 if ui.button("Apply line").clicked() {
                     edits.push(ObjectEdit::FirstLine(self.fields.first_line.clone()));
                 }
-                if o.kind == ObjectKind::Npc
-                    && ui
-                        .button("Edit script (20 lines)")
-                        .on_hover_text("Or double-click the marker")
-                        .clicked()
+                let edit_label = if o.kind == ObjectKind::Npc {
+                    "Edit full script"
+                } else {
+                    "Edit full text"
+                };
+                if ui
+                    .button(edit_label)
+                    .on_hover_text("Or double-click the marker")
+                    .clicked()
                 {
                     self.open_script(o.id);
                 }
@@ -1540,7 +1558,10 @@ impl EditorApp {
                     Tool::Objects => {
                         let at = pointer.and_then(to_tiles);
                         if resp.double_clicked() {
-                            if let Some(o) = at.and_then(|(px, py)| self.editor.object_at(px, py)).filter(|o| o.kind == ObjectKind::Npc) {
+                            if let Some(o) = at
+                                .and_then(|(px, py)| self.editor.object_at(px, py))
+                                .filter(|o| matches!(o.kind, ObjectKind::Npc | ObjectKind::Sign))
+                            {
                                 self.open_script(o.id);
                             }
                         }
