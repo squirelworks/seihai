@@ -41,7 +41,7 @@ removed. **[src]** The client's own frame length was not read.
 `onTimeout`, then the scheduled events in the order they were made.
 **[seihai]**
 
-**Event names.** The client's event dispatcher (`0x3e2c0c`) accepts a name
+**Event names.** The client's event dispatcher accepts a name
 with or without its leading `on`, and the timer's own event is `timeout`.
 So `onTimeout` is the function a timer runs, and `scheduleevent(1, "Ping")`
 and `scheduleevent(1, "onPing")` both run `onPing`. **[inf]**
@@ -79,29 +79,29 @@ timer that runs out during a `sleep` runs on the frame after the run ends.
 
 These are opcodes, not calls by name (`gs2-opcodes.md`, "Built-in
 functions"), so GServer-v2, which has no GS2 VM, has nothing on them. All
-of this is from the 3.153 VM (`0x3dc954`) and its helpers. **[bin]** The
+of this is from the 3.153 VM and its helpers. **[bin]** The
 compiler converts the object of a method to a string first
 (`OP_CONV_TO_STRING`).
 
 | Built-in | Opcode | 3.153 |
 |---|---|---|
 | `char(n)` | `OP_CHAR` | the byte `(char)(int)n` as a one-byte string |
-| `s.trim()` | `OP_OBJ_TRIM` | drops leading and trailing bytes whose low 7 bits are 0x20 (space and 0xA0); tabs stay (`0x3d0588`) |
+| `s.trim()` | `OP_OBJ_TRIM` | drops leading and trailing bytes whose low 7 bits are 0x20 (space and 0xA0); tabs stay |
 | `s.length()` | `OP_OBJ_LENGTH` | the byte count |
-| `s.pos(t)` | `OP_OBJ_POS` | the first index of `t`, or -1; an empty `t` or one longer than `s` is -1 (`0x3cff90`) |
+| `s.pos(t)` | `OP_OBJ_POS` | the first index of `t`, or -1; an empty `t` or one longer than `s` is -1 |
 | `s.charat(i)` | `OP_OBJ_CHARAT` | the byte at `int(i)`, or "" outside the string |
-| `s.substring(a, n)` | `OP_OBJ_SUBSTR` | `a` below 0 is 0, past the end is the end; `n` below 0 runs to the end; the end stops at the length (`0x3da32c`) |
+| `s.substring(a, n)` | `OP_OBJ_SUBSTR` | `a` below 0 is 0, past the end is the end; `n` below 0 runs to the end; the end stops at the length |
 | `s.starts(t)`, `s.ends(t)` | `OP_OBJ_STARTS`, `OP_OBJ_ENDS` | 1 or 0 |
 | `_(s)` | `OP_TRANSLATE` | leaves the value as it is |
 | `format(f, …)` | `OP_FORMAT` | see below |
 
-`int(i)` above is the client's double-to-int conversion (`0x3d3ab8`). It
+`int(i)` above is the client's double-to-int conversion. It
 rounds down and adds a small constant first, whose value was not read.
 Seihai rounds down. The same conversion is used by `OP_INT` and the
 bitwise operators. Stage C truncated instead, so `int(-1.5)` was -1; it
 is -2 now, as in the client.
 
-**`format`** (`0x3dbb0c`): the pattern is on top of the stack and its
+**`format`**: the pattern is on top of the stack and its
 arguments are below it, back to the marker, the first nearest. The whole
 list becomes the result. With no pattern the result is "". The pattern is
 read as `%[-][+][width][.precision][l]` and one letter. Width and
@@ -119,7 +119,7 @@ precision stop at 120.
   the pattern ends it.
 
 The padding byte for `s` is a one-byte string constant in the client
-(`PTR_DAT_007ad4b8`) that was not read. Seihai uses a space. **[inf]**
+that was not read. Seihai uses a space. **[inf]**
 
 ### Where Seihai differs
 
@@ -131,7 +131,7 @@ The padding byte for `s` is a one-byte string constant in the client
   target of the assignment), as it would in the client. Write
   `s.substring(a, -1)` instead. **[src]/[bin]**
 - `starts` and `ends` with an empty `t` give 1. What the client's helpers
-  (`0x3d2a88`, `0x3d2b4c`) do with an empty string was not checked. **[inf]**
+  do with an empty string was not checked. **[inf]**
 
 ### String tests
 
@@ -157,28 +157,28 @@ string list. **[seihai]**
 
 | Built-in | Opcode | 3.153 | Seihai |
 |---|---|---|---|
-| `{a, b, …}` | `OP_ARRAY_END` | takes everything down to the marker, the first element nearest the top (`0x3d69c4`) | the same |
-| `new[n]` | `OP_ARRAY_NEW` | `n` zeros, `n` kept to 0..10 000 (`0x3d6b08`) | the same |
-| `new[n][m]` | `OP_ARRAY_NEW_MULTIDIM` | each element becomes `m` zeros, recursively (`0x3d6bcc`) | the same |
+| `{a, b, …}` | `OP_ARRAY_END` | takes everything down to the marker, the first element nearest the top | the same |
+| `new[n]` | `OP_ARRAY_NEW` | `n` zeros, `n` kept to 0..10 000 | the same |
+| `new[n][m]` | `OP_ARRAY_NEW_MULTIDIM` | each element becomes `m` zeros, recursively | the same |
 | `a.size()` | `OP_OBJ_SIZE` | the list's size; 0 for no object | 0 for anything that is not a list |
-| `a[i]` | `OP_ARRAY` | by kind: the number at `i`, the variable's string (no index), or the object at `i`; 0 for no object (`0x3da5d4`) | the element at `i`; a string or number variable gives itself; past the end is 0 **[inf]** |
-| `a[i] = v` | `OP_ARRAY_ASSIGN` | sets the element at `i` by the value's kind and leaves nothing on the stack (`0x3da744`) | past the end, nothing happens **[inf]** |
-| `a[i, j]`, `a[i, j] = v` | `OP_ARRAY_MULTIDIM`, `…_ASSIGN` | needs a two-dimensional variable (`0x3da904`, `0x3daaf8`) | element `j` of element `i` **[inf]** |
-| `a.add(v)` | `OP_OBJ_ADDSTRING` | inserts at -1, the end (`0x3dae0c`) | the same |
-| `a.insert(i, v)` | `OP_OBJ_INSERTSTRING` | the index is on top, the value under it; inserts at `i` (`0x3db220`) | `i` kept to 0..size **[inf]** |
-| `a.replace(i, v)` | `OP_OBJ_REPLACESTRING` | the index on top; sets at `i`, or adds at the end when `i` is below 0 or past the end (`0x3db064`) | the same |
+| `a[i]` | `OP_ARRAY` | by kind: the number at `i`, the variable's string (no index), or the object at `i`; 0 for no object | the element at `i`; a string or number variable gives itself; past the end is 0 **[inf]** |
+| `a[i] = v` | `OP_ARRAY_ASSIGN` | sets the element at `i` by the value's kind and leaves nothing on the stack | past the end, nothing happens **[inf]** |
+| `a[i, j]`, `a[i, j] = v` | `OP_ARRAY_MULTIDIM`, `…_ASSIGN` | needs a two-dimensional variable | element `j` of element `i` **[inf]** |
+| `a.add(v)` | `OP_OBJ_ADDSTRING` | inserts at -1, the end | the same |
+| `a.insert(i, v)` | `OP_OBJ_INSERTSTRING` | the index is on top, the value under it; inserts at `i` | `i` kept to 0..size **[inf]** |
+| `a.replace(i, v)` | `OP_OBJ_REPLACESTRING` | the index on top; sets at `i`, or adds at the end when `i` is below 0 or past the end | the same |
 | `a.delete(i)` | `OP_OBJ_DELETESTRING` | deletes at `i` | out of range, nothing **[inf]** |
-| `a.remove(v)` | `OP_OBJ_REMOVESTRING` | finds `v` and deletes the first match (`0x3daf74`) | the same |
+| `a.remove(v)` | `OP_OBJ_REMOVESTRING` | finds `v` and deletes the first match | the same |
 | `a.clear()` | `OP_OBJ_CLEAR` | clears the list | the same |
-| `a.index(v)` | `OP_OBJ_INDEX` | the first index of `v`, or -1; -1 for an empty list (`0x3db388`) | the same |
-| `v in a` | `OP_IN_OBJ` | 1 if `v` is in `a`; a list `v` is in when each of its elements is (`0x3d9f14`) | the same |
-| `s.tokenize(seps)` | `OP_OBJ_TOKENIZE` | splits on the bytes in `seps` (`" ,"` when none is given); `"…"` is one token with `""` for `"`; tokens trimmed, empty unquoted ones dropped; no tokens gives no object (`0x3db984`, `0x3c1884`) | the same |
-| `s.positions(t)` | `OP_OBJ_POSITIONS` | every index where `t` starts, overlapping ones too; an empty list when there is none (`0x3db7a8`) | the same |
-| `a.subarray(start, n)` | `OP_OBJ_SUBARRAY` | takes the list, the start and the count, the count on top; `start` kept to the list, `n` below 0 runs to the end (`0x3da47c`) | the same |
+| `a.index(v)` | `OP_OBJ_INDEX` | the first index of `v`, or -1; -1 for an empty list | the same |
+| `v in a` | `OP_IN_OBJ` | 1 if `v` is in `a`; a list `v` is in when each of its elements is | the same |
+| `s.tokenize(seps)` | `OP_OBJ_TOKENIZE` | splits on the bytes in `seps` (`" ,"` when none is given); `"…"` is one token with `""` for `"`; tokens trimmed, empty unquoted ones dropped; no tokens gives no object | the same |
+| `s.positions(t)` | `OP_OBJ_POSITIONS` | every index where `t` starts, overlapping ones too; an empty list when there is none | the same |
+| `a.subarray(start, n)` | `OP_OBJ_SUBARRAY` | takes the list, the start and the count, the count on top; `start` kept to the list, `n` below 0 runs to the end | the same |
 | `for (v : a)` | `OP_FOREACH` | with the loop variable, the list and the index on the stack: sets the variable to element `index`, or jumps out past the end | the same |
 
 Searches (`index`, `remove`, `in`) compare numbers with numbers and
-strings with strings (`0x3ef660`, `0x3ef704`). Seihai uses the executor's
+strings with strings. Seihai uses the executor's
 comparison (`gs2-executor.md`), and lists compare element by element.
 **[inf]**
 
@@ -208,23 +208,22 @@ in `scripting/gs2/lists.rs` for `tokenize`, `positions` and `subarray`.
 
 ## The rest
 
-The opcodes left after the lists, read in the 3.153 VM (`0x3dc954` and
-its helpers). **[bin]** S0 is the top of the stack and S1 the entry under
-it. Constants the decompile names but does not print are marked
+The opcodes left after the lists, read in the 3.153 VM and its helpers.
+**[bin]** S0 is the top of the stack and S1 the entry under it. Constants the decompile names but does not print are marked
 **[inf]**; the ones it prints (`OP_OBJ_TYPE`'s results) are **[bin]**.
 
 | Built-in | Opcode | 3.153 | Seihai |
 |---|---|---|---|
 | `exp(x)` | `OP_EXP` | `exp(S0)` | the same |
 | `log(…)` | `OP_LOG` | `log(S0) / log(S1)`: S1 is the base, `log10` when it is 10; a base of 0 or less gives 0 **[inf]** | the same |
-| `getangle(dx, dy)` | `OP_GETANGLE` | S1 `dx`, S0 `dy`: `atan(-dy / dx)`, plus π when `dx < 0`, plus 2π when still below 0 (`0x3dc038`); `dx == 0` gives one constant for `dy > 0` and another for the rest | 3π/2 and π/2 for those two **[inf]** |
+| `getangle(dx, dy)` | `OP_GETANGLE` | S1 `dx`, S0 `dy`: `atan(-dy / dx)`, plus π when `dx < 0`, plus 2π when still below 0; `dx == 0` gives one constant for `dy > 0` and another for the rest | 3π/2 and π/2 for those two **[inf]** |
 | `getdir(dx, dy)` | `OP_GETDIR` | the longer axis, ties to the vertical: four constants by sign | up 0, left 1, down 2, right 3 **[inf]** |
 | `vecx(d)`, `vecy(d)` | `OP_VECX`, `OP_VECY` | a four-row table for `d` 0..3, 0 for any other `d` | (0, -1), (-1, 0), (0, 1), (1, 0) **[inf]**: the table was not read |
 | `a << b`, `a >> b` | `OP_BW_LEFTSHIFT`, `…_RIGHTSHIFT` | 32-bit, both sides through the integer conversion, the count `& 63` | the same; a count of 32 or more gives 0 (or -1 for a negative `>>`), as PowerPC does |
-| `x in \|a, b\|` | `OP_IN_RANGE` | `[x, a, b]`; a list `x` is in when every element is; the bounds rule comes from the instruction's number field, modes 0..3 with small margins (`0x3d9d30`, `0x3d42dc`) | gs2-parser gives no number field (mode 0): `a <= x <= b`, no margin **[inf]** |
+| `x in \|a, b\|` | `OP_IN_RANGE` | `[x, a, b]`; a list `x` is in when every element is; the bounds rule comes from the instruction's number field, modes 0..3 with small margins | gs2-parser gives no number field (mode 0): `a <= x <= b`, no margin **[inf]** |
 | `a.type()` | `OP_OBJ_TYPE` | a list with elements 3; otherwise by the variable's kind: number 0, string 1, object 2; anything else -1 | the same; an empty list is -1, `this` or `player` is 2 **[inf]** |
-| `a.indices(v)` | `OP_OBJ_INDICES` | the list in S1, the value in S0: a new list of every index where the element equals `v` (numbers within a margin) (`0x3db4d4`) | the same, numbers exact |
-| `setarray(a, n)` | `OP_SETARRAY` | the list in S1, `n` in S0, nothing left: pads with 0 or cuts to `n`, kept to 0..10 000 (`0x3d6d7c`) | the same |
+| `a.indices(v)` | `OP_OBJ_INDICES` | the list in S1, the value in S0: a new list of every index where the element equals `v` (numbers within a margin) | the same, numbers exact |
+| `setarray(a, n)` | `OP_SETARRAY` | the list in S1, `n` in S0, nothing left: pads with 0 or cuts to `n`, kept to 0..10 000 | the same |
 | `with (obj) { … }` | `OP_WITH`, `OP_WITHEND` | a non-null object goes on the `with` stack and becomes `this` (unless it is of one class, not identified); a null object jumps past the block; `OP_WITHEND` pops it and puts `this` back | the same, below |
 
 `with` in Seihai: `this`, and names with no prefix, mean the `with` object
@@ -254,7 +253,7 @@ These opcodes are logged ("not run yet") and skipped:
 |---|---|
 | `OP_WAITFOR` (11) | not in the 3.153 VM's switch; gs2-parser compiles `waitfor` to it |
 | `OP_INLINE_NEW` (40), `OP_NEW_OBJECT` (42), `OP_OBJ_FROM_STR` (43), `OP_MAKEVAR` (41) | they make or find real objects, and Seihai has no object references yet |
-| `OP_OBJ_LINK` (100) | its helper (`0x3f5848`) was not read |
+| `OP_OBJ_LINK` (100) | its helper was not read |
 | `OP_OBJ_COMPARE` (104) | not in the 3.153 VM's switch; gs2-parser does not emit it |
 | 45–47, 66–67 | the VM has cases for them, but gs2-parser has no name for them and never emits them; they are logged as unknown opcodes |
 | `OP_PARAMS` (190) | pushes the function's `params` object, which needs object references; gs2-parser does not emit it |

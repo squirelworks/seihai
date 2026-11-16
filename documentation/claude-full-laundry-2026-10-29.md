@@ -33,7 +33,7 @@ The 2026-10-28 list, checked against main.
 
 ## What works
 
-- Live login on 2gta.home.eevul.net:14913 and 45.59.132.11:30903
+- Live login on `<host>:<port>` and `<public-host>:<port>`
 - Levels load from server boards
 - Images requested and cached
 - Hearts stay at default when server sends power 0

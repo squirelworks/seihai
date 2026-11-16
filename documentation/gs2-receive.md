@@ -28,23 +28,23 @@ PLO_RAWDATA (100)  GINT3 n  \n
 
 ## What the 3.153 client does with it
 
-The handler at `0x2e0b88` **[bin]**:
+The client's PLO_NPCBYTECODE handler **[bin]**:
 
 1. Needs at least 3 bytes. Reads bytes 1–3 (the string class counts from 1)
    as a GINT3, high 7 bits first, and drops them.
 2. An id of 0 or less is dropped. Ids under 1000 are looked up among the
-   current level's NPCs, 1000 and up in the global NPC list (`0x2e0c78`).
+   current level's NPCs, 1000 and up in the global NPC list.
    An id that is not found is dropped. The NPC has to exist already, which
    is why the server sends 131 after the NPC's props.
-3. Hands the rest to the NPC's script object (`0x3ec0f0` → `0x3e2030`),
-   which calls the bytecode loader `0x3c9a80` (the one that decodes the
+3. Hands the rest to the NPC's script object,
+   which calls the bytecode loader (the one that decodes the
    `F0`–`F6` operands, see `gs2-executor.md`). It then ORs two words of the
    script and of each class in its class list into the NPC (likely the GS1
    event flags; not checked).
-4. If any bytes were left, calls a method of the NPC (vtable slot `0x34`).
+4. If any bytes were left, calls a method of the NPC through a fixed vtable slot.
    What that slot does was not read. **[bin]**
 
-`0x2e0b88` has no direct caller in the decompile: the receive code reaches
+That handler has no direct caller in the decompile: the receive code reaches
 it through a table. That 131 lands here is from the receive-switch read in
 `v3x-clients.md` together with the layout match (`i3 code, bytecode` in
 `protocol/packet-ids.md`). **[inf]**
