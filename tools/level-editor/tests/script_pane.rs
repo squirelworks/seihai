@@ -5,7 +5,9 @@
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{EditorApp, Sheet, Tool};
-use level_editor::{tile_code, Document, EditError, ObjectEdit, Version, SCRIPT_PANE_LINES, SIZE};
+use level_editor::{
+    tile_code, Document, EditError, ObjectEdit, VersionProfile, SCRIPT_PANE_LINES, SIZE,
+};
 use seihai_core::assets::Level;
 use std::path::PathBuf;
 
@@ -212,7 +214,7 @@ fn window_double_click_on_an_npc_opens_the_pane_and_apply_saves() {
     std::fs::write(&path, level("\n")).unwrap();
     let mut h = Harness {
         ctx: egui::Context::default(),
-        app: EditorApp::new(Version::V222, Sheet::builtin(), Some(&path)),
+        app: EditorApp::new(VersionProfile::TextNw222, Sheet::builtin(), Some(&path)),
         events: Vec::new(),
         time: 0.0,
     };

@@ -13,7 +13,7 @@
 //! the tests also drive the real window code with synthetic mouse input.
 
 use crate::{
-    Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, Version, LAYERS,
+    Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, VersionProfile, LAYERS,
     SCRIPT_PANE_LINES, SIZE, TILE_LIMIT,
 };
 use eframe::egui;
@@ -131,7 +131,8 @@ impl LevelTab {
 /// Layer, tool and palette stay shared across tabs; each tab keeps its own
 /// document, path, unsaved flag and selected object.
 pub struct Editor {
-    pub version: Version,
+    /// Target format / feature profile (picker). Default: 2.22 text.
+    pub version: VersionProfile,
     /// The tile the left button paints.
     pub tile: u16,
     /// The layer painting, erasing and stamps go to (0 or 1).
@@ -154,7 +155,7 @@ fn no_level() -> EditError {
 }
 
 impl Editor {
-    pub fn new(version: Version) -> Editor {
+    pub fn new(version: VersionProfile) -> Editor {
         Editor {
             version,
             tile: 0,
@@ -233,13 +234,14 @@ impl Editor {
     }
 
     /// Open a level as a new tab, or switch to it when that path is already
-    /// open (without reloading). On an error nothing changes.
+    /// open (without reloading). On an error nothing changes. Uses the
+    /// selected profile (binary profiles refuse until I/O is wired).
     pub fn open(&mut self, path: &Path) -> Result<(), EditError> {
         if let Some(i) = self.tab_for_path(path) {
             self.set_active(i);
             return Ok(());
         }
-        let doc = Document::open(path)?;
+        let doc = Document::open_with_profile(path, self.version)?;
         self.tabs.push(LevelTab {
             doc,
             path: path.to_path_buf(),
@@ -613,7 +615,7 @@ pub struct EditorApp {
 }
 
 impl EditorApp {
-    pub fn new(version: Version, sheet: Sheet, file: Option<&Path>) -> EditorApp {
+    pub fn new(version: VersionProfile, sheet: Sheet, file: Option<&Path>) -> EditorApp {
         let mut app = EditorApp {
             editor: Editor::new(version),
             sheet,
@@ -952,16 +954,23 @@ impl EditorApp {
                     }
                 }
                 ui.separator();
-                ui.label("Version");
-                egui::ComboBox::from_id_salt("version")
-                    .selected_text(self.editor.version.name())
+                ui.label("Profile");
+                egui::ComboBox::from_id_salt("version-profile")
+                    .selected_text(self.editor.version.label())
                     .show_ui(ui, |ui| {
-                        for v in Version::SUPPORTED {
-                            ui.selectable_value(&mut self.editor.version, v, v.name());
+                        for v in VersionProfile::ALL {
+                            let text = if v.io_ready() {
+                                v.label().to_string()
+                            } else {
+                                format!("{} (parked)", v.label())
+                            };
+                            ui.selectable_value(&mut self.editor.version, v, text);
                         }
                     })
                     .response
-                    .on_hover_text("Other versions are not yet supported (see documentation/level-editor.md)");
+                    .on_hover_text(
+                        "Target format profile. 2.22 / 2.17.1 text open and save; binary profiles are parked until their I/O is wired.",
+                    );
             });
             ui.horizontal(|ui| {
                 ui.label("Layer");
@@ -1677,7 +1686,7 @@ impl eframe::App for EditorApp {
 }
 
 /// Open the window. Returns when it is closed.
-pub fn run(version: Version, sheet: Sheet, file: Option<&Path>) -> Result<(), String> {
+pub fn run(version: VersionProfile, sheet: Sheet, file: Option<&Path>) -> Result<(), String> {
     let app = EditorApp::new(version, sheet, file);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 900.0]),
