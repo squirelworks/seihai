@@ -1,11 +1,12 @@
 //! The level editor window: a tile palette, painting on layer 0 or 1, flood
 //! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC
-//! markers, a `.gmap` grid that opens its levels, and save. It sits on the
-//! command-line slice (`Document`): painting is `Document::paint_layer`, fill
-//! is `Document::flood_fill_layer`, objects go through
-//! `Document::edit_object` and friends, and saving is `Document::save`, so
-//! the file rules (byte-for-byte round trip, canonical rows after a change,
-//! write through a temporary file) are the same as the CLI's.
+//! markers, a `.gmap` grid that opens its levels, tabs for several open
+//! levels, and save. It sits on the command-line slice (`Document`):
+//! painting is `Document::paint_layer`, fill is `Document::flood_fill_layer`,
+//! objects go through `Document::edit_object` and friends, and saving is
+//! `Document::save`, so the file rules (byte-for-byte round trip, canonical
+//! rows after a change, write through a temporary file) are the same as the
+//! CLI's.
 //!
 //! The editor state (`Editor`) knows nothing about egui and is tested on its
 //! own; `EditorApp` draws it. `EditorApp::ui` takes a bare `egui::Context`, so
@@ -97,9 +98,38 @@ impl GmapView {
     }
 }
 
-/// The editor without its window: one open level, the active layer and
-/// tool, the selected tile, stamp and object, an optional gmap, the version,
-/// and whether there are unsaved changes.
+/// One open level in the window (a tab).
+#[derive(Debug)]
+pub struct LevelTab {
+    doc: Document,
+    path: PathBuf,
+    unsaved: bool,
+    /// The selected object (an id of `Document::objects`) for this tab.
+    selected: Option<usize>,
+}
+
+impl LevelTab {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn has_unsaved(&self) -> bool {
+        self.unsaved
+    }
+
+    /// The file name shown on the tab, or the whole path when there is none.
+    pub fn label(&self) -> String {
+        self.path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.path.display().to_string())
+    }
+}
+
+/// The editor without its window: the open levels as tabs, the active layer
+/// and tool, the selected tile and stamp, an optional gmap, and the version.
+/// Layer, tool and palette stay shared across tabs; each tab keeps its own
+/// document, path, unsaved flag and selected object.
 pub struct Editor {
     pub version: Version,
     /// The tile the left button paints.
@@ -112,12 +142,9 @@ pub struct Editor {
     /// The loaded object set, and the stamp picked from it.
     pub stamps: Option<(PathBuf, ObjectSet)>,
     pub stamp: Option<usize>,
-    /// The selected object (an id of `Document::objects`).
-    pub selected: Option<usize>,
     pub gmap: Option<GmapView>,
-    doc: Option<Document>,
-    path: Option<PathBuf>,
-    unsaved: bool,
+    tabs: Vec<LevelTab>,
+    active: Option<usize>,
     /// Bumped on every change of the board, so the window knows when to redraw it.
     pub board_rev: u64,
 }
@@ -136,38 +163,110 @@ impl Editor {
             tool: Tool::Paint,
             stamps: None,
             stamp: None,
-            selected: None,
             gmap: None,
-            doc: None,
-            path: None,
-            unsaved: false,
+            tabs: Vec::new(),
+            active: None,
             board_rev: 0,
         }
     }
 
+    pub fn tabs(&self) -> &[LevelTab] {
+        &self.tabs
+    }
+
+    pub fn active(&self) -> Option<usize> {
+        self.active
+    }
+
+    /// The selected object of the active tab.
+    pub fn selected(&self) -> Option<usize> {
+        self.active_tab().and_then(|t| t.selected)
+    }
+
+    pub fn set_selected(&mut self, id: Option<usize>) {
+        if let Some(t) = self.active_tab_mut() {
+            t.selected = id;
+        }
+    }
+
+    fn active_tab(&self) -> Option<&LevelTab> {
+        self.active.and_then(|i| self.tabs.get(i))
+    }
+
+    fn active_tab_mut(&mut self) -> Option<&mut LevelTab> {
+        self.active.and_then(|i| self.tabs.get_mut(i))
+    }
+
     pub fn doc(&self) -> Option<&Document> {
-        self.doc.as_ref()
+        self.active_tab().map(|t| &t.doc)
+    }
+
+    fn doc_mut(&mut self) -> Option<&mut Document> {
+        self.active_tab_mut().map(|t| &mut t.doc)
     }
 
     pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
+        self.active_tab().map(|t| t.path.as_path())
     }
 
-    /// Painted or edited since the last open or save.
+    /// Whether any open level has unsaved changes.
+    pub fn has_any_unsaved(&self) -> bool {
+        self.tabs.iter().any(|t| t.unsaved)
+    }
+
+    /// Painted or edited on the active tab since its last open or save.
     pub fn has_unsaved(&self) -> bool {
-        self.unsaved
+        self.active_tab().map(|t| t.unsaved).unwrap_or(false)
     }
 
-    /// Open a level; the current one is dropped (the window asks first when
-    /// it has unsaved changes). On an error nothing changes.
+    /// Switch to an open tab. Out-of-range indexes do nothing.
+    pub fn set_active(&mut self, index: usize) {
+        if index < self.tabs.len() && self.active != Some(index) {
+            self.active = Some(index);
+            self.board_rev += 1;
+        }
+    }
+
+    /// Index of a tab whose path is the same as `path`, if any.
+    pub fn tab_for_path(&self, path: &Path) -> Option<usize> {
+        self.tabs.iter().position(|t| t.path == path)
+    }
+
+    /// Open a level as a new tab, or switch to it when that path is already
+    /// open (without reloading). On an error nothing changes.
     pub fn open(&mut self, path: &Path) -> Result<(), EditError> {
+        if let Some(i) = self.tab_for_path(path) {
+            self.set_active(i);
+            return Ok(());
+        }
         let doc = Document::open(path)?;
-        self.doc = Some(doc);
-        self.path = Some(path.to_path_buf());
-        self.unsaved = false;
-        self.selected = None;
+        self.tabs.push(LevelTab {
+            doc,
+            path: path.to_path_buf(),
+            unsaved: false,
+            selected: None,
+        });
+        self.active = Some(self.tabs.len() - 1);
         self.board_rev += 1;
         Ok(())
+    }
+
+    /// Close the tab at `index`. The caller must have handled unsaved changes.
+    /// Returns false when the index is out of range.
+    pub fn close_tab(&mut self, index: usize) -> bool {
+        if index >= self.tabs.len() {
+            return false;
+        }
+        self.tabs.remove(index);
+        self.active = match (self.active, self.tabs.len()) {
+            (_, 0) => None,
+            (Some(a), _) if a > index => Some(a - 1),
+            (Some(a), n) if a == index => Some(a.min(n - 1)),
+            (Some(a), _) => Some(a),
+            (None, _) => None,
+        };
+        self.board_rev += 1;
+        true
     }
 
     /// Open a `.gmap` (read with the client's parser). The open level stays.
@@ -208,7 +307,9 @@ impl Editor {
 
     fn changed(&mut self, n: usize) -> usize {
         if n > 0 {
-            self.unsaved = true;
+            if let Some(t) = self.active_tab_mut() {
+                t.unsaved = true;
+            }
             self.board_rev += 1;
         }
         n
@@ -217,8 +318,10 @@ impl Editor {
     /// Paint the selected tile at board cell (x, y) on the active layer.
     /// Returns the number of tiles that changed (0 or 1).
     pub fn paint_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
-        let doc = self.doc.as_mut().ok_or_else(no_level)?;
-        let n = doc.paint_layer(self.layer, x, y, 1, 1, Some(self.tile as u32))?;
+        let layer = self.layer;
+        let tile = self.tile;
+        let doc = self.doc_mut().ok_or_else(no_level)?;
+        let n = doc.paint_layer(layer, x, y, 1, 1, Some(tile as u32))?;
         Ok(self.changed(n))
     }
 
@@ -229,7 +332,7 @@ impl Editor {
                 "only layer 1 has empty cells; switch to layer 1 to erase".into(),
             ));
         }
-        let doc = self.doc.as_mut().ok_or_else(no_level)?;
+        let doc = self.doc_mut().ok_or_else(no_level)?;
         let n = doc.paint_layer(1, x, y, 1, 1, None)?;
         Ok(self.changed(n))
     }
@@ -237,8 +340,10 @@ impl Editor {
     /// Flood-fill the 4-connected region of the active layer under (x, y)
     /// with the selected tile. Returns how many cells changed.
     pub fn flood_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
-        let doc = self.doc.as_mut().ok_or_else(no_level)?;
-        let n = doc.flood_fill_layer(self.layer, x, y, Some(self.tile as u32))?;
+        let layer = self.layer;
+        let tile = self.tile;
+        let doc = self.doc_mut().ok_or_else(no_level)?;
+        let n = doc.flood_fill_layer(layer, x, y, Some(tile as u32))?;
         Ok(self.changed(n))
     }
 
@@ -250,7 +355,7 @@ impl Editor {
             .cloned()
             .ok_or_else(|| EditError::Io("no stamp is picked; load an object set first".into()))?;
         let layer = self.layer;
-        let doc = self.doc.as_mut().ok_or_else(no_level)?;
+        let doc = self.doc_mut().ok_or_else(no_level)?;
         let mut n = 0;
         for sy in 0..stamp.height {
             for sx in 0..stamp.width {
@@ -269,7 +374,7 @@ impl Editor {
     /// Select the tile under board cell (x, y) on the active layer (the right
     /// button). An empty layer-1 cell selects nothing.
     pub fn pick_at(&mut self, x: usize, y: usize) -> Option<u16> {
-        let t = self.doc.as_ref()?.layer_tile(self.layer, x, y)?;
+        let t = self.doc()?.layer_tile(self.layer, x, y)?;
         self.tile = t;
         Some(t)
     }
@@ -284,7 +389,7 @@ impl Editor {
     }
 
     pub fn objects(&self) -> Vec<Object> {
-        self.doc.as_ref().map(|d| d.objects()).unwrap_or_default()
+        self.doc().map(|d| d.objects()).unwrap_or_default()
     }
 
     /// The topmost object whose marker covers the point (in tiles).
@@ -296,51 +401,69 @@ impl Editor {
     }
 
     pub fn edit_object(&mut self, id: usize, edit: ObjectEdit) -> Result<(), EditError> {
-        self.doc
-            .as_mut()
-            .ok_or_else(no_level)?
-            .edit_object(id, edit)?;
-        self.unsaved = true;
+        self.doc_mut().ok_or_else(no_level)?.edit_object(id, edit)?;
+        if let Some(t) = self.active_tab_mut() {
+            t.unsaved = true;
+        }
         Ok(())
     }
 
     /// The first script lines of an NPC, for the script pane.
     pub fn script_head(&self, id: usize) -> Result<ScriptHead, EditError> {
-        self.doc.as_ref().ok_or_else(no_level)?.script_head(id)
+        self.doc().ok_or_else(no_level)?.script_head(id)
     }
 
     /// Add a link, sign, chest or NPC at (x, y) and select it.
     pub fn add_object(&mut self, kind: ObjectKind, x: i32, y: i32) -> Result<usize, EditError> {
         let id = self
-            .doc
-            .as_mut()
+            .doc_mut()
             .ok_or_else(no_level)?
             .add_object(kind, x, y)?;
-        self.unsaved = true;
-        self.selected = Some(id);
+        if let Some(t) = self.active_tab_mut() {
+            t.unsaved = true;
+            t.selected = Some(id);
+        }
         Ok(id)
     }
 
     pub fn delete_object(&mut self, id: usize) -> Result<(), EditError> {
-        self.doc.as_mut().ok_or_else(no_level)?.delete_object(id)?;
-        self.unsaved = true;
-        self.selected = None;
+        self.doc_mut().ok_or_else(no_level)?.delete_object(id)?;
+        if let Some(t) = self.active_tab_mut() {
+            t.unsaved = true;
+            t.selected = None;
+        }
         Ok(())
     }
 
-    /// Save to the file that was opened.
+    /// Save the active tab to the file that was opened.
     pub fn save(&mut self) -> Result<PathBuf, EditError> {
-        let path = self.path.clone().ok_or_else(no_level)?;
+        let path = self.path().map(Path::to_path_buf).ok_or_else(no_level)?;
         self.save_as(&path)
     }
 
-    /// Save to `path`, which becomes the file that Save writes from now on.
+    /// Save the active tab to `path`, which becomes that tab's Save target.
     pub fn save_as(&mut self, path: &Path) -> Result<PathBuf, EditError> {
-        let doc = self.doc.as_ref().ok_or_else(no_level)?;
-        doc.save(path)?;
-        self.path = Some(path.to_path_buf());
-        self.unsaved = false;
+        let tab = self.active_tab_mut().ok_or_else(no_level)?;
+        tab.doc.save(path)?;
+        tab.path = path.to_path_buf();
+        tab.unsaved = false;
         Ok(path.to_path_buf())
+    }
+
+    /// Save every tab that has unsaved changes. Stops on the first error and
+    /// leaves later tabs alone. Returns how many were written.
+    pub fn save_all(&mut self) -> Result<usize, EditError> {
+        let mut n = 0;
+        for i in 0..self.tabs.len() {
+            if !self.tabs[i].unsaved {
+                continue;
+            }
+            let path = self.tabs[i].path.clone();
+            self.tabs[i].doc.save(&path)?;
+            self.tabs[i].unsaved = false;
+            n += 1;
+        }
+        Ok(n)
     }
 }
 
@@ -412,7 +535,9 @@ fn kind_color(kind: ObjectKind) -> Color32 {
 /// A question the window is waiting on before it drops unsaved changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Pending {
-    Open(PathBuf),
+    /// Close the tab at this index.
+    CloseTab(usize),
+    /// Close the whole window.
     Close,
 }
 
@@ -481,6 +606,8 @@ pub struct EditorApp {
     pub board_rect: Option<Rect>,
     pub palette_rect: Option<Rect>,
     pub gmap_cells: Vec<((usize, usize), Rect)>,
+    /// Tab strip hit areas: (tab index, rect of the label button).
+    pub tab_rects: Vec<(usize, Rect)>,
     /// Set once the window may close (no unsaved changes, or the user chose).
     pub closing: bool,
 }
@@ -511,6 +638,7 @@ impl EditorApp {
             board_rect: None,
             palette_rect: None,
             gmap_cells: Vec::new(),
+            tab_rects: Vec::new(),
             closing: false,
         };
         if let Some(p) = file {
@@ -528,7 +656,7 @@ impl EditorApp {
             .unwrap_or(false)
     }
 
-    /// Open a level (asking first about unsaved changes) or a gmap.
+    /// Open a level as a tab (or switch to it) or a gmap.
     fn request_open(&mut self, p: PathBuf) {
         if Self::is_gmap(&p) {
             match self.editor.open_gmap(&p) {
@@ -541,21 +669,26 @@ impl EditorApp {
                 }
                 Err(e) => self.status = e.to_string(),
             }
-        } else if self.editor.has_unsaved() {
-            self.pending = Some(Pending::Open(p));
         } else {
             self.do_open(p);
         }
     }
 
     fn do_open(&mut self, path: PathBuf) {
+        let already = self.editor.tab_for_path(&path).is_some();
         match self.editor.open(&path) {
             Ok(()) => {
                 self.save_as_path = path.display().to_string();
                 self.open_path = path.display().to_string();
-                self.status = format!("Opened {}", path.display());
+                self.status = if already {
+                    format!("Switched to {}", path.display())
+                } else {
+                    format!("Opened {}", path.display())
+                };
                 self.map_view = false;
                 self.fields = ObjectFields::default();
+                self.script = None;
+                self.drag = None;
             }
             Err(e) => self.status = e.to_string(),
         }
@@ -578,6 +711,48 @@ impl EditorApp {
         }
     }
 
+    fn request_close_tab(&mut self, index: usize) {
+        if self
+            .editor
+            .tabs()
+            .get(index)
+            .map(|t| t.has_unsaved())
+            .unwrap_or(false)
+        {
+            self.pending = Some(Pending::CloseTab(index));
+        } else {
+            self.do_close_tab(index);
+        }
+    }
+
+    fn do_close_tab(&mut self, index: usize) {
+        if self.editor.close_tab(index) {
+            self.script = None;
+            self.drag = None;
+            self.fields = ObjectFields::default();
+            if let Some(p) = self.editor.path() {
+                self.save_as_path = p.display().to_string();
+                self.open_path = p.display().to_string();
+            }
+            self.status = "Closed the tab".into();
+        }
+    }
+
+    fn switch_tab(&mut self, index: usize) {
+        if self.editor.active() == Some(index) {
+            return;
+        }
+        self.editor.set_active(index);
+        self.script = None;
+        self.drag = None;
+        self.fields = ObjectFields::default();
+        if let Some(p) = self.editor.path() {
+            self.save_as_path = p.display().to_string();
+            self.open_path = p.display().to_string();
+        }
+        self.map_view = false;
+    }
+
     fn report(&mut self, r: Result<(), EditError>) {
         if let Err(e) = r {
             self.status = e.to_string();
@@ -587,7 +762,7 @@ impl EditorApp {
     /// One frame of the window. `update` calls this; tests call it with a bare context.
     pub fn ui(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.viewport().close_requested()) && !self.closing {
-            if self.editor.has_unsaved() {
+            if self.editor.has_any_unsaved() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.pending = Some(Pending::Close);
             } else {
@@ -615,6 +790,7 @@ impl EditorApp {
         }
 
         self.toolbar(ctx);
+        self.tab_bar(ctx);
         self.status_bar(ctx);
         self.palette(ctx);
         self.side_panel(ctx);
@@ -631,7 +807,7 @@ impl EditorApp {
     pub fn open_script(&mut self, id: usize) {
         match self.editor.script_head(id) {
             Ok(head) => {
-                self.editor.selected = Some(id);
+                self.editor.set_selected(Some(id));
                 self.script = Some(ScriptPane {
                     id,
                     text: head.lines.join("\n"),
@@ -765,6 +941,16 @@ impl EditorApp {
                 if ui.add_enabled(has_doc && !self.save_as_path.trim().is_empty(), egui::Button::new("Save as")).clicked() {
                     self.do_save(Some(PathBuf::from(self.save_as_path.trim())));
                 }
+                if ui
+                    .add_enabled(self.editor.has_any_unsaved(), egui::Button::new("Save all"))
+                    .on_hover_text("Write every open level that has changes")
+                    .clicked()
+                {
+                    match self.editor.save_all() {
+                        Ok(n) => self.status = format!("Saved {n} level(s)"),
+                        Err(e) => self.status = e.to_string(),
+                    }
+                }
                 ui.separator();
                 ui.label("Version");
                 egui::ComboBox::from_id_salt("version")
@@ -812,6 +998,46 @@ impl EditorApp {
                 }
             });
         });
+    }
+
+    fn tab_bar(&mut self, ctx: &egui::Context) {
+        if self.editor.tabs().is_empty() {
+            self.tab_rects.clear();
+            return;
+        }
+        let mut switch = None;
+        let mut close = None;
+        egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                self.tab_rects.clear();
+                for (i, tab) in self.editor.tabs().iter().enumerate() {
+                    let active = self.editor.active() == Some(i);
+                    let mut label = tab.label();
+                    if tab.has_unsaved() {
+                        label.insert(0, '*');
+                    }
+                    let resp = ui.selectable_label(active, label);
+                    self.tab_rects.push((i, resp.rect));
+                    if resp.clicked() {
+                        switch = Some(i);
+                    }
+                    if ui
+                        .small_button("×")
+                        .on_hover_text("Close this level")
+                        .clicked()
+                    {
+                        close = Some(i);
+                    }
+                    ui.separator();
+                }
+            });
+        });
+        if let Some(i) = switch {
+            self.switch_tab(i);
+        }
+        if let Some(i) = close {
+            self.request_close_tab(i);
+        }
     }
 
     fn status_bar(&mut self, ctx: &egui::Context) {
@@ -963,14 +1189,18 @@ impl EditorApp {
             };
             let text = egui::RichText::new(label).color(kind_color(o.kind));
             if ui
-                .selectable_label(self.editor.selected == Some(o.id), text)
+                .selectable_label(self.editor.selected() == Some(o.id), text)
                 .clicked()
             {
-                self.editor.selected = Some(o.id);
+                self.editor.set_selected(Some(o.id));
             }
         }
         ui.separator();
-        let Some(o) = self.editor.selected.and_then(|id| objects.get(id).cloned()) else {
+        let Some(o) = self
+            .editor
+            .selected()
+            .and_then(|id| objects.get(id).cloned())
+        else {
             ui.label("Click a marker or a row to select it; drag a marker to move it.");
             return;
         };
@@ -1086,11 +1316,17 @@ impl EditorApp {
         let Some(view) = self.editor.gmap.clone() else {
             return;
         };
-        let current = self.editor.path().map(Path::to_path_buf);
+        let active = self.editor.path().map(Path::to_path_buf);
+        let open_paths: Vec<PathBuf> = self
+            .editor
+            .tabs()
+            .iter()
+            .map(|t| t.path().to_path_buf())
+            .collect();
         let mut open = None;
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(format!(
-                "{} ({} x {} levels). Click a cell to open its level.",
+                "{} ({} x {} levels). Click a cell to open its level in a tab.",
                 view.path.display(),
                 view.map.width,
                 view.map.height
@@ -1112,7 +1348,11 @@ impl EditorApp {
                                     let file = view.level_path(x, y);
                                     let exists =
                                         file.as_ref().map(|f| f.is_file()).unwrap_or(false);
-                                    let is_open = file.is_some() && file == current;
+                                    let is_active = file.as_ref() == active.as_ref();
+                                    let is_open = file
+                                        .as_ref()
+                                        .map(|f| open_paths.iter().any(|p| p == f))
+                                        .unwrap_or(false);
                                     let mut text = egui::RichText::new(if name.is_empty() {
                                         "(hole)".into()
                                     } else {
@@ -1121,8 +1361,10 @@ impl EditorApp {
                                     if !exists {
                                         text = text.color(Color32::GRAY);
                                     }
-                                    if is_open {
+                                    if is_active {
                                         text = text.strong().color(Color32::YELLOW);
+                                    } else if is_open {
+                                        text = text.color(Color32::from_rgb(200, 200, 80));
                                     }
                                     let resp = ui.add_enabled(
                                         exists,
@@ -1198,7 +1440,7 @@ impl EditorApp {
                     }
                     let r = tile_rect(x, y, o.w, o.h);
                     let c = kind_color(o.kind);
-                    let selected = self.editor.selected == Some(o.id);
+                    let selected = self.editor.selected() == Some(o.id);
                     painter.rect_filled(r, 0.0, c.gamma_multiply(0.18));
                     painter.rect_stroke(r, 0.0, Stroke::new(if selected { 3.0_f32 } else { 1.5_f32 }, if selected { Color32::WHITE } else { c }));
                     let label = match o.kind {
@@ -1297,11 +1539,11 @@ impl EditorApp {
                             if let Some((px, py)) = at {
                                 match self.editor.object_at(px, py) {
                                     Some(o) => {
-                                        self.editor.selected = Some(o.id);
+                                        self.editor.set_selected(Some(o.id));
                                         self.drag = Some(Drag { id: o.id, from: (o.x, o.y), grab: (px, py), now: (o.x, o.y) });
                                     }
                                     None => {
-                                        self.editor.selected = None;
+                                        self.editor.set_selected(None);
                                         self.add_cell = (px as i32, py as i32);
                                     }
                                 }
@@ -1339,19 +1581,47 @@ impl EditorApp {
             return;
         };
         let mut choice = None;
+        let closing_window = matches!(pending, Pending::Close);
         egui::Window::new("Unsaved changes")
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
-                let name = self
-                    .editor
-                    .path()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_default();
+                let name = match &pending {
+                    Pending::CloseTab(i) => self
+                        .editor
+                        .tabs()
+                        .get(*i)
+                        .map(|t| t.path().display().to_string())
+                        .unwrap_or_default(),
+                    Pending::Close => {
+                        if self
+                            .editor
+                            .tabs()
+                            .iter()
+                            .filter(|t| t.has_unsaved())
+                            .count()
+                            > 1
+                        {
+                            "Some open levels".into()
+                        } else {
+                            self.editor
+                                .tabs()
+                                .iter()
+                                .find(|t| t.has_unsaved())
+                                .map(|t| t.path().display().to_string())
+                                .unwrap_or_default()
+                        }
+                    }
+                };
                 ui.label(format!("{name} has changes that are not saved."));
                 ui.horizontal(|ui| {
-                    if ui.button("Save").clicked() {
+                    let save_label = if closing_window && self.editor.has_any_unsaved() {
+                        "Save all"
+                    } else {
+                        "Save"
+                    };
+                    if ui.button(save_label).clicked() {
                         choice = Some(0);
                     }
                     if ui.button("Discard").clicked() {
@@ -1363,7 +1633,21 @@ impl EditorApp {
                 });
             });
         let go = match choice {
-            Some(0) => self.do_save(None),
+            Some(0) => match pending {
+                Pending::CloseTab(i) => {
+                    if self.editor.active() != Some(i) {
+                        self.switch_tab(i);
+                    }
+                    self.do_save(None)
+                }
+                Pending::Close => match self.editor.save_all() {
+                    Ok(_) => true,
+                    Err(e) => {
+                        self.status = e.to_string();
+                        false
+                    }
+                },
+            },
             Some(1) => true,
             Some(_) => {
                 self.pending = None;
@@ -1377,7 +1661,7 @@ impl EditorApp {
         }
         self.pending = None;
         match pending {
-            Pending::Open(p) => self.do_open(p),
+            Pending::CloseTab(i) => self.do_close_tab(i),
             Pending::Close => {
                 self.closing = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
