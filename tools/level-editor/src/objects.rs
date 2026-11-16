@@ -481,7 +481,6 @@ impl Document {
         self.splice(r.first, r.first, vec![new])
     }
 
-
     /// Replace the top of a baddy's verses: the lines the pane showed (up to
     /// [`BADDY_VERSE_LINES`]) become `new_lines`; lines after them are kept.
     fn set_baddy_verses(
