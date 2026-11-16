@@ -1,25 +1,25 @@
 //! Seihai level editor: the command line, and a minimal window (`gui`).
 //!
-//!   level-editor [--version V] list  FILE.nw [--rows]
-//!   level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
-//!   level-editor [--version V] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
-//!   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
-//!   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
+//!   level-editor [--version|--profile P] list  FILE.nw [--rows]
+//!   level-editor [--version|--profile P] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] save  FILE.nw (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] [--sheet PNG] gui [FILE.nw]
 //!   level-editor versions
 //!
 //! `level-editor FILE.nw` is `list FILE.nw`. See documentation/level-editor.md.
 
-use level_editor::{gui, Document, EditError, Version, SIZE};
+use level_editor::{gui, Document, EditError, VersionProfile, SIZE};
 use std::path::{Path, PathBuf};
 use std::process;
 
 const USAGE: &str = "\
 Usage:
-  level-editor [--version V] list  FILE.nw [--rows]
-  level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
-  level-editor [--version V] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
-  level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
-  level-editor [--version V] [--sheet PNG] gui [FILE.nw]
+  level-editor [--version|--profile P] list  FILE.nw [--rows]
+  level-editor [--version|--profile P] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
+  level-editor [--version|--profile P] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
+  level-editor [--version|--profile P] save  FILE.nw (--out FILE | --in-place)
+  level-editor [--version|--profile P] [--sheet PNG] gui [FILE.nw]
   level-editor versions
 
   list    summary and the most used tile ids; --rows dumps the board, one row per line,
@@ -32,7 +32,9 @@ Usage:
   gui     open the window: tile palette, click to paint, Fill tool for flood fill (right
           click picks the tile under the mouse), Save / Save as; --sheet sets the tile
           sheet (default: the built-in pics1.png)
-  --version V   editor version to follow: 2.22 (default) or 2.17.1; others say \"not yet\"";
+  --version / --profile P
+          target profile: 2.22 (default) or 2.17.1 for text .nw; also GR-V1.00..03,
+          GR-V1.05, Z3-V1.03/04 (listed; binary I/O is parked)";
 
 fn fail(msg: impl std::fmt::Display) -> ! {
     eprintln!("level-editor: {msg}");
@@ -40,7 +42,7 @@ fn fail(msg: impl std::fmt::Display) -> ! {
 }
 
 struct Args {
-    version: Version,
+    profile: VersionProfile,
     out: Option<PathBuf>,
     in_place: bool,
     rows: bool,
@@ -51,7 +53,7 @@ struct Args {
 
 fn parse_args(raw: Vec<String>) -> Args {
     let mut a = Args {
-        version: Version::V222,
+        profile: VersionProfile::DEFAULT,
         out: None,
         in_place: false,
         rows: false,
@@ -69,9 +71,18 @@ fn parse_args(raw: Vec<String>) -> Args {
                     .unwrap_or_else(|| fail(format!("{name} needs a value")))
             }
         };
-        if arg == "--version" || arg.starts_with("--version=") {
-            let v = value("--version");
-            a.version = Version::parse(&v).unwrap_or_else(|e| fail(e));
+        if arg == "--version"
+            || arg.starts_with("--version=")
+            || arg == "--profile"
+            || arg.starts_with("--profile=")
+        {
+            let name = if arg.starts_with("--profile") {
+                "--profile"
+            } else {
+                "--version"
+            };
+            let v = value(name);
+            a.profile = VersionProfile::parse(&v).unwrap_or_else(|e| fail(e));
         } else if arg == "--out" || arg.starts_with("--out=") {
             a.out = Some(PathBuf::from(value("--out")));
         } else if arg == "--sheet" || arg.starts_with("--sheet=") {
@@ -108,16 +119,21 @@ fn number(name: &str, text: &str) -> u32 {
     parsed.unwrap_or_else(|_| fail(format!("{name} must be a whole number, got \"{text}\"")))
 }
 
-fn open(path: &str) -> Document {
-    Document::open(Path::new(path)).unwrap_or_else(|e: EditError| fail(e))
+fn open(path: &str, profile: VersionProfile) -> Document {
+    Document::open_with_profile(Path::new(path), profile).unwrap_or_else(|e: EditError| fail(e))
 }
 
-fn list(path: &str, rows: bool, version: Version) {
-    let doc = open(path);
+fn list(path: &str, rows: bool, profile: VersionProfile) {
+    let doc = open(path, profile);
     let s = doc.summary();
     println!(
-        "Level:   {path} (GLEVNW01 text, editor version {})",
-        version.name()
+        "Level:   {path} ({}, profile {})",
+        if profile.is_text() {
+            "GLEVNW01 text"
+        } else {
+            profile.name()
+        },
+        profile.name()
     );
     println!("Board:   {SIZE} x {SIZE}; BOARD rows placed {}, skipped {}, with a layer other than 0 {} (the layer is not read)", s.rows_placed, s.rows_skipped, s.rows_other_layer);
     println!(
@@ -167,14 +183,14 @@ fn main() {
             process::exit(1);
         }
         Some("versions") => {
-            for v in Version::SUPPORTED {
-                println!("{}", v.name());
+            for p in VersionProfile::ALL {
+                let status = if p.io_ready() { "ready" } else { "parked" };
+                println!("{}  [{}]  {}", p.name(), status, p.label());
             }
-            println!("(other versions: not yet)");
         }
         Some("list") => {
             let file = pos.next().unwrap_or_else(|| fail("list needs a FILE.nw"));
-            list(file, a.rows, a.version);
+            list(file, a.rows, a.profile);
         }
         Some("paint") => {
             let file = pos
@@ -192,7 +208,7 @@ fn main() {
                 })
                 .collect();
             let out = target(&a, file);
-            let mut doc = open(file);
+            let mut doc = open(file, a.profile);
             let (x, y, w, h, tile) = (
                 nums[0] as usize,
                 nums[1] as usize,
@@ -227,7 +243,7 @@ fn main() {
                 })
                 .collect();
             let out = target(&a, file);
-            let mut doc = open(file);
+            let mut doc = open(file, a.profile);
             let (x, y, tile) = (nums[0] as usize, nums[1] as usize, nums[2]);
             let changed = doc
                 .flood_fill_layer(a.layer, x, y, Some(tile))
@@ -249,13 +265,13 @@ fn main() {
                 }
                 None => gui::Sheet::builtin(),
             };
-            gui::run(a.version, sheet, file.as_deref())
+            gui::run(a.profile, sheet, file.as_deref())
                 .unwrap_or_else(|e| fail(format!("cannot open the window: {e}")));
         }
         Some("save") => {
             let file = pos.next().unwrap_or_else(|| fail("save needs a FILE.nw"));
             let out = target(&a, file);
-            let doc = open(file);
+            let doc = open(file, a.profile);
             doc.save(&out).unwrap_or_else(|e| fail(e));
             println!(
                 "wrote {} ({} bytes, unchanged level)",
@@ -264,7 +280,7 @@ fn main() {
             );
         }
         Some(file) if file.ends_with(".nw") || Path::new(file).exists() => {
-            list(file, a.rows, a.version)
+            list(file, a.rows, a.profile)
         }
         Some(other) => fail(format!("unknown command \"{other}\"\n{USAGE}")),
     }

@@ -5,7 +5,7 @@
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{Editor, EditorApp, Sheet, Tool};
-use level_editor::{tile_code, Document, EditError, ObjectEdit, ObjectKind, Version, SIZE};
+use level_editor::{tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, SIZE};
 use seihai_core::assets::Level;
 use std::path::{Path, PathBuf};
 
@@ -400,7 +400,7 @@ fn stamp_set() -> PathBuf {
 #[test]
 fn stamps_load_and_drop_on_the_active_layer_clipped_to_the_board() {
     let path = copy_of("new1.nw", "stamp.nw");
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     assert!(ed.place_stamp(0, 0).is_err(), "no set loaded");
     assert_eq!(ed.load_stamps(&stamp_set()).unwrap(), 2);
@@ -427,7 +427,7 @@ fn stamps_load_and_drop_on_the_active_layer_clipped_to_the_board() {
 #[test]
 fn erase_and_pick_follow_the_active_layer() {
     let path = copy_of("new2.nw", "erase.nw");
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     assert!(
         matches!(ed.erase_at(0, 0), Err(EditError::Bounds(_))),
@@ -465,7 +465,7 @@ fn gmap() -> PathBuf {
 
 #[test]
 fn gmap_cells_name_files_next_to_the_gmap() {
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     let bad = scratch("bad.gmap");
     std::fs::write(&bad, "not a gmap").unwrap();
     assert!(matches!(ed.open_gmap(&bad), Err(EditError::NotText(_))));
@@ -494,7 +494,7 @@ impl Harness {
     fn new(file: Option<&Path>) -> Harness {
         let mut h = Harness {
             ctx: egui::Context::default(),
-            app: EditorApp::new(Version::V222, Sheet::builtin(), file),
+            app: EditorApp::new(VersionProfile::TextNw222, Sheet::builtin(), file),
             events: Vec::new(),
         };
         h.frame();

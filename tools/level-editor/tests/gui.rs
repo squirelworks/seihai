@@ -8,7 +8,7 @@ use level_editor::gui::{
     board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, Tool, SHEET_COLS,
     SHEET_ROWS,
 };
-use level_editor::{Document, EditError, Version, TILE_LIMIT};
+use level_editor::{Document, EditError, VersionProfile, TILE_LIMIT};
 use std::path::{Path, PathBuf};
 
 fn starter(name: &str) -> PathBuf {
@@ -71,8 +71,8 @@ fn line_cells_has_no_gaps() {
 fn editor_paint_pick_and_save() {
     let path = copy_of("new1.nw", "state.nw");
     let original = std::fs::read(&path).unwrap();
-    let mut ed = Editor::new(Version::V222);
-    assert_eq!(ed.version, Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
+    assert_eq!(ed.version, VersionProfile::TextNw222);
     assert!(
         matches!(ed.paint_at(0, 0), Err(EditError::Io(_))),
         "no level open"
@@ -119,7 +119,7 @@ fn editor_paint_pick_and_save() {
 fn editor_flood_fill_and_noop() {
     let path = copy_of("new1.nw", "flood.nw");
     let original = std::fs::read(&path).unwrap();
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     ed.tool = Tool::Fill;
     let seed = ed.doc().unwrap().tile(8, 8).unwrap();
@@ -140,7 +140,7 @@ fn editor_flood_fill_and_noop() {
 #[test]
 fn open_error_keeps_the_current_level() {
     let path = copy_of("new2.nw", "keep.nw");
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     let bad = scratch("bad.nw");
     std::fs::write(&bad, b"GR-V1.03 binary").unwrap();
@@ -155,7 +155,7 @@ fn tabs_keep_each_level_and_its_unsaved_edits() {
     let b = copy_of("new2.nw", "tab-b.nw");
     let a_bytes = std::fs::read(&a).unwrap();
     let b_bytes = std::fs::read(&b).unwrap();
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&a).unwrap();
     ed.select(42).unwrap();
     assert_eq!(ed.paint_at(1, 1).unwrap(), 1);
@@ -236,7 +236,7 @@ impl Harness {
     fn new(file: Option<&Path>) -> Harness {
         let mut h = Harness {
             ctx: egui::Context::default(),
-            app: EditorApp::new(Version::V222, Sheet::builtin(), file),
+            app: EditorApp::new(VersionProfile::TextNw222, Sheet::builtin(), file),
             events: Vec::new(),
         };
         h.frame();
@@ -305,7 +305,7 @@ fn window_palette_click_then_board_click_paints_and_ctrl_s_saves() {
     let mut h = Harness::new(Some(&path));
     assert_eq!(
         h.app.editor.version,
-        Version::V222,
+        VersionProfile::TextNw222,
         "the selector defaults to 2.22"
     );
     let doc = h.app.editor.doc().unwrap();

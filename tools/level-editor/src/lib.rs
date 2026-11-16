@@ -27,8 +27,13 @@
 //! (`objects`), read with the client's level parser. Moving one, or changing
 //! a link's destination and arrival or the first line of an NPC script or a
 //! sign, rewrites only that record's lines (`edit_object`).
+//!
+//! **Profiles.** The user picks a [`VersionProfile`] (2.22 text, GR-V1.03,
+//! GR-V1.05, Z3-V1.04, …). Only the text profiles open and save today;
+//! binary profiles are listed and parked.
 
 pub mod gui;
+pub mod profile;
 
 use std::fmt;
 use std::fs;
@@ -37,6 +42,7 @@ use std::path::Path;
 
 pub mod objects;
 pub use objects::{Object, ObjectEdit, ObjectKind, ScriptHead, SCRIPT_PANE_LINES};
+pub use profile::{IoStatus, Version, VersionProfile};
 
 /// Board edge in tiles.
 pub const SIZE: usize = 64;
@@ -95,54 +101,6 @@ impl fmt::Display for EditError {
 
 impl std::error::Error for EditError {}
 
-/// The editor version being imitated. 2.22 is the reference; the others are
-/// deltas that are not implemented unless they change nothing the editor does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Version {
-    /// The 2.22 client's built-in editor.
-    V222,
-    /// 2.17.1: no difference from 2.22 was found in the notes, so it is the same profile.
-    V217,
-}
-
-impl Version {
-    /// Versions the editor accepts, in the order they are listed.
-    pub const SUPPORTED: [Version; 2] = [Version::V222, Version::V217];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Version::V222 => "2.22",
-            Version::V217 => "2.17.1",
-        }
-    }
-
-    /// Parse a `--version` value. Anything but 2.22 and 2.17(.1) is a clear "not yet".
-    pub fn parse(text: &str) -> Result<Version, EditError> {
-        let t = text.trim().trim_start_matches('v');
-        match t {
-            "2.22" => return Ok(Version::V222),
-            "2.17" | "2.17.1" => return Ok(Version::V217),
-            _ => {}
-        }
-        let nums: Vec<u32> = t.split('.').map_while(|p| p.parse().ok()).collect();
-        let why = match (nums.first(), nums.get(1)) {
-            (Some(2), Some(5)) if t == "2.05" || t == "2.5" => {
-                "2.05 differs from 2.22 (no HEIGHTS block, no predefined NPCs, a *.graal-only open filter)"
-            }
-            (Some(2), Some(31)) | (Some(2), Some(3)) => {
-                "2.31 has no built-in editor (the standalone GraalEditor replaced it)"
-            }
-            (Some(2), Some(m)) if *m < 5 => "this build has no text level format at all",
-            (Some(1), _) | (Some(0), _) => "this build has no text level format",
-            (Some(2), Some(_)) => "this build is not covered by the editor notes",
-            _ => return Err(EditError::Version(format!("unknown version \"{text}\"; supported: 2.22, 2.17.1"))),
-        };
-        Err(EditError::Version(format!(
-            "version {text} is not yet supported: {why}. Supported: 2.22, 2.17.1"
-        )))
-    }
-}
-
 /// Counts of what a level holds, for `list`.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Summary {
@@ -197,11 +155,17 @@ fn parse_num(tok: &[u8]) -> Option<i64> {
 
 impl Document {
     /// Open a level from its bytes. Only `GLEVNW01` text is read.
+    ///
+    /// Binary magics are refused here; use a text [`VersionProfile`] and the
+    /// working path, or wait for parked binary I/O.
     pub fn parse(data: &[u8]) -> Result<Document, EditError> {
         if data.starts_with(b"GR-V1") || data.starts_with(b"Z3-V1") {
-            return Err(EditError::NotText(
-                "binary levels (GR-V1, Z3-V1) are not yet supported by the editor; only GLEVNW01 text levels (.nw) open".into(),
-            ));
+            let hint = VersionProfile::detect(data)
+                .map(|p| format!(" (detected {})", p.name()))
+                .unwrap_or_default();
+            return Err(EditError::NotText(format!(
+                "binary levels (GR-V1, Z3-V1){hint} are parked in the editor; only GLEVNW01 text levels (.nw) open under the 2.22 profile"
+            )));
         }
         let mut lines: Vec<Vec<u8>> = Vec::new();
         let mut start = 0;
@@ -360,8 +324,15 @@ impl Document {
         }
     }
 
-    /// Read a level file.
+    /// Read a level file with the default (2.22 text) profile.
     pub fn open(path: &Path) -> Result<Document, EditError> {
+        Document::open_with_profile(path, VersionProfile::DEFAULT)
+    }
+
+    /// Read a level file under `profile`. Parked (binary) profiles refuse
+    /// before any parse; the text path is unchanged.
+    pub fn open_with_profile(path: &Path, profile: VersionProfile) -> Result<Document, EditError> {
+        profile.require_io_ready()?;
         let data = fs::read(path)
             .map_err(|e| EditError::Io(format!("cannot read {}: {e}", path.display())))?;
         Document::parse(&data)
