@@ -306,13 +306,9 @@ fn npc_moves_keep_their_fraction_and_the_first_script_line_is_edited() {
         .contains("NPC tree.png 14.5 31\nif (playerenters) {\n  setshape 1,32,32;\n}\nNPCEND\n"));
     let npc = &Level::parse(&after).unwrap().npcs[0];
     assert_eq!((npc.x, npc.y), (14.5, 31.0));
-    assert!(
-        matches!(
-            doc.edit_object(4, ObjectEdit::Move(1.0, 1.0)),
-            Err(EditError::Bounds(_))
-        ),
-        "baddies are not edited"
-    );
+    doc.edit_object(4, ObjectEdit::Move(1.0, 1.0)).unwrap();
+    let after = String::from_utf8(doc.to_bytes()).unwrap();
+    assert!(after.contains("BADDY 1 1 0\none\ntwo\nthree\nBADDYEND\n"));
     // a CRLF file keeps CRLF on the edited line
     let crlf = layered().replace('\n', "\r\n");
     let mut doc = Document::parse(crlf.as_bytes()).unwrap();
@@ -330,11 +326,11 @@ fn objects_are_added_and_deleted_and_the_client_reads_them() {
     let s = doc.add_object(ObjectKind::Sign, 10, 11).unwrap();
     let c = doc.add_object(ObjectKind::Chest, 12, 13).unwrap();
     let n = doc.add_object(ObjectKind::Npc, 14, 15).unwrap();
-    assert_eq!((l, s, c, n), (before, before + 1, before + 2, before + 3));
-    assert!(matches!(
-        doc.add_object(ObjectKind::Baddy, 1, 1),
-        Err(EditError::Bounds(_))
-    ));
+    let b = doc.add_object(ObjectKind::Baddy, 16, 17).unwrap();
+    assert_eq!(
+        (l, s, c, n, b),
+        (before, before + 1, before + 2, before + 3, before + 4)
+    );
     assert!(matches!(
         doc.add_object(ObjectKind::Chest, 64, 1),
         Err(EditError::Bounds(_))
@@ -349,6 +345,15 @@ fn objects_are_added_and_deleted_and_the_client_reads_them() {
     assert_eq!(level.chests.len(), orig.chests.len() + 1);
     assert_eq!(level.npcs.len(), 1);
     assert_eq!(level.npcs[0].script, "setimg tree.png;");
+    assert_eq!(level.baddies.len(), 1);
+    assert_eq!(
+        (
+            level.baddies[0].x,
+            level.baddies[0].y,
+            level.baddies[0].kind.as_str()
+        ),
+        (16.0, 17.0, "0")
+    );
     let new_link = level.links.last().unwrap();
     assert_eq!(
         (new_link.x, new_link.y, new_link.width, new_link.height),
@@ -356,13 +361,15 @@ fn objects_are_added_and_deleted_and_the_client_reads_them() {
         "clipped to the board"
     );
 
+    // delete highest ids first so the others stay at their indexes
+    doc.delete_object(b).unwrap();
     doc.delete_object(c).unwrap();
     doc.delete_object(l).unwrap();
     let text = String::from_utf8(doc.to_bytes()).unwrap();
     let level = Level::parse(&text).unwrap();
     assert_eq!(
-        (level.links.len(), level.chests.len()),
-        (orig.links.len(), orig.chests.len())
+        (level.links.len(), level.chests.len(), level.baddies.len()),
+        (orig.links.len(), orig.chests.len(), 0)
     );
     assert!(
         text.starts_with(&std::fs::read_to_string(starter("new2.nw")).unwrap()),
