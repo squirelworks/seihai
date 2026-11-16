@@ -1,11 +1,11 @@
-//! The level editor window: a tile palette, painting on layer 0 or 1, stamps
-//! from a `GOBJSET01` object set, link / sign / chest / NPC markers, a
-//! `.gmap` grid that opens its levels, and save. It sits on the
-//! command-line slice (`Document`): painting is `Document::paint_layer`,
-//! objects go through `Document::edit_object` and friends, and saving is
-//! `Document::save`, so the file rules (byte-for-byte round trip, canonical
-//! rows after a change, write through a temporary file) are the same as the
-//! CLI's.
+//! The level editor window: a tile palette, painting on layer 0 or 1, flood
+//! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC
+//! markers, a `.gmap` grid that opens its levels, and save. It sits on the
+//! command-line slice (`Document`): painting is `Document::paint_layer`, fill
+//! is `Document::flood_fill_layer`, objects go through
+//! `Document::edit_object` and friends, and saving is `Document::save`, so
+//! the file rules (byte-for-byte round trip, canonical rows after a change,
+//! write through a temporary file) are the same as the CLI's.
 //!
 //! The editor state (`Editor`) knows nothing about egui and is tested on its
 //! own; `EditorApp` draws it. `EditorApp::ui` takes a bare `egui::Context`, so
@@ -74,6 +74,8 @@ pub enum Tool {
     Paint,
     /// Empty cells of layer 1.
     Erase,
+    /// Flood-fill the connected region under the click with the selected tile.
+    Fill,
     /// Drop the selected stamp with its top-left corner on the cell.
     Stamp,
     /// Select and drag links, signs, chests and NPCs.
@@ -229,6 +231,14 @@ impl Editor {
         }
         let doc = self.doc.as_mut().ok_or_else(no_level)?;
         let n = doc.paint_layer(1, x, y, 1, 1, None)?;
+        Ok(self.changed(n))
+    }
+
+    /// Flood-fill the 4-connected region of the active layer under (x, y)
+    /// with the selected tile. Returns how many cells changed.
+    pub fn flood_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
+        let doc = self.doc.as_mut().ok_or_else(no_level)?;
+        let n = doc.flood_fill_layer(self.layer, x, y, Some(self.tile as u32))?;
         Ok(self.changed(n))
     }
 
@@ -783,6 +793,8 @@ impl EditorApp {
                 ui.add_enabled_ui(self.editor.layer == 1, |ui| {
                     ui.selectable_value(&mut self.editor.tool, Tool::Erase, "Erase").on_disabled_hover_text("Layer 0 has no empty cells");
                 });
+                ui.selectable_value(&mut self.editor.tool, Tool::Fill, "Fill")
+                    .on_hover_text("Flood-fill the connected region under the click with the selected tile (cells that share a side)");
                 ui.selectable_value(&mut self.editor.tool, Tool::Stamp, "Stamp");
                 ui.selectable_value(&mut self.editor.tool, Tool::Objects, "Objects");
                 if self.editor.layer == 0 && self.editor.tool == Tool::Erase {
@@ -1247,6 +1259,21 @@ impl EditorApp {
                             }
                         } else {
                             self.stroke_last = None;
+                        }
+                    }
+                    Tool::Fill => {
+                        if resp.clicked() {
+                            if let Some((x, y)) = resp.interact_pointer_pos().and_then(to_cell) {
+                                match self.editor.flood_at(x, y) {
+                                    Ok(n) => {
+                                        self.status = format!(
+                                            "Filled at ({x}, {y}) on layer {}: {n} tiles changed",
+                                            self.editor.layer
+                                        )
+                                    }
+                                    Err(e) => self.status = e.to_string(),
+                                }
+                            }
                         }
                     }
                     Tool::Stamp => {

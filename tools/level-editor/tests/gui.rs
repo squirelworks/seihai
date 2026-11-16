@@ -5,7 +5,7 @@
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{
-    board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, SHEET_COLS,
+    board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, Tool, SHEET_COLS,
     SHEET_ROWS,
 };
 use level_editor::{Document, EditError, Version, TILE_LIMIT};
@@ -113,6 +113,28 @@ fn editor_paint_pick_and_save() {
         Some(back.as_path()),
         "Save as becomes the Save target"
     );
+}
+
+#[test]
+fn editor_flood_fill_and_noop() {
+    let path = copy_of("new1.nw", "flood.nw");
+    let original = std::fs::read(&path).unwrap();
+    let mut ed = Editor::new(Version::V222);
+    ed.open(&path).unwrap();
+    ed.tool = Tool::Fill;
+    let seed = ed.doc().unwrap().tile(8, 8).unwrap();
+    ed.select(seed as u32).unwrap();
+    assert_eq!(ed.flood_at(8, 8).unwrap(), 0, "same tile is a no-op");
+    assert!(!ed.has_unsaved());
+    assert_eq!(ed.doc().unwrap().to_bytes(), original);
+
+    let new = if seed == 0x111 { 0x222 } else { 0x111 };
+    ed.select(new as u32).unwrap();
+    let n = ed.flood_at(8, 8).unwrap();
+    assert!(n >= 1);
+    assert!(ed.has_unsaved());
+    assert_eq!(ed.doc().unwrap().tile(8, 8), Some(new));
+    assert!(matches!(ed.flood_at(64, 0), Err(EditError::Bounds(_))));
 }
 
 #[test]

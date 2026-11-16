@@ -2,6 +2,7 @@
 //!
 //!   level-editor [--version V] list  FILE.nw [--rows]
 //!   level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
+//!   level-editor [--version V] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
 //!   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
 //!   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
 //!   level-editor versions
@@ -16,6 +17,7 @@ const USAGE: &str = "\
 Usage:
   level-editor [--version V] list  FILE.nw [--rows]
   level-editor [--version V] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
+  level-editor [--version V] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
   level-editor [--version V] save  FILE.nw (--out FILE | --in-place)
   level-editor [--version V] [--sheet PNG] gui [FILE.nw]
   level-editor versions
@@ -24,10 +26,12 @@ Usage:
           each tile as three hex digits
   paint   fill the rectangle (X, Y, W, H in tiles, 0 to 63) with tile id TILE (0 to 4095,
           decimal or 0x hex); --layer 1 paints layer 1 instead of layer 0
+  fill    flood-fill the connected region under (X, Y) with tile id TILE (cells that share
+          a side); --layer 1 fills layer 1 instead of layer 0
   save    open and write again (the same bytes when the level was not changed)
-  gui     open the window: tile palette, click to paint (right click picks the tile
-          under the mouse), Save / Save as; --sheet sets the tile sheet (default: the
-          built-in pics1.png)
+  gui     open the window: tile palette, click to paint, Fill tool for flood fill (right
+          click picks the tile under the mouse), Save / Save as; --sheet sets the tile
+          sheet (default: the built-in pics1.png)
   --version V   editor version to follow: 2.22 (default) or 2.17.1; others say \"not yet\"";
 
 fn fail(msg: impl std::fmt::Display) -> ! {
@@ -204,6 +208,34 @@ fn main() {
                 "painted {w} x {h} at ({x}, {y}) on layer {} with tile {tile}: {changed} of {} tiles changed; wrote {}",
                 a.layer,
                 w * h,
+                out.display()
+            );
+        }
+        Some("fill") => {
+            let file = pos
+                .next()
+                .unwrap_or_else(|| fail("fill needs FILE.nw X Y TILE"));
+            let nums: Vec<u32> = ["X", "Y", "TILE"]
+                .iter()
+                .map(|n| {
+                    number(
+                        n,
+                        pos.next().unwrap_or_else(|| {
+                            fail(format!("fill needs FILE.nw X Y TILE (missing {n})"))
+                        }),
+                    )
+                })
+                .collect();
+            let out = target(&a, file);
+            let mut doc = open(file);
+            let (x, y, tile) = (nums[0] as usize, nums[1] as usize, nums[2]);
+            let changed = doc
+                .flood_fill_layer(a.layer, x, y, Some(tile))
+                .unwrap_or_else(|e| fail(e));
+            doc.save(&out).unwrap_or_else(|e| fail(e));
+            println!(
+                "filled at ({x}, {y}) on layer {} with tile {tile}: {changed} tiles changed; wrote {}",
+                a.layer,
                 out.display()
             );
         }

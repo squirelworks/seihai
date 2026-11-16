@@ -1,6 +1,6 @@
 //! The Seihai level editor: open a `GLEVNW01` text level, look at its tiles,
-//! paint a rectangle, save. The window (`gui`) is a tile palette and
-//! click-to-paint on top of the same `Document`.
+//! paint a rectangle, flood-fill a connected region, save. The window (`gui`)
+//! is a tile palette and click-to-paint on top of the same `Document`.
 //!
 //! The rules come from the 2.22 editor notes (see `documentation/level-editor.md`):
 //! the board is one 64 x 64 grid of 12-bit tile ids; a `BOARD` row is placed by
@@ -481,6 +481,90 @@ impl Document {
                     self.layer1[at] = tile;
                     changed += 1;
                 }
+            }
+        }
+        if changed > 0 {
+            self.dirty = true;
+            self.compose();
+        }
+        Ok(changed)
+    }
+
+    /// Flood-fill the 4-connected region of layer 0 that shares the tile at
+    /// (x, y) with one tile id. Same checks as `paint`. Returns how many
+    /// tiles changed value.
+    pub fn flood_fill(&mut self, x: usize, y: usize, tile: u32) -> Result<usize, EditError> {
+        self.flood_fill_layer(0, x, y, Some(tile))
+    }
+
+    /// Flood-fill the 4-connected region of `layer` (0 or 1) that matches the
+    /// cell at (x, y) with one tile id, or empty it (`None`, layer 1 only).
+    /// Neighbours share a side; diagonals do not join. Filling with the value
+    /// already at the seed changes nothing and leaves the file as it was.
+    /// Returns how many cells of that layer changed.
+    pub fn flood_fill_layer(
+        &mut self,
+        layer: usize,
+        x: usize,
+        y: usize,
+        tile: Option<u32>,
+    ) -> Result<usize, EditError> {
+        if layer >= LAYERS {
+            return Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 and 1"
+            )));
+        }
+        if layer == 0 && tile.is_none() {
+            return Err(EditError::Bounds(
+                "layer 0 has no empty cells; fill with a tile instead".into(),
+            ));
+        }
+        if x >= SIZE || y >= SIZE {
+            return Err(EditError::Bounds(format!(
+                "the cell ({x}, {y}) is outside the {SIZE} x {SIZE} board"
+            )));
+        }
+        if let Some(t) = tile {
+            if t >= TILE_LIMIT as u32 {
+                return Err(EditError::TileRange(t));
+            }
+        }
+        let fill = tile.map(|t| t as u16);
+        let seed = match layer {
+            0 => Some(self.layer0[y * SIZE + x]),
+            _ => self.layer1[y * SIZE + x],
+        };
+        if seed == fill {
+            return Ok(0);
+        }
+        let mut stack = vec![(x, y)];
+        let mut changed = 0;
+        while let Some((cx, cy)) = stack.pop() {
+            let at = cy * SIZE + cx;
+            let here = match layer {
+                0 => Some(self.layer0[at]),
+                _ => self.layer1[at],
+            };
+            if here != seed {
+                continue;
+            }
+            if layer == 0 {
+                self.layer0[at] = fill.expect("checked above");
+            } else {
+                self.layer1[at] = fill;
+            }
+            changed += 1;
+            if cx > 0 {
+                stack.push((cx - 1, cy));
+            }
+            if cx + 1 < SIZE {
+                stack.push((cx + 1, cy));
+            }
+            if cy > 0 {
+                stack.push((cx, cy - 1));
+            }
+            if cy + 1 < SIZE {
+                stack.push((cx, cy + 1));
             }
         }
         if changed > 0 {
