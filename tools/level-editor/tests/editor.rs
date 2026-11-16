@@ -433,14 +433,7 @@ fn crlf_levels_stay_crlf_after_a_paint() {
 }
 
 #[test]
-fn only_text_levels_open() {
-    for magic in ["GR-V1.03", "Z3-V1.04", "GR-V1.05"] {
-        let err = Document::parse(format!("{magic}\n...").as_bytes()).unwrap_err();
-        assert!(
-            err.to_string().contains("parked") && err.to_string().contains(magic),
-            "{err}"
-        );
-    }
+fn unknown_and_missing_files_are_errors() {
     assert!(matches!(
         Document::parse(b"hello\n"),
         Err(EditError::NotText(_))
@@ -450,6 +443,9 @@ fn only_text_levels_open() {
         Document::open(Path::new("/nonexistent/x.nw")),
         Err(EditError::Io(_))
     ));
+    // Unknown magic is refused.
+    let err = Document::parse(b"NOTALEVEL").unwrap_err();
+    assert!(err.to_string().contains("not a"), "{err}");
 }
 
 #[test]
@@ -486,15 +482,10 @@ fn version_profile_picker_lists_formats_and_keeps_text_ready() {
         VersionProfile::GrV105,
         VersionProfile::Z3V104,
     ] {
-        assert!(!p.io_ready(), "{}", p.name());
-        let msg = p.require_io_ready().unwrap_err().to_string();
-        assert!(msg.contains("parked") && msg.contains(p.name()), "{msg}");
+        assert!(p.io_ready(), "{}", p.name());
+        assert_eq!(p.io_status(), IoStatus::Ready);
+        assert!(p.require_io_ready().is_ok());
     }
-    assert!(VersionProfile::GrV105
-        .require_io_ready()
-        .unwrap_err()
-        .to_string()
-        .contains("shared core"));
 
     assert_eq!(
         VersionProfile::detect(b"GR-V1.05xxxx"),
@@ -524,19 +515,20 @@ fn version_profile_picker_lists_formats_and_keeps_text_ready() {
 }
 
 #[test]
-fn parked_profile_refuses_open_without_touching_text_path() {
+fn every_profile_opens_text_levels_by_magic() {
     let path = starter("new1.nw");
     let original = std::fs::read(&path).unwrap();
-    // default / text profile: unchanged round trip
-    let doc = Document::open_with_profile(&path, VersionProfile::TextNw222).unwrap();
-    assert_eq!(doc.to_bytes(), original);
-    let doc = Document::open_with_profile(&path, VersionProfile::TextNw217).unwrap();
-    assert_eq!(doc.to_bytes(), original);
-    // binary profile selected: refuse before rewrite
-    let err = Document::open_with_profile(&path, VersionProfile::GrV105).unwrap_err();
-    assert!(err.to_string().contains("parked"), "{err}");
-    let err = Document::open_with_profile(&path, VersionProfile::GrV103).unwrap_err();
-    assert!(err.to_string().contains("parked"), "{err}");
+    for profile in [
+        VersionProfile::TextNw222,
+        VersionProfile::TextNw217,
+        VersionProfile::GrV103,
+        VersionProfile::GrV105,
+        VersionProfile::Z3V104,
+    ] {
+        let doc = Document::open_with_profile(&path, profile).unwrap();
+        assert_eq!(doc.to_bytes(), original);
+        assert!(!doc.is_binary());
+    }
 }
 
 // ---- the command line ----
