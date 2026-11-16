@@ -48,7 +48,7 @@ Single code path. Versions are profile rows, not branches.
 - [x] Release profile: strip, LTO, one codegen unit. release.yml ships only `seihai`.
 - [x] Mae's own window hands a 6.x Join to Issho.
 - [x] Mae's version picker folds into the shared window (#470): offline play, the tutorial, the offline-only builds and per-version asset folders are in the shared window; inside `seihai`, Mae with no arguments and a lost connection (also after `--online`) come back to it. Mae's own window stays for the `seihai-mae` development binary.
-- [ ] Lab run on Windows 10, Linux and macOS (#471).
+- [x] Lab run on Windows 10, Linux and macOS (#471).
 - [ ] Ato's start window and server list reuse `seihai-play::start`.
 
 ## Issho (6.x)
