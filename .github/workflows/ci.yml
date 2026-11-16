@@ -33,6 +33,13 @@ jobs:
       - name: ALSA development files (Linux audio)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config libxkbcommon-x11-0
+      # Docs-only leak scrub (#537): no code addresses, decompiler names or
+      # public IPv4 literals in documentation/. Linux is enough.
+      - name: Documentation leak check
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/leak-check/check_docs.py
+          python3 -m pytest tools/leak-check -q
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

@@ -78,8 +78,8 @@ alpha and 5th Graal against Knorr's own GServ: every Delphi beta opens **two**
 relay connections, one to a room per level (`<level>` is the file name,
 `<base>` the name without extension) and one to a fixed game-wide room. Every
 Delphi beta pre-fills `127.0.0.1:14801`; from 3rd Graal on the server box is
-greyed out at Cyberjoueur's `204.85.8.128:14802` (the 4th and 5th alphas keep an
-editable `127.0.0.1:14801`).
+greyed out at Cyberjoueur's historical public host on port 14802 (the 4th and
+5th alphas keep an editable `127.0.0.1:14801`).
 
 1.21 is the `plays_as` row for the 1998–1999 builds because it is the oldest
 profile and reads both `.graal` and `.zelda` with no `.nw`. Its HUD, editor and
