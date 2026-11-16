@@ -727,6 +727,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             ),
             first_line: String::new(),
             verses: Vec::new(),
+            sign_index: -1,
             unreadable: false,
         });
         id += 1;
@@ -743,6 +744,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             arrival: (String::new(), String::new()),
             first_line: s.text.lines().next().unwrap_or("").to_string(),
             verses: Vec::new(),
+            sign_index: -1,
             unreadable: false,
         });
         id += 1;
@@ -759,6 +761,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             arrival: (String::new(), String::new()),
             first_line: String::new(),
             verses: Vec::new(),
+            sign_index: c.sign_index,
             unreadable: false,
         });
         id += 1;
@@ -775,6 +778,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             arrival: (String::new(), String::new()),
             first_line: n.script.lines().next().unwrap_or("").to_string(),
             verses: Vec::new(),
+            sign_index: -1,
             unreadable: false,
         });
         id += 1;
@@ -796,6 +800,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
                 .take(BADDY_VERSE_LINES)
                 .map(str::to_string)
                 .collect(),
+            sign_index: -1,
             unreadable: false,
         });
         id += 1;
