@@ -271,6 +271,92 @@ fn painting_the_tile_that_is_already_there_changes_nothing() {
 }
 
 #[test]
+fn flood_fill_replaces_the_connected_region_only() {
+    // a 3 x 3 block of tile 5 at (10, 10), and the same tile at (15, 10) with a gap
+    let mut s = String::from("GLEVNW01\n");
+    let mut ids = vec![0u16; 64];
+    ids[10..13].fill(5);
+    ids[15] = 5;
+    s.push_str(&row(10, &ids));
+    ids[15] = 0;
+    s.push_str(&row(11, &ids));
+    s.push_str(&row(12, &ids));
+    let original = s.clone();
+    let mut doc = Document::parse(s.as_bytes()).unwrap();
+
+    // filling with the tile already there changes nothing and keeps the bytes
+    assert_eq!(doc.flood_fill(11, 11, 5).unwrap(), 0);
+    assert!(!doc.is_modified());
+    assert_eq!(doc.to_bytes(), original.as_bytes());
+
+    let changed = doc.flood_fill(11, 11, 99).unwrap();
+    assert_eq!(changed, 9, "the 3 x 3 block is one region");
+    assert!(doc.is_modified());
+    for y in 10..13 {
+        for x in 10..13 {
+            assert_eq!(doc.tile(x, y), Some(99), "({x}, {y})");
+        }
+    }
+    assert_eq!(
+        doc.tile(15, 10),
+        Some(5),
+        "a same-tile cell across a gap is not filled"
+    );
+    assert_eq!(doc.tile(9, 10), Some(0));
+    assert_eq!(doc.tile(13, 10), Some(0));
+
+    let bytes = doc.to_bytes();
+    assert_eq!(
+        non_board_lines(&bytes),
+        non_board_lines(original.as_bytes())
+    );
+    let again = Document::parse(&bytes).unwrap();
+    for y in 0..SIZE {
+        assert_eq!(again.row(y), doc.row(y), "row {y}");
+    }
+}
+
+#[test]
+fn flood_fill_untouched_starter_stays_byte_identical() {
+    for name in ["new1.nw", "new2.nw"] {
+        let original = std::fs::read(starter(name)).unwrap();
+        let mut doc = Document::parse(&original).unwrap();
+        let seed = doc.tile(0, 0).unwrap();
+        assert_eq!(doc.flood_fill(0, 0, seed as u32).unwrap(), 0);
+        assert!(!doc.is_modified());
+        assert_eq!(doc.to_bytes(), original, "{name}");
+    }
+}
+
+#[test]
+fn flood_fill_layer1_and_bounds() {
+    let mut doc = Document::parse(b"GLEVNW01\n").unwrap();
+    doc.paint_layer(1, 2, 2, 3, 3, Some(7)).unwrap();
+    doc.paint_layer(1, 6, 2, 1, 1, Some(7)).unwrap();
+    assert_eq!(doc.flood_fill_layer(1, 3, 3, Some(42)).unwrap(), 9);
+    for y in 2..5 {
+        for x in 2..5 {
+            assert_eq!(doc.layer_tile(1, x, y), Some(42));
+        }
+    }
+    assert_eq!(doc.layer_tile(1, 6, 2), Some(7));
+    assert_eq!(
+        doc.flood_fill_layer(1, 0, 0, Some(1)).unwrap(),
+        SIZE * SIZE - 10,
+        "empty layer-1 cells are one region"
+    );
+    assert!(matches!(
+        doc.flood_fill(64, 0, 1),
+        Err(EditError::Bounds(_))
+    ));
+    assert_eq!(doc.flood_fill(0, 0, 4096), Err(EditError::TileRange(4096)));
+    assert!(matches!(
+        doc.flood_fill_layer(0, 0, 0, None),
+        Err(EditError::Bounds(_))
+    ));
+}
+
+#[test]
 fn bounds_and_id_range_are_checked_and_nothing_changes_on_error() {
     let original = synthetic();
     let mut doc = Document::parse(original.as_bytes()).unwrap();
@@ -424,6 +510,52 @@ fn cli_list_shows_a_summary_and_a_row_dump() {
         .map(|t| format!("{t:03X}"))
         .collect();
     assert_eq!(dump[0], format!(" 0: {}", first.join(" ")));
+}
+
+#[test]
+fn cli_fill_floods_a_region_and_leaves_the_input_alone() {
+    let input = scratch("cli-fill-in.nw");
+    let mut ids = vec![0u16; 64];
+    ids[1..4].fill(3);
+    let mut level = String::from("GLEVNW01\n");
+    level.push_str(&row(1, &ids));
+    level.push_str(&row(2, &ids));
+    std::fs::write(&input, &level).unwrap();
+    let before = std::fs::read(&input).unwrap();
+    let out_path = scratch("cli-fill-out.nw");
+    let out = run(&[
+        "fill",
+        input.to_str().unwrap(),
+        "2",
+        "1",
+        "88",
+        "--out",
+        out_path.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(text(&out.stdout).contains("tiles changed"));
+    assert_eq!(std::fs::read(&input).unwrap(), before);
+    let doc = Document::open(&out_path).unwrap();
+    assert_eq!(doc.tile(1, 1), Some(88));
+    assert_eq!(doc.tile(3, 2), Some(88));
+    assert_eq!(doc.tile(0, 1), Some(0));
+    // same tile again: file written unchanged
+    let same = scratch("cli-fill-same.nw");
+    let out = run(&[
+        "fill",
+        out_path.to_str().unwrap(),
+        "2",
+        "1",
+        "88",
+        "--out",
+        same.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(text(&out.stdout).contains("0 tiles changed"));
+    assert_eq!(
+        std::fs::read(&same).unwrap(),
+        std::fs::read(&out_path).unwrap()
+    );
 }
 
 #[test]
