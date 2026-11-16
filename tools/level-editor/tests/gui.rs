@@ -143,7 +143,7 @@ fn open_error_keeps_the_current_level() {
     let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     let bad = scratch("bad.nw");
-    std::fs::write(&bad, b"GR-V1.03 binary").unwrap();
+    std::fs::write(&bad, b"not a level file").unwrap();
     assert!(matches!(ed.open(&bad), Err(EditError::NotText(_))));
     assert_eq!(ed.path(), Some(path.as_path()));
     assert_eq!(ed.tabs().len(), 1);

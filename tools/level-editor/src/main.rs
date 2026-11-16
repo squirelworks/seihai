@@ -1,13 +1,14 @@
 //! Seihai level editor: the command line, and a minimal window (`gui`).
 //!
-//!   level-editor [--version|--profile P] list  FILE.nw [--rows]
-//!   level-editor [--version|--profile P] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
-//!   level-editor [--version|--profile P] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
-//!   level-editor [--version|--profile P] save  FILE.nw (--out FILE | --in-place)
-//!   level-editor [--version|--profile P] [--sheet PNG] gui [FILE.nw]
+//!   level-editor [--version|--profile P] list  FILE [--rows]
+//!   level-editor [--version|--profile P] paint FILE X Y W H TILE [--layer L] (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] fill  FILE X Y TILE [--layer L] (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] save  FILE (--out FILE | --in-place)
+//!   level-editor [--version|--profile P] [--sheet PNG] gui [FILE]
 //!   level-editor versions
 //!
-//! `level-editor FILE.nw` is `list FILE.nw`. See documentation/level-editor.md.
+//! `level-editor FILE` is `list FILE`. Text (`.nw`) and binary (`GR-V1` /
+//! `Z3-V1`) levels open. See documentation/level-editor.md.
 
 use level_editor::{gui, Document, EditError, VersionProfile, SIZE};
 use std::path::{Path, PathBuf};
@@ -15,17 +16,18 @@ use std::process;
 
 const USAGE: &str = "\
 Usage:
-  level-editor [--version|--profile P] list  FILE.nw [--rows]
-  level-editor [--version|--profile P] paint FILE.nw X Y W H TILE [--layer L] (--out FILE | --in-place)
-  level-editor [--version|--profile P] fill  FILE.nw X Y TILE [--layer L] (--out FILE | --in-place)
-  level-editor [--version|--profile P] save  FILE.nw (--out FILE | --in-place)
-  level-editor [--version|--profile P] [--sheet PNG] gui [FILE.nw]
+  level-editor [--version|--profile P] list  FILE [--rows]
+  level-editor [--version|--profile P] paint FILE X Y W H TILE [--layer L] (--out FILE | --in-place)
+  level-editor [--version|--profile P] fill  FILE X Y TILE [--layer L] (--out FILE | --in-place)
+  level-editor [--version|--profile P] save  FILE (--out FILE | --in-place)
+  level-editor [--version|--profile P] [--sheet PNG] gui [FILE]
   level-editor versions
 
   list    summary and the most used tile ids; --rows dumps the board, one row per line,
-          each tile as three hex digits
+          each tile as three hex digits; FILE may be GLEVNW01 text or GR-V1 / Z3-V1 binary
   paint   fill the rectangle (X, Y, W, H in tiles, 0 to 63) with tile id TILE (0 to 4095,
-          decimal or 0x hex); --layer 1 paints layer 1 instead of layer 0
+          decimal or 0x hex); --layer 1 paints layer 1 instead of layer 0; --out extension
+          picks the write profile (.nw text, .zelda Z3, otherwise GR-V1)
   fill    flood-fill the connected region under (X, Y) with tile id TILE (cells that share
           a side); --layer 1 fills layer 1 instead of layer 0
   save    open and write again (the same bytes when the level was not changed)
@@ -34,7 +36,7 @@ Usage:
           sheet (default: the built-in pics1.png)
   --version / --profile P
           target profile: 2.22 (default) or 2.17.1 for text .nw; also GR-V1.00..03,
-          GR-V1.05, Z3-V1.03/04 (listed; binary I/O is parked)";
+          GR-V1.05, Z3-V1.03/04 (binary open/save ready; open by magic, save by extension)";
 
 fn fail(msg: impl std::fmt::Display) -> ! {
     eprintln!("level-editor: {msg}");
@@ -128,11 +130,7 @@ fn list(path: &str, rows: bool, profile: VersionProfile) {
     let s = doc.summary();
     println!(
         "Level:   {path} ({}, profile {})",
-        if profile.is_text() {
-            "GLEVNW01 text"
-        } else {
-            profile.name()
-        },
+        doc.profile().name(),
         profile.name()
     );
     println!("Board:   {SIZE} x {SIZE}; BOARD rows placed {}, skipped {}, with a layer other than 0 {} (the layer is not read)", s.rows_placed, s.rows_skipped, s.rows_other_layer);

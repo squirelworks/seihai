@@ -255,6 +255,9 @@ impl Document {
 
     /// Every link, sign, chest, NPC and baddy, in file order.
     pub fn objects(&self) -> Vec<Object> {
+        if let Some(level) = self.binary_level() {
+            return objects_from_level(level);
+        }
         self.records
             .iter()
             .enumerate()
@@ -264,18 +267,29 @@ impl Document {
 
     /// One object by id.
     pub fn object(&self, id: usize) -> Option<Object> {
-        self.records.get(id).map(|r| self.read_record(id, r))
+        self.objects().into_iter().find(|o| o.id == id)
+    }
+
+    fn require_text_objects(&self) -> Result<(), EditError> {
+        if self.is_binary() {
+            return Err(bad(
+                "object editing of binary levels is not yet supported; paint and save work",
+            ));
+        }
+        Ok(())
     }
 
     /// Every line of an NPC's script, read from the file's own lines
     /// (between the `NPC` line and `NPCEND`).
     pub fn script_head(&self, id: usize) -> Result<ScriptHead, EditError> {
+        self.require_text_objects()?;
         self.text_body(id, ObjectKind::Npc)
     }
 
     /// Every line of a sign's text, read from the file's own lines
     /// (between the `SIGN` line and `SIGNEND`).
     pub fn sign_text(&self, id: usize) -> Result<ScriptHead, EditError> {
+        self.require_text_objects()?;
         self.text_body(id, ObjectKind::Sign)
     }
 
@@ -340,6 +354,7 @@ impl Document {
 
     /// Change one object. Only its own lines are rewritten.
     pub fn edit_object(&mut self, id: usize, edit: ObjectEdit) -> Result<(), EditError> {
+        self.require_text_objects()?;
         let r = *self
             .records
             .get(id)
@@ -625,6 +640,7 @@ impl Document {
     /// Add a link, sign, chest, NPC or baddy at (x, y) at the end of the file.
     /// Returns its id.
     pub fn add_object(&mut self, kind: ObjectKind, x: i32, y: i32) -> Result<usize, EditError> {
+        self.require_text_objects()?;
         if !(0..SIZE as i32).contains(&x) || !(0..SIZE as i32).contains(&y) {
             return Err(bad(format!("({x}, {y}) is off the board")));
         }
@@ -665,6 +681,7 @@ impl Document {
 
     /// Remove one object's lines.
     pub fn delete_object(&mut self, id: usize) -> Result<(), EditError> {
+        self.require_text_objects()?;
         let r = *self
             .records
             .get(id)
@@ -685,4 +702,108 @@ impl Document {
         *self = again;
         Ok(())
     }
+}
+
+/// Markers from a binary level's core `Level` (read-only in the editor for now).
+fn objects_from_level(level: &Level) -> Vec<Object> {
+    let mut out = Vec::new();
+    let mut id = 0usize;
+    for l in &level.links {
+        out.push(Object {
+            id,
+            kind: ObjectKind::Link,
+            x: l.x as f32,
+            y: l.y as f32,
+            w: l.width as f32,
+            h: l.height as f32,
+            name: l.dest.clone(),
+            arrival: (
+                l.new_x
+                    .map(|v| format!("{v}"))
+                    .unwrap_or_else(|| "playerx".into()),
+                l.new_y
+                    .map(|v| format!("{v}"))
+                    .unwrap_or_else(|| "playery".into()),
+            ),
+            first_line: String::new(),
+            verses: Vec::new(),
+            sign_index: -1,
+            unreadable: false,
+        });
+        id += 1;
+    }
+    for s in &level.signs {
+        out.push(Object {
+            id,
+            kind: ObjectKind::Sign,
+            x: s.x as f32,
+            y: s.y as f32,
+            w: 2.0,
+            h: 1.0,
+            name: String::new(),
+            arrival: (String::new(), String::new()),
+            first_line: s.text.lines().next().unwrap_or("").to_string(),
+            verses: Vec::new(),
+            sign_index: -1,
+            unreadable: false,
+        });
+        id += 1;
+    }
+    for c in &level.chests {
+        out.push(Object {
+            id,
+            kind: ObjectKind::Chest,
+            x: c.x as f32,
+            y: c.y as f32,
+            w: 2.0,
+            h: 2.0,
+            name: c.item.clone(),
+            arrival: (String::new(), String::new()),
+            first_line: String::new(),
+            verses: Vec::new(),
+            sign_index: c.sign_index,
+            unreadable: false,
+        });
+        id += 1;
+    }
+    for n in &level.npcs {
+        out.push(Object {
+            id,
+            kind: ObjectKind::Npc,
+            x: n.x,
+            y: n.y,
+            w: 2.0,
+            h: 2.0,
+            name: n.image.clone(),
+            arrival: (String::new(), String::new()),
+            first_line: n.script.lines().next().unwrap_or("").to_string(),
+            verses: Vec::new(),
+            sign_index: -1,
+            unreadable: false,
+        });
+        id += 1;
+    }
+    for b in &level.baddies {
+        out.push(Object {
+            id,
+            kind: ObjectKind::Baddy,
+            x: b.x,
+            y: b.y,
+            w: 2.0,
+            h: 2.0,
+            name: b.kind.clone(),
+            arrival: (String::new(), String::new()),
+            first_line: String::new(),
+            verses: b
+                .verses
+                .lines()
+                .take(BADDY_VERSE_LINES)
+                .map(str::to_string)
+                .collect(),
+            sign_index: -1,
+            unreadable: false,
+        });
+        id += 1;
+    }
+    out
 }

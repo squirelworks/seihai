@@ -259,7 +259,7 @@ impl Editor {
 
     /// Open a level as a new tab, or switch to it when that path is already
     /// open (without reloading). On an error nothing changes. Uses the
-    /// selected profile (binary profiles refuse until I/O is wired).
+    /// selected profile (open still follows the file magic).
     pub fn open(&mut self, path: &Path) -> Result<(), EditError> {
         if let Some(i) = self.tab_for_path(path) {
             self.set_active(i);
@@ -1216,7 +1216,7 @@ impl EditorApp {
                     })
                     .response
                     .on_hover_text(
-                        "Target format profile. 2.22 / 2.17.1 text open and save; binary profiles are parked until their I/O is wired.",
+                        "Target format profile. Open follows file magic; save follows the path extension (.nw text, .zelda Zelda, otherwise Graal).",
                     );
             });
             ui.horizontal(|ui| {

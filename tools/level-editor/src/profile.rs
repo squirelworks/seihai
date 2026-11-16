@@ -1,17 +1,16 @@
 //! Version profiles for the level editor.
 //!
 //! A profile is the target the editor is imitating: which level format it
-//! reads and writes, and (later) which features apply. Today only the 2.22
-//! and 2.17.1 text (`GLEVNW01` / `.nw`) profiles actually open and save.
-//! Binary profiles are listed so the picker and CLI can name them; their
-//! I/O is parked until the matching reader/writer is wired.
+//! reads and writes, and (later) which features apply. Text (`GLEVNW01` /
+//! `.nw`) and binary (`GR-V1.*`, `Z3-V1.*`) profiles are ready: open follows
+//! the file magic; save follows the path extension through seihai-core.
 
 use crate::EditError;
 
 /// Whether this profile's level I/O is ready to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IoStatus {
-    /// Open / save work through the current text path.
+    /// Open / save work for this profile.
     Ready,
     /// Listed in the picker, but open / save refuse with a clear message.
     Parked,
@@ -19,9 +18,9 @@ pub enum IoStatus {
 
 /// The target profile: format and (later) feature switches.
 ///
-/// The default and the only fully working path is [`VersionProfile::TextNw222`]
-/// (2.22 `GLEVNW01` text). Binary profiles stay parked so the scaffold does
-/// not block on GR-V1.05 reader/writer work landing elsewhere.
+/// The default path is [`VersionProfile::TextNw222`] (2.22 `GLEVNW01` text).
+/// Binary profiles also open and save; open follows magic, save follows the
+/// path extension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VersionProfile {
     /// 2.22 client's built-in editor: `GLEVNW01` text (`.nw`).
@@ -36,7 +35,7 @@ pub enum VersionProfile {
     GrV102,
     /// Binary `GR-V1.03` (`.graal`) — the usual single-layer binary write.
     GrV103,
-    /// Binary `GR-V1.05` multi-layer (`.graal`). Parked until core binary I/O lands.
+    /// Binary `GR-V1.05` multi-layer (`.graal`).
     GrV105,
     /// Binary `Z3-V1.03` (`.zelda`).
     Z3V103,
@@ -61,8 +60,8 @@ impl VersionProfile {
         VersionProfile::Z3V104,
     ];
 
-    /// Profiles whose open / save path works today.
-    pub const WORKING: [VersionProfile; 2] = [VersionProfile::TextNw222, VersionProfile::TextNw217];
+    /// Profiles whose open / save path works today (every listed format).
+    pub const WORKING: [VersionProfile; 9] = VersionProfile::ALL;
 
     /// Short id for the CLI (`--version` / `--profile`) and the combo box.
     pub fn name(self) -> &'static str {
@@ -128,11 +127,7 @@ impl VersionProfile {
 
     /// Whether open / save for this profile are ready.
     pub fn io_status(self) -> IoStatus {
-        if self.is_text() {
-            IoStatus::Ready
-        } else {
-            IoStatus::Parked
-        }
+        IoStatus::Ready
     }
 
     /// True when open / save use the working text path.
@@ -140,28 +135,13 @@ impl VersionProfile {
         self.io_status() == IoStatus::Ready
     }
 
-    /// Refuse with a parked message when binary I/O is not wired yet.
+    /// Refuse when a profile's I/O is not ready (none today).
     pub fn require_io_ready(self) -> Result<(), EditError> {
         if self.io_ready() {
             return Ok(());
         }
-        let why = match self {
-            VersionProfile::GrV105 => {
-                "binary GR-V1.05 read/write is parked until the shared core lands it; the text 2.22 path stays the working default"
-            }
-            VersionProfile::GrV100
-            | VersionProfile::GrV101
-            | VersionProfile::GrV102
-            | VersionProfile::GrV103 => {
-                "binary GR-V1 read/write is not yet wired in the editor; pick 2.22 (text .nw) for now"
-            }
-            VersionProfile::Z3V103 | VersionProfile::Z3V104 => {
-                "binary Z3-V1 read/write is not yet wired in the editor; pick 2.22 (text .nw) for now"
-            }
-            VersionProfile::TextNw222 | VersionProfile::TextNw217 => unreachable!("text is ready"),
-        };
         Err(EditError::Version(format!(
-            "profile {} is parked: {why}",
+            "profile {} is parked",
             self.name()
         )))
     }

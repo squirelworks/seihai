@@ -1,6 +1,7 @@
-//! The Seihai level editor: open a `GLEVNW01` text level, look at its tiles,
-//! paint a rectangle, flood-fill a connected region, save. The window (`gui`)
-//! is a tile palette and click-to-paint on top of the same `Document`.
+//! The Seihai level editor: open a `GLEVNW01` text level or a binary
+//! `GR-V1` / `Z3-V1` level, look at its tiles, paint a rectangle, flood-fill
+//! a connected region, save. The window (`gui`) is a tile palette and
+//! click-to-paint on top of the same `Document`.
 //!
 //! The rules come from the 2.22 editor notes (see `documentation/level-editor.md`):
 //! the board is one 64 x 64 grid of 12-bit tile ids; a `BOARD` row is placed by
@@ -8,12 +9,13 @@
 //! skipped without an error; a character outside the base64 alphabet ends a
 //! row.
 //!
-//! **Round trip.** The file is kept as its original lines. A level that was
-//! not changed is written back byte for byte. After a change, the `BOARD`
-//! rows are replaced by 64 canonical rows (`BOARD 0 y 64 0 <128 characters>`,
-//! the 2.22 writer's shape) at the place of the first old `BOARD` row, and
-//! every other line (links, signs, chests, baddies, NPC scripts, `HEIGHTS`,
-//! comments) is written back as it was.
+//! **Round trip.** A level that was not changed is written back byte for
+//! byte (text lines as they were; binary the original file). After a paint,
+//! text `BOARD` rows are replaced by the canonical 2.22 writer shape, and
+//! binary levels are rebuilt with seihai-core's `encode_binary` (`GR-V1.03`
+//! or `GR-V1.05` for Graal, `Z3-V1.04` for Zelda). The write profile follows
+//! the path extension: `.nw` text, `.zelda` Zelda binary, everything else
+//! Graal binary.
 //!
 //! **Layers.** The 2.22 reader does not read a row's layer field, so `tile`
 //! and `row` give that view: every row on one board, in file order. The
@@ -22,16 +24,19 @@
 //! everywhere, layer 1 starts empty. After a change, layer 0 is written as
 //! the 64 canonical rows and layer 1 as one `BOARD x y w 1 data` row per run
 //! of filled cells; rows of other layers are written back as they were.
+//! Binary `GR-V1.05` keeps layers above 1 from the core reader.
 //!
 //! **Objects.** Links, signs, chests, baddies and NPCs are records of lines
-//! (`objects`), read with the client's level parser. Moving one, or changing
-//! a link's destination and arrival, a baddy's type and verses, or the body
-//! of an NPC script or a sign, rewrites only that record's lines
-//! (`edit_object`).
+//! (`objects`) on text levels, read with the client's level parser. Moving
+//! one, or changing a link's destination and arrival, a baddy's type and
+//! verses, or the body of an NPC script or a sign, rewrites only that
+//! record's lines (`edit_object`). Object edits of binary levels are not
+//! supported yet; their records are kept and written back after a paint.
 //!
 //! **Profiles.** The user picks a [`VersionProfile`] (2.22 text, GR-V1.03,
-//! GR-V1.05, Z3-V1.04, …). Only the text profiles open and save today;
-//! binary profiles are listed and parked.
+//! GR-V1.05, Z3-V1.04, …). Open follows the file magic (`GLEVNW01`, `GR-V1`,
+//! `Z3-V1`). Save follows the path extension (`.nw` text, `.zelda` Zelda,
+//! otherwise Graal binary).
 //!
 //! **Selection.** A tile rectangle on the active layer can be copied, cut,
 //! deleted or pasted. Copy and cut lift the tiles into a block the window
@@ -39,6 +44,7 @@
 //! level still round-trips byte for byte: only a write that changes a cell
 //! marks the file dirty.
 
+pub mod binary;
 pub mod gui;
 pub mod profile;
 
@@ -48,11 +54,14 @@ use std::io::Write;
 use std::path::Path;
 
 pub mod objects;
+pub use binary::LevelProfile;
 pub use objects::{
     Object, ObjectEdit, ObjectKind, ScriptHead, BADDY_TYPE_NAMES, BADDY_VERSE_LINES,
     SCRIPT_PANE_LINES,
 };
 pub use profile::{IoStatus, Version, VersionProfile};
+
+use seihai_core::assets::Level;
 
 /// Board edge in tiles.
 pub const SIZE: usize = 64;
@@ -134,7 +143,7 @@ pub fn tile_code(id: u16) -> [u8; 2] {
 pub enum EditError {
     /// The file could not be read or written.
     Io(String),
-    /// Not a text level.
+    /// Not a recognised level.
     NotText(String),
     /// A rectangle that leaves the 64 x 64 board, or is empty.
     Bounds(String),
@@ -147,12 +156,13 @@ pub enum EditError {
 impl fmt::Display for EditError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EditError::Io(m) | EditError::NotText(m) | EditError::Bounds(m) | EditError::Version(m) => {
-                f.write_str(m)
-            }
+            EditError::Io(m)
+            | EditError::NotText(m)
+            | EditError::Bounds(m)
+            | EditError::Version(m) => f.write_str(m),
             EditError::TileRange(id) => write!(
                 f,
-                "tile id {id} is out of range: text levels hold ids 0 to {} (two base64 characters)",
+                "tile id {id} is out of range: levels hold ids 0 to {} (12-bit)",
                 TILE_LIMIT - 1
             ),
         }
@@ -185,6 +195,7 @@ pub struct Summary {
 #[derive(Debug, Clone)]
 pub struct Document {
     /// The file as lines, each with its line terminator (the last may have none).
+    /// Empty for a binary level.
     lines: Vec<Vec<u8>>,
     /// Indexes of the BOARD lines in `lines`.
     board_lines: Vec<usize>,
@@ -195,13 +206,19 @@ pub struct Document {
     layer1: Vec<Option<u16>>,
     /// Placed BOARD rows of other layers, without their line ending, in file order.
     other_rows: Vec<Vec<u8>>,
-    /// The object records, in file order.
+    /// The object records, in file order (text only).
     records: Vec<objects::Record>,
     /// Lines were changed by an object edit (the board rows are not rewritten for that).
     edited: bool,
     summary: Summary,
     eol: &'static [u8],
     dirty: bool,
+    /// How the file was opened.
+    profile: LevelProfile,
+    /// Original file bytes (byte-identical unchanged save).
+    raw: Vec<u8>,
+    /// Binary only: objects and layers above 1 from the core reader.
+    binary_level: Option<Level>,
 }
 
 fn strip_eol(line: &[u8]) -> &[u8] {
@@ -214,19 +231,66 @@ fn parse_num(tok: &[u8]) -> Option<i64> {
 }
 
 impl Document {
-    /// Open a level from its bytes. Only `GLEVNW01` text is read.
-    ///
-    /// Binary magics are refused here; use a text [`VersionProfile`] and the
-    /// working path, or wait for parked binary I/O.
+    /// Open a level from its bytes: `GLEVNW01` text, or `GR-V1` / `Z3-V1` binary.
     pub fn parse(data: &[u8]) -> Result<Document, EditError> {
-        if data.starts_with(b"GR-V1") || data.starts_with(b"Z3-V1") {
-            let hint = VersionProfile::detect(data)
-                .map(|p| format!(" (detected {})", p.name()))
-                .unwrap_or_default();
-            return Err(EditError::NotText(format!(
-                "binary levels (GR-V1, Z3-V1){hint} are parked in the editor; only GLEVNW01 text levels (.nw) open under the 2.22 profile"
-            )));
+        if data.len() >= 8 && (data.starts_with(b"GR-V1") || data.starts_with(b"Z3-V1")) {
+            return binary::parse_binary(data);
         }
+        Self::parse_text(data)
+    }
+
+    pub(crate) fn from_binary(
+        raw: Vec<u8>,
+        profile: LevelProfile,
+        level: Level,
+        board: Vec<u16>,
+        layer0: Vec<u16>,
+        layer1: Vec<Option<u16>>,
+        summary: Summary,
+    ) -> Document {
+        Document {
+            lines: Vec::new(),
+            board_lines: Vec::new(),
+            board,
+            layer0,
+            layer1,
+            other_rows: Vec::new(),
+            records: Vec::new(),
+            edited: false,
+            summary,
+            eol: b"\n",
+            dirty: false,
+            profile,
+            raw,
+            binary_level: Some(level),
+        }
+    }
+
+    pub(crate) fn binary_level(&self) -> Option<&Level> {
+        self.binary_level.as_ref()
+    }
+
+    pub(crate) fn layer0_tiles(&self) -> &[u16] {
+        &self.layer0
+    }
+
+    pub(crate) fn layer1_tiles(&self) -> &[Option<u16>] {
+        &self.layer1
+    }
+
+    /// Text bytes for converting objects when writing binary from a text level.
+    pub(crate) fn text_snapshot_bytes(&self) -> Vec<u8> {
+        if self.profile != LevelProfile::Text {
+            return self.raw.clone();
+        }
+        if self.dirty {
+            self.encode_text()
+        } else {
+            self.lines.concat()
+        }
+    }
+
+    fn parse_text(data: &[u8]) -> Result<Document, EditError> {
         let mut lines: Vec<Vec<u8>> = Vec::new();
         let mut start = 0;
         for (i, &b) in data.iter().enumerate() {
@@ -244,7 +308,7 @@ impl Document {
             .unwrap_or(false);
         if !header_ok {
             return Err(EditError::NotText(
-                "not a GLEVNW01 text level (the first line must be GLEVNW01)".into(),
+                "not a GLEVNW01 text level (the first line must be GLEVNW01) or a GR-V1 / Z3-V1 binary level".into(),
             ));
         }
         let eol: &'static [u8] = if lines[0].ends_with(b"\r\n") {
@@ -265,6 +329,9 @@ impl Document {
             summary: Summary::default(),
             eol,
             dirty: false,
+            profile: LevelProfile::Text,
+            raw: data.to_vec(),
+            binary_level: None,
         };
         let mut i = 1;
         while i < doc.lines.len() {
@@ -294,7 +361,6 @@ impl Document {
                 _ => None,
             };
             if let Some(end) = block_end {
-                // A block swallows its lines up to the terminator (or the end of the file).
                 let first = i;
                 i += 1;
                 while i < doc.lines.len() && strip_eol(&doc.lines[i]).trim_ascii() != end {
@@ -371,7 +437,7 @@ impl Document {
         }
         for k in 0..w as usize {
             let (Some(hi), Some(lo)) = (b64_value(data[2 * k]), b64_value(data[2 * k + 1])) else {
-                break; // an invalid character ends the row; tiles already placed stay
+                break;
             };
             let at = y as usize * SIZE + x as usize + k;
             let t = (hi << 6) | lo;
@@ -389,8 +455,8 @@ impl Document {
         Document::open_with_profile(path, VersionProfile::DEFAULT)
     }
 
-    /// Read a level file under `profile`. Parked (binary) profiles refuse
-    /// before any parse; the text path is unchanged.
+    /// Read a level file under `profile`. Every listed profile is ready;
+    /// open still follows the file magic (`GLEVNW01` / `GR-V1` / `Z3-V1`).
     pub fn open_with_profile(path: &Path, profile: VersionProfile) -> Result<Document, EditError> {
         profile.require_io_ready()?;
         let data = fs::read(path)
@@ -400,6 +466,16 @@ impl Document {
 
     pub fn summary(&self) -> &Summary {
         &self.summary
+    }
+
+    /// How this level was opened (text, Graal binary, or Zelda binary).
+    pub fn profile(&self) -> LevelProfile {
+        self.profile
+    }
+
+    /// True when the open file is `GR-V1` or `Z3-V1`.
+    pub fn is_binary(&self) -> bool {
+        self.profile != LevelProfile::Text
     }
 
     /// Whether a paint or an object edit changed the level since it was opened.
@@ -687,6 +763,26 @@ impl Document {
                 *b = *t;
             }
         }
+        if self.is_binary() {
+            if let Some(level) = &self.binary_level {
+                for run in level.boards.iter().filter(|r| r.layer > 1) {
+                    if !(0..64).contains(&run.y) {
+                        continue;
+                    }
+                    for (i, t) in run.tiles.iter().enumerate() {
+                        let x = run.x + i as i32;
+                        if !(0..64).contains(&x) {
+                            continue;
+                        }
+                        let id = seihai_core::assets::tile_id(*t);
+                        if id != 4095 {
+                            self.board[run.y as usize * SIZE + x as usize] = id;
+                        }
+                    }
+                }
+            }
+            return;
+        }
         for raw in &self.other_rows {
             let toks: Vec<&[u8]> = raw
                 .split(|&b| b == b' ')
@@ -712,11 +808,7 @@ impl Document {
         }
     }
 
-    /// The level as bytes: the original bytes when nothing was painted.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        if !self.dirty {
-            return self.lines.concat();
-        }
+    fn encode_text(&self) -> Vec<u8> {
         let mut canonical = Vec::new();
         for y in 0..SIZE {
             canonical.extend_from_slice(format!("BOARD 0 {y} {SIZE} 0 ").as_bytes());
@@ -725,7 +817,6 @@ impl Document {
             }
             canonical.extend_from_slice(self.eol);
         }
-        // layer 1: one row per run of filled cells, empty cells left out (as Gonstruct writes it)
         for y in 0..SIZE {
             let mut x = 0;
             while x < SIZE {
@@ -763,7 +854,6 @@ impl Document {
             }
             out.extend_from_slice(line);
             if first.is_none() && i == 0 {
-                // no BOARD row in the file: the board goes right after the header
                 if !line.ends_with(b"\n") {
                     out.extend_from_slice(self.eol);
                 }
@@ -773,11 +863,87 @@ impl Document {
         out
     }
 
+    /// Bytes for this document's open profile. Unchanged files return the
+    /// original bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.bytes_for_profile(self.profile)
+    }
+
+    /// Bytes for a destination path: extension picks text / Graal / Zelda.
+    /// An unchanged level written back to the same profile stays byte identical.
+    pub fn bytes_for_path(&self, path: &Path) -> Vec<u8> {
+        self.bytes_for_profile(LevelProfile::from_path(path))
+    }
+
+    fn bytes_for_profile(&self, dest: LevelProfile) -> Vec<u8> {
+        let unchanged = !self.dirty && !self.edited;
+        if unchanged && dest == self.profile {
+            return if self.profile == LevelProfile::Text {
+                self.lines.concat()
+            } else {
+                self.raw.clone()
+            };
+        }
+        match dest {
+            LevelProfile::Text => {
+                if self.profile == LevelProfile::Text {
+                    if self.dirty {
+                        self.encode_text()
+                    } else {
+                        self.lines.concat()
+                    }
+                } else {
+                    // Binary → text: rebuild as GLEVNW01 from the editor boards.
+                    self.encode_text_from_boards()
+                }
+            }
+            LevelProfile::Graal | LevelProfile::Zelda => {
+                let format = dest.binary_format().expect("binary profile");
+                binary::encode_binary_doc(self, format)
+            }
+        }
+    }
+
+    /// Minimal text rewrite when converting a binary level to `.nw`.
+    fn encode_text_from_boards(&self) -> Vec<u8> {
+        let mut out = b"GLEVNW01\n".to_vec();
+        for y in 0..SIZE {
+            out.extend_from_slice(format!("BOARD 0 {y} {SIZE} 0 ").as_bytes());
+            for x in 0..SIZE {
+                out.extend_from_slice(&tile_code(self.layer0[y * SIZE + x]));
+            }
+            out.push(b'\n');
+        }
+        for y in 0..SIZE {
+            let mut x = 0;
+            while x < SIZE {
+                if self.layer1[y * SIZE + x].is_none() {
+                    x += 1;
+                    continue;
+                }
+                let start = x;
+                let mut data = Vec::new();
+                while x < SIZE {
+                    let Some(t) = self.layer1[y * SIZE + x] else {
+                        break;
+                    };
+                    data.extend_from_slice(&tile_code(t));
+                    x += 1;
+                }
+                out.extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
+                out.extend_from_slice(&data);
+                out.push(b'\n');
+            }
+        }
+        out
+    }
+
     /// Write the level to `path` through a temporary file in the same folder
     /// and a rename, so a crash cannot leave a half-written level (2.22
-    /// deleted the old file first; its successors fixed that).
+    /// deleted the old file first; its successors fixed that). The path
+    /// extension picks the write profile.
     pub fn save(&self, path: &Path) -> Result<(), EditError> {
-        write_atomic(path, &self.to_bytes())
+        write_atomic(path, &self.bytes_for_path(path))
     }
 }
 

@@ -433,14 +433,7 @@ fn crlf_levels_stay_crlf_after_a_paint() {
 }
 
 #[test]
-fn only_text_levels_open() {
-    for magic in ["GR-V1.03", "Z3-V1.04", "GR-V1.05"] {
-        let err = Document::parse(format!("{magic}\n...").as_bytes()).unwrap_err();
-        assert!(
-            err.to_string().contains("parked") && err.to_string().contains(magic),
-            "{err}"
-        );
-    }
+fn unknown_and_missing_files_are_errors() {
     assert!(matches!(
         Document::parse(b"hello\n"),
         Err(EditError::NotText(_))
@@ -450,6 +443,9 @@ fn only_text_levels_open() {
         Document::open(Path::new("/nonexistent/x.nw")),
         Err(EditError::Io(_))
     ));
+    // Unknown magic is refused.
+    let err = Document::parse(b"NOTALEVEL").unwrap_err();
+    assert!(err.to_string().contains("not a"), "{err}");
 }
 
 #[test]
@@ -464,7 +460,7 @@ fn version_profile_picker_lists_formats_and_keeps_text_ready() {
     assert_eq!(VersionProfile::DEFAULT, VersionProfile::TextNw222);
     assert!(VersionProfile::TextNw222.io_ready());
     assert_eq!(VersionProfile::TextNw222.io_status(), IoStatus::Ready);
-    assert_eq!(VersionProfile::WORKING, VersionProfile::ALL[..2]);
+    assert_eq!(VersionProfile::WORKING, VersionProfile::ALL);
 
     for (text, want) in [
         ("GR-V1.03", VersionProfile::GrV103),
@@ -486,15 +482,10 @@ fn version_profile_picker_lists_formats_and_keeps_text_ready() {
         VersionProfile::GrV105,
         VersionProfile::Z3V104,
     ] {
-        assert!(!p.io_ready(), "{}", p.name());
-        let msg = p.require_io_ready().unwrap_err().to_string();
-        assert!(msg.contains("parked") && msg.contains(p.name()), "{msg}");
+        assert!(p.io_ready(), "{}", p.name());
+        assert_eq!(p.io_status(), IoStatus::Ready);
+        assert!(p.require_io_ready().is_ok());
     }
-    assert!(VersionProfile::GrV105
-        .require_io_ready()
-        .unwrap_err()
-        .to_string()
-        .contains("shared core"));
 
     assert_eq!(
         VersionProfile::detect(b"GR-V1.05xxxx"),
@@ -524,19 +515,20 @@ fn version_profile_picker_lists_formats_and_keeps_text_ready() {
 }
 
 #[test]
-fn parked_profile_refuses_open_without_touching_text_path() {
+fn every_profile_opens_text_levels_by_magic() {
     let path = starter("new1.nw");
     let original = std::fs::read(&path).unwrap();
-    // default / text profile: unchanged round trip
-    let doc = Document::open_with_profile(&path, VersionProfile::TextNw222).unwrap();
-    assert_eq!(doc.to_bytes(), original);
-    let doc = Document::open_with_profile(&path, VersionProfile::TextNw217).unwrap();
-    assert_eq!(doc.to_bytes(), original);
-    // binary profile selected: refuse before rewrite
-    let err = Document::open_with_profile(&path, VersionProfile::GrV105).unwrap_err();
-    assert!(err.to_string().contains("parked"), "{err}");
-    let err = Document::open_with_profile(&path, VersionProfile::GrV103).unwrap_err();
-    assert!(err.to_string().contains("parked"), "{err}");
+    for profile in [
+        VersionProfile::TextNw222,
+        VersionProfile::TextNw217,
+        VersionProfile::GrV103,
+        VersionProfile::GrV105,
+        VersionProfile::Z3V104,
+    ] {
+        let doc = Document::open_with_profile(&path, profile).unwrap();
+        assert_eq!(doc.to_bytes(), original);
+        assert!(!doc.is_binary());
+    }
 }
 
 // ---- the command line ----
@@ -700,7 +692,7 @@ fn cli_errors_are_clear_and_exit_non_zero() {
     let f = f.to_str().unwrap();
     let o = scratch("cli-never.nw");
     let o = o.to_str().unwrap();
-    let cases: [(Vec<&str>, &str); 9] = [
+    let cases: [(Vec<&str>, &str); 7] = [
         (
             vec!["paint", f, "60", "0", "5", "1", "1", "--out", o],
             "leaves the 64 x 64 board",
@@ -719,8 +711,6 @@ fn cli_errors_are_clear_and_exit_non_zero() {
         ),
         (vec!["--version", "2.05", "list", f], "not yet supported"),
         (vec!["--version", "2.31", "list", f], "not yet supported"),
-        (vec!["--profile", "GR-V1.05", "list", f], "parked"),
-        (vec!["--version", "GR-V1.03", "list", f], "parked"),
         (vec!["list", "/nonexistent/level.nw"], "cannot read"),
     ];
     for (args, want) in cases {
@@ -733,11 +723,13 @@ fn cli_errors_are_clear_and_exit_non_zero() {
         );
     }
     assert!(!Path::new(o).exists(), "a failed paint writes nothing");
-    // a working text profile is named
+    // ready profiles are named; binary ones list a text file without parking
     assert!(text(&run(&["--version", "2.17.1", "list", f]).stdout).contains("profile 2.17.1"));
     assert!(text(&run(&["--profile", "2.22", "list", f]).stdout).contains("profile 2.22"));
+    assert!(run(&["--profile", "GR-V1.05", "list", f]).status.success());
+    assert!(run(&["--version", "GR-V1.03", "list", f]).status.success());
     let versions = text(&run(&["versions"]).stdout);
     assert!(versions.starts_with("2.22  [ready]"), "{versions}");
-    assert!(versions.contains("GR-V1.05  [parked]"), "{versions}");
-    assert!(versions.contains("Z3-V1.04  [parked]"), "{versions}");
+    assert!(versions.contains("GR-V1.05  [ready]"), "{versions}");
+    assert!(versions.contains("Z3-V1.04  [ready]"), "{versions}");
 }
