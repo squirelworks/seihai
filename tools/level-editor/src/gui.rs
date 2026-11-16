@@ -1,10 +1,10 @@
 //! The level editor window: a tile palette, painting on layer 0 or 1, flood
 //! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC /
 //! baddy markers, a `.gmap` grid that opens its levels, tabs for several open
-//! levels, tile selection with copy / cut / paste / delete, and save. It
-//! sits on the command-line slice (`Document`): painting is
-//! `Document::paint_layer`, fill is `Document::flood_fill_layer`, selection
-//! uses `read_layer_block` / `write_layer_block` / `clear_layer_rect`,
+//! levels, tile selection with copy / cut / paste / delete, undo / redo of
+//! board writes, and save. It sits on the command-line slice (`Document`):
+//! painting is `Document::paint_layer`, fill is `Document::flood_fill_layer`,
+//! selection uses `read_layer_block` / `write_layer_block` / `clear_layer_rect`,
 //! objects go through `Document::edit_object` and friends, and saving is
 //! `Document::save`, so the file rules (byte-for-byte round trip, canonical
 //! rows after a change, write through a temporary file) are the same as the
@@ -345,6 +345,20 @@ impl Editor {
         n
     }
 
+    /// Start one undo record for a paint or erase stroke (many cells).
+    pub fn begin_stroke(&mut self) {
+        if let Some(doc) = self.doc_mut() {
+            doc.begin_undo_group();
+        }
+    }
+
+    /// Finish the stroke's undo record.
+    pub fn end_stroke(&mut self) {
+        if let Some(doc) = self.doc_mut() {
+            doc.end_undo_group();
+        }
+    }
+
     /// Paint the selected tile at board cell (x, y) on the active layer.
     /// Returns the number of tiles that changed (0 or 1).
     pub fn paint_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
@@ -379,6 +393,7 @@ impl Editor {
 
     /// Drop the picked stamp with its top-left corner at (x, y) on the active
     /// layer. Cells off the board are left out. Returns the tiles changed.
+    /// One Undo reverses the whole stamp.
     pub fn place_stamp(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
         let stamp = self
             .current_stamp()
@@ -386,6 +401,7 @@ impl Editor {
             .ok_or_else(|| EditError::Io("no stamp is picked; load an object set first".into()))?;
         let layer = self.layer;
         let doc = self.doc_mut().ok_or_else(no_level)?;
+        doc.begin_undo_group();
         let mut n = 0;
         for sy in 0..stamp.height {
             for sx in 0..stamp.width {
@@ -398,7 +414,42 @@ impl Editor {
                 }
             }
         }
+        doc.end_undo_group();
         Ok(self.changed(n))
+    }
+
+    /// Undo the last board write on the active tab. Object edits are not undone.
+    pub fn undo(&mut self) -> bool {
+        let Some(tab) = self.active_tab_mut() else {
+            return false;
+        };
+        if !tab.doc.undo() {
+            return false;
+        }
+        tab.unsaved = tab.doc.is_modified();
+        self.board_rev += 1;
+        true
+    }
+
+    /// Redo the last undone board write on the active tab.
+    pub fn redo(&mut self) -> bool {
+        let Some(tab) = self.active_tab_mut() else {
+            return false;
+        };
+        if !tab.doc.redo() {
+            return false;
+        }
+        tab.unsaved = tab.doc.is_modified();
+        self.board_rev += 1;
+        true
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.doc().is_some_and(|d| d.can_undo())
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.doc().is_some_and(|d| d.can_redo())
     }
 
     /// Select the tile under board cell (x, y) on the active layer (the right
@@ -1018,6 +1069,20 @@ impl EditorApp {
             self.do_save(None);
         }
         self.handle_selection_keys(ctx);
+        // Shift+Z before Z so Ctrl+Shift+Z is redo, not undo.
+        if ctx.input_mut(|i| {
+            i.consume_key(
+                egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                egui::Key::Z,
+            ) || i.consume_key(egui::Modifiers::COMMAND, egui::Key::Y)
+        }) && self.editor.redo()
+        {
+            self.status = "Redo".into();
+        } else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z))
+            && self.editor.undo()
+        {
+            self.status = "Undo".into();
+        }
 
         let title = format!(
             "{}{} - Seihai level editor ({})",
@@ -1199,6 +1264,22 @@ impl EditorApp {
                         Ok(n) => self.status = format!("Saved {n} level(s)"),
                         Err(e) => self.status = e.to_string(),
                     }
+                }
+                if ui
+                    .add_enabled(self.editor.can_undo(), egui::Button::new("Undo"))
+                    .on_hover_text("Ctrl+Z — board paints and erases")
+                    .clicked()
+                {
+                    self.editor.undo();
+                    self.status = "Undo".into();
+                }
+                if ui
+                    .add_enabled(self.editor.can_redo(), egui::Button::new("Redo"))
+                    .on_hover_text("Ctrl+Y or Ctrl+Shift+Z")
+                    .clicked()
+                {
+                    self.editor.redo();
+                    self.status = "Redo".into();
                 }
                 ui.separator();
                 ui.label("Profile");
@@ -1922,6 +2003,9 @@ impl EditorApp {
                     Tool::Paint | Tool::Erase => {
                         if resp.is_pointer_button_down_on() && down {
                             if let Some(c) = resp.interact_pointer_pos().and_then(to_cell) {
+                                if self.stroke_last.is_none() {
+                                    self.editor.begin_stroke();
+                                }
                                 let cells = match self.stroke_last {
                                     Some(last) => line_cells(last, c),
                                     None => vec![c],
@@ -1934,8 +2018,8 @@ impl EditorApp {
                                 }
                                 self.stroke_last = Some(c);
                             }
-                        } else {
-                            self.stroke_last = None;
+                        } else if self.stroke_last.take().is_some() {
+                            self.editor.end_stroke();
                         }
                     }
                     Tool::Fill => {
