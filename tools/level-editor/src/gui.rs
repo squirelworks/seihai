@@ -340,8 +340,10 @@ impl Editor {
     /// Flood-fill the 4-connected region of the active layer under (x, y)
     /// with the selected tile. Returns how many cells changed.
     pub fn flood_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
-        let doc = self.doc.as_mut().ok_or_else(no_level)?;
-        let n = doc.flood_fill_layer(self.layer, x, y, Some(self.tile as u32))?;
+        let layer = self.layer;
+        let tile = self.tile;
+        let doc = self.doc_mut().ok_or_else(no_level)?;
+        let n = doc.flood_fill_layer(layer, x, y, Some(tile as u32))?;
         Ok(self.changed(n))
     }
 
