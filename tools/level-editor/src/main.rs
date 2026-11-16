@@ -36,7 +36,7 @@ Usage:
           sheet (default: the built-in pics1.png)
   --version / --profile P
           target profile: 2.22 (default) or 2.17.1 for text .nw; also GR-V1.00..03,
-          GR-V1.05, Z3-V1.03/04 (listed; binary I/O is parked)";
+          GR-V1.05, Z3-V1.03/04 (binary open/save ready; open by magic, save by extension)";
 
 fn fail(msg: impl std::fmt::Display) -> ! {
     eprintln!("level-editor: {msg}");

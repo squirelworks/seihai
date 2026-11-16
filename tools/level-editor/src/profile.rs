@@ -60,8 +60,8 @@ impl VersionProfile {
         VersionProfile::Z3V104,
     ];
 
-    /// Profiles whose open / save path works today.
-    pub const WORKING: [VersionProfile; 2] = [VersionProfile::TextNw222, VersionProfile::TextNw217];
+    /// Profiles whose open / save path works today (every listed format).
+    pub const WORKING: [VersionProfile; 9] = VersionProfile::ALL;
 
     /// Short id for the CLI (`--version` / `--profile`) and the combo box.
     pub fn name(self) -> &'static str {
