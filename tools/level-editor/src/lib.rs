@@ -33,6 +33,12 @@
 //! record's lines (`edit_object`). Object edits of binary levels are not
 //! supported yet; their records are kept and written back after a paint.
 //!
+//! **Undo.** Board paints (and erases) keep up to [`UNDO_LIMIT`] rectangle
+//! snapshots. Undo restores the tiles and the dirty flag from before that
+//! paint, so undoing every board change on an untouched file again writes the
+//! original bytes. Object edits are not on the undo stack. An open undo group
+//! merges several paints into one record (a drag stroke, a stamp).
+//!
 //! **Profiles.** The user picks a [`VersionProfile`] (2.22 text, GR-V1.03,
 //! GR-V1.05, Z3-V1.04, …). Open follows the file magic (`GLEVNW01`, `GR-V1`,
 //! `Z3-V1`). Save follows the path extension (`.nw` text, `.zelda` Zelda,
@@ -48,6 +54,7 @@ pub mod binary;
 pub mod gui;
 pub mod profile;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::io::Write;
@@ -69,6 +76,8 @@ pub const SIZE: usize = 64;
 pub const TILE_LIMIT: u16 = 4096;
 /// Layers the editor shows and edits (0 and 1).
 pub const LAYERS: usize = 2;
+/// How many board undo records one level keeps (oldest dropped first).
+pub const UNDO_LIMIT: usize = 128;
 
 /// A rectangle of board cells (top-left and size), clipped to the board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +200,31 @@ pub struct Summary {
     pub rows_other_layers_kept: usize,
 }
 
+/// One board write on the undo stack: a rectangle of tiles before and after.
+#[derive(Debug, Clone)]
+struct BoardChange {
+    layer: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+    /// Previous tiles, row-major in the rectangle (`None` = empty layer 1).
+    before: Vec<Option<u16>>,
+    /// Tiles after the write, same layout.
+    after: Vec<Option<u16>>,
+    /// `dirty` before this write (so a full undo can restore byte-identical saves).
+    dirty_before: bool,
+}
+
+/// Paints being merged into one undo record (a stroke or a stamp).
+#[derive(Debug, Clone)]
+struct UndoGroup {
+    layer: usize,
+    dirty_before: bool,
+    /// Cell → (before, after).
+    cells: BTreeMap<(usize, usize), (Option<u16>, Option<u16>)>,
+}
+
 /// An opened level.
 #[derive(Debug, Clone)]
 pub struct Document {
@@ -219,6 +253,11 @@ pub struct Document {
     raw: Vec<u8>,
     /// Binary only: objects and layers above 1 from the core reader.
     binary_level: Option<Level>,
+    undo: Vec<BoardChange>,
+    redo: Vec<BoardChange>,
+    /// When true, paints join [`group`] instead of each pushing their own undo.
+    grouping: bool,
+    group: Option<UndoGroup>,
 }
 
 fn strip_eol(line: &[u8]) -> &[u8] {
@@ -263,6 +302,10 @@ impl Document {
             profile,
             raw,
             binary_level: Some(level),
+            undo: Vec::new(),
+            redo: Vec::new(),
+            grouping: false,
+            group: None,
         }
     }
 
@@ -332,6 +375,10 @@ impl Document {
             profile: LevelProfile::Text,
             raw: data.to_vec(),
             binary_level: None,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            grouping: false,
+            group: None,
         };
         let mut i = 1;
         while i < doc.lines.len() {
@@ -538,7 +585,8 @@ impl Document {
 
     /// Paint a rectangle of `layer` (0 or 1) with one tile id, or empty it
     /// (`None`, layer 1 only). The same checks as `paint`. Returns how many
-    /// cells of that layer changed.
+    /// cells of that layer changed. A change is pushed on the undo stack (or
+    /// merged into an open undo group).
     pub fn paint_layer(
         &mut self,
         layer: usize,
@@ -574,32 +622,56 @@ impl Document {
             }
         }
         let tile = tile.map(|t| t as u16);
+        let dirty_before = self.dirty;
+        let mut before = Vec::with_capacity(w * h);
+        let mut after = Vec::with_capacity(w * h);
         let mut changed = 0;
         for yy in y..y + h {
             for xx in x..x + w {
                 let at = yy * SIZE + xx;
+                let old = if layer == 0 {
+                    Some(self.layer0[at])
+                } else {
+                    self.layer1[at]
+                };
+                before.push(old);
                 if layer == 0 {
                     let t = tile.expect("checked above");
                     if self.layer0[at] != t {
                         self.layer0[at] = t;
                         changed += 1;
                     }
-                } else if self.layer1[at] != tile {
-                    self.layer1[at] = tile;
-                    changed += 1;
+                    after.push(Some(t));
+                } else {
+                    if self.layer1[at] != tile {
+                        self.layer1[at] = tile;
+                        changed += 1;
+                    }
+                    after.push(tile);
                 }
             }
         }
         if changed > 0 {
             self.dirty = true;
             self.compose();
+            self.record_change(BoardChange {
+                layer,
+                x,
+                y,
+                w,
+                h,
+                before,
+                after,
+                dirty_before,
+            });
         }
         Ok(changed)
     }
 
     /// Flood-fill the 4-connected region of layer 0 that shares the tile at
     /// (x, y) with one tile id. Same checks as `paint`. Returns how many
-    /// tiles changed value.
+    /// tiles changed value. A change is pushed on the undo stack (or merged
+    /// into an open undo group).
     pub fn flood_fill(&mut self, x: usize, y: usize, tile: u32) -> Result<usize, EditError> {
         self.flood_fill_layer(0, x, y, Some(tile))
     }
@@ -608,7 +680,8 @@ impl Document {
     /// cell at (x, y) with one tile id, or empty it (`None`, layer 1 only).
     /// Neighbours share a side; diagonals do not join. Filling with the value
     /// already at the seed changes nothing and leaves the file as it was.
-    /// Returns how many cells of that layer changed.
+    /// Returns how many cells of that layer changed. A change is pushed on the
+    /// undo stack (or merged into an open undo group).
     pub fn flood_fill_layer(
         &mut self,
         layer: usize,
@@ -645,9 +718,13 @@ impl Document {
             return Ok(0);
         }
         let mut stack = vec![(x, y)];
-        let mut changed = 0;
+        let mut cells = Vec::new();
+        let mut seen = [false; SIZE * SIZE];
         while let Some((cx, cy)) = stack.pop() {
             let at = cy * SIZE + cx;
+            if seen[at] {
+                continue;
+            }
             let here = match layer {
                 0 => Some(self.layer0[at]),
                 _ => self.layer1[at],
@@ -655,12 +732,8 @@ impl Document {
             if here != seed {
                 continue;
             }
-            if layer == 0 {
-                self.layer0[at] = fill.expect("checked above");
-            } else {
-                self.layer1[at] = fill;
-            }
-            changed += 1;
+            seen[at] = true;
+            cells.push((cx, cy));
             if cx > 0 {
                 stack.push((cx - 1, cy));
             }
@@ -674,11 +747,228 @@ impl Document {
                 stack.push((cx, cy + 1));
             }
         }
-        if changed > 0 {
-            self.dirty = true;
-            self.compose();
+        if cells.is_empty() {
+            return Ok(0);
         }
-        Ok(changed)
+        let dirty_before = self.dirty;
+        let mut x0 = cells[0].0;
+        let mut y0 = cells[0].1;
+        let mut x1 = x0;
+        let mut y1 = y0;
+        for &(cx, cy) in &cells {
+            x0 = x0.min(cx);
+            y0 = y0.min(cy);
+            x1 = x1.max(cx);
+            y1 = y1.max(cy);
+        }
+        let w = x1 - x0 + 1;
+        let h = y1 - y0 + 1;
+        let mut before = Vec::with_capacity(w * h);
+        let mut after = Vec::with_capacity(w * h);
+        let mut fill_set = [false; SIZE * SIZE];
+        for &(cx, cy) in &cells {
+            fill_set[cy * SIZE + cx] = true;
+        }
+        for yy in y0..=y1 {
+            for xx in x0..=x1 {
+                let at = yy * SIZE + xx;
+                let old = if layer == 0 {
+                    Some(self.layer0[at])
+                } else {
+                    self.layer1[at]
+                };
+                before.push(old);
+                if fill_set[at] {
+                    if layer == 0 {
+                        self.layer0[at] = fill.expect("checked above");
+                    } else {
+                        self.layer1[at] = fill;
+                    }
+                    after.push(fill);
+                } else {
+                    after.push(old);
+                }
+            }
+        }
+        self.dirty = true;
+        self.compose();
+        self.record_change(BoardChange {
+            layer,
+            x: x0,
+            y: y0,
+            w,
+            h,
+            before,
+            after,
+            dirty_before,
+        });
+        Ok(cells.len())
+    }
+
+    /// Start merging paints into one undo record until [`end_undo_group`].
+    /// A drag stroke or a stamp uses this so one Undo reverses the whole write.
+    pub fn begin_undo_group(&mut self) {
+        self.commit_undo_group();
+        self.grouping = true;
+    }
+
+    /// Finish the open undo group and push it (if it changed any tile).
+    pub fn end_undo_group(&mut self) {
+        self.grouping = false;
+        self.commit_undo_group();
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
+    /// How many board undos are stacked (at most [`UNDO_LIMIT`]).
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+
+    /// Restore the last board write. Returns false when there is nothing to undo.
+    pub fn undo(&mut self) -> bool {
+        self.end_undo_group();
+        let Some(change) = self.undo.pop() else {
+            return false;
+        };
+        self.apply_tiles(&change, true);
+        self.dirty = change.dirty_before;
+        self.compose();
+        self.redo.push(change);
+        true
+    }
+
+    /// Re-apply the last undone board write. Returns false when the redo stack is empty.
+    pub fn redo(&mut self) -> bool {
+        self.end_undo_group();
+        let Some(change) = self.redo.pop() else {
+            return false;
+        };
+        self.apply_tiles(&change, false);
+        self.dirty = true;
+        self.compose();
+        self.push_undo(change);
+        true
+    }
+
+    fn record_change(&mut self, change: BoardChange) {
+        self.redo.clear();
+        if !self.grouping {
+            self.push_undo(change);
+            return;
+        }
+        if self.group.as_ref().is_some_and(|g| g.layer != change.layer) {
+            self.commit_undo_group();
+        }
+        let group = self.group.get_or_insert_with(|| UndoGroup {
+            layer: change.layer,
+            dirty_before: change.dirty_before,
+            cells: BTreeMap::new(),
+        });
+        for yy in 0..change.h {
+            for xx in 0..change.w {
+                let cell = (change.x + xx, change.y + yy);
+                let i = yy * change.w + xx;
+                let before = change.before[i];
+                let after = change.after[i];
+                match group.cells.entry(cell) {
+                    std::collections::btree_map::Entry::Vacant(e) => {
+                        e.insert((before, after));
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut e) => {
+                        e.get_mut().1 = after;
+                    }
+                }
+            }
+        }
+    }
+
+    fn commit_undo_group(&mut self) {
+        let Some(group) = self.group.take() else {
+            return;
+        };
+        if group.cells.is_empty() {
+            return;
+        }
+        let mut iter = group.cells.keys();
+        let &(fx, fy) = iter.next().expect("non-empty");
+        let (mut x0, mut y0, mut x1, mut y1) = (fx, fy, fx, fy);
+        for &(x, y) in iter {
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x);
+            y1 = y1.max(y);
+        }
+        let w = x1 - x0 + 1;
+        let h = y1 - y0 + 1;
+        let mut before = Vec::with_capacity(w * h);
+        let mut after = Vec::with_capacity(w * h);
+        let mut changed = false;
+        for yy in y0..=y1 {
+            for xx in x0..=x1 {
+                if let Some(&(b, a)) = group.cells.get(&(xx, yy)) {
+                    before.push(b);
+                    after.push(a);
+                    if b != a {
+                        changed = true;
+                    }
+                } else {
+                    // a hole in the bounding box: leave the tile as it is
+                    let t = if group.layer == 0 {
+                        Some(self.layer0[yy * SIZE + xx])
+                    } else {
+                        self.layer1[yy * SIZE + xx]
+                    };
+                    before.push(t);
+                    after.push(t);
+                }
+            }
+        }
+        if changed {
+            self.push_undo(BoardChange {
+                layer: group.layer,
+                x: x0,
+                y: y0,
+                w,
+                h,
+                before,
+                after,
+                dirty_before: group.dirty_before,
+            });
+        }
+    }
+
+    fn push_undo(&mut self, change: BoardChange) {
+        if self.undo.len() >= UNDO_LIMIT {
+            self.undo.remove(0);
+        }
+        self.undo.push(change);
+    }
+
+    fn apply_tiles(&mut self, change: &BoardChange, use_before: bool) {
+        let tiles = if use_before {
+            &change.before
+        } else {
+            &change.after
+        };
+        for yy in 0..change.h {
+            for xx in 0..change.w {
+                let at = (change.y + yy) * SIZE + (change.x + xx);
+                let t = tiles[yy * change.w + xx];
+                if change.layer == 0 {
+                    self.layer0[at] = t.expect("layer 0 always has a tile");
+                } else {
+                    self.layer1[at] = t;
+                }
+            }
+        }
+    }
     }
 
     /// Copy a rectangle of `layer` (0 or 1) into a block. Empty layer-1 cells
