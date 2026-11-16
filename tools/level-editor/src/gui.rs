@@ -491,7 +491,10 @@ impl Editor {
             EditError::Bounds("nothing is selected; drag a rectangle with the Select tool".into())
         })?;
         let layer = self.layer;
-        let block = self.doc().ok_or_else(no_level)?.read_layer_block(layer, rect)?;
+        let block = self
+            .doc()
+            .ok_or_else(no_level)?
+            .read_layer_block(layer, rect)?;
         self.clipboard = Some(block.clone());
         self.floating = Some(FloatingPaste {
             block,
@@ -509,7 +512,10 @@ impl Editor {
             EditError::Bounds("nothing is selected; drag a rectangle with the Select tool".into())
         })?;
         let layer = self.layer;
-        let block = self.doc().ok_or_else(no_level)?.read_layer_block(layer, rect)?;
+        let block = self
+            .doc()
+            .ok_or_else(no_level)?
+            .read_layer_block(layer, rect)?;
         self.clipboard = Some(block.clone());
         self.floating = Some(FloatingPaste {
             block,
