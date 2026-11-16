@@ -5,7 +5,7 @@
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{EditorApp, Sheet, Tool};
-use level_editor::{VersionProfile, tile_code, Document, EditError, ObjectEdit, ObjectKind, Version, SIZE};
+use level_editor::{tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, SIZE};
 use seihai_core::assets::Level;
 
 fn board(eol: &str) -> String {
@@ -263,7 +263,7 @@ fn window_objects_tool_drags_a_baddy() {
         .id;
     let (a, b) = (h.board_at(9.0, 10.0), h.board_at(12.0, 13.0));
     h.press(a);
-    assert_eq!(h.app.editor.selected, Some(id));
+    assert_eq!(h.app.editor.selected(), Some(id));
     h.move_to(b);
     h.release(b);
     let baddy = h.app.editor.doc().unwrap().object(id).unwrap();
