@@ -119,7 +119,7 @@ fn editor_paint_pick_and_save() {
 fn editor_flood_fill_and_noop() {
     let path = copy_of("new1.nw", "flood.nw");
     let original = std::fs::read(&path).unwrap();
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&path).unwrap();
     ed.tool = Tool::Fill;
     let seed = ed.doc().unwrap().tile(8, 8).unwrap();
@@ -155,7 +155,7 @@ fn tabs_keep_each_level_and_its_unsaved_edits() {
     let b = copy_of("new2.nw", "tab-b.nw");
     let a_bytes = std::fs::read(&a).unwrap();
     let b_bytes = std::fs::read(&b).unwrap();
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::TextNw222);
     ed.open(&a).unwrap();
     ed.select(42).unwrap();
     assert_eq!(ed.paint_at(1, 1).unwrap(), 1);

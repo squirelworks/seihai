@@ -243,7 +243,7 @@ fn main() {
                 })
                 .collect();
             let out = target(&a, file);
-            let mut doc = open(file);
+            let mut doc = open(file, a.profile);
             let (x, y, tile) = (nums[0] as usize, nums[1] as usize, nums[2]);
             let changed = doc
                 .flood_fill_layer(a.layer, x, y, Some(tile))
