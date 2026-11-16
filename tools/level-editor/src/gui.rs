@@ -347,14 +347,14 @@ impl Editor {
 
     /// Start one undo record for a paint or erase stroke (many cells).
     pub fn begin_stroke(&mut self) {
-        if let Some(doc) = self.doc.as_mut() {
+        if let Some(doc) = self.doc_mut() {
             doc.begin_undo_group();
         }
     }
 
     /// Finish the stroke's undo record.
     pub fn end_stroke(&mut self) {
-        if let Some(doc) = self.doc.as_mut() {
+        if let Some(doc) = self.doc_mut() {
             doc.end_undo_group();
         }
     }
@@ -418,38 +418,38 @@ impl Editor {
         Ok(self.changed(n))
     }
 
-    /// Undo the last board write. Object edits are not undone.
+    /// Undo the last board write on the active tab. Object edits are not undone.
     pub fn undo(&mut self) -> bool {
-        let Some(doc) = self.doc.as_mut() else {
+        let Some(tab) = self.active_tab_mut() else {
             return false;
         };
-        if !doc.undo() {
+        if !tab.doc.undo() {
             return false;
         }
-        self.unsaved = doc.is_modified();
+        tab.unsaved = tab.doc.is_modified();
         self.board_rev += 1;
         true
     }
 
-    /// Redo the last undone board write.
+    /// Redo the last undone board write on the active tab.
     pub fn redo(&mut self) -> bool {
-        let Some(doc) = self.doc.as_mut() else {
+        let Some(tab) = self.active_tab_mut() else {
             return false;
         };
-        if !doc.redo() {
+        if !tab.doc.redo() {
             return false;
         }
-        self.unsaved = doc.is_modified();
+        tab.unsaved = tab.doc.is_modified();
         self.board_rev += 1;
         true
     }
 
     pub fn can_undo(&self) -> bool {
-        self.doc.as_ref().is_some_and(|d| d.can_undo())
+        self.doc().is_some_and(|d| d.can_undo())
     }
 
     pub fn can_redo(&self) -> bool {
-        self.doc.as_ref().is_some_and(|d| d.can_redo())
+        self.doc().is_some_and(|d| d.can_redo())
     }
 
     /// Select the tile under board cell (x, y) on the active layer (the right

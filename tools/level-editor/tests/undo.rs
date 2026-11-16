@@ -2,7 +2,7 @@
 //! groups for a stroke, and a full undo restoring byte-identical bytes.
 
 use level_editor::gui::Editor;
-use level_editor::{Document, Version, UNDO_LIMIT};
+use level_editor::{Document, VersionProfile, UNDO_LIMIT};
 use std::path::{Path, PathBuf};
 
 fn starter(name: &str) -> PathBuf {
@@ -109,7 +109,7 @@ fn undo_cap_drops_the_oldest() {
 
 #[test]
 fn editor_stroke_undo_and_keys_path() {
-    let mut ed = Editor::new(Version::V222);
+    let mut ed = Editor::new(VersionProfile::DEFAULT);
     ed.open(&starter("new1.nw")).unwrap();
     let old = ed.doc().unwrap().tile(2, 3).unwrap();
     ed.select(42).unwrap();
