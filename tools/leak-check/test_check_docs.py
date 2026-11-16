@@ -17,8 +17,9 @@ def test_flags_code_addresses_names_and_public_ips() -> None:
     assert any('code address' in e for e in line_errors('handler at 0x2e0b88'))
     assert any('disassembler name' in e for e in line_errors('see FUN_003c9a80'))
     assert any('PTR_DAT_' in e for e in line_errors('pad PTR_DAT_007ad4b8'))
-    assert any('public IPv4' in e for e in line_errors('host 45.59.132.11:30903'))
-    assert not ip_allowed('204.85.8.128')
+    # Neutral public DNS — not a game-server host from the scrubbed docs.
+    assert any('public IPv4' in e for e in line_errors('host 8.8.8.8:53'))
+    assert not ip_allowed('1.1.1.1')
 
 
 def test_ip_allowlist() -> None:
@@ -26,8 +27,6 @@ def test_ip_allowlist() -> None:
     assert ip_allowed('192.0.2.10')
     assert ip_allowed('198.51.100.1')
     assert ip_allowed('203.0.113.5')
-    assert not ip_allowed('45.59.132.11')
-    # Single-digit first octet versions (e.g. 4.0.2.11) stay allowed; a
-    # public host with a larger first octet does not.
-    assert ip_allowed('4.0.2.11')
-    assert not ip_allowed('45.1.2.3')
+    assert ip_allowed('4.0.2.11')  # client version string in the docs
+    assert not ip_allowed('8.8.8.8')
+    assert not ip_allowed('1.1.1.1')

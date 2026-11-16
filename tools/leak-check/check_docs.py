@@ -4,7 +4,7 @@ Fails on:
 * hex code/data addresses (`0x` + 5..8 digits) not on the allowlist,
 * disassembler names (`FUN_` / `DAT_` / `LAB_` / `PTR_DAT_` / …),
 * public IPv4 literals outside the allowlist (loopback, RFC 5737 docs,
-  RFC 2544 benchmarking, and version-like `N.N.N.N` strings).
+  RFC 2544 benchmarking, and known client-version dotted quads).
 
 The community listserver hostname is out of scope for this check.
 Pure Python. Run from the repo root: `python3 tools/leak-check/check_docs.py`.
@@ -32,11 +32,22 @@ NAME_RE = re.compile(
     r'\b(?:(?:FUN|DAT|LAB|PTR_DAT|PTR_FUN|thunk_FUN)_[0-9a-fA-F]{4,}|sub_[0-9a-fA-F]{6,8})\b'
 )
 IP_RE = re.compile(r'\b([0-9]{1,3}\.){3}[0-9]{1,3}\b')
-VERSION_IP_RE = re.compile(r'\b[0-9]\.[0-9]+\.[0-9]+\.[0-9]+\b')
+
+# Client / build version strings that look like dotted quads in the docs.
+# Keep this an explicit list so neutral public DNS (8.8.8.8, 1.1.1.1) still fail.
+ALLOWED_VERSION_QUADS = {
+    '0.0.0.0',
+    '2.2.2.0',
+    '2.3.1.1',
+    '4.0.2.11',
+    '6.0.0.7',
+    '6.0.1.5',
+    '6.0.3.4',
+}
 
 
 def ip_allowed(ip: str) -> bool:
-    if VERSION_IP_RE.fullmatch(ip):
+    if ip in ALLOWED_VERSION_QUADS:
         return True
     parts = ip.split('.')
     if len(parts) != 4 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
