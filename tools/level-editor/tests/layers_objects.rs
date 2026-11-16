@@ -599,7 +599,7 @@ fn window_objects_tool_drags_a_link_and_adds_at_the_clicked_cell() {
     // the first link is 2 x 2 at (41, 20); grab it in its middle and drag 3 right, 2 down
     let (a, b) = (h.board_at(42.0, 21.0), h.board_at(45.0, 23.0));
     h.press(a);
-    assert_eq!(h.app.editor.selected, Some(0));
+    assert_eq!(h.app.editor.selected(), Some(0));
     h.move_to(b);
     h.release(b);
     let link = h.app.editor.doc().unwrap().object(0).unwrap();
@@ -608,7 +608,7 @@ fn window_objects_tool_drags_a_link_and_adds_at_the_clicked_cell() {
     // a click on an empty cell deselects and sets where new objects go
     let e = h.board_at(5.5, 6.5);
     h.click(e);
-    assert_eq!(h.app.editor.selected, None);
+    assert_eq!(h.app.editor.selected(), None);
     let id = h.app.editor.add_object(ObjectKind::Npc, 5, 6).unwrap();
     assert_eq!(
         h.app.editor.doc().unwrap().object(id).unwrap().kind,

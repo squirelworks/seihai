@@ -146,6 +146,69 @@ fn open_error_keeps_the_current_level() {
     std::fs::write(&bad, b"GR-V1.03 binary").unwrap();
     assert!(matches!(ed.open(&bad), Err(EditError::NotText(_))));
     assert_eq!(ed.path(), Some(path.as_path()));
+    assert_eq!(ed.tabs().len(), 1);
+}
+
+#[test]
+fn tabs_keep_each_level_and_its_unsaved_edits() {
+    let a = copy_of("new1.nw", "tab-a.nw");
+    let b = copy_of("new2.nw", "tab-b.nw");
+    let a_bytes = std::fs::read(&a).unwrap();
+    let b_bytes = std::fs::read(&b).unwrap();
+    let mut ed = Editor::new(Version::V222);
+    ed.open(&a).unwrap();
+    ed.select(42).unwrap();
+    assert_eq!(ed.paint_at(1, 1).unwrap(), 1);
+    assert!(ed.has_unsaved());
+    assert_eq!(ed.tabs().len(), 1);
+
+    ed.open(&b).unwrap();
+    assert_eq!(ed.tabs().len(), 2);
+    assert_eq!(ed.active(), Some(1));
+    assert_eq!(ed.path(), Some(b.as_path()));
+    assert!(!ed.has_unsaved(), "the new tab starts clean");
+    assert!(ed.has_any_unsaved(), "the first tab still has changes");
+    ed.select(99).unwrap();
+    assert_eq!(ed.paint_at(2, 2).unwrap(), 1);
+
+    ed.set_active(0);
+    assert_eq!(ed.path(), Some(a.as_path()));
+    assert_eq!(ed.doc().unwrap().tile(1, 1), Some(42));
+    assert!(ed.has_unsaved());
+    // re-opening the same path switches without reloading (keeps the paint)
+    ed.open(&a).unwrap();
+    assert_eq!(ed.tabs().len(), 2);
+    assert_eq!(ed.active(), Some(0));
+    assert_eq!(ed.doc().unwrap().tile(1, 1), Some(42));
+
+    ed.set_active(1);
+    assert_eq!(ed.doc().unwrap().tile(2, 2), Some(99));
+    ed.save().unwrap();
+    assert!(!ed.has_unsaved());
+    assert!(ed.has_any_unsaved(), "tab a is still dirty");
+    assert_eq!(ed.save_all().unwrap(), 1);
+    assert!(!ed.has_any_unsaved());
+
+    // untouched bytes: painting the old tiles back restores each starter
+    ed.set_active(0);
+    let old_a = Document::parse(&a_bytes).unwrap().tile(1, 1).unwrap();
+    ed.select(old_a as u32).unwrap();
+    ed.paint_at(1, 1).unwrap();
+    ed.save().unwrap();
+    assert_eq!(std::fs::read(&a).unwrap(), a_bytes);
+    ed.set_active(1);
+    let old_b = Document::parse(&b_bytes).unwrap().tile(2, 2).unwrap();
+    ed.select(old_b as u32).unwrap();
+    ed.paint_at(2, 2).unwrap();
+    ed.save().unwrap();
+    assert_eq!(std::fs::read(&b).unwrap(), b_bytes);
+
+    assert!(ed.close_tab(0));
+    assert_eq!(ed.tabs().len(), 1);
+    assert_eq!(ed.path(), Some(b.as_path()));
+    assert!(ed.close_tab(0));
+    assert!(ed.tabs().is_empty());
+    assert!(ed.doc().is_none());
 }
 
 #[test]
@@ -338,4 +401,29 @@ fn window_without_a_file_shows_no_board() {
     assert!(h.app.editor.doc().is_none());
     assert!(h.app.board_rect.is_none());
     assert!(h.app.palette_rect.is_some());
+}
+
+#[test]
+fn window_tabs_switch_between_open_levels() {
+    let a = copy_of("new1.nw", "win-tab-a.nw");
+    let b = copy_of("new2.nw", "win-tab-b.nw");
+    let mut h = Harness::new(Some(&a));
+    assert_eq!(h.app.editor.tabs().len(), 1);
+    h.app.editor.select(11).unwrap();
+    let cell = h.board_at(4, 5);
+    h.click(cell, PointerButton::Primary);
+    assert_eq!(h.app.editor.doc().unwrap().tile(4, 5), Some(11));
+
+    h.app.editor.open(&b).unwrap();
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.editor.tabs().len(), 2);
+    assert_eq!(h.app.editor.active(), Some(1));
+    assert_eq!(h.app.tab_rects.len(), 2);
+    // click the first tab's label
+    let (_, rect) = h.app.tab_rects[0];
+    h.click(rect.center(), PointerButton::Primary);
+    assert_eq!(h.app.editor.active(), Some(0));
+    assert_eq!(h.app.editor.doc().unwrap().tile(4, 5), Some(11));
+    assert!(h.app.editor.has_unsaved());
 }
