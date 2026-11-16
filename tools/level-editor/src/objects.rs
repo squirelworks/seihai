@@ -27,14 +27,32 @@ impl ObjectKind {
         }
     }
 
-    /// The kinds the editor can place, move and edit (baddies are only shown).
-    pub const EDITABLE: [ObjectKind; 4] = [
+    /// The kinds the editor can place, move and edit.
+    pub const EDITABLE: [ObjectKind; 5] = [
         ObjectKind::Link,
         ObjectKind::Sign,
         ObjectKind::Chest,
         ObjectKind::Npc,
+        ObjectKind::Baddy,
     ];
 }
+
+/// The ten baddy types (0 to 9), as the classic editor lists them.
+pub const BADDY_TYPE_NAMES: [&str; 10] = [
+    "gray soldier",
+    "blue soldier",
+    "red soldier",
+    "shooting soldier",
+    "swamp soldier",
+    "frog / hare",
+    "octopus",
+    "gold soldier",
+    "lizardon",
+    "dragon",
+];
+
+/// How many verse lines the baddy editor shows and writes.
+pub const BADDY_VERSE_LINES: usize = 3;
 
 /// Where a record sits in the file: its first and last line (inclusive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +80,9 @@ pub struct Object {
     pub arrival: (String, String),
     /// NPC: the first script line; sign: the first text line.
     pub first_line: String,
+    /// Baddy: the verse lines between the header and `BADDYEND` (at most
+    /// [`BADDY_VERSE_LINES`] are edited; any further lines are kept).
+    pub verses: Vec<String>,
     /// The record could not be read by the client's parser (shown, not editable).
     pub unreadable: bool,
 }
@@ -70,7 +91,7 @@ pub struct Object {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ObjectEdit {
     /// Move the marker's top-left corner to (x, y), in tiles. Links, signs and
-    /// chests take whole tiles (rounded); NPCs keep the fraction.
+    /// chests and baddies take whole tiles (rounded); NPCs keep the fraction.
     Move(f32, f32),
     /// A link's destination level.
     LinkDest(String),
@@ -87,6 +108,13 @@ pub enum ObjectEdit {
     /// Every line of a sign's text (between `SIGN` and `SIGNEND`). Replaces
     /// the whole body; an empty list leaves only the end line.
     SignText(Vec<String>),
+    /// A baddy's type (0 to 9, as written on the `BADDY` line).
+    BaddyKind(String),
+    /// Up to the first [`BADDY_VERSE_LINES`] verse lines of a baddy. They
+    /// replace that many lines between the header and `BADDYEND`; any lines
+    /// after them are kept. Types 4 to 6 (swamp, hare, octopus) have no
+    /// verses in the classic editor; the pane still accepts an empty list.
+    BaddyVerses(Vec<String>),
 }
 
 /// How many rows the script / sign text pane prefers to show at once.
@@ -150,6 +178,7 @@ impl Document {
             name: String::new(),
             arrival: (String::new(), String::new()),
             first_line: String::new(),
+            verses: Vec::new(),
             unreadable: false,
         };
         let head = lines
@@ -192,6 +221,16 @@ impl Document {
                 o.name = b.kind.clone();
             }),
         });
+        if r.kind == ObjectKind::Baddy && found.is_some() && r.last > r.first {
+            // read verse lines from the file so empty trailing lines are kept
+            let end = text(&self.lines[r.last]).trim() == "BADDYEND";
+            let last_body = if end { lines.len() - 1 } else { lines.len() };
+            o.verses = lines[1..last_body]
+                .iter()
+                .take(BADDY_VERSE_LINES)
+                .cloned()
+                .collect();
+        }
         if found.is_none() {
             o.unreadable = true;
             // place it by its header numbers if there are any, so it can still be seen
@@ -297,9 +336,6 @@ impl Document {
             .records
             .get(id)
             .ok_or_else(|| bad(format!("there is no object {id}")))?;
-        if r.kind == ObjectKind::Baddy {
-            return Err(bad("baddies are shown but not edited yet"));
-        }
         let current = self.read_record(id, &r);
         if current.unreadable {
             return Err(bad(format!(
@@ -313,6 +349,9 @@ impl Document {
             }
             ObjectEdit::SignText(new_lines) => {
                 return self.set_text_body(id, r, ObjectKind::Sign, new_lines.clone());
+            }
+            ObjectEdit::BaddyVerses(new_lines) => {
+                return self.set_baddy_verses(id, r, new_lines.clone());
             }
             _ => {}
         }
@@ -411,7 +450,24 @@ impl Document {
                     self.splice(r.last, r.last, vec![new, end_line])
                 };
             }
-            ObjectEdit::Script(_) | ObjectEdit::SignText(_) => unreachable!("handled above"),
+            ObjectEdit::BaddyKind(kind) => {
+                let kind = kind.trim();
+                let n: u32 = kind
+                    .parse()
+                    .map_err(|_| bad("a baddy type is a number 0 to 9"))?;
+                if r.kind != ObjectKind::Baddy || n > 9 || kind.contains(char::is_whitespace) {
+                    return Err(bad("a baddy type is a number 0 to 9"));
+                }
+                if head.len() < 4 {
+                    return Err(bad(
+                        "this baddy header is incomplete, so it is left as it is",
+                    ));
+                }
+                head[3] = kind.to_string();
+            }
+            ObjectEdit::Script(_) | ObjectEdit::SignText(_) | ObjectEdit::BaddyVerses(_) => {
+                unreachable!("handled above")
+            }
         }
         let new = self.line(&head.join(" "), r.first);
         let check = Level::parse(&format!(
@@ -423,6 +479,56 @@ impl Document {
             return Err(bad("the link would not read back; nothing was changed"));
         }
         self.splice(r.first, r.first, vec![new])
+    }
+
+
+    /// Replace the top of a baddy's verses: the lines the pane showed (up to
+    /// [`BADDY_VERSE_LINES`]) become `new_lines`; lines after them are kept.
+    fn set_baddy_verses(
+        &mut self,
+        id: usize,
+        r: Record,
+        new_lines: Vec<String>,
+    ) -> Result<(), EditError> {
+        if r.kind != ObjectKind::Baddy {
+            return Err(bad(format!("a {} has no verses", r.kind.name())));
+        }
+        let current = self.read_record(id, &r);
+        if current.unreadable || text(&self.lines[r.last]).trim() != "BADDYEND" || r.last == r.first
+        {
+            return Err(bad(
+                "this baddy record could not be read, so it is left as it is",
+            ));
+        }
+        if new_lines.len() > BADDY_VERSE_LINES {
+            return Err(bad(format!(
+                "a baddy has at most {BADDY_VERSE_LINES} verse lines"
+            )));
+        }
+        if new_lines.iter().any(|l| l.contains(['\n', '\r'])) {
+            return Err(bad("a verse line cannot hold a line break"));
+        }
+        if new_lines.iter().any(|l| l.trim() == "BADDYEND") {
+            return Err(bad(
+                "a verse line cannot be BADDYEND; it would end the baddy early",
+            ));
+        }
+        let shown = current.verses.len();
+        let new: Vec<Vec<u8>> = new_lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| self.line(l, r.first + 1 + i.min(shown.saturating_sub(1))))
+            .collect();
+        if shown == 0 {
+            if new.is_empty() {
+                return Ok(());
+            }
+            let mut with_end = new;
+            with_end.push(self.lines[r.last].clone());
+            return self.splice(r.last, r.last, with_end);
+        }
+        let (first, last) = (r.first + 1, r.first + shown);
+        self.splice(first, last, new)
     }
 
     /// Replace the whole body of an NPC script or a sign's text. Each new
@@ -482,7 +588,7 @@ impl Document {
         self.splice(r.first + 1, r.last - 1, new)
     }
 
-    /// Add a link, sign, chest or NPC at (x, y) at the end of the file.
+    /// Add a link, sign, chest, NPC or baddy at (x, y) at the end of the file.
     /// Returns its id.
     pub fn add_object(&mut self, kind: ObjectKind, x: i32, y: i32) -> Result<usize, EditError> {
         if !(0..SIZE as i32).contains(&x) || !(0..SIZE as i32).contains(&y) {
@@ -496,7 +602,13 @@ impl Document {
             ObjectKind::Sign => vec![format!("SIGN {x} {y}"), String::new(), "SIGNEND".into()],
             ObjectKind::Chest => vec![format!("CHEST {x} {y} greenrupee -1")],
             ObjectKind::Npc => vec![format!("NPC - {x} {y}"), String::new(), "NPCEND".into()],
-            ObjectKind::Baddy => return Err(bad("baddies are shown but not placed yet")),
+            ObjectKind::Baddy => vec![
+                format!("BADDY {x} {y} 0"),
+                String::new(),
+                String::new(),
+                String::new(),
+                "BADDYEND".into(),
+            ],
         };
         let last = self.lines.len() - 1;
         let mut tail = self.lines[last].clone();

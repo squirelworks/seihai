@@ -1,6 +1,6 @@
 //! The level editor window: a tile palette, painting on layer 0 or 1, flood
-//! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC
-//! markers, a `.gmap` grid that opens its levels, tabs for several open
+//! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC /
+//! baddy markers, a `.gmap` grid that opens its levels, tabs for several open
 //! levels, tile selection with copy / cut / paste / delete, and save. It
 //! sits on the command-line slice (`Document`): painting is
 //! `Document::paint_layer`, fill is `Document::flood_fill_layer`, selection
@@ -16,7 +16,8 @@
 
 use crate::{
     Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, TileBlock, TileRect,
-    VersionProfile, LAYERS, SCRIPT_PANE_LINES, SIZE, TILE_LIMIT,
+    VersionProfile, BADDY_TYPE_NAMES, BADDY_VERSE_LINES, LAYERS, SCRIPT_PANE_LINES, SIZE,
+    TILE_LIMIT,
 };
 use eframe::egui;
 use egui::{
@@ -83,7 +84,7 @@ pub enum Tool {
     Stamp,
     /// Drag a tile rectangle for copy, cut, paste and delete.
     Select,
-    /// Select and drag links, signs, chests and NPCs.
+    /// Select and drag links, signs, chests, NPCs and baddies.
     Objects,
 }
 
@@ -452,7 +453,7 @@ impl Editor {
         self.doc().ok_or_else(no_level)?.sign_text(id)
     }
 
-    /// Add a link, sign, chest or NPC at (x, y) and select it.
+    /// Add a link, sign, chest, NPC or baddy at (x, y) and select it.
     pub fn add_object(&mut self, kind: ObjectKind, x: i32, y: i32) -> Result<usize, EditError> {
         let id = self
             .doc_mut()
@@ -741,6 +742,9 @@ struct ObjectFields {
     arrival_x: String,
     arrival_y: String,
     first_line: String,
+    /// Baddy type 0 to 9 (the combo box index).
+    baddy_kind: usize,
+    verses: [String; BADDY_VERSE_LINES],
     x: f32,
     y: f32,
     w: i32,
@@ -1513,12 +1517,24 @@ impl EditorApp {
         if self.fields.id != Some(o.id)
             || self.drag.is_none() && (self.fields.x != o.x || self.fields.y != o.y)
         {
+            let mut verses = [String::new(), String::new(), String::new()];
+            for (i, v) in o.verses.iter().take(BADDY_VERSE_LINES).enumerate() {
+                verses[i] = v.clone();
+            }
+            let baddy_kind = o
+                .name
+                .parse::<usize>()
+                .ok()
+                .filter(|n| *n < BADDY_TYPE_NAMES.len())
+                .unwrap_or(0);
             self.fields = ObjectFields {
                 id: Some(o.id),
                 dest: o.name.clone(),
                 arrival_x: o.arrival.0.clone(),
                 arrival_y: o.arrival.1.clone(),
                 first_line: o.first_line.clone(),
+                baddy_kind,
+                verses,
                 x: o.x,
                 y: o.y,
                 w: o.w as i32,
@@ -1528,10 +1544,6 @@ impl EditorApp {
         ui.strong(format!("{} {}", o.kind.name(), o.id));
         if o.unreadable {
             ui.label("The client's parser could not read this record; it is kept as it is.");
-            return;
-        }
-        if o.kind == ObjectKind::Baddy {
-            ui.label("Baddies are shown, not edited, in this slice.");
             return;
         }
         let mut edits: Vec<ObjectEdit> = Vec::new();
@@ -1605,7 +1617,40 @@ impl EditorApp {
             ObjectKind::Chest => {
                 ui.label(format!("Item: {}", o.name));
             }
-            ObjectKind::Baddy => {}
+            ObjectKind::Baddy => {
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    egui::ComboBox::from_id_salt("baddy-kind")
+                        .selected_text(format!(
+                            "{} ({})",
+                            self.fields.baddy_kind, BADDY_TYPE_NAMES[self.fields.baddy_kind]
+                        ))
+                        .show_ui(ui, |ui| {
+                            for (i, name) in BADDY_TYPE_NAMES.iter().enumerate() {
+                                ui.selectable_value(
+                                    &mut self.fields.baddy_kind,
+                                    i,
+                                    format!("{i} ({name})"),
+                                );
+                            }
+                        });
+                    if ui.button("Apply type").clicked() {
+                        edits.push(ObjectEdit::BaddyKind(self.fields.baddy_kind.to_string()));
+                    }
+                });
+                // types 4 to 6 (swamp, hare, octopus) have no verses in the classic editor
+                if !(4..=6).contains(&self.fields.baddy_kind) {
+                    ui.label("Verses (on sight, on hurt, on attack)");
+                    for v in &mut self.fields.verses {
+                        ui.text_edit_singleline(v);
+                    }
+                    if ui.button("Apply verses").clicked() {
+                        edits.push(ObjectEdit::BaddyVerses(self.fields.verses.to_vec()));
+                    }
+                } else {
+                    ui.label("This type has no verses.");
+                }
+            }
         }
         for e in edits {
             let r = self.editor.edit_object(o.id, e);
@@ -1758,7 +1803,7 @@ impl EditorApp {
                         ObjectKind::Npc => "NPC".to_string(),
                         ObjectKind::Sign => "sign".to_string(),
                         ObjectKind::Chest => "chest".to_string(),
-                        ObjectKind::Baddy => "baddy".to_string(),
+                        ObjectKind::Baddy => format!("baddy {}", o.name),
                     };
                     painter.text(r.left_top() + Vec2::new(2.0, 1.0), Align2::LEFT_TOP, label, FontId::proportional(10.0), Color32::WHITE);
                 }
