@@ -726,6 +726,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
                     .unwrap_or_else(|| "playery".into()),
             ),
             first_line: String::new(),
+            verses: Vec::new(),
             unreadable: false,
         });
         id += 1;
@@ -741,6 +742,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             name: String::new(),
             arrival: (String::new(), String::new()),
             first_line: s.text.lines().next().unwrap_or("").to_string(),
+            verses: Vec::new(),
             unreadable: false,
         });
         id += 1;
@@ -756,6 +758,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             name: c.item.clone(),
             arrival: (String::new(), String::new()),
             first_line: String::new(),
+            verses: Vec::new(),
             unreadable: false,
         });
         id += 1;
@@ -771,6 +774,7 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             name: n.image.clone(),
             arrival: (String::new(), String::new()),
             first_line: n.script.lines().next().unwrap_or("").to_string(),
+            verses: Vec::new(),
             unreadable: false,
         });
         id += 1;
@@ -786,6 +790,12 @@ fn objects_from_level(level: &Level) -> Vec<Object> {
             name: b.kind.clone(),
             arrival: (String::new(), String::new()),
             first_line: String::new(),
+            verses: b
+                .verses
+                .lines()
+                .take(BADDY_VERSE_LINES)
+                .map(str::to_string)
+                .collect(),
             unreadable: false,
         });
         id += 1;
