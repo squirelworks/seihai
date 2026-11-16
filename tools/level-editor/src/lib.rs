@@ -19,12 +19,13 @@
 //!
 //! **Layers.** The 2.22 reader does not read a row's layer field, so `tile`
 //! and `row` give that view: every row on one board, in file order. The
-//! editor also keeps layer 0 and layer 1 apart (`layer_tile`,
+//! editor also keeps layers 0 to `LAYERS - 1` apart (`layer_tile`,
 //! `paint_layer`), the way Gonstruct does: layer 0 starts as tile 0
-//! everywhere, layer 1 starts empty. After a change, layer 0 is written as
-//! the 64 canonical rows and layer 1 as one `BOARD x y w 1 data` row per run
-//! of filled cells; rows of other layers are written back as they were.
-//! Binary `GR-V1.05` keeps layers above 1 from the core reader.
+//! everywhere, higher layers start empty. After a change, layer 0 is written
+//! as the 64 canonical rows and each higher editable layer as one
+//! `BOARD x y w layer data` row per run of filled cells; rows of layers at
+//! or above `LAYERS` are written back as they were. Binary `GR-V1.05` keeps
+//! layers at or above `LAYERS` from the core reader.
 //!
 //! **Objects.** Links, signs, chests, baddies and NPCs are records of lines
 //! (`objects`) on text levels, read with the client's level parser. Moving
@@ -74,8 +75,9 @@ use seihai_core::assets::Level;
 pub const SIZE: usize = 64;
 /// Tile ids the text format can hold (two base64 characters).
 pub const TILE_LIMIT: u16 = 4096;
-/// Layers the editor shows and edits (0 and 1).
-pub const LAYERS: usize = 2;
+/// Layers the editor shows and edits (0 through `LAYERS - 1`). Layer 0 is
+/// always filled; layers above 0 start empty and are written as runs.
+pub const LAYERS: usize = 8;
 /// How many board undo records one level keeps (oldest dropped first).
 pub const UNDO_LIMIT: usize = 128;
 
@@ -196,7 +198,7 @@ pub struct Summary {
     pub npcs: usize,
     /// A HEIGHTS block is present; the editor leaves it as it is.
     pub heights: bool,
-    /// Placed rows with a layer other than 0 and 1 (kept as they are).
+    /// Placed rows with a layer at or above [`LAYERS`] (kept as they are).
     pub rows_other_layers_kept: usize,
 }
 
@@ -235,10 +237,11 @@ pub struct Document {
     board_lines: Vec<usize>,
     /// The board as 2.22 reads it (all rows, layer not read), index = y * 64 + x.
     board: Vec<u16>,
-    /// Layer 0 (starts as tile 0) and layer 1 (starts empty), index = y * 64 + x.
+    /// Layer 0 (starts as tile 0), index = y * 64 + x.
     layer0: Vec<u16>,
-    layer1: Vec<Option<u16>>,
-    /// Placed BOARD rows of other layers, without their line ending, in file order.
+    /// Layers 1..LAYERS-1 (each starts empty), index = y * 64 + x.
+    upper: Vec<Vec<Option<u16>>>,
+    /// Placed BOARD rows of layers at or above [`LAYERS`], without their line ending.
     other_rows: Vec<Vec<u8>>,
     /// The object records, in file order (text only).
     records: Vec<objects::Record>,
@@ -287,12 +290,15 @@ impl Document {
         layer1: Vec<Option<u16>>,
         summary: Summary,
     ) -> Document {
+        let mut upper: Vec<Vec<Option<u16>>> =
+            (1..LAYERS).map(|_| vec![None; SIZE * SIZE]).collect();
+        upper[0] = layer1;
         Document {
             lines: Vec::new(),
             board_lines: Vec::new(),
             board,
             layer0,
-            layer1,
+            upper,
             other_rows: Vec::new(),
             records: Vec::new(),
             edited: false,
@@ -318,7 +324,7 @@ impl Document {
     }
 
     pub(crate) fn layer1_tiles(&self) -> &[Option<u16>] {
-        &self.layer1
+        &self.upper[0]
     }
 
     /// Text bytes for converting objects when writing binary from a text level.
@@ -365,7 +371,7 @@ impl Document {
             board_lines: Vec::new(),
             board: vec![0; SIZE * SIZE],
             layer0: vec![0; SIZE * SIZE],
-            layer1: vec![None; SIZE * SIZE],
+            upper: (1..LAYERS).map(|_| vec![None; SIZE * SIZE]).collect(),
             other_rows: Vec::new(),
             records: Vec::new(),
             edited: false,
@@ -478,7 +484,7 @@ impl Document {
         if layer != 0 {
             self.summary.rows_other_layer += 1;
         }
-        if layer != 0 && layer != 1 {
+        if layer >= LAYERS as i64 {
             self.summary.rows_other_layers_kept += 1;
             self.other_rows.push(raw.to_vec());
         }
@@ -489,10 +495,10 @@ impl Document {
             let at = y as usize * SIZE + x as usize + k;
             let t = (hi << 6) | lo;
             self.board[at] = t;
-            match layer {
-                0 => self.layer0[at] = t,
-                1 => self.layer1[at] = Some(t),
-                _ => {}
+            if layer == 0 {
+                self.layer0[at] = t;
+            } else if (1..LAYERS as i64).contains(&layer) {
+                self.upper[layer as usize - 1][at] = Some(t);
             }
         }
     }
@@ -530,22 +536,31 @@ impl Document {
         self.dirty || self.edited
     }
 
-    /// Tile of `layer` (0 or 1) at (x, y). `None` outside the board, for
-    /// another layer, and for an empty layer-1 cell.
+    /// Tile of `layer` (0..LAYERS) at (x, y). `None` outside the board, for
+    /// a layer the editor does not edit, and for an empty cell of a layer
+    /// above 0.
     pub fn layer_tile(&self, layer: usize, x: usize, y: usize) -> Option<u16> {
-        if x >= SIZE || y >= SIZE {
+        if x >= SIZE || y >= SIZE || layer >= LAYERS {
             return None;
         }
-        match layer {
-            0 => Some(self.layer0[y * SIZE + x]),
-            1 => self.layer1[y * SIZE + x],
-            _ => None,
+        if layer == 0 {
+            Some(self.layer0[y * SIZE + x])
+        } else {
+            self.upper[layer - 1][y * SIZE + x]
         }
+    }
+
+    /// Filled cells of one editable layer above 0.
+    pub fn layer_filled_count(&self, layer: usize) -> usize {
+        if layer == 0 || layer >= LAYERS {
+            return 0;
+        }
+        self.upper[layer - 1].iter().filter(|t| t.is_some()).count()
     }
 
     /// Filled cells of layer 1.
     pub fn layer1_count(&self) -> usize {
-        self.layer1.iter().filter(|t| t.is_some()).count()
+        self.layer_filled_count(1)
     }
 
     /// Tile id at (x, y), or `None` outside the board.
@@ -583,10 +598,10 @@ impl Document {
         self.paint_layer(0, x, y, w, h, Some(tile))
     }
 
-    /// Paint a rectangle of `layer` (0 or 1) with one tile id, or empty it
-    /// (`None`, layer 1 only). The same checks as `paint`. Returns how many
-    /// cells of that layer changed. A change is pushed on the undo stack (or
-    /// merged into an open undo group).
+    /// Paint a rectangle of `layer` (0..LAYERS) with one tile id, or empty it
+    /// (`None`, layers above 0 only). The same checks as `paint`. Returns how
+    /// many cells of that layer changed. A change is pushed on the undo stack
+    /// (or merged into an open undo group).
     pub fn paint_layer(
         &mut self,
         layer: usize,
@@ -598,7 +613,8 @@ impl Document {
     ) -> Result<usize, EditError> {
         if layer >= LAYERS {
             return Err(EditError::Bounds(format!(
-                "layer {layer} is not editable; the editor edits layers 0 and 1"
+                "layer {layer} is not editable; the editor edits layers 0 to {}",
+                LAYERS - 1
             )));
         }
         if layer == 0 && tile.is_none() {
@@ -632,7 +648,7 @@ impl Document {
                 let old = if layer == 0 {
                     Some(self.layer0[at])
                 } else {
-                    self.layer1[at]
+                    self.upper[layer - 1][at]
                 };
                 before.push(old);
                 if layer == 0 {
@@ -643,8 +659,8 @@ impl Document {
                     }
                     after.push(Some(t));
                 } else {
-                    if self.layer1[at] != tile {
-                        self.layer1[at] = tile;
+                    if self.upper[layer - 1][at] != tile {
+                        self.upper[layer - 1][at] = tile;
                         changed += 1;
                     }
                     after.push(tile);
@@ -676,12 +692,12 @@ impl Document {
         self.flood_fill_layer(0, x, y, Some(tile))
     }
 
-    /// Flood-fill the 4-connected region of `layer` (0 or 1) that matches the
-    /// cell at (x, y) with one tile id, or empty it (`None`, layer 1 only).
-    /// Neighbours share a side; diagonals do not join. Filling with the value
-    /// already at the seed changes nothing and leaves the file as it was.
-    /// Returns how many cells of that layer changed. A change is pushed on the
-    /// undo stack (or merged into an open undo group).
+    /// Flood-fill the 4-connected region of `layer` (0..LAYERS) that matches
+    /// the cell at (x, y) with one tile id, or empty it (`None`, layers above
+    /// 0 only). Neighbours share a side; diagonals do not join. Filling with
+    /// the value already at the seed changes nothing and leaves the file as
+    /// it was. Returns how many cells of that layer changed. A change is
+    /// pushed on the undo stack (or merged into an open undo group).
     pub fn flood_fill_layer(
         &mut self,
         layer: usize,
@@ -691,7 +707,8 @@ impl Document {
     ) -> Result<usize, EditError> {
         if layer >= LAYERS {
             return Err(EditError::Bounds(format!(
-                "layer {layer} is not editable; the editor edits layers 0 and 1"
+                "layer {layer} is not editable; the editor edits layers 0 to {}",
+                LAYERS - 1
             )));
         }
         if layer == 0 && tile.is_none() {
@@ -710,9 +727,10 @@ impl Document {
             }
         }
         let fill = tile.map(|t| t as u16);
-        let seed = match layer {
-            0 => Some(self.layer0[y * SIZE + x]),
-            _ => self.layer1[y * SIZE + x],
+        let seed = if layer == 0 {
+            Some(self.layer0[y * SIZE + x])
+        } else {
+            self.upper[layer - 1][y * SIZE + x]
         };
         if seed == fill {
             return Ok(0);
@@ -725,9 +743,10 @@ impl Document {
             if seen[at] {
                 continue;
             }
-            let here = match layer {
-                0 => Some(self.layer0[at]),
-                _ => self.layer1[at],
+            let here = if layer == 0 {
+                Some(self.layer0[at])
+            } else {
+                self.upper[layer - 1][at]
             };
             if here != seed {
                 continue;
@@ -775,14 +794,14 @@ impl Document {
                 let old = if layer == 0 {
                     Some(self.layer0[at])
                 } else {
-                    self.layer1[at]
+                    self.upper[layer - 1][at]
                 };
                 before.push(old);
                 if fill_set[at] {
                     if layer == 0 {
                         self.layer0[at] = fill.expect("checked above");
                     } else {
-                        self.layer1[at] = fill;
+                        self.upper[layer - 1][at] = fill;
                     }
                     after.push(fill);
                 } else {
@@ -923,7 +942,7 @@ impl Document {
                     let t = if group.layer == 0 {
                         Some(self.layer0[yy * SIZE + xx])
                     } else {
-                        self.layer1[yy * SIZE + xx]
+                        self.upper[group.layer - 1][yy * SIZE + xx]
                     };
                     before.push(t);
                     after.push(t);
@@ -964,18 +983,19 @@ impl Document {
                 if change.layer == 0 {
                     self.layer0[at] = t.expect("layer 0 always has a tile");
                 } else {
-                    self.layer1[at] = t;
+                    self.upper[change.layer - 1][at] = t;
                 }
             }
         }
     }
 
-    /// Copy a rectangle of `layer` (0 or 1) into a block. Empty layer-1 cells
-    /// are `None`; layer 0 is always filled.
+    /// Copy a rectangle of `layer` (0..LAYERS) into a block. Empty cells on
+    /// layers above 0 are `None`; layer 0 is always filled.
     pub fn read_layer_block(&self, layer: usize, rect: TileRect) -> Result<TileBlock, EditError> {
         if layer >= LAYERS {
             return Err(EditError::Bounds(format!(
-                "layer {layer} is not editable; the editor edits layers 0 and 1"
+                "layer {layer} is not editable; the editor edits layers 0 to {}",
+                LAYERS - 1
             )));
         }
         let mut tiles = Vec::with_capacity(rect.w * rect.h);
@@ -1003,7 +1023,8 @@ impl Document {
     ) -> Result<usize, EditError> {
         if layer >= LAYERS {
             return Err(EditError::Bounds(format!(
-                "layer {layer} is not editable; the editor edits layers 0 and 1"
+                "layer {layer} is not editable; the editor edits layers 0 to {}",
+                LAYERS - 1
             )));
         }
         if block.tiles.len() != block.w * block.h {
@@ -1033,23 +1054,29 @@ impl Document {
         Ok(changed)
     }
 
-    /// Clear a rectangle of `layer`: tile 0 on layer 0, empty on layer 1.
+    /// Clear a rectangle of `layer`: tile 0 on layer 0, empty on layers above 0.
     pub fn clear_layer_rect(&mut self, layer: usize, rect: TileRect) -> Result<usize, EditError> {
-        match layer {
-            0 => self.paint_layer(0, rect.x, rect.y, rect.w, rect.h, Some(0)),
-            1 => self.paint_layer(1, rect.x, rect.y, rect.w, rect.h, None),
-            _ => Err(EditError::Bounds(format!(
-                "layer {layer} is not editable; the editor edits layers 0 and 1"
-            ))),
+        if layer == 0 {
+            self.paint_layer(0, rect.x, rect.y, rect.w, rect.h, Some(0))
+        } else if layer < LAYERS {
+            self.paint_layer(layer, rect.x, rect.y, rect.w, rect.h, None)
+        } else {
+            Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 to {}",
+                LAYERS - 1
+            )))
         }
     }
     /// The 2.22 view of the board as the editor will write it: layer 0, then
-    /// the layer 1 runs, then the rows of other layers (all placed, in that order).
+    /// each higher editable layer's filled cells, then rows of layers at or
+    /// above [`LAYERS`] (all placed, in that order).
     fn compose(&mut self) {
         self.board.copy_from_slice(&self.layer0);
-        for (b, t) in self.board.iter_mut().zip(&self.layer1) {
-            if let Some(t) = t {
-                *b = *t;
+        for layer in &self.upper {
+            for (b, t) in self.board.iter_mut().zip(layer) {
+                if let Some(t) = t {
+                    *b = *t;
+                }
             }
         }
         if self.is_binary() {
@@ -1106,26 +1133,31 @@ impl Document {
             }
             canonical.extend_from_slice(self.eol);
         }
-        for y in 0..SIZE {
-            let mut x = 0;
-            while x < SIZE {
-                if self.layer1[y * SIZE + x].is_none() {
-                    x += 1;
-                    continue;
-                }
-                let start = x;
-                let mut data = Vec::new();
+        // layers 1..LAYERS-1: one row per run of filled cells (as Gonstruct writes them)
+        for (layer_i, layer) in self.upper.iter().enumerate() {
+            let layer_n = layer_i + 1;
+            for y in 0..SIZE {
+                let mut x = 0;
                 while x < SIZE {
-                    let Some(t) = self.layer1[y * SIZE + x] else {
-                        break;
-                    };
-                    data.extend_from_slice(&tile_code(t));
-                    x += 1;
+                    if layer[y * SIZE + x].is_none() {
+                        x += 1;
+                        continue;
+                    }
+                    let start = x;
+                    let mut data = Vec::new();
+                    while x < SIZE {
+                        let Some(t) = layer[y * SIZE + x] else {
+                            break;
+                        };
+                        data.extend_from_slice(&tile_code(t));
+                        x += 1;
+                    }
+                    canonical.extend_from_slice(
+                        format!("BOARD {start} {y} {} {layer_n} ", x - start).as_bytes(),
+                    );
+                    canonical.extend_from_slice(&data);
+                    canonical.extend_from_slice(self.eol);
                 }
-                canonical
-                    .extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
-                canonical.extend_from_slice(&data);
-                canonical.extend_from_slice(self.eol);
             }
         }
         for raw in &self.other_rows {
@@ -1203,25 +1235,30 @@ impl Document {
             }
             out.push(b'\n');
         }
-        for y in 0..SIZE {
-            let mut x = 0;
-            while x < SIZE {
-                if self.layer1[y * SIZE + x].is_none() {
-                    x += 1;
-                    continue;
-                }
-                let start = x;
-                let mut data = Vec::new();
+        for (layer_i, layer) in self.upper.iter().enumerate() {
+            let layer_n = layer_i + 1;
+            for y in 0..SIZE {
+                let mut x = 0;
                 while x < SIZE {
-                    let Some(t) = self.layer1[y * SIZE + x] else {
-                        break;
-                    };
-                    data.extend_from_slice(&tile_code(t));
-                    x += 1;
+                    if layer[y * SIZE + x].is_none() {
+                        x += 1;
+                        continue;
+                    }
+                    let start = x;
+                    let mut data = Vec::new();
+                    while x < SIZE {
+                        let Some(t) = layer[y * SIZE + x] else {
+                            break;
+                        };
+                        data.extend_from_slice(&tile_code(t));
+                        x += 1;
+                    }
+                    out.extend_from_slice(
+                        format!("BOARD {start} {y} {} {layer_n} ", x - start).as_bytes(),
+                    );
+                    out.extend_from_slice(&data);
+                    out.push(b'\n');
                 }
-                out.extend_from_slice(format!("BOARD {start} {y} {} 1 ", x - start).as_bytes());
-                out.extend_from_slice(&data);
-                out.push(b'\n');
             }
         }
         out

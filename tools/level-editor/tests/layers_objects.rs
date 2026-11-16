@@ -1,11 +1,13 @@
-//! Tests of the second editor slice: layers 0 and 1, object records (links,
+//! Tests of the second editor slice: layers 0..LAYERS-1, object records (links,
 //! signs, chests, NPCs), stamps from a GOBJSET01 set, and the gmap grid, on
 //! the document, on the editor state, and through the window driven headless.
 
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{Editor, EditorApp, Sheet, Tool};
-use level_editor::{tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, SIZE};
+use level_editor::{
+    tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, LAYERS, SIZE,
+};
 use seihai_core::assets::Level;
 use std::path::{Path, PathBuf};
 
@@ -38,7 +40,8 @@ fn code(id: u16) -> String {
     String::from_utf8(tile_code(id).to_vec()).unwrap()
 }
 
-/// A level with layer-1 runs, a layer-2 row and objects of every kind.
+/// A level with layer-1 runs, a layer-2 cell, a layer-8 row (kept verbatim)
+/// and objects of every kind.
 fn layered() -> String {
     let mut s = String::from("GLEVNW01\n");
     for y in 0..SIZE {
@@ -47,6 +50,7 @@ fn layered() -> String {
     s.push_str(&format!("BOARD 3 4 2 1 {}{}\n", code(100), code(101)));
     s.push_str(&format!("BOARD 60 63 4 1 {}\n", code(200).repeat(4)));
     s.push_str(&format!("BOARD 10 10 1 2 {}\n", code(300)));
+    s.push_str(&format!("BOARD 15 15 1 8 {}\n", code(400)));
     s.push_str("LINK other.nw 0 20 1 4 playerx 30\n");
     s.push_str("NPC tree.png 12.5 30\nif (created) {\n  setshape 1,32,32;\n}\nNPCEND\n");
     s.push_str("SIGN 3 4\nhello\nSIGNEND\nCHEST 5 6 bombs -1\n");
@@ -63,12 +67,24 @@ fn layers_are_read_apart_and_the_222_view_is_kept() {
     assert_eq!(doc.layer_tile(1, 5, 4), None, "layer 1 starts empty");
     assert_eq!(doc.layer_tile(1, 63, 63), Some(200));
     assert_eq!(doc.layer1_count(), 6);
+    assert_eq!(doc.layer_tile(2, 10, 10), Some(300));
+    assert_eq!(doc.layer_filled_count(2), 1);
+    assert_eq!(
+        doc.layer_tile(8, 15, 15),
+        None,
+        "layer 8 is outside the editable range"
+    );
     // the 2.22 view: every row on one board
     assert_eq!(doc.tile(3, 4), Some(100));
     assert_eq!(
         doc.tile(10, 10),
         Some(300),
         "the layer 2 row is placed in the 2.22 view"
+    );
+    assert_eq!(
+        doc.tile(15, 15),
+        Some(400),
+        "layer 8 still lands on the board"
     );
     assert_eq!(doc.layer_tile(0, 10, 10), Some(5));
     assert_eq!(doc.summary().rows_other_layers_kept, 1);
@@ -98,7 +114,7 @@ fn both_layers_are_saved_and_layer_1_is_written_in_runs() {
         "layer 0 has no empty cells"
     );
     assert!(matches!(
-        doc.paint_layer(2, 0, 0, 1, 1, Some(1)),
+        doc.paint_layer(LAYERS, 0, 0, 1, 1, Some(1)),
         Err(EditError::Bounds(_))
     ));
     assert_eq!(doc.tile(20, 7), Some(77), "the 2.22 view follows");
@@ -115,12 +131,16 @@ fn both_layers_are_saved_and_layer_1_is_written_in_runs() {
     assert!(text.contains(&format!("\nBOARD 60 63 4 1 {}\n", code(200).repeat(4))));
     assert!(
         text.contains(&format!("\nBOARD 10 10 1 2 {}\n", code(300))),
-        "the layer 2 row is kept as it was"
+        "layer 2 is written as a run"
+    );
+    assert!(
+        text.contains(&format!("\nBOARD 15 15 1 8 {}\n", code(400))),
+        "layer 8 is kept as it was"
     );
     assert!(!text.contains("BOARD 4 4"), "an empty cell is left out");
 
     let again = Document::parse(&bytes).unwrap();
-    for l in 0..2 {
+    for l in 0..LAYERS {
         for y in 0..SIZE {
             for x in 0..SIZE {
                 assert_eq!(
@@ -132,6 +152,7 @@ fn both_layers_are_saved_and_layer_1_is_written_in_runs() {
         }
     }
     assert_eq!(again.tile(10, 10), Some(300));
+    assert_eq!(again.tile(15, 15), Some(400));
     // the client reads both layers back
     let level = Level::parse(&text).unwrap();
     assert!(level
@@ -139,6 +160,40 @@ fn both_layers_are_saved_and_layer_1_is_written_in_runs() {
         .iter()
         .any(|b| b.layer == 1 && b.x == 20 && b.y == 7 && b.width == 3));
     assert_eq!(level.layer0_board()[0], 9);
+}
+
+#[test]
+fn layers_above_one_paint_erase_and_round_trip() {
+    let original = layered();
+    let mut doc = Document::parse(original.as_bytes()).unwrap();
+    assert_eq!(doc.paint_layer(2, 11, 11, 2, 1, Some(333)).unwrap(), 2);
+    assert_eq!(doc.layer_tile(2, 11, 11), Some(333));
+    assert_eq!(doc.layer_tile(2, 12, 11), Some(333));
+    assert_eq!(doc.layer_tile(0, 11, 11), Some(5), "layer 0 untouched");
+    assert_eq!(doc.tile(11, 11), Some(333));
+    assert_eq!(doc.paint_layer(3, 0, 1, 1, 1, Some(50)).unwrap(), 1);
+    assert_eq!(doc.paint_layer(2, 10, 10, 1, 1, None).unwrap(), 1);
+    assert_eq!(doc.layer_tile(2, 10, 10), None);
+    assert_eq!(doc.tile(10, 10), Some(5), "layer 0 shows through");
+
+    let bytes = doc.to_bytes();
+    let text = String::from_utf8(bytes.clone()).unwrap();
+    assert!(text.contains(&format!("\nBOARD 11 11 2 2 {}\n", code(333).repeat(2))));
+    assert!(text.contains(&format!("\nBOARD 0 1 1 3 {}\n", code(50))));
+    assert!(!text.contains(&format!("BOARD 10 10 1 2 {}", code(300))));
+    assert!(text.contains(&format!("\nBOARD 15 15 1 8 {}\n", code(400))));
+
+    let again = Document::parse(&bytes).unwrap();
+    assert_eq!(again.layer_tile(2, 11, 11), Some(333));
+    assert_eq!(again.layer_tile(3, 0, 1), Some(50));
+    assert_eq!(again.layer_tile(2, 10, 10), None);
+    assert_eq!(again.summary().rows_other_layers_kept, 1);
+
+    // painting the old tiles back restores the starter shape for editable layers;
+    // layer 8 was never rewritten from our model until dirty, and after a dirty
+    // save it is still the same one-cell row
+    let undo = Document::parse(original.as_bytes()).unwrap();
+    assert_eq!(undo.to_bytes(), original.as_bytes());
 }
 
 #[test]
@@ -440,6 +495,12 @@ fn erase_and_pick_follow_the_active_layer() {
         matches!(ed.erase_at(0, 0), Err(EditError::Bounds(_))),
         "layer 0 cannot be erased"
     );
+    ed.layer = 2;
+    ed.select(88).unwrap();
+    assert_eq!(ed.paint_at(8, 8).unwrap(), 1);
+    assert_eq!(ed.doc().unwrap().layer_tile(2, 8, 8), Some(88));
+    assert_eq!(ed.erase_at(8, 8).unwrap(), 1);
+    assert_eq!(ed.doc().unwrap().layer_tile(2, 8, 8), None);
     ed.layer = 1;
     ed.select(321).unwrap();
     ed.paint_at(5, 5).unwrap();
@@ -691,8 +752,32 @@ fn cli_paints_layer_1_and_lists_it() {
         .args(["list", out.to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&r.stdout).contains("layer 1 cells filled 4"));
-    let r = std::process::Command::new(exe)
+    assert!(String::from_utf8_lossy(&r.stdout).contains("layer 1 4"));
+    let out2 = scratch("cli-layer2-out.nw");
+    let r2 = std::process::Command::new(exe)
+        .args([
+            "paint",
+            input.to_str().unwrap(),
+            "4",
+            "5",
+            "2",
+            "1",
+            "88",
+            "--layer",
+            "2",
+            "--out",
+            out2.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        r2.status.success(),
+        "{}",
+        String::from_utf8_lossy(&r2.stderr)
+    );
+    assert!(String::from_utf8_lossy(&r2.stdout).contains("on layer 2"));
+    assert_eq!(Document::open(&out2).unwrap().layer_tile(2, 4, 5), Some(88));
+    let bad = std::process::Command::new(exe)
         .args([
             "paint",
             input.to_str().unwrap(),
@@ -702,11 +787,11 @@ fn cli_paints_layer_1_and_lists_it() {
             "1",
             "1",
             "--layer",
-            "2",
+            "8",
             "--in-place",
         ])
         .output()
         .unwrap();
-    assert!(!r.status.success());
-    assert!(String::from_utf8_lossy(&r.stderr).contains("--layer must be 0 or 1"));
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("--layer must be 0 to 7"));
 }

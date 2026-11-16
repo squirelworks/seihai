@@ -10,7 +10,7 @@
 //! `level-editor FILE` is `list FILE`. Text (`.nw`) and binary (`GR-V1` /
 //! `Z3-V1`) levels open. See documentation/level-editor.md.
 
-use level_editor::{gui, Document, EditError, VersionProfile, SIZE};
+use level_editor::{gui, Document, EditError, VersionProfile, LAYERS, SIZE};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -26,10 +26,10 @@ Usage:
   list    summary and the most used tile ids; --rows dumps the board, one row per line,
           each tile as three hex digits; FILE may be GLEVNW01 text or GR-V1 / Z3-V1 binary
   paint   fill the rectangle (X, Y, W, H in tiles, 0 to 63) with tile id TILE (0 to 4095,
-          decimal or 0x hex); --layer 1 paints layer 1 instead of layer 0; --out extension
+          decimal or 0x hex); --layer L paints that layer (0 to 7; default 0); --out extension
           picks the write profile (.nw text, .zelda Z3, otherwise GR-V1)
   fill    flood-fill the connected region under (X, Y) with tile id TILE (cells that share
-          a side); --layer 1 fills layer 1 instead of layer 0
+          a side); --layer L fills that layer (0 to 7; default 0)
   save    open and write again (the same bytes when the level was not changed)
   gui     open the window: tile palette, click to paint, Fill tool for flood fill (right
           click picks the tile under the mouse), Save / Save as; --sheet sets the tile
@@ -91,11 +91,12 @@ fn parse_args(raw: Vec<String>) -> Args {
             a.sheet = Some(PathBuf::from(value("--sheet")));
         } else if arg == "--layer" || arg.starts_with("--layer=") {
             let v = value("--layer");
-            a.layer = match v.trim() {
-                "0" => 0,
-                "1" => 1,
-                _ => fail(format!("--layer must be 0 or 1, got \"{v}\"")),
-            };
+            a.layer = v.trim().parse::<usize>().unwrap_or_else(|_| {
+                fail(format!("--layer must be 0 to {}, got \"{v}\"", LAYERS - 1))
+            });
+            if a.layer >= LAYERS {
+                fail(format!("--layer must be 0 to {}, got \"{v}\"", LAYERS - 1));
+            }
         } else if arg == "--in-place" {
             a.in_place = true;
         } else if arg == "--rows" {
@@ -134,9 +135,12 @@ fn list(path: &str, rows: bool, profile: VersionProfile) {
         profile.name()
     );
     println!("Board:   {SIZE} x {SIZE}; BOARD rows placed {}, skipped {}, with a layer other than 0 {} (the layer is not read)", s.rows_placed, s.rows_skipped, s.rows_other_layer);
+    let upper: String = (1..LAYERS)
+        .map(|l| format!("layer {l} {}", doc.layer_filled_count(l)))
+        .collect::<Vec<_>>()
+        .join(", ");
     println!(
-        "Layers:  layer 1 cells filled {}; rows of other layers kept as they are {}",
-        doc.layer1_count(),
+        "Layers:  {upper}; rows of layers {LAYERS}+ kept as they are {}",
         s.rows_other_layers_kept
     );
     println!(
