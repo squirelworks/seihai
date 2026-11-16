@@ -6,9 +6,7 @@
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use level_editor::gui::{EditorApp, Sheet, Tool};
-use level_editor::{
-    tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, SIZE,
-};
+use level_editor::{tile_code, Document, EditError, ObjectEdit, ObjectKind, VersionProfile, SIZE};
 use seihai_core::assets::Level;
 use std::path::PathBuf;
 

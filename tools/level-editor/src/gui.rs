@@ -396,7 +396,7 @@ impl Editor {
 
     /// One object by id.
     pub fn object(&self, id: usize) -> Option<Object> {
-        self.doc.as_ref()?.object(id)
+        self.doc()?.object(id)
     }
 
     /// The topmost object whose marker covers the point (in tiles).
@@ -422,7 +422,7 @@ impl Editor {
 
     /// Every line of a sign's text, for the text pane.
     pub fn sign_text(&self, id: usize) -> Result<ScriptHead, EditError> {
-        self.doc.as_ref().ok_or_else(no_level)?.sign_text(id)
+        self.doc().ok_or_else(no_level)?.sign_text(id)
     }
 
     /// Add a link, sign, chest or NPC at (x, y) and select it.
