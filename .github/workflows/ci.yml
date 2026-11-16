@@ -38,6 +38,7 @@ jobs:
       - name: Documentation leak check
         if: runner.os == 'Linux'
         run: |
+          python3 -m pip install --user pytest
           python3 tools/leak-check/check_docs.py
           python3 -m pytest tools/leak-check -q
       - uses: dtolnay/rust-toolchain@stable
