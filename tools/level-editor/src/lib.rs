@@ -31,6 +31,12 @@
 //! **Profiles.** The user picks a [`VersionProfile`] (2.22 text, GR-V1.03,
 //! GR-V1.05, Z3-V1.04, …). Only the text profiles open and save today;
 //! binary profiles are listed and parked.
+//!
+//! **Selection.** A tile rectangle on the active layer can be copied, cut,
+//! deleted or pasted. Copy and cut lift the tiles into a block the window
+//! can float under the mouse; dropping the float writes them. An unchanged
+//! level still round-trips byte for byte: only a write that changes a cell
+//! marks the file dirty.
 
 pub mod gui;
 pub mod profile;
@@ -50,6 +56,56 @@ pub const SIZE: usize = 64;
 pub const TILE_LIMIT: u16 = 4096;
 /// Layers the editor shows and edits (0 and 1).
 pub const LAYERS: usize = 2;
+
+/// A rectangle of board cells (top-left and size), clipped to the board.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TileRect {
+    pub x: usize,
+    pub y: usize,
+    pub w: usize,
+    pub h: usize,
+}
+
+impl TileRect {
+    /// A non-empty rectangle that stays on the 64 x 64 board.
+    pub fn new(x: usize, y: usize, w: usize, h: usize) -> Result<TileRect, EditError> {
+        if w == 0 || h == 0 {
+            return Err(EditError::Bounds(format!(
+                "the rectangle is empty ({w} x {h}); width and height must be at least 1"
+            )));
+        }
+        if x >= SIZE || y >= SIZE || x + w > SIZE || y + h > SIZE {
+            return Err(EditError::Bounds(format!(
+                "the rectangle x {x}, y {y}, {w} x {h} leaves the {SIZE} x {SIZE} board (x + width and y + height must be at most {SIZE})"
+            )));
+        }
+        Ok(TileRect { x, y, w, h })
+    }
+
+    /// The axis-aligned rectangle covering the two corner cells (order free).
+    pub fn from_corners(a: (usize, usize), b: (usize, usize)) -> Result<TileRect, EditError> {
+        let x0 = a.0.min(b.0);
+        let y0 = a.1.min(b.1);
+        let x1 = a.0.max(b.0);
+        let y1 = a.1.max(b.1);
+        TileRect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+    }
+}
+
+/// A rectangular block of tiles lifted from one layer. `None` is an empty
+/// layer-1 cell; layer 0 always stores `Some`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TileBlock {
+    pub w: usize,
+    pub h: usize,
+    pub tiles: Vec<Option<u16>>,
+}
+
+impl TileBlock {
+    fn at(&self, x: usize, y: usize) -> Option<u16> {
+        self.tiles.get(y * self.w + x).copied().flatten()
+    }
+}
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -545,6 +601,79 @@ impl Document {
         Ok(changed)
     }
 
+    /// Copy a rectangle of `layer` (0 or 1) into a block. Empty layer-1 cells
+    /// are `None`; layer 0 is always filled.
+    pub fn read_layer_block(&self, layer: usize, rect: TileRect) -> Result<TileBlock, EditError> {
+        if layer >= LAYERS {
+            return Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 and 1"
+            )));
+        }
+        let mut tiles = Vec::with_capacity(rect.w * rect.h);
+        for yy in rect.y..rect.y + rect.h {
+            for xx in rect.x..rect.x + rect.w {
+                tiles.push(self.layer_tile(layer, xx, yy));
+            }
+        }
+        Ok(TileBlock {
+            w: rect.w,
+            h: rect.h,
+            tiles,
+        })
+    }
+
+    /// Write a block onto `layer` with its top-left at (x, y). Cells that fall
+    /// off the board are left out. On layer 1, `None` clears the cell; on
+    /// layer 0, `None` is skipped. Returns how many cells changed.
+    pub fn write_layer_block(
+        &mut self,
+        layer: usize,
+        x: usize,
+        y: usize,
+        block: &TileBlock,
+    ) -> Result<usize, EditError> {
+        if layer >= LAYERS {
+            return Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 and 1"
+            )));
+        }
+        if block.tiles.len() != block.w * block.h {
+            return Err(EditError::Bounds(format!(
+                "tile block is {} cells but size is {} x {}",
+                block.tiles.len(),
+                block.w,
+                block.h
+            )));
+        }
+        let mut changed = 0;
+        for sy in 0..block.h {
+            for sx in 0..block.w {
+                let (bx, by) = (x + sx, y + sy);
+                if bx >= SIZE || by >= SIZE {
+                    continue;
+                }
+                let tile = block.at(sx, sy);
+                if layer == 0 {
+                    let Some(t) = tile else { continue };
+                    changed += self.paint_layer(0, bx, by, 1, 1, Some(t as u32))?;
+                } else {
+                    changed += self.paint_layer(1, bx, by, 1, 1, tile.map(|t| t as u32))?;
+                }
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Clear a rectangle of `layer`: tile 0 on layer 0, empty on layer 1.
+    pub fn clear_layer_rect(&mut self, layer: usize, rect: TileRect) -> Result<usize, EditError> {
+        match layer {
+            0 => self.paint_layer(0, rect.x, rect.y, rect.w, rect.h, Some(0)),
+            1 => self.paint_layer(1, rect.x, rect.y, rect.w, rect.h, None),
+            _ => Err(EditError::Bounds(format!(
+                "layer {layer} is not editable; the editor edits layers 0 and 1"
+            ))),
+        }
+    }
     /// The 2.22 view of the board as the editor will write it: layer 0, then
     /// the layer 1 runs, then the rows of other layers (all placed, in that order).
     fn compose(&mut self) {

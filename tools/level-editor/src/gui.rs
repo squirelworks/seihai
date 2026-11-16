@@ -1,8 +1,10 @@
 //! The level editor window: a tile palette, painting on layer 0 or 1, flood
 //! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC
 //! markers, a `.gmap` grid that opens its levels, tabs for several open
-//! levels, and save. It sits on the command-line slice (`Document`):
-//! painting is `Document::paint_layer`, fill is `Document::flood_fill_layer`,
+//! levels, tile selection with copy / cut / paste / delete, and save. It
+//! sits on the command-line slice (`Document`): painting is
+//! `Document::paint_layer`, fill is `Document::flood_fill_layer`, selection
+//! uses `read_layer_block` / `write_layer_block` / `clear_layer_rect`,
 //! objects go through `Document::edit_object` and friends, and saving is
 //! `Document::save`, so the file rules (byte-for-byte round trip, canonical
 //! rows after a change, write through a temporary file) are the same as the
@@ -13,8 +15,8 @@
 //! the tests also drive the real window code with synthetic mouse input.
 
 use crate::{
-    Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, VersionProfile, LAYERS,
-    SCRIPT_PANE_LINES, SIZE, TILE_LIMIT,
+    Document, EditError, Object, ObjectEdit, ObjectKind, ScriptHead, TileBlock, TileRect,
+    VersionProfile, LAYERS, SCRIPT_PANE_LINES, SIZE, TILE_LIMIT,
 };
 use eframe::egui;
 use egui::{
@@ -79,8 +81,19 @@ pub enum Tool {
     Fill,
     /// Drop the selected stamp with its top-left corner on the cell.
     Stamp,
+    /// Drag a tile rectangle for copy, cut, paste and delete.
+    Select,
     /// Select and drag links, signs, chests and NPCs.
     Objects,
+}
+
+/// A floating paste: tiles that follow the mouse until dropped or cancelled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FloatingPaste {
+    pub block: TileBlock,
+    /// Top-left cell under the mouse.
+    pub x: usize,
+    pub y: usize,
 }
 
 /// An opened `.gmap`: its grid and the folder its levels are in.
@@ -127,15 +140,16 @@ impl LevelTab {
 }
 
 /// The editor without its window: the open levels as tabs, the active layer
-/// and tool, the selected tile and stamp, an optional gmap, and the version.
-/// Layer, tool and palette stay shared across tabs; each tab keeps its own
-/// document, path, unsaved flag and selected object.
+/// and tool, the selected tile and stamp, a tile selection and clipboard, an
+/// optional gmap, and the version. Layer, tool, palette and selection stay
+/// shared across tabs; each tab keeps its own document, path, unsaved flag
+/// and selected object.
 pub struct Editor {
     /// Target format / feature profile (picker). Default: 2.22 text.
     pub version: VersionProfile,
     /// The tile the left button paints.
     pub tile: u16,
-    /// The layer painting, erasing and stamps go to (0 or 1).
+    /// The layer painting, erasing, stamps and selection go to (0 or 1).
     pub layer: usize,
     /// Which layers are drawn.
     pub show: [bool; LAYERS],
@@ -143,6 +157,12 @@ pub struct Editor {
     /// The loaded object set, and the stamp picked from it.
     pub stamps: Option<(PathBuf, ObjectSet)>,
     pub stamp: Option<usize>,
+    /// The tile rectangle for copy / cut / delete (active layer).
+    pub selection: Option<TileRect>,
+    /// The last block lifted by copy or cut.
+    pub clipboard: Option<TileBlock>,
+    /// Tiles following the mouse after copy, cut or paste.
+    pub floating: Option<FloatingPaste>,
     pub gmap: Option<GmapView>,
     tabs: Vec<LevelTab>,
     active: Option<usize>,
@@ -164,6 +184,9 @@ impl Editor {
             tool: Tool::Paint,
             stamps: None,
             stamp: None,
+            selection: None,
+            clipboard: None,
+            floating: None,
             gmap: None,
             tabs: Vec::new(),
             active: None,
@@ -239,6 +262,8 @@ impl Editor {
     pub fn open(&mut self, path: &Path) -> Result<(), EditError> {
         if let Some(i) = self.tab_for_path(path) {
             self.set_active(i);
+            self.selection = None;
+            self.floating = None;
             return Ok(());
         }
         let doc = Document::open_with_profile(path, self.version)?;
@@ -249,6 +274,8 @@ impl Editor {
             selected: None,
         });
         self.active = Some(self.tabs.len() - 1);
+        self.selection = None;
+        self.floating = None;
         self.board_rev += 1;
         Ok(())
     }
@@ -447,14 +474,146 @@ impl Editor {
         Ok(())
     }
 
-    /// Save the active tab to the file that was opened.
+    /// Set the tile selection. Does not change the file.
+    pub fn set_selection(&mut self, rect: TileRect) {
+        self.selection = Some(rect);
+    }
+
+    /// Clear the tile selection. Does not change the file.
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    /// Lift the selection into the clipboard and a floating paste at the same
+    /// place. The board is not changed.
+    pub fn copy_selection(&mut self) -> Result<(), EditError> {
+        let rect = self.selection.ok_or_else(|| {
+            EditError::Bounds("nothing is selected; drag a rectangle with the Select tool".into())
+        })?;
+        let layer = self.layer;
+        let block = self
+            .doc()
+            .ok_or_else(no_level)?
+            .read_layer_block(layer, rect)?;
+        self.clipboard = Some(block.clone());
+        self.floating = Some(FloatingPaste {
+            block,
+            x: rect.x,
+            y: rect.y,
+        });
+        self.selection = None;
+        Ok(())
+    }
+
+    /// Copy the selection into a floating paste and clear the rectangle on
+    /// the active layer (tile 0 on layer 0, empty on layer 1).
+    pub fn cut_selection(&mut self) -> Result<usize, EditError> {
+        let rect = self.selection.ok_or_else(|| {
+            EditError::Bounds("nothing is selected; drag a rectangle with the Select tool".into())
+        })?;
+        let layer = self.layer;
+        let block = self
+            .doc()
+            .ok_or_else(no_level)?
+            .read_layer_block(layer, rect)?;
+        self.clipboard = Some(block.clone());
+        self.floating = Some(FloatingPaste {
+            block,
+            x: rect.x,
+            y: rect.y,
+        });
+        self.selection = None;
+        let n = self
+            .doc_mut()
+            .ok_or_else(no_level)?
+            .clear_layer_rect(layer, rect)?;
+        Ok(self.changed(n))
+    }
+
+    /// Clear the selection on the active layer without putting it on the
+    /// clipboard. Returns how many cells changed.
+    pub fn delete_selection(&mut self) -> Result<usize, EditError> {
+        let rect = self.selection.ok_or_else(|| {
+            EditError::Bounds("nothing is selected; drag a rectangle with the Select tool".into())
+        })?;
+        let layer = self.layer;
+        let n = self
+            .doc_mut()
+            .ok_or_else(no_level)?
+            .clear_layer_rect(layer, rect)?;
+        self.selection = None;
+        Ok(self.changed(n))
+    }
+
+    /// Start a floating paste from the clipboard at (x, y). The board is not
+    /// changed until [`drop_floating`](Self::drop_floating).
+    pub fn paste_at(&mut self, x: usize, y: usize) -> Result<(), EditError> {
+        let block = self
+            .clipboard
+            .clone()
+            .ok_or_else(|| EditError::Bounds("the clipboard is empty; copy or cut first".into()))?;
+        if self.doc().is_none() {
+            return Err(no_level());
+        }
+        let (x, y) = clamp_paste(x, y, block.w, block.h);
+        self.floating = Some(FloatingPaste { block, x, y });
+        self.selection = None;
+        Ok(())
+    }
+
+    /// Move the floating paste so its top-left is at (x, y), clipped so the
+    /// whole block stays on the board when it fits.
+    pub fn move_floating(&mut self, x: usize, y: usize) {
+        if let Some(f) = &mut self.floating {
+            let (x, y) = clamp_paste(x, y, f.block.w, f.block.h);
+            f.x = x;
+            f.y = y;
+        }
+    }
+
+    /// Write the floating paste onto the active layer and clear it. Returns
+    /// how many cells changed.
+    pub fn drop_floating(&mut self) -> Result<usize, EditError> {
+        let float = self
+            .floating
+            .take()
+            .ok_or_else(|| EditError::Bounds("there is no floating paste to drop".into()))?;
+        let layer = self.layer;
+        let n = self.doc_mut().ok_or_else(no_level)?.write_layer_block(
+            layer,
+            float.x,
+            float.y,
+            &float.block,
+        )?;
+        let rect = TileRect::new(
+            float.x,
+            float.y,
+            float.block.w.min(SIZE - float.x),
+            float.block.h.min(SIZE - float.y),
+        )
+        .ok();
+        self.selection = rect;
+        Ok(self.changed(n))
+    }
+
+    /// Discard the floating paste without writing.
+    pub fn cancel_floating(&mut self) {
+        self.floating = None;
+    }
+
+    /// Drop any floating paste (so a save keeps what is on screen), then save
+    /// the active tab to the file that was opened.
     pub fn save(&mut self) -> Result<PathBuf, EditError> {
         let path = self.path().map(Path::to_path_buf).ok_or_else(no_level)?;
         self.save_as(&path)
     }
 
     /// Save the active tab to `path`, which becomes that tab's Save target.
+    /// A floating paste is written first, matching the classic editor's save.
     pub fn save_as(&mut self, path: &Path) -> Result<PathBuf, EditError> {
+        if self.floating.is_some() {
+            let _ = self.drop_floating()?;
+        }
         let tab = self.active_tab_mut().ok_or_else(no_level)?;
         tab.doc.save(path)?;
         tab.path = path.to_path_buf();
@@ -465,6 +624,9 @@ impl Editor {
     /// Save every tab that has unsaved changes. Stops on the first error and
     /// leaves later tabs alone. Returns how many were written.
     pub fn save_all(&mut self) -> Result<usize, EditError> {
+        if self.floating.is_some() {
+            let _ = self.drop_floating()?;
+        }
         let mut n = 0;
         for i in 0..self.tabs.len() {
             if !self.tabs[i].unsaved {
@@ -477,6 +639,14 @@ impl Editor {
         }
         Ok(n)
     }
+}
+
+/// Keep a paste's top-left on the board; when the block fits, keep all of it
+/// on the board too.
+fn clamp_paste(x: usize, y: usize, w: usize, h: usize) -> (usize, usize) {
+    let max_x = SIZE.saturating_sub(w.max(1));
+    let max_y = SIZE.saturating_sub(h.max(1));
+    (x.min(max_x), y.min(max_y))
 }
 
 /// An RGB tile sheet.
@@ -605,6 +775,10 @@ pub struct EditorApp {
     hover: Option<(usize, usize)>,
     /// The last cell painted in the current drag.
     stroke_last: Option<(usize, usize)>,
+    /// The corner where a Select-tool drag started.
+    sel_drag: Option<(usize, usize)>,
+    /// The live rectangle while dragging a selection (before release).
+    sel_preview: Option<TileRect>,
     drag: Option<Drag>,
     /// The cell new objects go to (the last empty cell clicked with the Objects tool).
     add_cell: (i32, i32),
@@ -640,6 +814,8 @@ impl EditorApp {
             status: String::new(),
             hover: None,
             stroke_last: None,
+            sel_drag: None,
+            sel_preview: None,
             drag: None,
             add_cell: (30, 30),
             fields: ObjectFields::default(),
@@ -770,6 +946,55 @@ impl EditorApp {
         }
     }
 
+    /// Ctrl+C / X / V and Del for the tile selection; Esc cancels a float.
+    fn handle_selection_keys(&mut self, ctx: &egui::Context) {
+        if self.editor.doc().is_none() {
+            return;
+        }
+        // do not steal keys while a text field is being edited
+        if ctx.wants_keyboard_input() {
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::C)) {
+            let r = self.editor.copy_selection();
+            if r.is_ok() {
+                self.status = "Copied; move the float and click to drop".into();
+            }
+            self.report(r);
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::X)) {
+            match self.editor.cut_selection() {
+                Ok(n) => self.status = format!("Cut {n} cells; click to drop"),
+                Err(e) => self.status = e.to_string(),
+            }
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::V)) {
+            let (x, y) = self
+                .hover
+                .or_else(|| self.editor.selection.map(|r| (r.x, r.y)))
+                .or_else(|| self.editor.floating.as_ref().map(|f| (f.x, f.y)))
+                .unwrap_or((0, 0));
+            match self.editor.paste_at(x, y) {
+                Ok(()) => self.status = "Paste follows the mouse; click to drop".into(),
+                Err(e) => self.status = e.to_string(),
+            }
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+            || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace))
+        {
+            match self.editor.delete_selection() {
+                Ok(n) => self.status = format!("Deleted {n} cells"),
+                Err(e) => self.status = e.to_string(),
+            }
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            && self.editor.floating.is_some()
+        {
+            self.editor.cancel_floating();
+            self.status = "Floating paste cancelled".into();
+        }
+    }
+
     /// One frame of the window. `update` calls this; tests call it with a bare context.
     pub fn ui(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.viewport().close_requested()) && !self.closing {
@@ -785,6 +1010,7 @@ impl EditorApp {
         {
             self.do_save(None);
         }
+        self.handle_selection_keys(ctx);
 
         let title = format!(
             "{}{} - Seihai level editor ({})",
@@ -1005,9 +1231,66 @@ impl EditorApp {
                 ui.selectable_value(&mut self.editor.tool, Tool::Fill, "Fill")
                     .on_hover_text("Flood-fill the connected region under the click with the selected tile (cells that share a side)");
                 ui.selectable_value(&mut self.editor.tool, Tool::Stamp, "Stamp");
+                ui.selectable_value(&mut self.editor.tool, Tool::Select, "Select")
+                    .on_hover_text("Drag a rectangle; Ctrl+C / Ctrl+X / Ctrl+V / Del");
                 ui.selectable_value(&mut self.editor.tool, Tool::Objects, "Objects");
                 if self.editor.layer == 0 && self.editor.tool == Tool::Erase {
                     self.editor.tool = Tool::Paint;
+                }
+                if self.editor.selection.is_some() || self.editor.floating.is_some() {
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            self.editor.selection.is_some(),
+                            egui::Button::new("Copy"),
+                        )
+                        .on_hover_text("Ctrl+C")
+                        .clicked()
+                    {
+                        let r = self.editor.copy_selection();
+                        self.report(r);
+                    }
+                    if ui
+                        .add_enabled(
+                            self.editor.selection.is_some(),
+                            egui::Button::new("Cut"),
+                        )
+                        .on_hover_text("Ctrl+X")
+                        .clicked()
+                    {
+                        match self.editor.cut_selection() {
+                            Ok(n) => self.status = format!("Cut {n} cells"),
+                            Err(e) => self.status = e.to_string(),
+                        }
+                    }
+                    if ui
+                        .add_enabled(
+                            self.editor.clipboard.is_some(),
+                            egui::Button::new("Paste"),
+                        )
+                        .on_hover_text("Ctrl+V")
+                        .clicked()
+                    {
+                        let (x, y) = self
+                            .hover
+                            .or_else(|| self.editor.selection.map(|r| (r.x, r.y)))
+                            .unwrap_or((0, 0));
+                        let r = self.editor.paste_at(x, y);
+                        self.report(r);
+                    }
+                    if ui
+                        .add_enabled(
+                            self.editor.selection.is_some(),
+                            egui::Button::new("Delete"),
+                        )
+                        .on_hover_text("Del")
+                        .clicked()
+                    {
+                        match self.editor.delete_selection() {
+                            Ok(n) => self.status = format!("Deleted {n} cells"),
+                            Err(e) => self.status = e.to_string(),
+                        }
+                    }
                 }
                 ui.separator();
                 ui.label("Zoom");
@@ -1480,8 +1763,46 @@ impl EditorApp {
                     painter.text(r.left_top() + Vec2::new(2.0, 1.0), Align2::LEFT_TOP, label, FontId::proportional(10.0), Color32::WHITE);
                 }
 
+                // tile selection (or the drag preview)
+                if let Some(sel) = self.sel_preview.or(self.editor.selection) {
+                    let r = tile_rect(sel.x as f32, sel.y as f32, sel.w as f32, sel.h as f32);
+                    painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(80, 160, 255, 40));
+                    painter.rect_stroke(r, 0.0, Stroke::new(2.0_f32, Color32::from_rgb(80, 180, 255)));
+                }
+
                 self.hover = resp.hover_pos().and_then(to_cell);
-                if let Some((x, y)) = self.hover {
+                if let Some(f) = &self.editor.floating {
+                    // floating paste under the mouse, see-through
+                    let tint = Color32::from_rgba_unmultiplied(255, 255, 255, 180);
+                    if let Some(st) = sheet_tex {
+                        for sy in 0..f.block.h {
+                            for sx in 0..f.block.w {
+                                let Some(t) = f.block.tiles.get(sy * f.block.w + sx).copied().flatten() else {
+                                    continue;
+                                };
+                                if f.x + sx >= SIZE || f.y + sy >= SIZE {
+                                    continue;
+                                }
+                                let (c, r) = sheet_cell(t);
+                                let uv = Rect::from_min_size(
+                                    Pos2::new(c as f32 / SHEET_COLS as f32, r as f32 / SHEET_ROWS as f32),
+                                    Vec2::new(1.0 / SHEET_COLS as f32, 1.0 / SHEET_ROWS as f32),
+                                );
+                                painter.image(
+                                    st,
+                                    tile_rect((f.x + sx) as f32, (f.y + sy) as f32, 1.0, 1.0),
+                                    uv,
+                                    tint,
+                                );
+                            }
+                        }
+                    }
+                    painter.rect_stroke(
+                        tile_rect(f.x as f32, f.y as f32, f.block.w as f32, f.block.h as f32),
+                        0.0,
+                        Stroke::new(2.0_f32, Color32::from_rgb(255, 220, 80)),
+                    );
+                } else if let Some((x, y)) = self.hover {
                     match (self.editor.tool, self.editor.current_stamp(), sheet_tex) {
                         (Tool::Stamp, Some(stamp), Some(st)) => {
                             // the stamp under the mouse, see-through
@@ -1510,6 +1831,19 @@ impl EditorApp {
 
                 let (pressed, down, released) = ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down(), i.pointer.primary_released()));
                 let pointer = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
+
+                // a floating paste follows the mouse and drops on click
+                if self.editor.floating.is_some() {
+                    if let Some((x, y)) = pointer.and_then(to_cell).or(self.hover) {
+                        self.editor.move_floating(x, y);
+                    }
+                    if resp.clicked() {
+                        match self.editor.drop_floating() {
+                            Ok(n) => self.status = format!("Pasted {n} cells"),
+                            Err(e) => self.status = e.to_string(),
+                        }
+                    }
+                } else {
                 match self.editor.tool {
                     Tool::Paint | Tool::Erase => {
                         if resp.is_pointer_button_down_on() && down {
@@ -1555,6 +1889,31 @@ impl EditorApp {
                             }
                         }
                     }
+                    Tool::Select => {
+                        if pressed && resp.hovered() {
+                            if let Some(c) = pointer.and_then(to_cell) {
+                                self.sel_drag = Some(c);
+                                self.sel_preview = TileRect::from_corners(c, c).ok();
+                            }
+                        }
+                        if let (Some(start), Some(c)) = (self.sel_drag, pointer.and_then(to_cell)) {
+                            self.sel_preview = TileRect::from_corners(start, c).ok();
+                        }
+                        if released || !down {
+                            if let (Some(start), Some(end)) = (self.sel_drag.take(), self.sel_preview.take().map(|r| {
+                                (r.x + r.w - 1, r.y + r.h - 1)
+                            }).or_else(|| pointer.and_then(to_cell))) {
+                                if let Ok(rect) = TileRect::from_corners(start, end) {
+                                    self.editor.set_selection(rect);
+                                    self.status = format!(
+                                        "Selected {} x {} at ({}, {}) on layer {}",
+                                        rect.w, rect.h, rect.x, rect.y, self.editor.layer
+                                    );
+                                }
+                            }
+                            self.sel_preview = None;
+                        }
+                    }
                     Tool::Objects => {
                         let at = pointer.and_then(to_tiles);
                         if resp.double_clicked() {
@@ -1596,6 +1955,7 @@ impl EditorApp {
                         }
                     }
                 }
+                } // end: no floating paste
                 if resp.secondary_clicked() {
                     if let Some((x, y)) = resp.interact_pointer_pos().and_then(to_cell) {
                         self.editor.pick_at(x, y);
