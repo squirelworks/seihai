@@ -1,5 +1,5 @@
-//! The level editor window: a tile palette, painting on layer 0 or 1, flood
-//! fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC /
+//! The level editor window: a tile palette, painting on layers 0..LAYERS-1,
+//! flood fill, stamps from a `GOBJSET01` object set, link / sign / chest / NPC /
 //! baddy markers, a `.gmap` grid that opens its levels, tabs for several open
 //! levels, tile selection with copy / cut / paste / delete, undo / redo of
 //! board writes, and save. It sits on the command-line slice (`Document`):
@@ -76,7 +76,7 @@ pub fn line_cells(a: (usize, usize), b: (usize, usize)) -> Vec<(usize, usize)> {
 pub enum Tool {
     /// Paint the selected tile on the active layer.
     Paint,
-    /// Empty cells of layer 1.
+    /// Empty cells of a layer above 0.
     Erase,
     /// Flood-fill the connected region under the click with the selected tile.
     Fill,
@@ -150,7 +150,7 @@ pub struct Editor {
     pub version: VersionProfile,
     /// The tile the left button paints.
     pub tile: u16,
-    /// The layer painting, erasing, stamps and selection go to (0 or 1).
+    /// The layer painting, erasing, stamps and selection go to (0..LAYERS).
     pub layer: usize,
     /// Which layers are drawn.
     pub show: [bool; LAYERS],
@@ -369,15 +369,16 @@ impl Editor {
         Ok(self.changed(n))
     }
 
-    /// Empty board cell (x, y) of layer 1.
+    /// Empty board cell (x, y) of the active layer (layers above 0 only).
     pub fn erase_at(&mut self, x: usize, y: usize) -> Result<usize, EditError> {
-        if self.layer != 1 {
+        if self.layer == 0 {
             return Err(EditError::Bounds(
-                "only layer 1 has empty cells; switch to layer 1 to erase".into(),
+                "layer 0 has no empty cells; switch to a higher layer to erase".into(),
             ));
         }
+        let layer = self.layer;
         let doc = self.doc_mut().ok_or_else(no_level)?;
-        let n = doc.paint_layer(1, x, y, 1, 1, None)?;
+        let n = doc.paint_layer(layer, x, y, 1, 1, None)?;
         Ok(self.changed(n))
     }
 
@@ -724,8 +725,8 @@ impl Sheet {
     }
 }
 
-/// The 64 x 64 board drawn with `sheet`, 16 px per tile: layer 0, then the
-/// filled cells of layer 1 over it, each when `show` says so. A hidden
+/// The 64 x 64 board drawn with `sheet`, 16 px per tile: layer 0, then each
+/// higher layer's filled cells over it, each when `show` says so. A hidden
 /// layer 0 is drawn dark grey.
 pub fn board_image(doc: &Document, sheet: &Sheet, show: [bool; LAYERS]) -> Framebuffer {
     let px = SIZE as u32 * TILE_PX;
@@ -1304,7 +1305,7 @@ impl EditorApp {
                 ui.label("Layer");
                 for l in 0..LAYERS {
                     ui.radio_value(&mut self.editor.layer, l, l.to_string())
-                        .on_hover_text("The layer painting, erasing and stamps go to. The 2.22 client does not read the layer: it draws layer 1 tiles over layer 0 on one board.");
+                        .on_hover_text("The layer painting, erasing and stamps go to. The 2.22 client does not read the layer field: higher-layer tiles replace lower ones on one board.");
                 }
                 ui.label("Show");
                 for (l, shown) in self.editor.show.iter_mut().enumerate() {
@@ -1313,7 +1314,7 @@ impl EditorApp {
                 ui.separator();
                 ui.label("Tool");
                 ui.selectable_value(&mut self.editor.tool, Tool::Paint, "Paint");
-                ui.add_enabled_ui(self.editor.layer == 1, |ui| {
+                ui.add_enabled_ui(self.editor.layer > 0, |ui| {
                     ui.selectable_value(&mut self.editor.tool, Tool::Erase, "Erase").on_disabled_hover_text("Layer 0 has no empty cells");
                 });
                 ui.selectable_value(&mut self.editor.tool, Tool::Fill, "Fill")
@@ -1448,12 +1449,17 @@ impl EditorApp {
                 }
                 ui.separator();
                 if let (Some((x, y)), Some(doc)) = (self.hover, self.editor.doc()) {
-                    let l0 = doc.layer_tile(0, x, y).unwrap_or(0);
-                    let l1 = doc
-                        .layer_tile(1, x, y)
-                        .map(|t| t.to_string())
-                        .unwrap_or_else(|| "empty".into());
-                    ui.label(format!("x {x}, y {y}: layer 0 tile {l0}, layer 1 {l1}"));
+                    let active = self.editor.layer;
+                    let at = if active == 0 {
+                        format!("layer 0 tile {}", doc.layer_tile(0, x, y).unwrap_or(0))
+                    } else {
+                        match doc.layer_tile(active, x, y) {
+                            Some(t) => format!("layer {active} tile {t}"),
+                            None => format!("layer {active} empty"),
+                        }
+                    };
+                    let under = doc.layer_tile(0, x, y).unwrap_or(0);
+                    ui.label(format!("x {x}, y {y}: {at} (layer 0 {under})"));
                     ui.separator();
                 }
                 if self.editor.has_unsaved() {

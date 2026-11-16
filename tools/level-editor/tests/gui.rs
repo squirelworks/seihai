@@ -8,7 +8,7 @@ use level_editor::gui::{
     board_image, line_cells, sheet_cell, sheet_tile, Editor, EditorApp, Sheet, Tool, SHEET_COLS,
     SHEET_ROWS,
 };
-use level_editor::{Document, EditError, VersionProfile, TILE_LIMIT};
+use level_editor::{Document, EditError, VersionProfile, LAYERS, TILE_LIMIT};
 use std::path::{Path, PathBuf};
 
 fn starter(name: &str) -> PathBuf {
@@ -216,7 +216,7 @@ fn board_image_uses_the_sheet() {
     let sheet = Sheet::builtin();
     assert_eq!((sheet.width, sheet.height), (2048, 512));
     let doc = Document::open(&starter("new1.nw")).unwrap();
-    let fb = board_image(&doc, &sheet, [true, true]);
+    let fb = board_image(&doc, &sheet, [true; LAYERS]);
     assert_eq!((fb.width, fb.height), (1024, 1024));
     // the top-left pixel of the board is the top-left pixel of tile (0, 0) on the sheet
     let (c, r) = sheet_cell(doc.tile(0, 0).unwrap());
