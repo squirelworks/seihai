@@ -72,6 +72,17 @@ Run 7 (one client; runs 2 to 6 were setup and are not counted).
 
 Both are valid: a reader gets the same rotation from either axis. Nothing in this lab asks Ato to change its wire format. The only difference that matters is behaviour: on a real 5.x 3D server, how a player walks is the server's script, not the client. Ato's speeds stay as placeholders, and a server that wants 5.12 players to walk must send a 3D weapon like [`walk3d.gs2`](walk3d.gs2).
 
+## Ato and the real 5.12 in one world (run 8)
+
+Ato (`seihai-ato` built from `main` at `a8b8cec`, `--version 5.12 --graal3d`, account `labato`) joined the same lab world as the running real 5.12, first with `--no-window`, then with its window. Its window drew in the VM under its software renderer.
+
+- Ato reached login step 6 beside the real client, with all 8 files.
+- While the real 5.12 walked, the gserver passed its moves on to Ato: 24 transform updates for the real player's ghost.
+- While Ato walked (Up for about 2 s), the gserver passed Ato's moves on to the real 5.12: 34 transform updates, (0, −6, 1) to (0, 11.08, 1). The real client took them and stayed linked.
+- Ato's window drew the real player as a second cube under the nickname `unknown`, the gserver's name for a guest's object.
+
+One gap shows up: Ato also runs the 3D weapon's GS2. Its GS2 has no `objecttype()`, and its `player` is not its 3D object, so `walk3d.gs2` logs `function player.objecttype not found` every tick and cannot move Ato. A server that walks 5.x players with a script like this would need that in Ato. Ato's own key walking is unaffected.
+
 ## What this changes elsewhere
 
 - seihai-gserver-v2 `docs/graal3d.md` says a 5.12 client script "could not reach its own 3D object", so the gserver moves the object (`g3dpos`). A script can reach it: it is `player` from login step 5 on. The `g3dpos` route still works, but it is not needed.
