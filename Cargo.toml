@@ -1,6 +1,8 @@
 [workspace]
 members = ["crates/seihai-mae", "crates/seihai-ato", "crates/seihai-play", "crates/seihai-issho", "crates/seihai-g3d", "crates/seihai-launcher", "tools/level-editor"]
 resolver = "2"
+# vendor/minifb is a patched copy of a dependency, not a member.
+exclude = ["vendor/minifb"]
 
 [workspace.package]
 version = "0.0.7"
@@ -19,6 +21,12 @@ seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "e563
 # The drawing shared with tools: tiles, sprites and gani frames into an
 # RGBA buffer. From the same seihai-core rev.
 seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "e5632bb11cbe56a385ece73a77aa65b4663351cb" }
+
+# minifb 0.27.0 with one change: on macOS, when there is no Metal device
+# (a VM's emulated display) or MINIFB_NO_METAL is set, the window draws with
+# CoreGraphics instead of failing to open. See vendor/minifb/SEIHAI-CHANGES.md.
+[patch.crates-io]
+minifb = { path = "vendor/minifb" }
 
 # Release builds ship one program (`seihai`), so it is built small: no
 # debug symbols, and link-time optimisation across all the crates.
