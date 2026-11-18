@@ -1,0 +1,5 @@
+GRPKG001
+NAME basepackage
+VERSION 1.0
+PLATFORM any
+MODE required
