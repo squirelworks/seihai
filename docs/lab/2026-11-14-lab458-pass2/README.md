@@ -59,11 +59,9 @@ Login reached step 6 at 0.23 s (`3d: Connection established` at 0.068 s). The li
 | Turn left | +3.779 rad | 1.5 s | 2.5 rad/s | `TURN_SPEED = 2.5` |
 | Turn right | −7.528 rad | 3 s | 2.5 rad/s | `TURN_SPEED = 2.5` |
 
-Measured on the gserver's clock, each leg's updates are spread over more time than the key was held:
-- The 10 s walk arrived over 12.9 s, about 4.65 units/s.
-- The 1.5 s turn arrived over 2.56 s, and the 3 s turn over 3.50 s.
+On the wire, each leg lasted as long as its key was held: the 10 s walk's transforms span 10.03 s (5.99 units/s), the 1.5 s left turn 1.51 s, the 2 s walk 2.03 s and the 3 s right turn 3.03 s. Both the capture clock and the gserver's trace clock agree.
 
-The totals still match the hold times exactly. So Ato under Xvfb with software GL sends its simulated motion more slowly than real time, without losing any of it. Compare speeds by distance per key-hold time, not by the packet clock.
+*Correction (2026-11-18):* this section first said the walk "arrived over 12.9 s" and that Ato under Xvfb sends motion slower than real time. That figure ran from the spawn transform at login, not from the first step, so it was wrong. The per-packet tables are in [docs/captures/lab458-graal3d](../../captures/lab458-graal3d/FINDINGS.md).
 
 Ato sends **no velocity section**, only transforms.
 

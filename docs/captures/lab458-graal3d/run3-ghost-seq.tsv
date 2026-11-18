@@ -1,0 +1,9 @@
+ghost	class	name_or_event	udp_seq
+0	GameObject	Ground	1
+1	GameObject	Cube	2
+2	Sun	-	2
+3	Sky	-	3
+4	GameObject	G3DPlayer_<account>	3
+5	Camera	G3DCamera_<account>	4
+4	control object	sent	6
+4	control object	delivered	6

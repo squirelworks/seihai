@@ -1,0 +1,4 @@
+mask	section	count
+0x1000	s9	1
+0x20	s5	475
+0x800028	s5	1

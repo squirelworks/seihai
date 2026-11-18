@@ -1,0 +1,13 @@
+milestone	run1	run2	run3
+connection established	4.256	0.754	0.652
+MissionStartPhase1	4.350	0.834	0.702
+first ghost	4.350	0.851	0.703
+level board read	4.507	0.755	0.846
+Sky ghost	4.521	0.897	0.883
+player ghost	4.521	0.897	0.883
+Camera ghost	4.575	0.954	1.320
+Sky textures in	-	-	1.369
+MissionStartPhase2	4.654	1.017	1.374
+Mission lighting done	4.654	1.017	1.374
+control object	4.708	1.054	1.423
+login step 6	-	-	1.423
