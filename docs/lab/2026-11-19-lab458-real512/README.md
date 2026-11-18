@@ -81,7 +81,16 @@ Ato (`seihai-ato` built from `main` at `a8b8cec`, `--version 5.12 --graal3d`, ac
 - While Ato walked (Up for about 2 s), the gserver passed Ato's moves on to the real 5.12: 34 transform updates, (0, −6, 1) to (0, 11.08, 1). The real client took them and stayed linked.
 - Ato's window drew the real player as a second cube under the nickname `unknown`, the gserver's name for a guest's object.
 
-One gap shows up: Ato also runs the 3D weapon's GS2. Its GS2 has no `objecttype()`, and its `player` is not its 3D object, so `walk3d.gs2` logs `function player.objecttype not found` every tick and cannot move Ato. A server that walks 5.x players with a script like this would need that in Ato. Ato's own key walking is unaffected.
+One gap showed up: Ato also runs the 3D weapon's GS2. Its GS2 had no `objecttype()`, and its `player` was not its 3D object, so `walk3d.gs2` logged `function player.objecttype not found` every tick and could not move Ato.
+
+**Fixed in this PR** (`scripts3d.rs`, `session.rs`):
+- From the control object on, a 3D script's `player` is Ato's own object, as on the real 5.12. `player.objecttype()` gives `GameConnection` before that and `GameObject` after it.
+- `player.position`, `player.transform` (angle in degrees) and `player.chat` read and write the own object. What a script writes goes out as sections 5 and 9, the same way Ato's own moves do. Writing `player.velocity` does nothing, as on the real client.
+- `keydown2` reads the 3D window's arrows (37 to 40).
+- Once a script has moved the player, Ato stops walking it from the keys. The script owns the walk, as on a real 5.12.
+- Unit tests cover each of these.
+
+A limit is left in core's GS2 VM (seihai-core): an object stored in a variable or passed as a parameter loses its root. `this.me = player; this.me.position = …` therefore does not reach the player in Ato, while `player.position = …` does. `walk3d.gs2` uses the variable form, so in Ato it still finds nothing. A script written with `player.` directly walks both clients. The new code has unit tests only. It was not run live, because the VM went back to the Windows 10 thread.
 
 ## What this changes elsewhere
 

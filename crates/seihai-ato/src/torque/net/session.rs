@@ -17,7 +17,7 @@ use super::ghosts::{
 use super::graal_text::{self, Applied, GraalText};
 use super::handshake::{self, ConnectRequest, ServerPacket};
 use super::link::{Link, Rate};
-use super::scripts3d::{vm_version, Weapons3d};
+use super::scripts3d::{vm_version, Keys3d, Weapons3d};
 use super::tge::{self, ClientGame19, Control19, Game19Error, Move, Phase, PhaseAcks};
 use crate::torque::TorqueProfile;
 use crate::view3d::{Shared3d, SharedInput3d};
@@ -266,7 +266,47 @@ pub fn run_with_sequence(
         let ms = last_tick.elapsed().as_millis() as u64;
         if ms > 0 {
             last_tick += Duration::from_millis(ms);
+            // The scripts' `player` is the own object once it is the
+            // control object, and their `keydown2` the window's arrows.
+            weapons.me = game.control.and(me_at);
+            weapons.keys = match input {
+                Some(i) => {
+                    let i = i.lock().unwrap_or_else(|e| e.into_inner());
+                    Keys3d {
+                        forward: i.forward,
+                        turn: i.turn,
+                    }
+                }
+                None => Keys3d::default(),
+            };
             weapons.tick(ms.min(1000));
+            let change = weapons.take_player();
+            if let Some(t) = change.transform {
+                me_at = Some(t);
+                game.position = t.position;
+                own.transform = Some(Transform {
+                    position: t.position,
+                    axis: t.axis,
+                    angle: t.angle,
+                });
+                if let (Some(w), Some(i)) = (world, game.control) {
+                    let mut w = w.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(o) = w.objects.get_mut(&i) {
+                        o.transform = Some(t);
+                    }
+                }
+            }
+            if let Some(line) = change.chat {
+                let _ = writeln!(out, "3d: a script says {line}");
+                if let (Some(w), Some(i)) = (world, game.control) {
+                    w.lock().unwrap_or_else(|e| e.into_inner()).labels_of(
+                        i,
+                        None,
+                        Some(line.as_bytes()),
+                    );
+                }
+                own.chat = Some(line.into_bytes());
+            }
         }
         for line in weapons.log.drain(..) {
             let _ = writeln!(out, "3d: {line}");
@@ -306,7 +346,10 @@ pub fn run_with_sequence(
                 let mut i = inp.lock().unwrap_or_else(|e| e.into_inner());
                 (i.forward, i.turn, std::mem::take(&mut i.say))
             };
-            if let Some(t) = me_at.filter(|_| forward != 0 || turn != 0) {
+            // Once a server script walks the player (as on a real 5.12),
+            // the keys are the script's, not the client's.
+            let walk_here = !weapons.scripted && (forward != 0 || turn != 0);
+            if let Some(t) = me_at.filter(|_| walk_here) {
                 let t = crate::view3d::step(t, forward, turn, dt);
                 me_at = Some(t);
                 game.position = t.position;
