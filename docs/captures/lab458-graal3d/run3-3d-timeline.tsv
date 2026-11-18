@@ -1,0 +1,40 @@
+t_s	ato_line
+0.000	3d: opening the Graal3D link beside 127.0.0.1:14830
+0.652	3d: Connection established (19 classes)
+0.702	3d: MissionStartPhase1
+0.703	3d: flag clientr.g3dpos=0 -6 1
+0.703	3d: weapon -Move3D added
+0.703	3d: ghost 0 GameObject Ground
+0.703	3d: requesting ground.3ds over TCP
+0.709	3d: ghost 1 GameObject Cube
+0.709	3d: requesting labcube.3ds over TCP
+0.709	3d: ghost 2 Sun
+0.747	requesting ground.3ds
+0.747	requesting labcube.3ds
+0.883	3d: ghost 3 Sky
+0.883	3d: requesting sky_fr over TCP
+0.883	3d: requesting sky_rt over TCP
+0.883	3d: requesting sky_bk over TCP
+0.883	3d: requesting sky_lf over TCP
+0.883	3d: requesting sky_up over TCP
+0.883	3d: requesting sky_dn over TCP
+0.883	3d: ghost 4 GameObject G3DPlayer_labato
+0.883	requesting sky_fr
+0.883	requesting sky_rt
+0.883	requesting sky_bk
+0.889	3d: got ground.3ds (432 bytes)
+0.889	3d: got labcube.3ds (426 bytes)
+1.320	3d: got sky_fr (180 bytes)
+1.320	3d: got sky_rt (180 bytes)
+1.320	3d: got sky_bk (180 bytes)
+1.320	3d: got sky_lf (180 bytes)
+1.320	3d: ghost 5 Camera
+1.352	3d: got sky_up (151 bytes)
+1.369	3d: got sky_dn (177 bytes)
+1.369	3d: the Sky's 6 textures are in
+1.374	3d: weapon -Move3D script (1101 bytes, kept; not run yet)
+1.374	3d: MissionStartPhase2
+1.374	3d: Mission lighting done
+1.423	3d: Sky read again with its textures
+1.423	3d: control object is ghost 4 GameObject G3DPlayer_labato
+1.423	3d: login step 6: every file request answered (files: 8, not on the server: 0)

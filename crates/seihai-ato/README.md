@@ -221,9 +221,10 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
   and no velocity sections. Source: the authored
   [pass-2 report](../../docs/lab/2026-11-14-lab458-pass2/README.md).
   Ato's 6.0 units/s walk and 2.5 rad/s turn are implementation placeholders,
-  not measured native speeds. Synthetic key-hold time and server arrival
-  time differed: the 10 s walk's updates arrived over 12.9 s under software
-  rendering. This records historical Ato behaviour, not a new run.
+  not measured native speeds. On the wire each leg took as long as its key
+  was held (the 10 s walk's updates span 10.03 s); an earlier reading of
+  12.9 s counted from the spawn transform instead of the first step (see
+  [docs/captures](../../docs/captures/lab458-graal3d/FINDINGS.md)).
   Real 5.12 movement speeds and whether it sends velocity remain unknown;
   the original client was not run in this pass.
 - The water sound and `--no-sound` pass on 3.153 (#466). The water-to-dry
