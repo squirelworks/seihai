@@ -1,0 +1,71 @@
+//#CLIENTSIDE
+//#GS2
+// Lab #458 (2026-11-19), sent to a real 5.12 as a 3D weapon (gserver-v2 `weapon3d`).
+// From login step 5 on, `player` is the client's own 3D GameObject. This walks it with the
+// arrow keys at Ato's speeds (6 units/s, 2.5 rad/s), says "hi e:smile" on C, and tries a
+// velocity on V / B. plog() reports through triggerserver, which the gserver logs as an
+// ignored trigger (the 5.12 console log is only written when the client closes).
+function onCreated() {
+  this.walk = 6;
+  this.turn = 2.5;
+  this.me = NULL;
+  this.tries = 0;
+  this.want = "G3DPlayer_" @ player.account;
+  plog("p3d: created account=" @ player.account @ " want=" @ this.want);
+  plog("p3d: player type=" @ player.objecttype() @ " name=" @ player.name @ " pos=" @ player.position);
+  plog("p3d: sc type=" @ ServerConnection.objecttype() @ " camera=" @ ServerConnection.camera.name);
+  setTimer(0.05);
+}
+function plog(m) {
+  echo(m);
+  triggerserver("gui", "-Probe3D", "p3dlog", m);
+}
+function onGraal3DLoginStep(s) {
+  plog("p3d: loginstep " @ s);
+}
+function onGhostAlwaysObjectReceived(o) {
+  plog("p3d: ghostalways " @ o.name @ " type=" @ o.objecttype());
+}
+function report(how, o) {
+  plog("p3d: " @ how @ " -> [" @ o.name @ "] type=" @ o.objecttype() @ " pos=" @ o.position);
+}
+function findMe() {
+  this.tries++;
+  if (this.tries % 40 == 1) report("player", player);
+  if (player.objecttype() == "GameObject") return player;
+  return NULL;
+}
+function onTimeout() {
+  setTimer(0.05);
+  if (this.me == NULL) {
+    this.me = findMe();
+    if (this.me == NULL) return;
+    plog("p3d: found " @ this.me.objecttype() @ " at " @ this.me.position @ " tries=" @ this.tries);
+    temp.p = this.me.position;
+    this.px = temp.p[0]; this.py = temp.p[1]; this.pz = temp.p[2];
+    this.h = 0;
+  }
+  temp.fwd = keydown2(38, true) - keydown2(40, true);
+  temp.trn = keydown2(37, true) - keydown2(39, true);
+  if (temp.fwd != this.lf || temp.trn != this.lt) { this.lf = temp.fwd; this.lt = temp.trn; plog("p3d: keys fwd=" @ temp.fwd @ " turn=" @ temp.trn @ " pos=" @ this.me.position); }
+  if (temp.fwd != 0 || temp.trn != 0) {
+    this.h += temp.trn * this.turn * 0.05;
+    temp.d = temp.fwd * this.walk * 0.05;
+    this.px -= sin(this.h) * temp.d;
+    this.py += cos(this.h) * temp.d;
+    this.me.position = {this.px, this.py, this.pz};
+    if (temp.trn != 0) this.me.transform = {this.px, this.py, this.pz, 0, 0, 1, this.h};
+    this.steps++;
+    if (this.steps % 10 == 1) plog("p3d: at " @ this.me.position @ " h=" @ this.h @ " transform=" @ this.me.transform);
+  }
+  if (keydown2(86, true) && !this.vset) { this.vset = true; this.me.velocity = "0 3 0"; plog("p3d: velocity set " @ this.me.velocity); }
+  if (keydown2(66, true) && this.vset) { this.vset = false; this.me.velocity = "0 0 0"; plog("p3d: velocity cleared"); }
+  if (keydown2(67, true) && this.chatdone != 1) { this.chatdone = 1; temp.msg = "hi " @ "e" @ ":smile"; this.me.chat = temp.msg; plog("p3d: chat set " @ this.me.chat); }
+  temp.camera = ServerConnection.camera;
+  if (temp.camera != NULL) {
+    temp.camera.cameramode = "free";
+    temp.camera.position = format("%f %f %f", this.px, this.py - 4, this.pz + 2);
+    temp.camera.eulerrotation = "0.35 0 0";
+    temp.camera.updatePosition();
+  }
+}
