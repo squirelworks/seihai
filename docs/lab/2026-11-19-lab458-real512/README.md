@@ -90,7 +90,13 @@ One gap showed up: Ato also runs the 3D weapon's GS2. Its GS2 had no `objecttype
 - Once a script has moved the player, Ato stops walking it from the keys. The script owns the walk, as on a real 5.12.
 - Unit tests cover each of these.
 
-The rest of the fix is in core's GS2 VM, [seihai-core#103](https://github.com/squirelworks/seihai-core/pull/103), which this PR pins. Before it, an object kept in a variable or passed as a parameter lost its root, so `this.me = player; this.me.position = …` never reached the player. A host property also could not be a list, so `temp.p = player.position; temp.p[1]` gave the whole text. With that core, `walk3d.gs2` finds Ato's player at its spawn point and walks it, as it did the real 5.12 (unit test `the_lab_walk_script_walks_ato_from_the_spawn_point`). This has not been run live yet; the Windows VM is with another lab.
+The rest of the fix is in core's GS2 VM, [seihai-core#103](https://github.com/squirelworks/seihai-core/pull/103), which this PR pins. Before it, an object kept in a variable or passed as a parameter lost its root, so `this.me = player; this.me.position = …` never reached the player. A host property also could not be a list, so `temp.p = player.position; temp.p[1]` gave the whole text. With that core, `walk3d.gs2` finds Ato's player at its spawn point and walks it, as it did the real 5.12 (unit test `the_lab_walk_script_walks_ato_from_the_spawn_point`). **Live (run 9, same VM, Ato built from this branch):** Ato alone against the gserver, with the same `walk3d.gs2` as its 3D weapon.
+- The script found the player at (0, −6, 1) on its 4th tick.
+- With the arrows it walked Ato to (0, 13.8, 1), turned, and walked on to (14.39, 14.34, 1).
+- Ato sent 108 transforms, about one every 87 ms. Ato runs the script at its full 50 ms frame, against six ticks a second for the real client under software OpenGL.
+- There were no `not found` errors.
+
+`keydown2` in Ato covers the four arrows only, so the script's `C` (chat) and `V` (velocity) keys did nothing there.
 
 ## What this changes elsewhere
 
