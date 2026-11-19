@@ -18,6 +18,7 @@ pub mod help;
 pub mod inventory;
 pub mod keys;
 pub mod mapscreen;
+pub mod mouse;
 pub mod present;
 pub mod receive_build;
 pub mod regcode;

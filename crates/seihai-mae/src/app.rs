@@ -2298,6 +2298,7 @@ pub fn main(args: Vec<String>) {
     let mut map_files = seihai::mapscreen::MapFiles::default();
     let mut map_asked: HashSet<String> = HashSet::new();
     let mut map_mouse_was_down = false;
+    let mut clicks = seihai::mouse::Clicks::default();
     let map_reading_pose = seihai::scripting::engine::vocab::Era::for_version(version)
         != seihai::scripting::engine::vocab::Era::V200;
     let mut confirm_quit = false;
@@ -3477,6 +3478,29 @@ pub fn main(args: Vec<String>) {
             }
         }
         map_mouse_was_down = mouse_down;
+        // Clicks in the game window: online each one goes to the server as
+        // a trigger action at the clicked point, as the real 2.31 sends it
+        // (`mouse`). Not over the open map, where Ctrl+click is its own.
+        let buttons = [
+            mouse_down,
+            window.get_mouse_down(minifb::MouseButton::Right),
+            window.get_mouse_down(minifb::MouseButton::Middle),
+        ];
+        let at = window
+            .get_mouse_pos(minifb::MouseMode::Discard)
+            .map(|(x, y)| (x as i32, y as i32));
+        let actions = clicks.update(buttons, at.unwrap_or((-1, -1)), std::time::Instant::now());
+        if let (Some(at), Some(c)) = (at, conn.as_mut()) {
+            if !map_screen.open {
+                let cam = seihai::render::camera_origin(&session, view_w, view_h);
+                let (x, y) = seihai::mouse::level_point(at, cam);
+                for a in actions {
+                    if let Err(e) = c.send_trigger_action(x, y, a, "") {
+                        eprintln!("send failed: {e}");
+                    }
+                }
+            }
+        }
         // The files of an open map: read when they arrive.
         if map_screen.open && (map_files.grid.is_none() || map_files.picture.is_none()) {
             if let Some(want) = map_files.source.clone() {
