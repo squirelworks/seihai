@@ -58,6 +58,21 @@ pub fn level_point(at: (i32, i32), cam: (i32, i32)) -> (f32, f32) {
     ((cam.0 + at.0) as f32 / t, (cam.1 + at.1) as f32 / t)
 }
 
+/// The message 2.31 sends before `rightmouse` when the right click lands
+/// on the player's own 48-pixel box: `PLI 80` with the account (it opens
+/// the "Profile" window; lab bytes `80:?{c224729}` for that run's account).
+pub fn own_profile_message(account: &str) -> Vec<u8> {
+    let mut m = vec![80 + 0x20];
+    m.extend_from_slice(account.as_bytes());
+    m.push(b'\n');
+    m
+}
+
+/// True when window pixel `at` is in the player's box at `origin`.
+pub fn on_player(at: (i32, i32), origin: (i32, i32)) -> bool {
+    (origin.0..origin.0 + 48).contains(&at.0) && (origin.1..origin.1 + 48).contains(&at.1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +102,13 @@ mod tests {
             c.update([true, true, true], (0, 0), late),
             ["rightmouse", "middlemouse"]
         );
+    }
+
+    #[test]
+    fn a_right_click_on_the_player_asks_for_the_profile() {
+        assert_eq!(own_profile_message("c224729"), b"pc224729\n");
+        assert!(on_player((330, 250), (320, 240)));
+        assert!(!on_player((368, 250), (320, 240)));
     }
 
     #[test]

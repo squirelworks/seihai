@@ -3520,7 +3520,21 @@ pub fn main(args: Vec<String>) {
             if !map_screen.open {
                 let cam = seihai::render::camera_origin(&session, view_w, view_h);
                 let (x, y) = seihai::mouse::level_point(at, cam);
+                // A right click on the player's own box asks for its
+                // profile first (2.31 only was measured).
+                let own = version == ClientVersion::V231
+                    && seihai::mouse::on_player(
+                        at,
+                        seihai::render::player_box_origin(&session, view_w, view_h),
+                    );
                 for a in actions {
+                    if a == "rightmouse" && own {
+                        if let Err(e) =
+                            c.send_messages(&[seihai::mouse::own_profile_message(&account)])
+                        {
+                            eprintln!("send failed: {e}");
+                        }
+                    }
                     if let Err(e) = c.send_trigger_action(x, y, a, "") {
                         eprintln!("send failed: {e}");
                     }
