@@ -165,6 +165,28 @@ impl View {
         if game_keys && pressed(egui::Key::D) {
             self.game.fire();
         }
+        // Every key that goes down reaches the GS2 scripts' `onKeyPressed`.
+        if game_keys {
+            let down: Vec<egui::Key> = ctx.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            ..
+                        } => Some(*key),
+                        _ => None,
+                    })
+                    .collect()
+            });
+            for key in down {
+                if let Some((code, text)) = virtual_key(key) {
+                    self.game.key_pressed(code, &text);
+                }
+            }
+        }
         // Letting go of A ends a grab; of an arrow, a push or a pull.
         let (a_down, arrow_up) = ctx.input(|i| {
             (
@@ -471,6 +493,48 @@ pub fn fit(size: (f32, f32), area: egui::Rect) -> (egui::Pos2, f32) {
 /// A canvas of `canvas` pixels in whole tiles.
 pub fn view_tiles(canvas: (f32, f32)) -> (u32, u32) {
     (canvas.0 as u32 / TILE_PX, canvas.1 as u32 / TILE_PX)
+}
+
+/// The Windows virtual-key code and text of a key, as a GS2 script's
+/// `onKeyPressed` gets them (`params[0]`, `params[1]`) **[inf]**. Keys
+/// with no code here are not passed.
+pub fn virtual_key(key: egui::Key) -> Option<(u32, String)> {
+    use egui::Key as K;
+    let name = key.name();
+    let code = match key {
+        K::Backspace => 8,
+        K::Tab => 9,
+        K::Enter => 13,
+        K::Escape => 27,
+        K::Space => 32,
+        K::PageUp => 33,
+        K::PageDown => 34,
+        K::End => 35,
+        K::Home => 36,
+        K::ArrowLeft => 37,
+        K::ArrowUp => 38,
+        K::ArrowRight => 39,
+        K::ArrowDown => 40,
+        K::Insert => 45,
+        K::Delete => 46,
+        _ if name.len() == 1 && name.as_bytes()[0].is_ascii_alphanumeric() => {
+            let c = name.as_bytes()[0].to_ascii_uppercase();
+            return Some((u32::from(c), name.to_ascii_lowercase()));
+        }
+        _ if name.len() >= 2 && name.starts_with('F') => {
+            let n: u32 = name[1..].parse().ok()?;
+            if !(1..=12).contains(&n) {
+                return None;
+            }
+            return Some((111 + n, String::new()));
+        }
+        _ => return None,
+    };
+    let text = match key {
+        K::Space => " ".to_string(),
+        _ => String::new(),
+    };
+    Some((code, text))
 }
 
 #[cfg(test)]

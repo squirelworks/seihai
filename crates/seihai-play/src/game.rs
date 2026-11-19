@@ -1161,6 +1161,20 @@ impl Game {
         self.dirty = true;
     }
 
+    /// A key went down: `onKeyPressed` on the GS2 scripts with the key's
+    /// code and text (see `view::virtual_key`).
+    pub fn key_pressed(&mut self, code: u32, key: &str) {
+        let Some(sc) = self.scripts.as_mut() else {
+            return;
+        };
+        if sc.is_empty() || self.session.current_level.is_none() {
+            return;
+        }
+        sc.key_pressed(&mut self.session, code, key);
+        self.after_scripts();
+        self.dirty = true;
+    }
+
     /// What the scripts' effects ask of the game: the server messages for
     /// the flags they changed, new NPC images, and a `setlevel`.
     pub(super) fn after_scripts(&mut self) {

@@ -395,6 +395,46 @@ impl ClientScripts {
         self.apply(session);
     }
 
+    /// A key went down while the game has the keys: `onKeyPressed` on
+    /// every script, with `params[0]` the key code and `params[1]` the
+    /// key's text, as the GS2 weapons of 4.x to 6.x read them (221 of the
+    /// weapons in Graal_analysis `npc-library/gs2-weapon-corpus-2026-11-14.md`).
+    /// The codes are Windows virtual-key codes, as the Windows clients pass
+    /// them **[inf]**.
+    pub fn key_pressed(&mut self, session: &mut OfflineSession, code: u32, key: &str) {
+        self.event_on_all(
+            session,
+            "KeyPressed",
+            &[Val::Num(f64::from(code)), Val::Str(key.to_string())],
+        );
+    }
+
+    /// The player took damage: `onPlayerHurt` on every script.
+    pub fn player_hurt(&mut self, session: &mut OfflineSession) {
+        self.event_on_all(session, "PlayerHurt", &[]);
+    }
+
+    /// The player died: `onPlayerDies` on every script.
+    pub fn player_dies(&mut self, session: &mut OfflineSession) {
+        self.event_on_all(session, "PlayerDies", &[]);
+    }
+
+    /// `on{event}` on every running script, each with a fresh view of the
+    /// player.
+    fn event_on_all(&mut self, session: &mut OfflineSession, event: &str, args: &[Val]) {
+        if self.running.is_empty() {
+            return;
+        }
+        self.retag(session);
+        self.host.sync_player(session);
+        for i in 0..self.running.len() {
+            self.sync(i, session);
+            self.seed_flags(i);
+            self.event(i, event, args);
+        }
+        self.apply(session);
+    }
+
     /// `onPlayerTouchsMe` on each visible NPC the player's feet have just
     /// entered.
     fn touch(&mut self, session: &mut OfflineSession) {
@@ -752,6 +792,34 @@ mod tests {
         // A second arrival of the same script does not start it again.
         assert_eq!(sc.start(&mut s, &script(src)), 0);
         assert_eq!(sc.len(), 1);
+    }
+
+    /// `onKeyPressed` gets the key code and text as `params`;
+    /// `onPlayerHurt` and `onPlayerDies` run on every script.
+    #[test]
+    fn key_hurt_and_death_events_reach_the_scripts() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onKeyPressed() { message(params[0] @ \":\" @ params[1]); }\n\
+                   function onPlayerHurt() { message(\"hurt\"); }\n\
+                   function onPlayerDies() { message(\"dies\"); }\n";
+        sc.start(&mut s, &script(src));
+        sc.key_pressed(&mut s, 65, "a");
+        assert_eq!(npc(&s).message, "65:a");
+        sc.player_hurt(&mut s);
+        assert_eq!(npc(&s).message, "hurt");
+        sc.player_dies(&mut s);
+        assert_eq!(npc(&s).message, "dies");
+    }
+
+    #[test]
+    fn keys_map_to_virtual_key_codes() {
+        use crate::view::virtual_key;
+        assert_eq!(virtual_key(egui::Key::A), Some((65, "a".to_string())));
+        assert_eq!(virtual_key(egui::Key::Num7), Some((55, "7".to_string())));
+        assert_eq!(virtual_key(egui::Key::ArrowLeft), Some((37, String::new())));
+        assert_eq!(virtual_key(egui::Key::Space), Some((32, " ".to_string())));
+        assert_eq!(virtual_key(egui::Key::F5), Some((116, String::new())));
     }
 
     /// A script whose NPC is not on the level, or that did not parse,
