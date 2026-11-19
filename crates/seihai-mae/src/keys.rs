@@ -337,11 +337,13 @@ pub fn virtual_key(k: Key) -> Option<(u32, String)> {
     if let Some(d) = name.strip_prefix("Key").and_then(|d| d.parse::<u32>().ok()) {
         return Some((48 + d, d.to_string()));
     }
+    // The real 2.31 gave the keypad 0 as 48 and "0", the digit's code,
+    // not the keypad code 96 the 4.x and later builds give.
     if let Some(d) = name
         .strip_prefix("NumPad")
         .and_then(|d| d.parse::<u32>().ok())
     {
-        return Some((96 + d, d.to_string()));
+        return Some((48 + d, d.to_string()));
     }
     if let Some(n) = name.strip_prefix('F').and_then(|d| d.parse::<u32>().ok()) {
         return (1..=12).contains(&n).then(|| (111 + n, String::new()));
@@ -407,7 +409,7 @@ mod tests {
         assert_eq!(virtual_key(Key::F1), Some((112, String::new())));
         assert_eq!(virtual_key(Key::F12), Some((123, String::new())));
         assert_eq!(virtual_key(Key::Left), Some((37, String::new())));
-        assert_eq!(virtual_key(Key::NumPad0), Some((96, "0".into())));
+        assert_eq!(virtual_key(Key::NumPad0), Some((48, "0".into())));
         assert_eq!(virtual_key(Key::F13), None);
     }
 
