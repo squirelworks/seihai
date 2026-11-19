@@ -1269,6 +1269,40 @@ impl Game {
         }
     }
 
+    /// A key went down: the scripts' `onKeyPressed` (`crate::keycodes`).
+    /// Nothing goes to the server for the key itself, as on the real
+    /// clients; a script may send something.
+    pub fn key_pressed(&mut self, press: &crate::keycodes::Press) {
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.key_pressed(&mut self.session, press);
+            self.after_scripts();
+        }
+    }
+
+    /// The version's label (`6.03r7`), empty before the login.
+    pub fn version_label(&self) -> &'static str {
+        self.life.version.map_or("", ClientVersion::label)
+    }
+
+    /// P: pause, or go on. Others see STATUS bit 0x01.
+    pub fn toggle_pause(&mut self) -> bool {
+        self.dirty = true;
+        self.session.toggle_pause()
+    }
+
+    /// Paused by P or by a window without the focus.
+    pub fn paused(&self) -> bool {
+        self.session.paused
+    }
+
+    /// The window got or lost the focus: without it the player is paused,
+    /// as on the real clients from 1.35 on (core's `focus_pauses`).
+    pub fn set_focused(&mut self, focused: bool) {
+        let version = self.life.version.unwrap_or(ClientVersion::V205);
+        self.session
+            .set_focused(focused || !seihai_core::offline::focus_pauses(version));
+    }
+
     /// The player's own bubble, while it lasts.
     pub fn own_bubble(&self, now: Instant) -> Option<&str> {
         self.own_bubble
@@ -1342,6 +1376,7 @@ impl Game {
             self.dirty = true;
         }
         self.tick_life(now);
+        self.send_hide_status();
         self.notice_sign();
         self.play_sounds();
         if self.take_chat_and_counters(now) {

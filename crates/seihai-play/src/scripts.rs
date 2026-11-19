@@ -395,6 +395,28 @@ impl ClientScripts {
         self.apply(session);
     }
 
+    /// A key went down: `onKeyPressed(code, key, scan)` on every script,
+    /// NPCs and weapons alike, as the real 4.20r8 and 6.03r7 pass every
+    /// key (`crate::keycodes`).
+    pub fn key_pressed(&mut self, session: &mut OfflineSession, press: &crate::keycodes::Press) {
+        if self.running.is_empty() {
+            return;
+        }
+        self.retag(session);
+        self.host.sync_player(session);
+        let args = [
+            Val::Num(f64::from(press.code)),
+            Val::Str(press.key.clone()),
+            Val::Num(f64::from(press.scan)),
+        ];
+        for i in 0..self.running.len() {
+            self.sync(i, session);
+            self.seed_flags(i);
+            self.event(i, "KeyPressed", &args);
+        }
+        self.apply(session);
+    }
+
     /// `onPlayerTouchsMe` on each visible NPC the player's feet have just
     /// entered.
     fn touch(&mut self, session: &mut OfflineSession) {
@@ -804,6 +826,22 @@ mod tests {
         assert_eq!(npc(&s).message, "");
         sc.tick(&mut s, 100);
         assert_eq!(npc(&s).message, "n=1");
+    }
+
+    /// A key runs `onKeyPressed(code, key, scan)` with the numbers the
+    /// real clients give (lab key sweep, 2026-11-19).
+    #[test]
+    fn a_key_runs_on_key_pressed_with_the_real_numbers() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onKeyPressed(code, key, scan) { message(code @ \",\" @ key @ \",\" @ scan); }\n";
+        sc.start(&mut s, &script(src));
+        let a = crate::keycodes::press(egui::Key::A, egui::Modifiers::NONE).unwrap();
+        sc.key_pressed(&mut s, &a);
+        assert_eq!(npc(&s).message, "65,a,30");
+        let alt7 = crate::keycodes::press(egui::Key::Num7, egui::Modifiers::ALT).unwrap();
+        sc.key_pressed(&mut s, &alt7);
+        assert_eq!(npc(&s).message, "1079,7,8");
     }
 
     /// Stepping onto the NPC runs `onPlayerTouchsMe` once, until the feet

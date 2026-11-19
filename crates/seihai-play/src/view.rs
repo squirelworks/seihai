@@ -35,6 +35,14 @@ pub struct View {
     /// A sign is open, or closed with a game key still down: the game keys
     /// stay away from the player.
     sign_hold: bool,
+    /// Paused by P (not by the focus): the next key goes on.
+    key_paused: bool,
+    /// The keys that paused or went on are still down.
+    swallow: bool,
+    /// Alt+Enter made the window fullscreen.
+    fullscreen: bool,
+    /// Shift, Ctrl and Alt as last seen, to tell when one goes down alone.
+    mods: egui::Modifiers,
 }
 
 /// How long a toall, PM or admin line stays on screen.
@@ -50,7 +58,42 @@ impl View {
             texture: None,
             typing: None,
             sign_hold: false,
+            key_paused: false,
+            swallow: false,
+            fullscreen: false,
+            mods: egui::Modifiers::NONE,
         }
+    }
+
+    /// The keys pressed this frame, as the scripts number them: each key
+    /// down (not its repeats) and Shift, Ctrl or Alt going down.
+    fn presses(&mut self, ctx: &egui::Context) -> Vec<crate::keycodes::Press> {
+        use crate::keycodes::{modifier, press, ALT_ALONE, CTRL_ALONE, SHIFT_ALONE};
+        let (events, mods) = ctx.input(|i| (i.events.clone(), i.modifiers));
+        let mut out = Vec::new();
+        for (now, before, alone) in [
+            (mods.shift, self.mods.shift, SHIFT_ALONE),
+            (mods.ctrl, self.mods.ctrl, CTRL_ALONE),
+            (mods.alt, self.mods.alt, ALT_ALONE),
+        ] {
+            if now && !before {
+                out.push(modifier(alone));
+            }
+        }
+        self.mods = mods;
+        for e in events {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                repeat: false,
+                modifiers,
+                ..
+            } = e
+            {
+                out.extend(press(key, modifiers));
+            }
+        }
+        out
     }
 
     /// The view in tiles.
@@ -69,11 +112,50 @@ impl View {
             }
         }
         let now = Instant::now();
-        let pressed = |k| ctx.input(|i| i.key_pressed(k));
+        // Every key goes to the scripts' `onKeyPressed`, before the game
+        // keys act on it, as on the real 4.20r8 and 6.03r7 (lab key sweep,
+        // 2026-11-19). Not while a chat line is being typed.
+        let presses = self.presses(ctx);
+        if self.typing.is_none() {
+            for p in &presses {
+                self.game.key_pressed(p);
+            }
+        }
+        // A window without the focus pauses the player.
+        self.game.set_focused(ctx.input(|i| i.focused));
+        // Alt+Enter: fullscreen, as on the real 4.20r8 (the 6.03r7 does
+        // nothing with it).
+        let alt_enter = ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::Enter));
+        if alt_enter && !self.game.version_label().starts_with('6') {
+            self.fullscreen = !self.fullscreen;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
+        // P pauses; the next key goes on and does nothing else, as on the
+        // real 4.20r8 and 6.03r7.
+        if self.typing.is_none() && !presses.is_empty() {
+            if self.game.paused() && self.key_paused {
+                self.game.toggle_pause();
+                self.key_paused = false;
+                self.swallow = true;
+            } else if !self.game.reading()
+                && !self.game.list_open()
+                && ctx.input(|i| i.key_pressed(egui::Key::P) && !i.modifiers.any())
+            {
+                self.key_paused = self.game.toggle_pause();
+                self.swallow = true;
+            }
+        }
+        // The press that paused or went on stays away from the game until
+        // its keys are let go; while paused the player stands still.
+        if self.swallow {
+            self.swallow = ctx.input(|i| !i.keys_down.is_empty());
+        }
+        let frozen = self.swallow || self.game.paused();
+        let pressed = |k| ctx.input(|i| i.key_pressed(k) && !i.modifiers.alt);
         // An open sign takes the game keys (the 2.05 rules, `game::signs`):
         // Up goes back a page, Escape closes it, the others go on. The keys
         // stay away from the player until they are let go after it closes.
-        let sign_busy = self.typing.is_none() && self.game.reading();
+        let sign_busy = !frozen && self.typing.is_none() && self.game.reading();
         if sign_busy {
             if pressed(egui::Key::ArrowUp) {
                 self.game.sign_key(SignKey::Back);
@@ -115,7 +197,7 @@ impl View {
         let list_before = self.game.list_open();
         // The open item list takes the game keys: the arrows move its
         // selection and the others close it.
-        if !sign_busy && self.typing.is_none() && self.game.list_open() {
+        if !frozen && !sign_busy && self.typing.is_none() && self.game.list_open() {
             for (keys, lk) in [
                 ([egui::Key::ArrowUp, egui::Key::ArrowLeft], ListKey::Back),
                 ([egui::Key::ArrowDown, egui::Key::ArrowRight], ListKey::Next),
@@ -137,13 +219,13 @@ impl View {
             {
                 self.game.item_list_key(ListKey::Close);
             }
-        } else if !sign_busy && self.typing.is_none() && pressed(egui::Key::Q) {
+        } else if !frozen && !sign_busy && self.typing.is_none() && pressed(egui::Key::Q) {
             self.game.toggle_item_list();
         }
         // Busy with the list this frame: it was open, or Q opened it.
         let list_busy = list_before || self.game.list_open();
         match self.typing.take() {
-            None if list_busy || sign_busy => {}
+            None if list_busy || sign_busy || frozen => {}
             None if pressed(egui::Key::Tab) || pressed(egui::Key::Enter) => {
                 self.typing = Some(String::new())
             }
@@ -154,12 +236,14 @@ impl View {
         // S swings the sword (and spins), D fires the weapon, A with S
         // held picks an item to drop and A lays it, as in the classic key
         // set. Not while the list is open or was closed this frame.
-        let game_keys = self.typing.is_none() && !list_busy && !sign_busy;
+        let game_keys = self.typing.is_none() && !list_busy && !sign_busy && !frozen;
         if game_keys && pressed(egui::Key::A) {
             let s_held = ctx.input(|i| i.key_down(egui::Key::S));
             self.game.act(s_held);
         }
-        if game_keys && pressed(egui::Key::S) {
+        // Space is the second attack key, as in the real clients' default
+        // key sets (4.20r8 and 6.03r7).
+        if game_keys && (pressed(egui::Key::S) || pressed(egui::Key::Space)) {
             self.game.swing();
         }
         if game_keys && pressed(egui::Key::D) {
@@ -181,9 +265,18 @@ impl View {
         });
         self.game.keys_up(a_down, arrow_up);
 
-        let held = |k| self.typing.is_none() && !sign_busy && ctx.input(|i| i.key_down(k));
-        let dx = held(egui::Key::ArrowRight) as i8 - held(egui::Key::ArrowLeft) as i8;
-        let dy = held(egui::Key::ArrowDown) as i8 - held(egui::Key::ArrowUp) as i8;
+        // The arrows walk, and I, J, K and L too: the third key set of the
+        // real 6.03r7's defaults (the classic clients' second).
+        let held = |a, b| {
+            self.typing.is_none()
+                && !sign_busy
+                && !frozen
+                && ctx.input(|i| i.key_down(a) || (i.key_down(b) && !i.modifiers.any()))
+        };
+        let dx = held(egui::Key::ArrowRight, egui::Key::L) as i8
+            - held(egui::Key::ArrowLeft, egui::Key::J) as i8;
+        let dy = held(egui::Key::ArrowDown, egui::Key::K) as i8
+            - held(egui::Key::ArrowUp, egui::Key::I) as i8;
         let changed = self.game.tick(dx, dy, now);
         if changed || self.texture.is_none() {
             let f = self.game.draw(self.tiles());
