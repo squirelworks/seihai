@@ -1284,6 +1284,31 @@ impl Game {
         self.life.version.map_or("", ClientVersion::label)
     }
 
+    /// A mouse click at level tile `(x, y)`: `PLI_TRIGGERACTION` (38) with
+    /// no NPC, the point in half tiles, and `leftmouse`, `rightmouse`,
+    /// `middlemouse` or `doublemouse` (after a `leftmouse`). The real
+    /// 4.20r8 and 6.03r7 send it for every click, on the player, the ground,
+    /// an NPC (still NPC 0) or the status display, and draw nothing; the
+    /// wheel sends nothing (lab key sweep, 2026-11-19). False offline or
+    /// before a level.
+    pub fn mouse_click(&mut self, x: f32, y: f32, action: &str) -> bool {
+        if self.offline || self.session.current_level.is_none() {
+            return false;
+        }
+        self.send.lock().unwrap_or_else(|e| e.into_inner()).push(
+            seihai_core::net::trigger_action_message(x.max(0.0), y.max(0.0), action, ""),
+        );
+        true
+    }
+
+    /// The level tile under the pixel `(px, py)` of a frame `view` tiles
+    /// wide and high, as [`Game::draw`] draws it.
+    pub fn tile_at_pixel(&self, view: (u32, u32), px: f32, py: f32) -> (f32, f32) {
+        let (cam_x, cam_y) = render::camera_origin(&self.session, view.0, view.1);
+        let t = render::TILE_PX as f32;
+        ((px + cam_x as f32) / t, (py + cam_y as f32) / t)
+    }
+
     /// P: pause, or go on. Others see STATUS bit 0x01.
     pub fn toggle_pause(&mut self) -> bool {
         self.dirty = true;

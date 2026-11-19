@@ -615,6 +615,50 @@ mod tests {
         std::mem::take(&mut *g.send.lock().unwrap())
     }
 
+    /// A click sends PLI 38 with NPC 0, the point in half tiles and the
+    /// button's name: the real 6.03r7 sent `20 20 20 5e 5f leftmouse` for a
+    /// click at (31, 31.5) (lab key sweep, 2026-11-19).
+    #[test]
+    fn a_click_sends_a_trigger_action_with_the_point() {
+        let mut g = game_on(ClientVersion::V603R7);
+        sent(&g);
+        assert!(g.mouse_click(31.0, 31.5, "leftmouse"));
+        let mut want = vec![38 + 0x20, 0x20, 0x20, 0x20, 0x5e, 0x5f];
+        want.extend_from_slice(b"leftmouse\n");
+        assert_eq!(sent(&g), vec![want]);
+    }
+
+    /// P and Q send STATUS with the paused bit, and 20 again after, as the
+    /// real 4.20r8 and 6.03r7 did (lab key sweep, 2026-11-19).
+    #[test]
+    fn pause_and_the_item_list_send_the_paused_bit() {
+        let mut g = game_on(ClientVersion::V603R7);
+        g.tick(0, 0, Instant::now());
+        sent(&g);
+        assert!(g.toggle_pause());
+        g.tick(0, 0, Instant::now());
+        let paused = sent(&g);
+        assert!(
+            paused
+                .iter()
+                .any(|m| m[..2] == [2 + 0x20, 18 + 0x20] && (m[2] - 0x20) & 1 == 1),
+            "{paused:?}"
+        );
+        assert!(!g.toggle_pause());
+        g.tick(0, 0, Instant::now());
+        let on = sent(&g);
+        assert!(
+            on.iter()
+                .any(|m| m[..2] == [2 + 0x20, 18 + 0x20] && (m[2] - 0x20) & 1 == 0),
+            "{on:?}"
+        );
+        g.toggle_item_list();
+        g.tick(0, 0, Instant::now());
+        assert!(sent(&g)
+            .iter()
+            .any(|m| m[..2] == [2 + 0x20, 18 + 0x20] && (m[2] - 0x20) & 1 == 1));
+    }
+
     /// The server's counters: 5 bombs, 10 arrows, and `status`.
     fn counters(g: &mut Game, status: u8) {
         *g.own.lock().unwrap() = OwnStats {

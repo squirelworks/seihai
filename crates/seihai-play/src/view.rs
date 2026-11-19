@@ -294,12 +294,14 @@ impl View {
         }
         let (w, h) = self.canvas;
         let tiles = self.tiles();
+        let mut placed = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(egui::Color32::BLACK))
             .show(ctx, |ui| {
                 // The frame fills the window, scaled to keep its shape and
                 // centred, so a maximised window shows the whole game.
                 let (origin, scale) = fit((w, h), ui.max_rect());
+                placed = Some((origin, scale));
                 if let Some(t) = &self.texture {
                     let rect = egui::Rect::from_min_size(origin, egui::vec2(w, h) * scale);
                     ui.painter().image(
@@ -464,6 +466,39 @@ impl View {
                     edit.request_focus();
                 }
             });
+        // A click on the game sends PLI_TRIGGERACTION with the point
+        // (`Game::mouse_click`); the second click of a double click sends
+        // `doublemouse` instead of `leftmouse`, as the real clients do.
+        if let Some((origin, scale)) = placed.filter(|(_, sc)| *sc > 0.0) {
+            let clicks = ctx.input(|i| {
+                let p = &i.pointer;
+                let pos = p.interact_pos();
+                let mut out = Vec::new();
+                if p.button_double_clicked(egui::PointerButton::Primary) {
+                    out.push("doublemouse");
+                } else if p.button_clicked(egui::PointerButton::Primary) {
+                    out.push("leftmouse");
+                }
+                if p.button_clicked(egui::PointerButton::Secondary) {
+                    out.push("rightmouse");
+                }
+                if p.button_clicked(egui::PointerButton::Middle) {
+                    out.push("middlemouse");
+                }
+                pos.map(|pos| (pos, out))
+            });
+            if let Some((pos, actions)) = clicks {
+                let inside =
+                    egui::Rect::from_min_size(origin, egui::vec2(w, h) * scale).contains(pos);
+                if inside && self.typing.is_none() {
+                    let px = (pos - origin) / scale;
+                    let (x, y) = self.game.tile_at_pixel(tiles, px.x, px.y);
+                    for a in actions {
+                        self.game.mouse_click(x, y, a);
+                    }
+                }
+            }
+        }
         // Walking needs frames while a key is held; otherwise poll the
         // network now and then.
         ctx.request_repaint_after(Duration::from_millis(if dx != 0 || dy != 0 {
