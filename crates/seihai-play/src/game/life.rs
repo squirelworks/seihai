@@ -167,8 +167,18 @@ impl Game {
     /// STATUS with the hidden bit (0x02) set or cleared, once the level is
     /// in, as Mae sends it (`pause_message_bits`). The position goes with
     /// the next pose tick.
+    ///
+    /// The paused bit (0x01) goes the same way: P, a window without the
+    /// focus, a sign being read, and the open item list. The real 4.20r8
+    /// and 6.03r7 sent STATUS 21 when P or Q was pressed and 20 when the
+    /// next key closed it (lab key sweep, 2026-11-19).
     pub(super) fn send_hide_status(&mut self) {
-        let bits = self.session.hide_status();
+        let list = if self.actions.list.open {
+            seihai_core::offline::PAUSED_STATUS
+        } else {
+            0
+        };
+        let bits = self.session.hide_status() | self.session.pause_status() | list;
         if bits == self.life.hide_told || self.session.current_level.is_none() {
             return;
         }

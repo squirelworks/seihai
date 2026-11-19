@@ -395,17 +395,20 @@ impl ClientScripts {
         self.apply(session);
     }
 
-    /// A key went down while the game has the keys: `onKeyPressed` on
-    /// every script, with `params[0]` the key code and `params[1]` the
-    /// key's text, as the GS2 weapons of 4.x to 6.x read them (221 of the
-    /// weapons in Graal_analysis `npc-library/gs2-weapon-corpus-2026-11-14.md`).
-    /// The codes are Windows virtual-key codes, as the Windows clients pass
-    /// them **[inf]**.
-    pub fn key_pressed(&mut self, session: &mut OfflineSession, code: u32, key: &str) {
+    /// A key went down: `onKeyPressed(code, key, scan)` on every script,
+    /// NPCs and weapons alike, as the real 4.20r8 and 6.03r7 pass every
+    /// key (`crate::keycodes`, lab key sweep 2026-11-19). The GS2 weapons
+    /// of 4.x to 6.x read them as `params` (221 of the weapons in
+    /// Graal_analysis `npc-library/gs2-weapon-corpus-2026-11-14.md`).
+    pub fn key_pressed(&mut self, session: &mut OfflineSession, press: &crate::keycodes::Press) {
         self.event_on_all(
             session,
             "KeyPressed",
-            &[Val::Num(f64::from(code)), Val::Str(key.to_string())],
+            &[
+                Val::Num(f64::from(press.code)),
+                Val::Str(press.key.clone()),
+                Val::Num(f64::from(press.scan)),
+            ],
         );
     }
 
@@ -804,22 +807,13 @@ mod tests {
                    function onPlayerHurt() { message(\"hurt\"); }\n\
                    function onPlayerDies() { message(\"dies\"); }\n";
         sc.start(&mut s, &script(src));
-        sc.key_pressed(&mut s, 65, "a");
+        let a = crate::keycodes::press(egui::Key::A, egui::Modifiers::NONE).unwrap();
+        sc.key_pressed(&mut s, &a);
         assert_eq!(npc(&s).message, "65:a");
         sc.player_hurt(&mut s);
         assert_eq!(npc(&s).message, "hurt");
         sc.player_dies(&mut s);
         assert_eq!(npc(&s).message, "dies");
-    }
-
-    #[test]
-    fn keys_map_to_virtual_key_codes() {
-        use crate::view::virtual_key;
-        assert_eq!(virtual_key(egui::Key::A), Some((65, "a".to_string())));
-        assert_eq!(virtual_key(egui::Key::Num7), Some((55, "7".to_string())));
-        assert_eq!(virtual_key(egui::Key::ArrowLeft), Some((37, String::new())));
-        assert_eq!(virtual_key(egui::Key::Space), Some((32, " ".to_string())));
-        assert_eq!(virtual_key(egui::Key::F5), Some((116, String::new())));
     }
 
     /// A script whose NPC is not on the level, or that did not parse,
@@ -872,6 +866,22 @@ mod tests {
         assert_eq!(npc(&s).message, "");
         sc.tick(&mut s, 100);
         assert_eq!(npc(&s).message, "n=1");
+    }
+
+    /// A key runs `onKeyPressed(code, key, scan)` with the numbers the
+    /// real clients give (lab key sweep, 2026-11-19).
+    #[test]
+    fn a_key_runs_on_key_pressed_with_the_real_numbers() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onKeyPressed(code, key, scan) { message(code @ \",\" @ key @ \",\" @ scan); }\n";
+        sc.start(&mut s, &script(src));
+        let a = crate::keycodes::press(egui::Key::A, egui::Modifiers::NONE).unwrap();
+        sc.key_pressed(&mut s, &a);
+        assert_eq!(npc(&s).message, "65,a,30");
+        let alt7 = crate::keycodes::press(egui::Key::Num7, egui::Modifiers::ALT).unwrap();
+        sc.key_pressed(&mut s, &alt7);
+        assert_eq!(npc(&s).message, "1079,7,8");
     }
 
     /// Stepping onto the NPC runs `onPlayerTouchsMe` once, until the feet

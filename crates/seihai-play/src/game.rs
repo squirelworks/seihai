@@ -1227,20 +1227,6 @@ impl Game {
         self.dirty = true;
     }
 
-    /// A key went down: `onKeyPressed` on the GS2 scripts with the key's
-    /// code and text (see `view::virtual_key`).
-    pub fn key_pressed(&mut self, code: u32, key: &str) {
-        let Some(sc) = self.scripts.as_mut() else {
-            return;
-        };
-        if sc.is_empty() || self.session.current_level.is_none() {
-            return;
-        }
-        sc.key_pressed(&mut self.session, code, key);
-        self.after_scripts();
-        self.dirty = true;
-    }
-
     /// What the scripts' effects ask of the game: the server messages for
     /// the flags they changed, new NPC images, and a `setlevel`.
     pub(super) fn after_scripts(&mut self) {
@@ -1349,6 +1335,65 @@ impl Game {
         }
     }
 
+    /// A key went down: the scripts' `onKeyPressed` (`crate::keycodes`).
+    /// Nothing goes to the server for the key itself, as on the real
+    /// clients; a script may send something.
+    pub fn key_pressed(&mut self, press: &crate::keycodes::Press) {
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.key_pressed(&mut self.session, press);
+            self.after_scripts();
+        }
+    }
+
+    /// The version's label (`6.03r7`), empty before the login.
+    pub fn version_label(&self) -> &'static str {
+        self.life.version.map_or("", ClientVersion::label)
+    }
+
+    /// A mouse click at level tile `(x, y)`: `PLI_TRIGGERACTION` (38) with
+    /// no NPC, the point in half tiles, and `leftmouse`, `rightmouse`,
+    /// `middlemouse` or `doublemouse` (after a `leftmouse`). The real
+    /// 4.20r8 and 6.03r7 send it for every click, on the player, the ground,
+    /// an NPC (still NPC 0) or the status display, and draw nothing; the
+    /// wheel sends nothing (lab key sweep, 2026-11-19). False offline or
+    /// before a level.
+    pub fn mouse_click(&mut self, x: f32, y: f32, action: &str) -> bool {
+        if self.offline || self.session.current_level.is_none() {
+            return false;
+        }
+        self.send.lock().unwrap_or_else(|e| e.into_inner()).push(
+            seihai_core::net::trigger_action_message(x.max(0.0), y.max(0.0), action, ""),
+        );
+        true
+    }
+
+    /// The level tile under the pixel `(px, py)` of a frame `view` tiles
+    /// wide and high, as [`Game::draw`] draws it.
+    pub fn tile_at_pixel(&self, view: (u32, u32), px: f32, py: f32) -> (f32, f32) {
+        let (cam_x, cam_y) = render::camera_origin(&self.session, view.0, view.1);
+        let t = render::TILE_PX as f32;
+        ((px + cam_x as f32) / t, (py + cam_y as f32) / t)
+    }
+
+    /// P: pause, or go on. Others see STATUS bit 0x01.
+    pub fn toggle_pause(&mut self) -> bool {
+        self.dirty = true;
+        self.session.toggle_pause()
+    }
+
+    /// Paused by P or by a window without the focus.
+    pub fn paused(&self) -> bool {
+        self.session.paused
+    }
+
+    /// The window got or lost the focus: without it the player is paused,
+    /// as on the real clients from 1.35 on (core's `focus_pauses`).
+    pub fn set_focused(&mut self, focused: bool) {
+        let version = self.life.version.unwrap_or(ClientVersion::V205);
+        self.session
+            .set_focused(focused || !seihai_core::offline::focus_pauses(version));
+    }
+
     /// The player's own bubble, while it lasts.
     pub fn own_bubble(&self, now: Instant) -> Option<&str> {
         self.own_bubble
@@ -1422,6 +1467,7 @@ impl Game {
             self.dirty = true;
         }
         self.tick_life(now);
+        self.send_hide_status();
         self.notice_sign();
         self.play_sounds();
         if self.take_chat_and_counters(now) {

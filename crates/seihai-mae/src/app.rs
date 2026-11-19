@@ -4375,6 +4375,12 @@ pub fn main(args: Vec<String>) {
             } else {
                 keymap.keydown_bits(&window)
             };
+            // Each key down runs `keypressed` (2.17.1 and later).
+            if !input.is_open() {
+                for (code, key) in crate::keys::script_presses(&window) {
+                    scripts.key_pressed(&mut session, code, &key);
+                }
+            }
             scripts.tick(&mut session, dt);
             ft.mark("scripts");
             // A script asked for a level change (setlevel / setlevel2).
