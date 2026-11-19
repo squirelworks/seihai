@@ -1,5 +1,12 @@
 # Release points
 
+> **The versioning policy is [VERSIONING.md](VERSIONING.md)** (2026-11-19):
+> when a release happens, what the numbers mean, and what 1.0.0 needs. Each
+> repo's next milestone and 1.0.0 bar are tracked in its "0.N.0 roadmap" and
+> "1.0.0 criteria checklist" issues. The table below is a dated snapshot. The
+> seihai-core rows are history, because core now lives in
+> squirelworks/seihai-core.
+
 When each repo is ready for a release, and how a release happens. Rows that say
 "rechecked 2026-11-12" were checked that day against each repo's main and
 releases page; "rechecked 2026-11-11" rows are from the day before. Update a row in the same
@@ -8,7 +15,8 @@ PR that changes it.
 ## How a release happens: drafts, then the owner presses Publish
 
 1. When a repo reaches its point, someone bumps the version in `Cargo.toml` and
-   writes the release notes in `docs/releases/v<version>.md`, in one normal PR:
+   writes the release notes in `docs/releases/v<version>.md`, in one release PR
+   with `Release: v<version>` in its body (the `version-guard` check wants it):
    what is new, what it is for, what is known not to work. Generated lists of PR
    titles are not notes. Then they run that repo's **release** workflow by hand
    (Actions, release, Run workflow) with the version, e.g. `0.1.0`.

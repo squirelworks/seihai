@@ -257,3 +257,7 @@ otherwise, a contribution you submit is licensed the same way.
 Seihai is an independent fan project. It is not affiliated with, endorsed by,
 or connected to GraalOnline. "Graal" is used only to identify the games and
 servers Seihai works with.
+
+## Versioning
+
+When a release happens, what the version numbers mean and what 1.0.0 needs: [VERSIONING.md](VERSIONING.md). Release points per version are in [RELEASES.md](RELEASES.md).

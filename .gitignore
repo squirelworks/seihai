@@ -16,3 +16,6 @@ __pycache__/
 !/recovered-hacks/**/*.md
 !/recovered-hacks/**/*.json
 !/recovered-hacks/**/*.BLOCKED.txt
+
+# Local [patch] overrides for test builds (VERSIONING.md)
+/.cargo/config.toml
