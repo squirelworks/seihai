@@ -20,6 +20,7 @@ pub mod keys;
 pub mod mapscreen;
 pub mod present;
 pub mod receive_build;
+pub mod regcode;
 mod relay_chat;
 pub mod render;
 pub mod settings;

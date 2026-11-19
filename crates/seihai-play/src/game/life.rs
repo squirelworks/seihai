@@ -86,6 +86,10 @@ impl Game {
             }
         }
         if took {
+            if let Some(sc) = self.scripts.as_mut() {
+                sc.player_hurt(&mut self.session);
+                self.after_scripts();
+            }
             self.set_pose(self.session.walking);
             self.dirty = true;
         }
@@ -192,6 +196,10 @@ impl Game {
                 eprintln!("died (attacker {attacker:?})");
                 if let Some(sc) = self.actions.scripts.as_mut() {
                     sc.player_dies(&mut self.session);
+                }
+                if let Some(sc) = self.scripts.as_mut() {
+                    sc.player_dies(&mut self.session);
+                    self.after_scripts();
                 }
                 self.set_pose(false);
                 self.dirty = true;

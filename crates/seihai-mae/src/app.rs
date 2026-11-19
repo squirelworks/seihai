@@ -2396,7 +2396,18 @@ pub fn main(args: Vec<String>) {
             colors: session.looks.colors,
         };
         match seihai::relay::Client::connect(&endpoint, player) {
-            Ok(c) => Some(c),
+            Ok(mut c) => {
+                // The install's reg.code key goes to the peers as type 8.
+                let key = resolver
+                    .user_root()
+                    .and_then(|r| crate::regcode::registration_key(&r.root));
+                if let Some(key) = key {
+                    if c.set_registration_key(&key).is_ok() {
+                        eprintln!("relay: showing the reg.code registration key to peers");
+                    }
+                }
+                Some(c)
+            }
             Err(e) => {
                 eprintln!("relay connect: {e}");
                 std::process::exit(1);
@@ -2427,6 +2438,12 @@ pub fn main(args: Vec<String>) {
                     "relay disconnected: {e}; {} queued chat messages were not submitted",
                     pending_relay_chat.len()
                 );
+                net_state.others.clear();
+                break 'game;
+            }
+            if c.duplicate_registration() {
+                eprintln!("relay: {}", crate::regcode::DUPLICATE_KEY);
+                exit_error = Some(crate::regcode::DUPLICATE_KEY.to_string());
                 net_state.others.clear();
                 break 'game;
             }
