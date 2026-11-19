@@ -875,7 +875,7 @@ mod tests {
         use seihai_core::items::{FloorItem, ITEM_LIFE};
         let (tx, rx) = std::sync::mpsc::channel();
         drop(tx);
-        let mut g = Game::new(rx, None, true).unwrap();
+        let mut g = Game::new(rx, None, false).unwrap();
         let live = seihai_core::client::Live::default();
         g.attach(live.clone());
         g.session.current_level = Some(seihai_core::assets::Level::from_board(&[0; 4096]));

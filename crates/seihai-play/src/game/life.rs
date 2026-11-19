@@ -245,7 +245,7 @@ mod tests {
     /// thread's half kept.
     fn game() -> (Game, Live, mpsc::Sender<Event>) {
         let (tx, rx) = mpsc::channel();
-        let mut g = Game::new(rx, None, true).unwrap();
+        let mut g = Game::new(rx, None, false).unwrap();
         g.offline = false;
         let live = Live::default();
         g.attach(live.clone());
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn no_build_no_hits() {
         let (tx, rx) = mpsc::channel::<Event>();
-        let mut g = Game::new(rx, None, true).unwrap();
+        let mut g = Game::new(rx, None, false).unwrap();
         drop(tx);
         g.session.current_level = Some(Level::from_board(&[0; 4096]));
         let before = g.session.hearts_half();
