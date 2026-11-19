@@ -34,6 +34,7 @@ use seihai_core::protocol::ClientVersion;
 use seihai_core::scripting::engine::world::Effect;
 use seihai_core::scripting::engine::{Era, Val};
 use seihai_core::scripting::gs2::exec::{EffectHost, Host, Machine, Outcome, Root};
+use seihai_core::scripting::gs2::lists::Value;
 use seihai_core::scripting::gs2::Script;
 use std::collections::BTreeMap;
 
@@ -98,18 +99,14 @@ fn numbers(v: &Val) -> Vec<f32> {
         .collect()
 }
 
-fn list(xs: &[f32]) -> Val {
-    Val::Str(
-        xs.iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>()
-            .join(","),
-    )
+/// A list of numbers, as the client's array properties read.
+fn list(xs: &[f32]) -> Value {
+    Value::List(xs.iter().map(|x| Value::Val(Val::Num(*x as f64))).collect())
 }
 
 impl Host3d {
     /// `player.<name>` of the own object.
-    fn player_prop(&self, name: &str) -> Option<Val> {
+    fn player_prop(&self, name: &str) -> Option<Value> {
         let t = self.me?;
         match name.to_ascii_lowercase().as_str() {
             "position" => Some(list(&t.position)),
@@ -118,7 +115,7 @@ impl Host3d {
                 let [ax, ay, az] = t.axis;
                 Some(list(&[x, y, z, ax, ay, az, t.angle.to_degrees()]))
             }
-            "chat" => Some(Val::Str(self.chat.clone())),
+            "chat" => Some(Value::Val(Val::Str(self.chat.clone()))),
             _ => None,
         }
     }
@@ -178,6 +175,10 @@ impl Host for Host3d {
                 };
                 return Some(Val::Num(if down { 1.0 } else { 0.0 }));
             }
+            // The 3D link itself (`ServerConnection`, a `GameConnection`).
+            "global.serverconnection.objecttype" => {
+                return Some(Val::Str("GameConnection".into()));
+            }
             "player.objecttype" => {
                 let t = if self.me.is_some() {
                     "GameObject"
@@ -202,12 +203,16 @@ impl Host for Host3d {
     }
 
     fn get_prop(&mut self, root: Root, name: &str) -> Option<Val> {
+        self.get_prop_value(root, name).map(|v| v.val())
+    }
+
+    fn get_prop_value(&mut self, root: Root, name: &str) -> Option<Value> {
         if root == Root::Player {
             if let Some(v) = self.player_prop(name) {
                 return Some(v);
             }
         }
-        self.inner.get_prop(root, name)
+        self.inner.get_prop(root, name).map(Value::Val)
     }
 
     fn set_prop(&mut self, root: Root, name: &str, value: &Val) -> bool {
@@ -645,6 +650,37 @@ mod tests {
         assert_eq!(c.chat.as_deref(), Some("hi"));
         assert_eq!(c.transform, None);
         assert_eq!(lines(&mut w), ["s client.c=hi"]);
+    }
+
+    #[test]
+    fn the_lab_walk_script_walks_ato_from_the_spawn_point() {
+        let src = include_str!("../../../../../docs/lab/2026-11-19-lab458-real512/walk3d.gs2");
+        let mut w = Weapons3d::new(ClientVersion::V512);
+        w.start("-Probe3D", &bytecode(src), &BTreeMap::new());
+        w.tick(100);
+        w.me = Some(spawn());
+        w.tick(100);
+        assert!(
+            w.log
+                .iter()
+                .any(|l| l.contains("p3d: found GameObject at 0,-6,1")),
+            "{:?}",
+            w.log
+        );
+        w.keys.forward = 1;
+        w.tick(100);
+        let t = w
+            .take_player()
+            .transform
+            .expect("the script moved the player");
+        assert_eq!(t.position[0], 0.0);
+        assert_eq!(t.position[2], 1.0);
+        assert!(t.position[1] > -6.0 && t.position[1] < -5.0, "{t:?}");
+        assert!(
+            !w.log.iter().any(|l| l.contains("not found")),
+            "{:?}",
+            w.log
+        );
     }
 
     #[test]
