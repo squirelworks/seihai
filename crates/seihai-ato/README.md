@@ -225,8 +225,10 @@ On 2026-11-13, the six builds (3.04, 3.153, 4.04r2, 4.20r8, 5.00r7, 5.12) ran ag
   was held (the 10 s walk's updates span 10.03 s); an earlier reading of
   12.9 s counted from the spawn transform instead of the first step (see
   [docs/captures](../../docs/captures/lab458-graal3d/FINDINGS.md)).
-  Real 5.12 movement speeds and whether it sends velocity remain unknown;
-  the original client was not run in this pass.
+  A real 5.12 was run on 2026-11-19 ([write-up](../../docs/lab/2026-11-19-lab458-real512/README.md)):
+  it has no walking of its own in 3D mode. A server script moves its player,
+  the client sends the transform after each change and never a velocity, so
+  there is no native speed for Ato to copy.
 - The water sound and `--no-sound` pass on 3.153 (#466). The water-to-dry
   follow-up reported five Ato runs at client `4d1a28d` against gserver-v2
   `c851b4e`: a splash already playing ran to completion; one new splash

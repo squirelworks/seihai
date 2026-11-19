@@ -17,8 +17,19 @@
 //! `local.` flags stay on the client. An unset flag has no line of its own
 //! in the text, so it is only logged. Sleeps and timers run on the VM's
 //! 50 ms frame, as for the 2D NPC scripts.
+//!
+//! **The player.** A real 5.12 does not walk by itself in 3D mode: its keys
+//! only reach scripts (`keydown2`), and from login step 5 on a script's
+//! `player` is the client's own `GameObject` (`player.objecttype()` is
+//! `GameObject`; before that it is `GameConnection`). A server's 3D weapon
+//! walks the player by writing `player.position` and `player.transform`,
+//! and talks with `player.chat` (lab #458, 2026-11-19). The same holds
+//! here: [`Weapons3d::me`] is the own object, and what scripts write to it
+//! comes back through [`Weapons3d::take_player`]. A script's `transform`
+//! angle is in degrees; the wire's is in radians.
 
 use super::graal_text::{Applied, ClientEvents};
+use crate::view3d::Transform;
 use seihai_core::protocol::ClientVersion;
 use seihai_core::scripting::engine::world::Effect;
 use seihai_core::scripting::engine::{Era, Val};
@@ -49,14 +60,139 @@ pub enum ToServer {
     Trigger(Vec<String>),
 }
 
+/// The keys a 3D script reads with `keydown2`: the arrows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Keys3d {
+    /// 1 up, -1 down.
+    pub forward: i8,
+    /// 1 left, -1 right.
+    pub turn: i8,
+}
+
+/// What scripts did to the player since the last [`Weapons3d::take_player`].
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PlayerChange {
+    /// The new transform, when a script moved or turned the player.
+    pub transform: Option<Transform>,
+    /// A line a script said (`player.chat`).
+    pub chat: Option<String>,
+}
+
 /// Core's effect host, with the calls a 3D weapon makes to the server.
 struct Host3d {
     inner: EffectHost,
     out: Vec<ToServer>,
+    /// The own object while there is one (login step 5 on).
+    me: Option<Transform>,
+    chat: String,
+    keys: Keys3d,
+    changed: PlayerChange,
+}
+
+/// Numbers from a list value: `{x, y, z}` arrives as `x,y,z`; spaces too.
+fn numbers(v: &Val) -> Vec<f32> {
+    v.text()
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.parse().unwrap_or(0.0))
+        .collect()
+}
+
+fn list(xs: &[f32]) -> Val {
+    Val::Str(
+        xs.iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    )
+}
+
+impl Host3d {
+    /// `player.<name>` of the own object.
+    fn player_prop(&self, name: &str) -> Option<Val> {
+        let t = self.me?;
+        match name.to_ascii_lowercase().as_str() {
+            "position" => Some(list(&t.position)),
+            "transform" => {
+                let [x, y, z] = t.position;
+                let [ax, ay, az] = t.axis;
+                Some(list(&[x, y, z, ax, ay, az, t.angle.to_degrees()]))
+            }
+            "chat" => Some(Val::Str(self.chat.clone())),
+            _ => None,
+        }
+    }
+
+    /// Writes `player.<name>`; `false` if it is not one of the own object's.
+    fn set_player_prop(&mut self, name: &str, value: &Val) -> bool {
+        let Some(mut t) = self.me else {
+            return false;
+        };
+        match name.to_ascii_lowercase().as_str() {
+            "position" => {
+                let n = numbers(value);
+                if n.len() < 3 {
+                    return true;
+                }
+                t.position = [n[0], n[1], n[2]];
+            }
+            "transform" => {
+                let n = numbers(value);
+                if n.len() < 7 {
+                    return true;
+                }
+                t = Transform {
+                    position: [n[0], n[1], n[2]],
+                    axis: [n[3], n[4], n[5]],
+                    angle: n[6].to_radians(),
+                };
+            }
+            "chat" => {
+                self.chat = value.text();
+                self.changed.chat = Some(self.chat.clone());
+                return true;
+            }
+            // A real 5.12 takes no velocity from a script (it reads back as
+            // 0,0,0 and is never sent).
+            "velocity" => return true,
+            _ => return false,
+        }
+        self.me = Some(t);
+        self.changed.transform = Some(t);
+        true
+    }
 }
 
 impl Host for Host3d {
     fn command(&mut self, name: &str, args: &[Val]) -> Option<Val> {
+        match name.to_ascii_lowercase().as_str() {
+            // The 3D view's arrows, by virtual key code.
+            "keydown2" => {
+                let k = &self.keys;
+                let down = match args.first().map(Val::num).unwrap_or(0.0) as i64 {
+                    37 => k.turn > 0,
+                    38 => k.forward > 0,
+                    39 => k.turn < 0,
+                    40 => k.forward < 0,
+                    _ => false,
+                };
+                return Some(Val::Num(if down { 1.0 } else { 0.0 }));
+            }
+            "player.objecttype" => {
+                let t = if self.me.is_some() {
+                    "GameObject"
+                } else {
+                    "GameConnection"
+                };
+                return Some(Val::Str(t.into()));
+            }
+            "echo" => {
+                let line = args.iter().map(Val::text).collect::<Vec<_>>().join("");
+                self.inner.log(line);
+                return Some(Val::Num(0.0));
+            }
+            _ => {}
+        }
         if name.eq_ignore_ascii_case("triggerserver") {
             self.out
                 .push(ToServer::Trigger(args.iter().map(Val::text).collect()));
@@ -66,10 +202,18 @@ impl Host for Host3d {
     }
 
     fn get_prop(&mut self, root: Root, name: &str) -> Option<Val> {
+        if root == Root::Player {
+            if let Some(v) = self.player_prop(name) {
+                return Some(v);
+            }
+        }
         self.inner.get_prop(root, name)
     }
 
     fn set_prop(&mut self, root: Root, name: &str, value: &Val) -> bool {
+        if root == Root::Player && self.set_player_prop(name, value) {
+            return true;
+        }
         // `client.` variables go to the server; the VM keeps the value too.
         if name.len() > 7 && name[..7].eq_ignore_ascii_case("client.") {
             self.out.push(ToServer::Flag {
@@ -104,6 +248,16 @@ pub struct Weapons3d {
     version: ClientVersion,
     running: BTreeMap<String, Running>,
     acc_ms: u64,
+    /// The own object, for the scripts' `player` (set from the control
+    /// object on; scripts' moves update it).
+    pub me: Option<Transform>,
+    /// The arrows held, for `keydown2`.
+    pub keys: Keys3d,
+    /// Whether a script has moved the player: from then on the scripts
+    /// walk it, not the client.
+    pub scripted: bool,
+    chat: String,
+    changed: PlayerChange,
     /// What the scripts asked to send, not yet sent.
     pub events: ClientEvents,
     /// Lines for the log, without the `3d: ` prefix.
@@ -129,8 +283,27 @@ impl Weapons3d {
             version,
             running: BTreeMap::new(),
             acc_ms: 0,
+            me: None,
+            keys: Keys3d::default(),
+            scripted: false,
+            chat: String::new(),
+            changed: PlayerChange::default(),
             events: ClientEvents::default(),
             log: Vec::new(),
+        }
+    }
+
+    /// What scripts did to the player since the last call.
+    pub fn take_player(&mut self) -> PlayerChange {
+        std::mem::take(&mut self.changed)
+    }
+
+    /// Before a run: give the host the player as it stands now.
+    fn lend(&mut self, weapon: &str) {
+        if let Some(r) = self.running.get_mut(weapon) {
+            r.host.me = self.me;
+            r.host.keys = self.keys;
+            r.host.chat = self.chat.clone();
         }
     }
 
@@ -191,6 +364,10 @@ impl Weapons3d {
             host: Host3d {
                 inner,
                 out: Vec::new(),
+                me: self.me,
+                chat: self.chat.clone(),
+                keys: self.keys,
+                changed: PlayerChange::default(),
             },
             wait: Wait::Idle,
         };
@@ -218,6 +395,10 @@ impl Weapons3d {
                 .push(format!("weapon {weapon}: {event} dropped while it sleeps"));
             return;
         }
+        self.lend(weapon);
+        let Some(r) = self.running.get_mut(weapon) else {
+            return;
+        };
         let out = r.machine.call_event(event, args, &mut r.host);
         self.ended(weapon, out);
     }
@@ -229,6 +410,7 @@ impl Weapons3d {
             self.acc_ms -= FRAME_MS;
             let names: Vec<String> = self.running.keys().cloned().collect();
             for name in names {
+                self.lend(&name);
                 let Some(r) = self.running.get_mut(&name) else {
                     continue;
                 };
@@ -265,6 +447,16 @@ impl Weapons3d {
             Outcome::Sleep(t) => r.wait = Wait::Sleep(t),
             Outcome::Stopped(why) => self.log.push(format!("weapon {weapon} stopped: {why}")),
             _ => {}
+        }
+        let change = std::mem::take(&mut r.host.changed);
+        if let Some(t) = change.transform {
+            self.me = Some(t);
+            self.scripted = true;
+            self.changed.transform = Some(t);
+        }
+        if let Some(c) = change.chat {
+            self.chat = c.clone();
+            self.changed.chat = Some(c);
         }
         for line in std::mem::take(&mut r.host.inner.log) {
             self.log.push(format!("weapon {weapon}: {line}"));
@@ -395,6 +587,64 @@ mod tests {
         let src = "function onCreated() {\n  set(\"door=open\");\n  set(\"lamp=on\");\n}\n";
         w.start("-F", &bytecode(src), &flags);
         assert_eq!(lines(&mut w), ["s lamp=on"]);
+    }
+
+    fn spawn() -> Transform {
+        Transform {
+            position: [0.0, -6.0, 1.0],
+            axis: [0.0, 0.0, 1.0],
+            angle: 0.0,
+        }
+    }
+
+    #[test]
+    fn player_is_a_connection_until_the_control_object_then_the_own_object() {
+        let mut w = Weapons3d::new(ClientVersion::V512);
+        let src = "function onCreated() {\n  client.a = player.objecttype();\n}\nfunction onTimeout() {\n  client.b = player.objecttype() @ \" \" @ player.position;\n}\n";
+        w.start("-P", &bytecode(src), &BTreeMap::new());
+        assert_eq!(lines(&mut w), ["s client.a=GameConnection"]);
+        w.me = Some(spawn());
+        w.event("-P", "onTimeout", &[]);
+        assert_eq!(lines(&mut w), ["s client.b=GameObject 0,-6,1"]);
+    }
+
+    #[test]
+    fn a_script_walks_the_player_with_the_arrows_like_a_real_512() {
+        let mut w = Weapons3d::new(ClientVersion::V512);
+        w.me = Some(spawn());
+        let src = "function onCreated() {\n  setTimer(0.05);\n}\nfunction onTimeout() {\n  setTimer(0.05);\n  if (keydown2(38, true)) player.position = {0, -5.5, 1};\n  if (keydown2(37, true)) player.transform = {0, -5.5, 1, 0, 0, 1, 90};\n  if (keydown2(67, true)) player.chat = \"hi\";\n}\n";
+        w.start("-W", &bytecode(src), &BTreeMap::new());
+        w.tick(60);
+        assert_eq!(w.take_player(), PlayerChange::default());
+        assert!(!w.scripted);
+        w.keys.forward = 1;
+        w.tick(60);
+        let c = w.take_player();
+        assert_eq!(c.transform.map(|t| t.position), Some([0.0, -5.5, 1.0]));
+        assert!(w.scripted);
+        w.keys = Keys3d {
+            forward: 0,
+            turn: 1,
+        };
+        w.tick(60);
+        let t = w.take_player().transform.unwrap();
+        assert_eq!(t.axis, [0.0, 0.0, 1.0]);
+        assert!(
+            (t.angle - std::f32::consts::FRAC_PI_2).abs() < 1e-5,
+            "{t:?}"
+        );
+    }
+
+    #[test]
+    fn chat_and_velocity_on_the_player() {
+        let mut w = Weapons3d::new(ClientVersion::V512);
+        w.me = Some(spawn());
+        let src = "function onCreated() {\n  player.velocity = {0, 3, 0};\n  player.chat = \"hi\";\n  client.c = player.chat;\n}\n";
+        w.start("-C", &bytecode(src), &BTreeMap::new());
+        let c = w.take_player();
+        assert_eq!(c.chat.as_deref(), Some("hi"));
+        assert_eq!(c.transform, None);
+        assert_eq!(lines(&mut w), ["s client.c=hi"]);
     }
 
     #[test]
