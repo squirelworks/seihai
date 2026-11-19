@@ -1403,6 +1403,19 @@ impl Game {
     }
 
     /// The chat lines taken so far, oldest first, with when each came.
+    /// A line from Seihai itself in the chat (a saved screenshot).
+    pub fn note(&mut self, text: String) {
+        self.chat.push((
+            ChatLine {
+                kind: seihai_core::protocol::ChatKind::Admin,
+                from: "Seihai".into(),
+                text,
+                born_ms: 0,
+            },
+            Instant::now(),
+        ));
+    }
+
     pub fn chat(&self) -> &[(ChatLine, Instant)] {
         &self.chat
     }

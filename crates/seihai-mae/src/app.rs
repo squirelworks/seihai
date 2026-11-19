@@ -2299,6 +2299,7 @@ pub fn main(args: Vec<String>) {
     let mut map_asked: HashSet<String> = HashSet::new();
     let mut map_mouse_was_down = false;
     let mut clicks = seihai::mouse::Clicks::default();
+    let mut emoticon_remove: Option<Vec<u8>> = None;
     let map_reading_pose = seihai::scripting::engine::vocab::Era::for_version(version)
         != seihai::scripting::engine::vocab::Era::V200;
     let mut confirm_quit = false;
@@ -3478,6 +3479,31 @@ pub fn main(args: Vec<String>) {
             }
         }
         map_mouse_was_down = mouse_down;
+        // Ctrl+letter: an emoticon, sent as image 0 of the player's
+        // showimg list and taken off again on the next frame, as the real
+        // 2.31 does (about 100 ms later; lab key sweep). Only 2.31 was
+        // measured.
+        if let Some(c) = conn.as_mut() {
+            if let Some(m) = emoticon_remove.take() {
+                if let Err(e) = c.send_messages(&[m]) {
+                    eprintln!("send failed: {e}");
+                }
+            }
+            if version == ClientVersion::V231 && ctrl && !input.is_open() {
+                let hit = window
+                    .get_keys_pressed(minifb::KeyRepeat::No)
+                    .into_iter()
+                    .find_map(seihai::keys::emoticon);
+                if let Some(name) = hit {
+                    let [add, remove] =
+                        seihai::keys::emoticon_messages(name, session.player_x, session.player_y);
+                    if let Err(e) = c.send_messages(&[add]) {
+                        eprintln!("send failed: {e}");
+                    }
+                    emoticon_remove = Some(remove);
+                }
+            }
+        }
         // Clicks in the game window: online each one goes to the server as
         // a trigger action at the clicked point, as the real 2.31 sends it
         // (`mouse`). Not over the open map, where Ctrl+click is its own.
@@ -5862,7 +5888,14 @@ pub fn main(args: Vec<String>) {
             chat_scroll,
             &input,
         );
-        if !input.is_open() && window.is_key_pressed(minifb::Key::F12, minifb::KeyRepeat::No) {
+        // F12, and Alt+1 / Alt+2 as on the real 2.31 (its "Save screenshot";
+        // lab key sweep), save the frame.
+        let shot_key = |k| window.is_key_pressed(k, minifb::KeyRepeat::No);
+        let alt_held =
+            window.is_key_down(minifb::Key::LeftAlt) || window.is_key_down(minifb::Key::RightAlt);
+        let shot = shot_key(minifb::Key::F12)
+            || (alt_held && (shot_key(minifb::Key::Key1) || shot_key(minifb::Key::Key2)));
+        if !input.is_open() && shot {
             let line = match save_screenshot(&frame) {
                 Ok(path) => format!("saved {}", path.display()),
                 Err(e) => format!("screenshot failed: {e}"),

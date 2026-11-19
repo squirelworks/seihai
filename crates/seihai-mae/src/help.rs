@@ -57,7 +57,8 @@ pub const BINDINGS: &[KeyHelp] = &[
     k("F3", &["F3"], "debug information"),
     k("F4", &["F4"], "level editor (not built yet)"),
     k("F5", &["F5"], "level window: the server's level, open a level offline, back to the server list"),
-    k("F12", &["F12"], "save a screenshot to screenshots/"),
+    k("F12 / Alt+1 / Alt+2", &["F12", "Key1", "Key2", "LeftAlt", "RightAlt"], "save a screenshot to screenshots/"),
+    k("Ctrl+letter", &[], "2.31 online: show an emoticon (Ctrl+A afk ... Ctrl+Z zzz)"),
     KeyHelp {
         label: "F9",
         keys: &["F9"],
