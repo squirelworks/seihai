@@ -25,7 +25,7 @@ pub struct Outcome {
 pub fn run(args: &[String]) -> Outcome {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         return ok("seihai-issho --version <6.x profile> [--online host:port \
---account NAME --password-env VAR [--assets DIR] [--no-window] [--first-level] [--no-sound]]\n\
+--account NAME --password-env VAR [--secure-login | --server-key KEY] [--assets DIR] [--no-window] [--first-level] [--no-sound]]\n\
 seihai-issho --version <6.x profile> --level NAME [--assets DIR] [--no-sound]\n\
 v6 profiles: 6.00r2, 6.015, 6.034, 6.03r7, 6.03r7 Linux\n\
 v7 is not a supported profile.\n");
@@ -157,6 +157,7 @@ fn online_login(
     )?;
     let password = env(var).ok_or_else(|| format!("--password-env: {var} is not set"))?;
     let nick = value(args, &["--nick", "--nickname"]).unwrap_or(account);
+    let secure = secure_login(args)?;
     Ok(Online {
         addr: addr.to_string(),
         version,
@@ -165,10 +166,26 @@ fn online_login(
             password,
             nick: nick.to_string(),
             language: "English".into(),
+            secure,
         },
         assets: value(args, &["--assets"]).map(std::path::PathBuf::from),
         first_level: args.iter().any(|a| a == "--first-level"),
     })
+}
+
+/// The Seihai secure login (`SEI00001`) `args` ask for, as in `seihai`:
+/// `--server-key KEY` trusts only that key, `--secure-login` trusts a
+/// server's key on the first visit (`known_servers.txt`). Either one
+/// replaces the build's clear login on every game server (#564).
+fn secure_login(args: &[String]) -> Result<Option<seihai_core::net::SecureLogin>, String> {
+    use seihai_core::net::SecureLogin;
+    if has(args, "--server-key") {
+        let key = value(args, &["--server-key"])
+            .and_then(seihai_core::protocol::seclogin::decode_key)
+            .ok_or("--server-key needs the server's key (43 characters of base64, as the server prints it)")?;
+        return Ok(Some(SecureLogin::pinned(key)));
+    }
+    Ok(has(args, "--secure-login").then(SecureLogin::trust_on_first_use))
 }
 
 /// Log in as `o` asks and log each level to `out` (core's client session).
@@ -313,5 +330,41 @@ mod tests {
             "{}",
             out.stderr
         );
+    }
+
+    /// #564: `--secure-login` and `--server-key` reach the login; without
+    /// them the build's own login is kept.
+    #[test]
+    fn secure_login_flags_reach_the_login() {
+        use seihai_core::net::{PinSource, SecureLogin};
+        let base = [
+            "--version",
+            "6.03r7",
+            "--online",
+            "127.0.0.1:14900",
+            "--account",
+            "ab",
+            "--password-env",
+            "PW",
+        ];
+        let o = online(&args(&base), env).unwrap().unwrap();
+        assert_eq!(o.login.secure, None);
+        let mut a = base.to_vec();
+        a.push("--secure-login");
+        let o = online(&args(&a), env).unwrap().unwrap();
+        assert!(matches!(
+            o.login.secure,
+            Some(SecureLogin {
+                pin: PinSource::File(_)
+            })
+        ));
+        let key = seihai_core::protocol::seclogin::encode_key(&[9; 32]);
+        let mut a = base.to_vec();
+        a.extend(["--server-key", key.as_str()]);
+        let o = online(&args(&a), env).unwrap().unwrap();
+        assert_eq!(o.login.secure, Some(SecureLogin::pinned([9; 32])));
+        let mut a = base.to_vec();
+        a.extend(["--server-key", "nope"]);
+        assert!(online(&args(&a), env).unwrap().is_err());
     }
 }
