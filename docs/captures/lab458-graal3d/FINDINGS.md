@@ -2,7 +2,7 @@
 
 Sources: runs 1 to 3 (2026-11-13) and pass 2 (2026-11-14) on GwenTea2, Ato against seihai-gserver-v2 with `graal3d = true`, loopback only. The setup is in the write-ups under [`docs/lab/`](../README.md). Times are seconds.
 
-These are Ato's numbers, not a real 5.12's. They describe what Seihai sends, and what the fork accepts. Whether a real 5.12 sends velocity, and its real walk and turn speeds, are still open on #458.
+Most of these are Ato's numbers: they describe what Seihai sends, and what the fork accepts. The `real512-*` table is an unmodified 5.12 in the Windows 10 lab VM (2026-11-19, [write-up](../../lab/2026-11-19-lab458-real512/README.md)). It settles the open question: a real 5.12 sends no velocity and has no walk or turn speed of its own.
 
 ## Tables
 
@@ -16,6 +16,7 @@ These are Ato's numbers, not a real 5.12's. They describe what Seihai sends, and
 | `pass2-client-packets.tsv` | All 598 client packets of pass 2 decoded from the UDP capture: time, seq, position, sections, transform axis and angle, flags, chat |
 | `pass2-gserver-trace-masks.tsv` | Section dirty masks the gserver's lab trace logged |
 | `pass2-input-timeline.tsv` | The synthetic key presses, relative to the first key |
+| `real512-client-packets.tsv` | All 140 data packets a real 5.12 sent in the 2026-11-19 run, from its 3D login to the end: time, seq, size, position, sections, transform axis and angle, flags, chat. Sizes include the script's `triggerserver` report events |
 
 ## Findings the write-ups did not have
 
@@ -85,3 +86,20 @@ The server sent these, in this order:
 5. `ISLEADER`, `GHOSTICON`, `ISLEADER`, `SETACTIVELEVEL`, `PLAYERPROPS` (3 bytes)
 
 Then the client sent `PLI_LANGUAGE`, `PLI_ENTERLEVEL` and eight `PLI_WANTFILE`: the two `.3ds` shapes and the six Sky textures. Each got one `PLO_FILE`, and `PLO_NEWWORLDTIME` closed the login.
+
+### A real 5.12 walking (2026-11-19)
+
+A client script moved the player through `player.position` and `player.transform`; the [write-up](../../lab/2026-11-19-lab458-real512/README.md) has the setup.
+
+| Leg | Transform updates | Change |
+|---|---|---|
+| Walk forward | 26 | y −6 → 1.8, 0.3 per update |
+| Turn left | 7 | rotation only |
+| Walk forward | 17 | (−0.23, 1.99) → (−3.91, 5.07) |
+| Turn right | 8 | rotation only, back through zero |
+
+- **Cadence:** one transform per packet, only after the script changed it. The median interval while walking was 0.17 s, the script's own tick under the VM's software OpenGL. Idle packets came about every 1.1 s.
+- **Rotation:** no rotation goes out as axis (1, 0, 0), angle 0. A right turn goes out as axis (0, 0, −1) with a positive angle. The axis carries small errors (0.9991 to 1.0005).
+- **Units:** the angle a script writes into `transform` is in degrees, and the wire angle is in radians (1.0 written, 0.0175 sent).
+- **Velocity:** none. Writing `player.velocity` read back as `0,0,0`, and no section 2 went out.
+- **Chat:** one section 9, `hi e:smile`, from `player.chat`.

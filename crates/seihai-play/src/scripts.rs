@@ -397,22 +397,43 @@ impl ClientScripts {
 
     /// A key went down: `onKeyPressed(code, key, scan)` on every script,
     /// NPCs and weapons alike, as the real 4.20r8 and 6.03r7 pass every
-    /// key (`crate::keycodes`).
+    /// key (`crate::keycodes`, lab key sweep 2026-11-19). The GS2 weapons
+    /// of 4.x to 6.x read them as `params` (221 of the weapons in
+    /// Graal_analysis `npc-library/gs2-weapon-corpus-2026-11-14.md`).
     pub fn key_pressed(&mut self, session: &mut OfflineSession, press: &crate::keycodes::Press) {
+        self.event_on_all(
+            session,
+            "KeyPressed",
+            &[
+                Val::Num(f64::from(press.code)),
+                Val::Str(press.key.clone()),
+                Val::Num(f64::from(press.scan)),
+            ],
+        );
+    }
+
+    /// The player took damage: `onPlayerHurt` on every script.
+    pub fn player_hurt(&mut self, session: &mut OfflineSession) {
+        self.event_on_all(session, "PlayerHurt", &[]);
+    }
+
+    /// The player died: `onPlayerDies` on every script.
+    pub fn player_dies(&mut self, session: &mut OfflineSession) {
+        self.event_on_all(session, "PlayerDies", &[]);
+    }
+
+    /// `on{event}` on every running script, each with a fresh view of the
+    /// player.
+    fn event_on_all(&mut self, session: &mut OfflineSession, event: &str, args: &[Val]) {
         if self.running.is_empty() {
             return;
         }
         self.retag(session);
         self.host.sync_player(session);
-        let args = [
-            Val::Num(f64::from(press.code)),
-            Val::Str(press.key.clone()),
-            Val::Num(f64::from(press.scan)),
-        ];
         for i in 0..self.running.len() {
             self.sync(i, session);
             self.seed_flags(i);
-            self.event(i, "KeyPressed", &args);
+            self.event(i, event, args);
         }
         self.apply(session);
     }
@@ -774,6 +795,25 @@ mod tests {
         // A second arrival of the same script does not start it again.
         assert_eq!(sc.start(&mut s, &script(src)), 0);
         assert_eq!(sc.len(), 1);
+    }
+
+    /// `onKeyPressed` gets the key code and text as `params`;
+    /// `onPlayerHurt` and `onPlayerDies` run on every script.
+    #[test]
+    fn key_hurt_and_death_events_reach_the_scripts() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onKeyPressed() { message(params[0] @ \":\" @ params[1]); }\n\
+                   function onPlayerHurt() { message(\"hurt\"); }\n\
+                   function onPlayerDies() { message(\"dies\"); }\n";
+        sc.start(&mut s, &script(src));
+        let a = crate::keycodes::press(egui::Key::A, egui::Modifiers::NONE).unwrap();
+        sc.key_pressed(&mut s, &a);
+        assert_eq!(npc(&s).message, "65:a");
+        sc.player_hurt(&mut s);
+        assert_eq!(npc(&s).message, "hurt");
+        sc.player_dies(&mut s);
+        assert_eq!(npc(&s).message, "dies");
     }
 
     /// A script whose NPC is not on the level, or that did not parse,

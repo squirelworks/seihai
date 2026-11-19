@@ -34,7 +34,7 @@ use seihai_core::gmap::Gmap;
 use seihai_core::offline::OfflineSession;
 use seihai_core::protocol::{ChatLine, ClientVersion, SessionState};
 use seihai_core::scripting::gs2::Script;
-use seihai_core::sound::{self, SoundEngine};
+use seihai_core::sound::{self, SoundEngine, SoundEvent};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
@@ -92,6 +92,10 @@ pub struct Game {
     sound_serial: u64,
     /// Where missing sounds go for the network thread to ask for.
     pub wanted_sounds: Arc<Mutex<Vec<String>>>,
+    /// The cues that found their file missing, kept until it arrives so a
+    /// one-off cue (a script's `playlooped` on level entry) still starts
+    /// (#563): the cue, its level serial and when it came.
+    pending_sounds: Vec<(SoundEvent, u64, u64)>,
     /// Sounds the server sent (kept in memory by the network thread), for
     /// the engine to take.
     arrived_sounds: online::SharedSounds,
@@ -276,20 +280,45 @@ fn load_object_tables(resolver: &AssetResolver, session: &mut OfflineSession) {
     }
 }
 
+/// How late an effect cue may start once its file arrives; looped sounds
+/// and music start however late (#563).
+const LATE_CUE_MS: u64 = 1000;
+/// Cues kept for files still on their way, at most.
+const MAX_PENDING_SOUNDS: usize = 32;
+
+/// A sound's name for matching a cue to its file: no `+` loop prefix, no
+/// path, lower case.
+fn sound_key(file: &str) -> String {
+    let name = sound::wanted_name(file);
+    name.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(&name)
+        .to_ascii_lowercase()
+}
+
+/// Whether a sound key names music (MIDI or MP3) rather than an effect.
+fn is_music(key: &str) -> bool {
+    [".mid", ".midi", ".mp3"].iter().any(|e| key.ends_with(e))
+}
+
 /// The sound engine for this run: core's default backend over the asset
-/// folders' sounds, or off.
+/// folders' sounds, or off with `--no-sound`. With no asset folder or no
+/// sounds folder the device still opens and every sound is asked of the
+/// server and kept in memory, as the real client fetches into its cache
+/// (#563); it says so instead of going silent.
 fn sound_engine(resolver: Option<&AssetResolver>, sound_on: bool) -> SoundEngine {
-    let Some(r) = resolver.filter(|_| sound_on) else {
-        return SoundEngine::off();
-    };
-    let dirs = r.sound_dirs();
-    if dirs.is_empty() {
-        eprintln!("sound: no sounds folder; sound is silent");
+    if !sound_on {
+        eprintln!("sound: off (--no-sound)");
         return SoundEngine::off();
     }
+    let dirs = resolver.map(|r| r.sound_dirs()).unwrap_or_default();
     let (out, why) = sound::default_backend();
-    let list: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
-    eprintln!("sound: {why}; sounds from {}", list.join(", "));
+    if dirs.is_empty() {
+        eprintln!("sound: {why}; no sounds folder, so every sound comes from the server");
+    } else {
+        let list: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
+        eprintln!("sound: {why}; sounds from {}", list.join(", "));
+    }
     SoundEngine::with_dirs(out, dirs, true)
 }
 
@@ -326,6 +355,7 @@ impl Game {
             pose_clock: Instant::now(),
             sound_serial: 0,
             wanted_sounds: Default::default(),
+            pending_sounds: Vec::new(),
             arrived_sounds: Default::default(),
             resolver: resolver.cloned(),
             npc_images: NpcImages::new(),
@@ -629,10 +659,14 @@ impl Game {
     }
 
     /// Play the sounds the session queued: the GANI cues of the steps just
-    /// taken. A new level stops the looped ones. A sound not on disk is
-    /// handed to the network thread to ask the server for. The file comes
-    /// back through [`Live::arrived_sounds`] (kept in memory, not saved),
-    /// goes into the engine, and plays on the next cue.
+    /// taken and the scripts' sounds. A new level stops the looped ones. A
+    /// sound not on disk is handed to the network thread to ask the server
+    /// for. The file comes back through [`Live::arrived_sounds`] (kept in
+    /// memory, not saved) and goes into the engine. The cue that asked for
+    /// it then starts, as the real 6.03r7 does (#446 lab, #563), if the
+    /// level is the same and no `stopsound` came for it: always for looped
+    /// sounds and music, and within [`LATE_CUE_MS`] for an effect. Later
+    /// cues play as usual.
     pub fn play_sounds(&mut self) {
         let arrived = std::mem::take(
             &mut *self
@@ -641,34 +675,66 @@ impl Game {
                 .unwrap_or_else(|e| e.into_inner()),
         );
         let on = self.sound.is_enabled();
+        let mut landed = Vec::new();
         for (name, bytes) in arrived.into_iter().filter(|_| on) {
             if self.sound.add(&name, &bytes).is_ok() {
                 eprintln!("sound: {name} arrived");
+                landed.push(sound_key(&name));
             }
         }
         if !self.sound.is_enabled() {
             self.session.sound_events.clear();
             self.session.sound_stops.clear();
+            self.pending_sounds.clear();
             return;
         }
         if self.session.level_serial != self.sound_serial {
             self.sound_serial = self.session.level_serial;
             self.sound.stop_all_loops();
         }
+        let serial = self.sound_serial;
+        self.pending_sounds.retain(|(_, s, _)| *s == serial);
         let now = self.sound_clock.elapsed().as_millis() as u64;
         let listener = (
             self.session.player_x + LISTENER_DX,
             self.session.player_y + LISTENER_DY,
         );
         for name in self.session.take_sound_stops() {
+            let key = sound_key(&name);
+            self.pending_sounds
+                .retain(|(ev, _, _)| sound_key(&ev.file) != key);
             self.sound.stop(&name);
         }
-        for ev in self.session.take_sound_events() {
+        let events = self.session.take_sound_events();
+        // The cues kept for a file that just arrived, unless this frame
+        // cues the same file again.
+        let mut late = Vec::new();
+        self.pending_sounds.retain(|(ev, _, at)| {
+            let key = sound_key(&ev.file);
+            if !landed.contains(&key) {
+                return true;
+            }
+            let again = events.iter().any(|e| sound_key(&e.file) == key);
+            let keep = ev.file.trim_start().starts_with('+')
+                || is_music(&key)
+                || now.saturating_sub(*at) <= LATE_CUE_MS;
+            if keep && !again && !late.iter().any(|l: &SoundEvent| sound_key(&l.file) == key) {
+                late.push(ev.clone());
+            }
+            false
+        });
+        for ev in late.into_iter().chain(events) {
             if self.sound.play(&ev, listener, now) == sound::Outcome::Missing {
                 self.wanted_sounds
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .push(sound::wanted_name(&ev.file));
+                let key = sound_key(&ev.file);
+                self.pending_sounds
+                    .retain(|(p, _, _)| sound_key(&p.file) != key);
+                if self.pending_sounds.len() < MAX_PENDING_SOUNDS {
+                    self.pending_sounds.push((ev, serial, now));
+                }
             }
         }
     }
@@ -1719,7 +1785,7 @@ mod tests {
 
     fn game() -> (Game, mpsc::Sender<Event>) {
         let (tx, rx) = mpsc::channel();
-        (Game::new(rx, None, true).unwrap(), tx)
+        (Game::new(rx, None, false).unwrap(), tx)
     }
 
     #[test]
@@ -2173,6 +2239,95 @@ mod tests {
         g.play_sounds();
         assert!(g.arrived_sounds.lock().unwrap().is_empty());
         assert!(matches!(rec.log().as_slice(), [Call::Play { name, .. }] if name == "steps2.wav"));
+    }
+
+    /// An 8-bit mono 8 kHz WAV of 100 silent samples.
+    fn tiny_wav() -> Vec<u8> {
+        let mut wav = Vec::new();
+        wav.extend(b"RIFF");
+        wav.extend(136u32.to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend(100u32.to_le_bytes());
+        wav.extend([128u8; 100]);
+        wav
+    }
+
+    /// #563 (lab #446): a script's one-off `playlooped` on level entry
+    /// finds its file missing; the file arrives later and starts with no
+    /// second cue, once.
+    #[test]
+    fn a_looped_sound_starts_when_its_file_arrives() {
+        use seihai_core::sound::{Call, RecordingSound, SoundEngine, SoundEvent};
+        let (mut g, _tx) = game();
+        let rec = RecordingSound::default();
+        g.sound = SoundEngine::with_dirs(Box::new(rec.clone()), Vec::new(), true);
+        g.session.sound_events.push(SoundEvent {
+            file: "+music/Theme.wav".into(),
+            x: 1.0,
+            y: 1.0,
+        });
+        g.play_sounds();
+        assert!(rec.log().is_empty());
+        assert_eq!(
+            g.wanted_sounds.lock().unwrap().as_slice(),
+            ["music/Theme.wav".to_string()]
+        );
+        g.play_sounds();
+        assert!(rec.log().is_empty());
+        g.arrived_sounds
+            .lock()
+            .unwrap()
+            .push(("theme.wav".into(), tiny_wav()));
+        g.play_sounds();
+        let plays = |r: &RecordingSound| {
+            r.log()
+                .iter()
+                .filter(|c| matches!(c, Call::Play { .. }))
+                .count()
+        };
+        assert_eq!(plays(&rec), 1);
+        g.play_sounds();
+        assert_eq!(plays(&rec), 1);
+    }
+
+    /// #563: a `stopsound` or a new level before the file arrives drops
+    /// the kept cue.
+    #[test]
+    fn a_kept_cue_is_dropped_by_stopsound_or_a_new_level() {
+        use seihai_core::sound::{Call, RecordingSound, SoundEngine, SoundEvent};
+        let (mut g, _tx) = game();
+        let rec = RecordingSound::default();
+        g.sound = SoundEngine::with_dirs(Box::new(rec.clone()), Vec::new(), true);
+        let cue = |g: &mut Game, f: &str| {
+            g.session.sound_events.push(SoundEvent {
+                file: f.into(),
+                x: 1.0,
+                y: 1.0,
+            })
+        };
+        cue(&mut g, "+a.wav");
+        cue(&mut g, "+b.wav");
+        g.play_sounds();
+        g.session.sound_stops.push("a.wav".into());
+        g.play_sounds();
+        g.session.level_serial += 1;
+        g.play_sounds();
+        for name in ["a.wav", "b.wav"] {
+            g.arrived_sounds
+                .lock()
+                .unwrap()
+                .push((name.into(), tiny_wav()));
+        }
+        g.play_sounds();
+        assert!(!rec.log().iter().any(|c| matches!(c, Call::Play { .. })));
     }
 
     #[test]

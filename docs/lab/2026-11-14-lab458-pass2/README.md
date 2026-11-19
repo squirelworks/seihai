@@ -76,6 +76,8 @@ Step 6 of the plan was to record a real 5.12's velocity and its walking and turn
 
 So whether a real 5.12 sends velocity, and its real speeds, are still open. The best route is probably a static read of the 5.12 `Graal3DEngine.dll` player move code, or a real 5.12 on Windows hardware once its keys reach the walking script.
 
+*Update (2026-11-19):* a real 5.12 has now walked and talked in the Mirae Windows 10 VM, through a client script that writes to `player` (its own 3D object from login step 5). It sends no velocity and has no speeds of its own. See [the real 5.12 lab](../2026-11-19-lab458-real512/README.md).
+
 
 ## Build notes
 

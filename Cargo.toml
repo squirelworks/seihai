@@ -15,12 +15,12 @@ license = "MIT OR Apache-2.0"
 # this repo and add a `[patch."https://github.com/squirelworks/seihai-core"]`
 # entry pointing at it in your local .cargo/config.toml.
 [workspace.dependencies]
-# Pin includes the GS1 `keypressed` event (seihai-core, key sweep). No release
-# tag yet; bump to a tag when Squirrel cuts one.
-seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "02e9836aacb7b6fe5c91c38c892d8a271611f8c1", default-features = false }
+# Pin: seihai-core v0.6.1 plus the GS1 `keypressed` event (seihai-core #113,
+# not merged yet; bump to its merge or the next tag).
+seihai-core = { git = "https://github.com/squirelworks/seihai-core", rev = "50d02625748b61d609601b5a3b0956a289436152", default-features = false }
 # The drawing shared with tools: tiles, sprites and gani frames into an
 # RGBA buffer. From the same seihai-core rev.
-seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "02e9836aacb7b6fe5c91c38c892d8a271611f8c1" }
+seihai-draw = { git = "https://github.com/squirelworks/seihai-core", rev = "50d02625748b61d609601b5a3b0956a289436152" }
 
 # minifb 0.27.0 with one change: on macOS, when there is no Metal device
 # (a VM's emulated display) or MINIFB_NO_METAL is set, the window draws with

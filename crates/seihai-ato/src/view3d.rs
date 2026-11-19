@@ -142,8 +142,10 @@ pub struct Input3d {
 /// [`Input3d`], shared between the window and the link's thread.
 pub type SharedInput3d = Arc<Mutex<Input3d>>;
 
-/// Walking speed, units a second. Seihai's choice until the walking lab
-/// trace (#462) shows the real client's.
+/// Walking speed, units a second. Seihai's choice: a real 5.12 has no
+/// walking of its own in 3D mode. Its keys only reach scripts, and a server
+/// script moves the player, so the speed was the server's (lab #458,
+/// 2026-11-19).
 pub const WALK_SPEED: f32 = 6.0;
 /// Turning speed, radians a second (Seihai's choice, as above).
 pub const TURN_SPEED: f32 = 2.5;

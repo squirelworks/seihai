@@ -183,6 +183,7 @@ impl StartWindow {
             password: self.password.clone(),
             nick: self.nick.clone(),
             language: self.language.clone(),
+            secure: None,
         };
         if self.layout.start_clears_password {
             self.password.clear();

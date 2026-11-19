@@ -136,6 +136,7 @@ fn run(version: ClientVersion) -> String {
         password: "pw".into(),
         nick: "lab".into(),
         language: "English".into(),
+        secure: None,
     };
     let mut out = Vec::new();
     let mut levels = Vec::new();
@@ -215,6 +216,7 @@ fn received_gs2_runs_created_and_timer_only_for_the_3153_profile() {
                 password: "pw".into(),
                 nick: "lab".into(),
                 language: "English".into(),
+                secure: None,
             };
             let mut out = Vec::new();
             client::run_with(
@@ -293,6 +295,7 @@ fn lobby_builds_follow_the_login_servers_warp() {
             password: "pw".into(),
             nick: "lab".into(),
             language: "English".into(),
+            secure: None,
         };
         let mut out = Vec::new();
         let mut levels = 0;
@@ -355,6 +358,7 @@ fn a_warp_to_a_3_server_is_where_the_3d_link_opens() {
         password: "pw".into(),
         nick: "lab".into(),
         language: "English".into(),
+        secure: None,
     };
     let joins: Arc<Mutex<Vec<ServerJoin>>> = Arc::default();
     let seen = joins.clone();

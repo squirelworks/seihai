@@ -103,7 +103,7 @@ mod tests {
     fn the_keys_page_and_close_the_sign() {
         let (tx, rx) = std::sync::mpsc::channel();
         drop(tx);
-        let mut g = Game::new(rx, None, true).unwrap();
+        let mut g = Game::new(rx, None, false).unwrap();
         g.session.reading = Some("one\ntwo\nthree\nfour".into());
         g.notice_sign();
         assert_eq!(g.sign_page().unwrap(), vec!["one", "two", "three"]);
