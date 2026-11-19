@@ -316,11 +316,37 @@ pub fn parse_key(name: &str) -> Option<Key> {
 /// the 4.20r8 and 6.03r7 scripts get; whether 2.x adds the modifier
 /// offsets those builds add is not checked, so none are added here.
 pub fn script_presses(window: &minifb::Window) -> Vec<(u32, String)> {
+    let held = |a: Key, b: Key| window.is_key_down(a) || window.is_key_down(b);
+    let ctrl = held(Key::LeftCtrl, Key::RightCtrl);
+    let alt = held(Key::LeftAlt, Key::RightAlt);
     window
         .get_keys_pressed(minifb::KeyRepeat::No)
         .into_iter()
-        .filter_map(virtual_key)
+        .filter_map(|k| with_modifiers(k, ctrl, alt))
         .collect()
+}
+
+/// A key as the real 2.31 hands it to `keypressed` with Ctrl or Alt held
+/// (lab key sweep, Graal_analysis `protocol/keysweep`): Ctrl adds 512
+/// (Ctrl+A is 577), except Ctrl+H, I and M, which arrive as their ASCII
+/// control codes 8, 9 and 13. Shift or Alt alone, and Alt with a digit,
+/// raise no event.
+pub fn with_modifiers(k: Key, ctrl: bool, alt: bool) -> Option<(u32, String)> {
+    let (code, ch) = virtual_key(k)?;
+    match code {
+        160 | 164 => return None,
+        48..=57 if alt => return None,
+        _ => {}
+    }
+    if ctrl && code != 162 {
+        return Some(match k {
+            Key::H => (8, String::new()),
+            Key::I => (9, String::new()),
+            Key::M => (13, String::new()),
+            _ => (code + 512, ch),
+        });
+    }
+    Some((code, ch))
 }
 
 /// (virtual-key code, character) of a key.
@@ -411,6 +437,31 @@ mod tests {
         assert_eq!(virtual_key(Key::Left), Some((37, String::new())));
         assert_eq!(virtual_key(Key::NumPad0), Some((48, "0".into())));
         assert_eq!(virtual_key(Key::F13), None);
+    }
+
+    #[test]
+    fn modifiers_match_the_real_2_31() {
+        assert_eq!(with_modifiers(Key::A, true, false), Some((577, "a".into())));
+        assert_eq!(
+            with_modifiers(Key::H, true, false),
+            Some((8, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::I, true, false),
+            Some((9, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::M, true, false),
+            Some((13, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::LeftCtrl, true, false),
+            Some((162, String::new()))
+        );
+        assert_eq!(with_modifiers(Key::LeftShift, false, false), None);
+        assert_eq!(with_modifiers(Key::LeftAlt, false, true), None);
+        assert_eq!(with_modifiers(Key::Key2, false, true), None);
+        assert_eq!(with_modifiers(Key::A, false, false), Some((65, "a".into())));
     }
 
     #[test]
