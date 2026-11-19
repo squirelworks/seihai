@@ -36,9 +36,15 @@ pub struct Press {
 }
 
 /// The press for `key` with these modifiers, or `None` for a key the
-/// real clients have no code for (the copy, cut and paste events).
+/// real clients give the scripts nothing for (Ctrl with a letter; the
+/// copy, cut and paste events).
 pub fn press(key: egui::Key, mods: egui::Modifiers) -> Option<Press> {
     let (vk, scan, ch) = base(key)?;
+    // Ctrl+letter reaches the scripts only as Ctrl alone (162): the
+    // 4.20r8, 5.24r4 and 6.03r7 sweeps gave no event for the letter.
+    if mods.ctrl && (65..=90).contains(&vk) {
+        return None;
+    }
     let mut code = vk;
     if mods.shift {
         code += SHIFT;
@@ -209,5 +215,6 @@ mod tests {
         assert_eq!(p(egui::Key::Enter, egui::Modifiers::ALT).code, 1037);
         assert_eq!(modifier(SHIFT_ALONE).code, 160);
         assert!(press(egui::Key::Copy, none).is_none());
+        assert!(press(egui::Key::A, egui::Modifiers::CTRL).is_none());
     }
 }
