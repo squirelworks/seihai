@@ -72,6 +72,7 @@ impl AtoApp {
         let repaint = ctx.clone();
         // The Graal3D side follows the session's servers (#459).
         let side = crate::graal3d::Side::new(version, login.clone(), self.start.graal3d);
+        let account = login.account.clone();
         let hooks = side.hooks();
         let boards_hidden = side.boards_hidden.clone();
         let world3d = side.world.clone();
@@ -91,6 +92,7 @@ impl AtoApp {
             Ok(mut g) => {
                 g.attach(live);
                 g.boards_hidden = boards_hidden;
+                g.account = Some(account);
                 // While the link is up, the 3D world is drawn instead (#461).
                 let world = world3d.clone();
                 g.view3d = Some(Box::new(move |w, h| {
