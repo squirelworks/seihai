@@ -98,6 +98,7 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         password,
         nick,
         language: "English".into(),
+        secure: None,
     };
     if a.graal3d {
         if let Err(e) = graal3d::profile(version) {
