@@ -191,6 +191,9 @@ pub struct Game {
     /// Where the network thread puts the server's floor item changes
     /// (other players' drops, the items the server rolls).
     pub items: online::SharedItems,
+    /// Where the network thread puts the server's trigger actions
+    /// (`PLO_TRIGGERACTION`, 48), for `onActionClientSide`.
+    pub triggers: online::SharedTriggers,
     /// Set by the network thread while the player leads the level: the
     /// leader runs the level's baddies.
     pub leader: Arc<std::sync::atomic::AtomicBool>,
@@ -398,6 +401,7 @@ impl Game {
             level_objects: Default::default(),
             throws: Default::default(),
             items: Default::default(),
+            triggers: Default::default(),
             leader: Default::default(),
             actions: actions::Actions::new(),
             effect_sheets: EffectSheets::load(resolver),
@@ -1334,6 +1338,7 @@ impl Game {
         self.level_objects = live.level_objects;
         self.throws = live.throws;
         self.items = live.items;
+        self.triggers = live.triggers;
         self.leader = live.leader;
     }
 
@@ -1509,7 +1514,35 @@ impl Game {
         }
         changed |= self.take_weapons();
         changed |= self.take_others_actions();
+        changed |= self.take_triggers();
         changed
+    }
+
+    /// The server's trigger actions: `clientside` ones run the weapon's
+    /// `onActionClientSide` ([`ClientScripts::server_trigger`]).
+    fn take_triggers(&mut self) -> bool {
+        let triggers =
+            std::mem::take(&mut *self.triggers.lock().unwrap_or_else(|e| e.into_inner()));
+        let Some(sc) = self.scripts.as_mut() else {
+            return false;
+        };
+        let mut ran = false;
+        for t in &triggers {
+            ran |= sc.server_trigger(&mut self.session, t);
+        }
+        if ran {
+            self.after_scripts();
+            self.dirty = true;
+        }
+        ran
+    }
+
+    /// The pointer is over level tile `(x, y)`: GS2's `mousex` and
+    /// `mousey` follow it, between clicks too.
+    pub fn mouse_moved(&mut self, x: f32, y: f32) {
+        if let Some(sc) = self.scripts.as_mut() {
+            sc.set_mouse(x, y);
+        }
     }
 
     /// One turn of the loop: take what the network thread sent, walk one

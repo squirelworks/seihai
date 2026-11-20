@@ -104,6 +104,11 @@ pub struct ClientScripts {
     /// `player.account`.
     pub nick: String,
     pub account: String,
+    /// The pointer, in level tiles: `mousex` and `mousey`. The real 6.03r7
+    /// keeps them on the pointer between clicks too (seihai-core#136 lab,
+    /// 2026-11-20), so the game sets them every frame
+    /// ([`ClientScripts::set_mouse`]).
+    mouse: (f64, f64),
 }
 
 impl ClientScripts {
@@ -118,6 +123,7 @@ impl ClientScripts {
             log: Vec::new(),
             chat: String::new(),
             nick: String::new(),
+            mouse: (0.0, 0.0),
             account: String::new(),
         }
     }
@@ -540,16 +546,56 @@ impl ClientScripts {
         }
         self.retag(session);
         self.host.sync_player(session);
-        let mouse = (f64::from(x), f64::from(y));
+        self.set_mouse(x, y);
         let args = [Val::Str(modifier.to_string())];
         for i in 0..self.running.len() {
-            self.running[i].host.mouse = mouse;
             self.sync(i, session);
             self.seed_flags(i);
             self.event(i, "MouseDown", &args);
         }
         self.apply(session);
         self.running.len()
+    }
+
+    /// The pointer is over level tile `(x, y)`: what `mousex` and `mousey`
+    /// read from now on.
+    pub fn set_mouse(&mut self, x: f32, y: f32) {
+        self.mouse = (f64::from(x), f64::from(y));
+    }
+
+    /// A trigger action from the server (`PLO_TRIGGERACTION`, 48). The real
+    /// 6.03r7 runs only `clientside,<weapon>,<action>,…`: that weapon's
+    /// `onActionClientSide`, with the action as `params[0]` and the rest
+    /// after it. The weapon name must match exactly, dash included; the
+    /// NPC id and the place are not used. Any other action reaches no
+    /// script (seihai#497 lab, 2026-11-20). True when a script got it.
+    pub fn server_trigger(
+        &mut self,
+        session: &mut OfflineSession,
+        trigger: &seihai_core::protocol::ServerTrigger,
+    ) -> bool {
+        if trigger.action != "clientside" {
+            return false;
+        }
+        let mut params = trigger.param_list().into_iter();
+        let Some(weapon) = params.next() else {
+            return false;
+        };
+        let Some(i) = self
+            .running
+            .iter()
+            .position(|r| matches!(&r.owner, Owner::Weapon(w) if *w == weapon))
+        else {
+            return false;
+        };
+        let args: Vec<Val> = params.map(Val::Str).collect();
+        self.retag(session);
+        self.host.sync_player(session);
+        self.sync(i, session);
+        self.seed_flags(i);
+        self.event(i, "ActionClientSide", &args);
+        self.apply(session);
+        true
     }
 
     /// The player took damage: `onPlayerHurt` on every script.
@@ -668,6 +714,7 @@ impl ClientScripts {
     /// A weapon stands at the player. The player goes in too.
     fn sync(&mut self, i: usize, session: &OfflineSession) {
         let r = &mut self.running[i];
+        r.host.mouse = self.mouse;
         r.host.player = PlayerSnap {
             x: f64::from(session.player_x),
             y: f64::from(session.player_y),
@@ -1175,6 +1222,50 @@ mod tests {
             sc.host.world.ids().len(),
             1,
             "replacement must not orphan world objects"
+        );
+    }
+
+    /// The 6.03r7 lab: `clientside,<weapon>,<action>,…` runs that weapon's
+    /// `onActionClientSide` with the action first; nothing else runs.
+    #[test]
+    fn a_clientside_trigger_runs_the_named_weapons_on_action_client_side() {
+        use seihai_core::protocol::ServerTrigger;
+        use seihai_core::scripting::gs2::exec::Root;
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onActionClientSide() {\n\
+                     this.got = params[0] @ \"|\" @ params[1] @ \"|\" @ params[2];\n\
+                     this.at = mousex @ \",\" @ mousey;\n\
+                   }\n";
+        sc.set_weapons(
+            &mut s,
+            &[(
+                "-wlab".into(),
+                String::new(),
+                vec![1],
+                Ok(compile_gs2(src).unwrap()),
+            )],
+        );
+        sc.set_mouse(12.5, 22.0);
+        let t = |action: &str, params: &str| ServerTrigger {
+            player: 0,
+            npc: 300,
+            x: 30.0,
+            y: 27.0,
+            action: action.into(),
+            params: params.into(),
+        };
+        let got = |sc: &ClientScripts| sc.running[0].machine.var(Root::This, "got").cloned();
+        // Plain actions, no weapon name, or a name off by the dash: nothing.
+        assert!(!sc.server_trigger(&mut s, &t("lab48", "s1,s2")));
+        assert!(!sc.server_trigger(&mut s, &t("clientside", "")));
+        assert!(!sc.server_trigger(&mut s, &t("clientside", "wlab,lab48,p1")));
+        assert_eq!(got(&sc), None);
+        assert!(sc.server_trigger(&mut s, &t("clientside", "-wlab,lab48,p1,p2")));
+        assert_eq!(got(&sc), Some(Val::from("lab48|p1|p2")));
+        assert_eq!(
+            sc.running[0].machine.var(Root::This, "at").cloned(),
+            Some(Val::from("12.5,22"))
         );
     }
 
