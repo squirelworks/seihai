@@ -90,7 +90,7 @@ export SEIHAI_PASSWORD=...
   --password-env SEIHAI_PASSWORD --version 2.22
 ```
 
-Every flag, the capture viewer, the chat commands (`/ignore`, `/buddy`, `/mute`)
+`seihai --help` prints the usage. Every flag, the capture viewer, the chat commands (`/ignore`, `/buddy`, `/mute`)
 and the settings file are described in
 [documentation/using-seihai.md](documentation/using-seihai.md).
 
