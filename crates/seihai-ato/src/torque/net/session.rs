@@ -481,14 +481,23 @@ pub fn run_with_sequence(
                 first_move19 += 1;
             }
             first_move19 = first_move19.max(g.last_move_ack);
-            if let Some(c) = g.control_camera {
-                game19.position = c.position;
+            // A Camera or Player control object places the view; a camera
+            // ghost's own packet data wins over it.
+            let view = g
+                .camera_data
+                .as_ref()
+                .and_then(|d| d.view())
+                .or_else(|| g.control_data.as_ref().and_then(|d| d.view()));
+            if let Some((position, _)) = g.control_data.as_ref().and_then(|d| d.view()) {
+                game19.position = position;
+            }
+            if let Some((position, yaw)) = view {
                 if let Some(w) = world {
                     w.lock().unwrap_or_else(|e| e.into_inner()).camera =
                         Some(crate::view3d::Transform {
-                            position: c.position,
+                            position,
                             axis: [0.0, 0.0, 1.0],
-                            angle: c.yaw,
+                            angle: yaw,
                         });
                 }
             }
@@ -716,6 +725,10 @@ struct Fetch {
     sky: Vec<String>,
     /// Every Sky texture is answered; a later Sky update is the re-read.
     sky_textures_in: bool,
+    /// For a shape texture asked for under one extension, the files to ask
+    /// for next if the server has none (`.gif`, then `.bmp`), by the
+    /// lower-case name asked.
+    fallbacks: HashMap<String, Vec<String>>,
 }
 
 impl Fetch {
@@ -735,6 +748,21 @@ impl Fetch {
         let _ = writeln!(out, "3d: requesting {name} over TCP");
     }
 
+    /// Ask for a shape's texture: the file it names, or for a bare name
+    /// the first of [`crate::view3d::texture_files`], then the next one
+    /// each time the server has none.
+    fn want_texture(&mut self, name: &str, asks: &FileAsks, out: &mut impl Write) {
+        let mut files = crate::view3d::texture_files(name);
+        if files.is_empty() {
+            return;
+        }
+        let first = files.remove(0);
+        if !files.is_empty() {
+            self.fallbacks.insert(first.to_ascii_lowercase(), files);
+        }
+        self.want(&first, asks, out);
+    }
+
     /// Take the answers core's session has put in.
     fn take_answers(&mut self, asks: &FileAsks, world: Option<&Shared3d>, out: &mut impl Write) {
         let got = std::mem::take(&mut *asks.answers.lock().unwrap_or_else(|e| e.into_inner()));
@@ -747,13 +775,29 @@ impl Fetch {
                     let _ = writeln!(out, "3d: {} is not on the server", a.name);
                 }
             }
-            if let Some(w) = world {
-                w.lock()
+            let textures = match world {
+                Some(w) => w
+                    .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .file(&a.name, a.data.as_deref());
-            }
+                    .file(&a.name, a.data.as_deref()),
+                None => Vec::new(),
+            };
             self.pending.retain(|p| !p.eq_ignore_ascii_case(&a.name));
-            self.files.insert(a.name.to_ascii_lowercase(), a.data);
+            let key = a.name.to_ascii_lowercase();
+            let missing = a.data.is_none();
+            self.files.insert(key.clone(), a.data);
+            if let Some(mut rest) = self.fallbacks.remove(&key) {
+                if missing && !rest.is_empty() {
+                    let next = rest.remove(0);
+                    if !rest.is_empty() {
+                        self.fallbacks.insert(next.to_ascii_lowercase(), rest);
+                    }
+                    self.want(&next, asks, out);
+                }
+            }
+            for t in textures {
+                self.want_texture(&t, asks, out);
+            }
         }
         if !self.sky_textures_in
             && !self.sky.is_empty()

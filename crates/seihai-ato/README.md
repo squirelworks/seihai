@@ -68,23 +68,30 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
   not), datablocks are counted by class, the stock ghosting and
   datablocks-done connection messages are answered (TGE 1.x numbering,
-  5 and 6), ghosts are kept by class name, a `Camera` control object's
-  packet data is read (it places the view), and the up and down keys go
-  out as moves numbered from the server's move ack. A `Player` control
-  object's packet data is not read yet, so the rest of a packet that
-  carries one is skipped. Source: Graal_analysis `torque/udp-session.md`
+  5 and 6), ghosts are kept by class name, a `Camera` or `Player` control
+  object's packet data is read (it places the view; a `Player` that drives
+  another object carries that object's packet data too), and the up and
+  down keys go out as moves numbered from the server's move ack. The
+  `Player` layout is the open TGE 1.x one and has not been matched
+  against the 4.04r2 reader yet; a class it does not know (a vehicle)
+  still stops the rest of its packet. Source: Graal_analysis `torque/udp-session.md`
   (§10 for protocol 19), `torque/protocol19-server.md` (the 4.04r2
   static read behind the protocol 19 lab server: messages, moves, Camera),
   `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
 - `view3d`, `three_ds` and `dts`: the 3D world as the link keeps it, drawn
-  flat shaded by a small software rasteriser. Shapes are `.3ds` and Torque
+  by a small software rasteriser, lit by the Sun's direction, colour and
+  ambient light. Shapes are `.3ds` and Torque
   `.dts` (versions 23 to 25; the rest pose of the first detail level that is
   not a billboard, placed by the nodes' default transforms; skins from their
-  initial vertices). The Sky's six textures (PNG, GIF or BMP) are drawn as a
+  initial vertices). A face whose material names a texture is drawn with it
+  (perspective-correct, nearest texel, repeating) once the file is in; the
+  file is asked for over TCP when the shape arrives, a bare Torque material
+  name as `.png`, then `.gif`, then `.bmp` (`.jpg` is not read yet). Other
+  faces are flat in their material's colour. The Sky's six textures (PNG, GIF or BMP) are drawn as a
   box around the eye, else its solid colour; shapes fade into the fog colour
   from half the visible distance and are not drawn past it. Nicknames (in
   their colour) and chat go over each object, written by the window. Not
-  drawn yet: `.dif` interiors, `.ft` shapes, textures on shapes, and
+  drawn yet: `.dif` interiors, `.ft` shapes, JPEG textures, and
   terrain (no server sends `TerrainBlock` or terrain chunks yet).
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). Start opens the

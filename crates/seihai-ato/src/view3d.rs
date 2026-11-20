@@ -7,8 +7,11 @@
 //! behind and above it, or stands at the camera ghost when there is no
 //! control object yet.
 //!
-//! Shapes: `.3ds` ([`crate::three_ds`]) and `.dts` ([`crate::dts`]).
-//! `.dif` interiors, `.ft` shapes and terrain are not drawn yet.
+//! Shapes: `.3ds` ([`crate::three_ds`]) and `.dts` ([`crate::dts`]),
+//! with their textures (PNG, GIF or BMP; perspective-correct, nearest
+//! texel, repeating) where the material names one and the file is in, else
+//! flat in the material's colour. `.dif` interiors, `.ft` shapes and
+//! terrain are not drawn yet.
 //!
 //! The Sky: its six textures as a box around the eye (front +y, right +x,
 //! back -y, left -x, top +z, bottom -z), else its solid colour. Past half
@@ -79,6 +82,12 @@ impl Texture {
                 rgba,
             },
         )
+    }
+
+    /// The colour at (u, v) from the top left, nearest, the image repeating
+    /// outside 0 to 1 (as shape textures do).
+    fn wrapped(&self, u: f32, v: f32) -> [u8; 3] {
+        self.at(u.rem_euclid(1.0), v.rem_euclid(1.0))
     }
 
     /// The colour at (u, v), each 0 to 1 from the top left, nearest.
@@ -202,18 +211,29 @@ impl World3d {
     }
 
     /// A file came in over TCP: a shape, or an image (the Sky's textures,
-    /// named without an extension).
-    pub fn file(&mut self, name: &str, data: Option<&[u8]>) {
+    /// named without an extension, and the shapes' textures). For a shape,
+    /// the texture files its faces name, to ask for.
+    pub fn file(&mut self, name: &str, data: Option<&[u8]>) -> Vec<String> {
         let lower = name.to_ascii_lowercase();
         let shape = [".3ds", ".dts", ".dif", ".ft"]
             .iter()
             .any(|e| lower.ends_with(e));
         if shape {
-            self.shape_file(name, data);
+            self.shape_file(name, data)
         } else {
             let t = data.and_then(Texture::decode).map(Arc::new);
             self.images.insert(lower, t);
+            Vec::new()
         }
+    }
+
+    /// A shape's texture, by the name its material gives: that file, or
+    /// for a name without an extension (Torque's materials) the first of
+    /// [`texture_files`] that is in and decoded.
+    fn texture(&self, name: &str) -> Option<&Texture> {
+        texture_files(name)
+            .iter()
+            .find_map(|f| self.images.get(&f.to_ascii_lowercase())?.as_deref())
     }
 
     /// The Sky's texture for face `i` (front, right, back, left, top,
@@ -225,8 +245,8 @@ impl World3d {
 
     /// A shape file came in over TCP (`None`: the server had none).
     /// `.3ds` and `.dts` shapes are read; `.dif` and `.ft` are kept as
-    /// `None` (not drawn yet).
-    pub fn shape_file(&mut self, name: &str, data: Option<&[u8]>) {
+    /// `None` (not drawn yet). Returns the texture files the shape names.
+    pub fn shape_file(&mut self, name: &str, data: Option<&[u8]>) -> Vec<String> {
         let lower = name.to_ascii_lowercase();
         let model = data
             .and_then(|d| {
@@ -239,7 +259,25 @@ impl World3d {
                 }
             })
             .map(Arc::new);
+        let textures = model.as_ref().map(|m| m.textures()).unwrap_or_default();
         self.models.insert(lower, model);
+        textures
+    }
+}
+
+/// The files a shape's texture name can be, in the order to try them: the
+/// name itself when it has an extension, else the name with each image
+/// extension this view decodes (PNG, then GIF, then BMP). Torque also
+/// tries `.jpg`, which this view does not read yet.
+pub fn texture_files(name: &str) -> Vec<String> {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    if base.contains('.') {
+        vec![base.to_string()]
+    } else {
+        ["png", "gif", "bmp"]
+            .iter()
+            .map(|e| format!("{base}.{e}"))
+            .collect()
     }
 }
 
@@ -393,57 +431,88 @@ pub fn draw(world: &World3d, width: u32, height: u32) -> Frame {
                 .iter()
                 .map(|&v| add(mul(&r, v), t.position))
                 .collect();
-            for (f, col) in mesh.faces.iter().zip(&mesh.face_colours) {
+            for (fi, (f, col)) in mesh.faces.iter().zip(&mesh.face_colours).enumerate() {
                 let p = f.map(|i| world_v[i as usize]);
                 let n = norm(cross(sub(p[1], p[0]), sub(p[2], p[0])));
                 // Both sides lit: .3ds winding is not reliable.
                 let lit = dot(n, to_light).abs();
-                let base = col.unwrap_or([180, 180, 180]);
-                let shade = |k: usize| {
-                    let l = ambient[k] + sun_col[k] * lit;
-                    (base[k] as f32 * l.clamp(0.0, 1.0)) as u8
+                let light = |k: usize| (ambient[k] + sun_col[k] * lit).clamp(0.0, 1.0);
+                let texture = mesh
+                    .face_textures
+                    .get(fi)
+                    .and_then(Option::as_ref)
+                    .filter(|_| !mesh.uvs.is_empty())
+                    .and_then(|name| world.texture(name));
+                let uv = |k: usize| mesh.uvs.get(f[k] as usize).copied().unwrap_or([0.0; 2]);
+                // A textured face is lit texel by texel; an untextured one
+                // gets its material colour (grey without one).
+                let base = if texture.is_some() {
+                    [255, 255, 255]
+                } else {
+                    col.unwrap_or([180, 180, 180])
                 };
+                let mut colour = [
+                    (base[0] as f32 * light(0)) as u8,
+                    (base[1] as f32 * light(1)) as u8,
+                    (base[2] as f32 * light(2)) as u8,
+                    255,
+                ];
                 // Fog from half the visible distance; nothing past it.
                 let mid = [
                     (p[0][0] + p[1][0] + p[2][0]) / 3.0,
                     (p[0][1] + p[1][1] + p[2][1]) / 3.0,
                     (p[0][2] + p[1][2] + p[2][2]) / 3.0,
                 ];
-                let mut colour = [shade(0), shade(1), shade(2), 255];
+                let mut fog_k = 0.0;
                 if let Some(far) = far {
                     let d = dot(sub(mid, eye.at), sub(mid, eye.at)).sqrt();
                     if d > far {
                         continue;
                     }
-                    let k = ((d - far / 2.0) / (far / 2.0)).clamp(0.0, 1.0);
-                    for c in 0..3 {
-                        let f = fog[c].clamp(0.0, 1.0) * 255.0;
-                        colour[c] = (colour[c] as f32 * (1.0 - k) + f * k) as u8;
+                    fog_k = ((d - far / 2.0) / (far / 2.0)).clamp(0.0, 1.0);
+                    if texture.is_none() {
+                        for c in 0..3 {
+                            let f = fog[c].clamp(0.0, 1.0) * 255.0;
+                            colour[c] = (colour[c] as f32 * (1.0 - fog_k) + f * fog_k) as u8;
+                        }
                     }
                 }
                 // Into eye space, cut at the near plane, then onto the
                 // screen.
-                let eye_v = p.map(|v| {
-                    let d = sub(v, eye.at);
-                    [dot(d, eye.right), dot(d, eye.up), dot(d, eye.forward)]
+                let eye_v: [Vert; 3] = std::array::from_fn(|k| {
+                    let d = sub(p[k], eye.at);
+                    let [u, v] = uv(k);
+                    [dot(d, eye.right), dot(d, eye.up), dot(d, eye.forward), u, v]
                 });
                 let poly = clip_near(&eye_v);
-                let screen: Vec<[f32; 3]> = poly
+                // (x, y, 1/z, u/z, v/z): u and v go straight on the screen
+                // only over z.
+                let screen: Vec<Vert> = poly
                     .iter()
                     .map(|e| {
                         [
                             cx + e[0] * focal / e[2],
                             cy - e[1] * focal / e[2],
                             1.0 / e[2],
+                            e[3] / e[2],
+                            e[4] / e[2],
                         ]
                     })
                     .collect();
+                let paint = match texture {
+                    Some(tex) => Paint::Texture {
+                        tex,
+                        light: [light(0), light(1), light(2)],
+                        fog: (fog_k, rgb(fog)),
+                    },
+                    None => Paint::Flat(colour),
+                };
                 for k in 1..screen.len().saturating_sub(1) {
                     triangle(
                         &mut frame,
                         &mut depth,
                         [screen[0], screen[k], screen[k + 1]],
-                        colour,
+                        &paint,
                     );
                 }
             }
@@ -576,9 +645,23 @@ pub fn labels(world: &World3d, width: u32, height: u32) -> Vec<Label> {
     out
 }
 
-/// The part of an eye-space triangle (right, up, forward) in front of the
-/// near plane: none, a triangle or a quad, as a fan.
-fn clip_near(t: &[Vec3; 3]) -> Vec<Vec3> {
+/// An eye-space or screen vertex with its texture coordinates.
+type Vert = [f32; 5];
+
+/// How a triangle is filled.
+enum Paint<'a> {
+    Flat([u8; 4]),
+    /// A texture, lit per channel and faded by the fog (amount, colour).
+    Texture {
+        tex: &'a Texture,
+        light: [f32; 3],
+        fog: (f32, [u8; 3]),
+    },
+}
+
+/// The part of an eye-space triangle (right, up, forward, u, v) in front
+/// of the near plane: none, a triangle or a quad, as a fan.
+fn clip_near(t: &[Vert; 3]) -> Vec<Vert> {
     let mut out = Vec::with_capacity(4);
     for i in 0..3 {
         let (a, b) = (t[i], t[(i + 1) % 3]);
@@ -588,15 +671,21 @@ fn clip_near(t: &[Vec3; 3]) -> Vec<Vec3> {
         }
         if ina != inb {
             let k = (NEAR - a[2]) / (b[2] - a[2]);
-            out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, NEAR]);
+            out.push(std::array::from_fn(|c| {
+                if c == 2 {
+                    NEAR
+                } else {
+                    a[c] + (b[c] - a[c]) * k
+                }
+            }));
         }
     }
     out
 }
 
-/// Fill one screen triangle (x, y, 1/z) where it is nearer than what is
-/// drawn.
-fn triangle(frame: &mut Frame, depth: &mut [f32], s: [[f32; 3]; 3], colour: [u8; 4]) {
+/// Fill one screen triangle (x, y, 1/z, u/z, v/z) where it is nearer than
+/// what is drawn.
+fn triangle(frame: &mut Frame, depth: &mut [f32], s: [Vert; 3], paint: &Paint<'_>) {
     let (w, h) = (frame.width as i32, frame.height as i32);
     let area =
         (s[1][0] - s[0][0]) * (s[2][1] - s[0][1]) - (s[2][0] - s[0][0]) * (s[1][1] - s[0][1]);
@@ -630,19 +719,30 @@ fn triangle(frame: &mut Frame, depth: &mut [f32], s: [[f32; 3]; 3], colour: [u8;
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let edge = |a: [f32; 3], b: [f32; 3]| {
-                (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])
-            };
+            let edge = |a: Vert, b: Vert| (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0]);
             let w0 = edge(s[1], s[2]) / area;
             let w1 = edge(s[2], s[0]) / area;
             let w2 = edge(s[0], s[1]) / area;
             if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                 continue;
             }
-            let z = w0 * s[0][2] + w1 * s[1][2] + w2 * s[2][2];
+            let at = |c: usize| w0 * s[0][c] + w1 * s[1][c] + w2 * s[2][c];
+            let z = at(2);
             let i = (y * w + x) as usize;
             if z > depth[i] {
                 depth[i] = z;
+                let colour = match paint {
+                    Paint::Flat(c) => *c,
+                    Paint::Texture { tex, light, fog } => {
+                        let texel = tex.wrapped(at(3) / z, at(4) / z);
+                        let (k, f) = *fog;
+                        let c = |n: usize| {
+                            let lit = texel[n] as f32 * light[n];
+                            (lit * (1.0 - k) + f[n] as f32 * k) as u8
+                        };
+                        [c(0), c(1), c(2), 255]
+                    }
+                };
                 frame.rgba[i * 4..i * 4 + 4].copy_from_slice(&colour);
             }
         }
@@ -782,6 +882,68 @@ mod tests {
         let mut out = Vec::new();
         seihai_core::assets::write_png_rgb(&mut out, 2, 2, &[255, 0, 0].repeat(4)).unwrap();
         out
+    }
+
+    fn green_png() -> Vec<u8> {
+        let mut out = Vec::new();
+        seihai_core::assets::write_png_rgb(&mut out, 2, 2, &[0, 255, 0].repeat(4)).unwrap();
+        out
+    }
+
+    #[test]
+    fn a_textured_shape_is_drawn_with_its_texture_once_it_is_in() {
+        let mut w = world();
+        let uvs: Vec<[f32; 2]> = (0..8).map(|i| [(i % 2) as f32, (i / 4) as f32]).collect();
+        let b = {
+            let m = crate::three_ds::Model::read(&cube()).unwrap();
+            let mesh = &m.meshes[0];
+            write::textured(
+                "cube",
+                &mesh.vertices,
+                &mesh.faces,
+                [220, 40, 40],
+                Some((&uvs, "cube")),
+            )
+        };
+        // A bare texture name is asked for as PNG first.
+        assert_eq!(w.shape_file("labcube.3ds", Some(&b)), ["cube"]);
+        assert_eq!(texture_files("cube"), ["cube.png", "cube.gif", "cube.bmp"]);
+        // Not in yet: the material's red.
+        let mid = pixel(&draw(&w, 160, 120), 80, 60);
+        assert!(mid[0] > mid[1], "red before the texture: {mid:?}");
+        // The PNG is not on the server, the GIF is not an image: still red.
+        assert!(w.file("cube.png", None).is_empty());
+        w.file("cube.gif", Some(b"not a gif"));
+        let mid = pixel(&draw(&w, 160, 120), 80, 60);
+        assert!(mid[0] > mid[1], "still red: {mid:?}");
+        // The BMP or PNG in: green, lit by the sun.
+        w.file("cube.png", Some(&green_png()));
+        let mid = pixel(&draw(&w, 160, 120), 80, 60);
+        assert!(
+            mid[1] > 0 && mid[0] == 0 && mid[2] == 0,
+            "green texture: {mid:?}"
+        );
+    }
+
+    #[test]
+    fn texture_names_with_an_extension_or_a_path_are_one_file() {
+        assert_eq!(texture_files("GRASS.BMP"), ["GRASS.BMP"]);
+        assert_eq!(texture_files("data/shapes/rock.png"), ["rock.png"]);
+        assert_eq!(texture_files("maps\\wall.gif"), ["wall.gif"]);
+    }
+
+    #[test]
+    fn the_suns_colour_and_ambient_light_shade_the_shapes() {
+        let mut w = world();
+        w.sun = Some(([0.0, 1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.2, 0.2, 0.2, 1.0]));
+        let bright = pixel(&draw(&w, 160, 120), 80, 60);
+        w.sun = Some(([0.0, 1.0, -1.0], [0.2, 0.2, 0.2, 1.0], [0.0, 0.0, 0.0, 1.0]));
+        let dim = pixel(&draw(&w, 160, 120), 80, 60);
+        assert!(bright[0] > dim[0], "{bright:?} vs {dim:?}");
+        // A blue sun and no ambient light leave a red face black.
+        w.sun = Some(([0.0, 1.0, -1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]));
+        let blue = pixel(&draw(&w, 160, 120), 80, 60);
+        assert_eq!(blue[0], 0, "{blue:?}");
     }
 
     #[test]

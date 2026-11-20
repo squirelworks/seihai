@@ -26,7 +26,7 @@
 //! in the order they came. A `waitfor` on an event of the NPC's own that
 //! comes in time resumes with 1; one that times out resumes with 0.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use seihai_core::offline::{OfflineSession, FOOT_DX, FOOT_DY};
 use seihai_core::protocol::ClientVersion;
@@ -86,6 +86,10 @@ pub struct ClientScripts {
     /// runs a script) and for applying effects to the session.
     pub host: SessionScripts,
     running: Vec<Running>,
+    /// The NPC scripts of gmap cells the walk left, by lower-case level
+    /// name, kept with their state for when it comes back (in the order
+    /// of their objects, which core's world parks with them).
+    parked: HashMap<String, Vec<Running>>,
     /// Milliseconds not yet counted into a frame.
     acc_ms: u64,
     /// Lines a run logged (calls with no command behind them), for the
@@ -105,6 +109,7 @@ impl ClientScripts {
             version,
             host: SessionScripts::new(version),
             running: Vec::new(),
+            parked: HashMap::new(),
             acc_ms: 0,
             log: Vec::new(),
             chat: String::new(),
@@ -145,12 +150,88 @@ impl ClientScripts {
             .collect()
     }
 
-    /// A new level is on screen: the old level's scripts stop. The
-    /// weapons go on.
+    /// A new level is on screen: the old level's scripts stop, and so do
+    /// the parked gmap cells'. The weapons go on.
     pub fn clear(&mut self) {
         self.running.retain(|r| matches!(r.owner, Owner::Weapon(_)));
         self.host.world.clear_level();
+        self.parked.clear();
+        self.host.world.retain_parked(|_| false);
         self.acc_ms = 0;
+    }
+
+    /// The walk left gmap cell `level`: its NPC scripts stop running but
+    /// keep their state (variables, timers, a sleep in progress), with
+    /// their objects in core's world, until [`Self::unpark`] brings them
+    /// back. The weapons go on.
+    pub fn park(&mut self, level: &str) {
+        let mut npcs = Vec::new();
+        let mut i = 0;
+        while i < self.running.len() {
+            if matches!(self.running[i].owner, Owner::Npc(_)) {
+                npcs.push(self.running.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        // Core parks the level's objects in id order; keep the same order.
+        npcs.sort_by_key(|r| r.obj);
+        self.host.world.park_level(level);
+        self.parked.insert(level.to_ascii_lowercase(), npcs);
+        self.acc_ms = 0;
+    }
+
+    /// The walk came back into gmap cell `level`: its parked scripts run
+    /// again where they were, and get `onPlayerEnters` (not `onCreated`).
+    /// Returns how many came back.
+    pub fn unpark(&mut self, session: &mut OfflineSession, level: &str) -> usize {
+        let Some(mut npcs) = self.parked.remove(&level.to_ascii_lowercase()) else {
+            return 0;
+        };
+        let base = self.host.world.len();
+        if !self.host.world.unpark_level(level) {
+            return 0;
+        }
+        let back = self.host.world.len() - base;
+        if back != npcs.len() {
+            // Not the objects these runs were parked with: start over.
+            for k in 0..back {
+                Self::release_npc_object(&mut self.host.world, base + k);
+            }
+            return 0;
+        }
+        for (k, r) in npcs.iter_mut().enumerate() {
+            r.obj = base + k;
+            r.host.obj = r.obj;
+            r.touching = false;
+        }
+        let first = self.running.len();
+        self.running.extend(npcs);
+        self.retag(session);
+        self.host.sync_player(session);
+        let mut came_back = 0;
+        for i in first..self.running.len() {
+            self.sync(i, session);
+            self.seed_flags(i);
+            self.event(i, "PlayerEnters", &[]);
+            came_back += 1;
+        }
+        self.apply(session);
+        came_back
+    }
+
+    /// Keep only the parked cells `keep` says yes to (lower-case names):
+    /// the gmap's neighbours of the player's cell.
+    pub fn retain_parked(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        self.parked.retain(|n, _| keep(n));
+        self.host.world.retain_parked(keep);
+    }
+
+    /// The gmap cells with scripts parked, lower-case.
+    pub fn parked_levels(&self) -> Vec<&str> {
+        let mut v: Vec<&str> = self.parked.keys().map(String::as_str).collect();
+        v.sort_unstable();
+        v
     }
 
     /// Stop NPC `npc_id`'s script, so a new one can start.
@@ -410,6 +491,44 @@ impl ClientScripts {
                 Val::Num(f64::from(press.scan)),
             ],
         );
+    }
+
+    /// A mouse click at `(x, y)` in level tiles: `onMouseDown(modifier)`
+    /// (`left`, `right`, `double` or `middle`) on every weapon, and on each
+    /// visible NPC whose touch box holds the point. Returns how many
+    /// scripts got it.
+    pub fn mouse_down(
+        &mut self,
+        session: &mut OfflineSession,
+        x: f32,
+        y: f32,
+        modifier: &str,
+    ) -> usize {
+        if self.running.is_empty() {
+            return 0;
+        }
+        self.retag(session);
+        self.host.sync_player(session);
+        let (x, y) = (f64::from(x), f64::from(y));
+        let args = [Val::Str(modifier.to_string())];
+        let mut got = 0;
+        for i in 0..self.running.len() {
+            let hit = match self.running[i].owner {
+                Owner::Weapon(_) => true,
+                Owner::Npc(_) => self.host.world.obj(self.running[i].obj).is_some_and(|o| {
+                    let (ox, oy, w, h) = o.rect();
+                    o.visible && x >= ox && x < ox + w && y >= oy && y < oy + h
+                }),
+            };
+            if hit {
+                self.sync(i, session);
+                self.seed_flags(i);
+                self.event(i, "MouseDown", &args);
+                got += 1;
+            }
+        }
+        self.apply(session);
+        got
     }
 
     /// The player took damage: `onPlayerHurt` on every script.
@@ -942,6 +1061,59 @@ mod tests {
         );
         sc.player_chats(&mut s, "hi");
         assert_eq!((npc(&s).x, npc(&s).y), (20.0, 21.0));
+    }
+
+    /// A gmap cell the walk leaves keeps its scripts' state: coming back
+    /// runs `onPlayerEnters` on the same run, not `onCreated` again.
+    #[test]
+    fn a_gmap_cell_left_and_entered_again_keeps_its_scripts_state() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src = "function onCreated() { this.entries = 0; }\n\
+                   function onPlayerEnters() { this.entries += 1; this.x = 10 + this.entries; }\n";
+        sc.start(&mut s, &script(src));
+        assert_eq!(npc(&s).x, 11.0);
+        // Out to the next cell and back, twice.
+        for back in [12.0, 13.0] {
+            sc.park("a.nw");
+            assert!(!sc.runs(7));
+            assert_eq!(sc.parked_levels(), ["a.nw"]);
+            assert_eq!(sc.unpark(&mut s, "A.nw"), 1);
+            assert!(sc.runs(7));
+            assert_eq!(npc(&s).x, back);
+        }
+        // Starting the kept scripts again does not start a second run.
+        assert_eq!(sc.start(&mut s, &script(src)), 0);
+        assert_eq!(sc.len(), 1);
+        // Nothing parked under another name; a cell no longer next to the
+        // player is dropped, and a level change drops them all.
+        assert_eq!(sc.unpark(&mut s, "b.nw"), 0);
+        sc.park("a.nw");
+        sc.retain_parked(|n| n == "b.nw");
+        assert_eq!(sc.unpark(&mut s, "a.nw"), 0);
+        sc.start(&mut s, &script(src));
+        sc.park("a.nw");
+        sc.clear();
+        assert!(sc.parked_levels().is_empty());
+        assert_eq!(sc.unpark(&mut s, "a.nw"), 0);
+    }
+
+    /// A click runs `onMouseDown` on the NPC under it (and on weapons), with
+    /// the button as its modifier.
+    #[test]
+    fn a_click_on_the_npc_runs_on_mouse_down() {
+        let mut s = session_with_npc(7);
+        let mut sc = ClientScripts::new(V);
+        let src =
+            "function onMouseDown(m) { if (m == \"right\") this.x = 20; else this.x = 15; }\n";
+        sc.start(&mut s, &script(src));
+        // Beside the NPC: nothing.
+        assert_eq!(sc.mouse_down(&mut s, 5.0, 5.0, "left"), 0);
+        assert_eq!(npc(&s).x, 10.0);
+        assert_eq!(sc.mouse_down(&mut s, 10.5, 10.5, "right"), 1);
+        assert_eq!(npc(&s).x, 20.0);
+        assert_eq!(sc.mouse_down(&mut s, 20.5, 10.5, "left"), 1);
+        assert_eq!(npc(&s).x, 15.0);
     }
 
     /// When the server deletes the NPC its script stops.
