@@ -151,6 +151,9 @@ pub struct StartWindow {
     pub graal3d: bool,
     /// The listserver the server list comes from (`host:port`).
     pub listserver: String,
+    /// `--secure-login` or `--server-key`: Start hands it over with the
+    /// form, so the list and game logins use `SEI00001` (#564).
+    pub secure: Option<seihai_core::net::SecureLogin>,
     /// Set by Start when there is a server: the form, taken before 3.153
     /// clears the password.
     pub started: Arc<Mutex<Option<Login>>>,
@@ -169,6 +172,7 @@ impl StartWindow {
             online: None,
             graal3d: false,
             listserver: crate::server_list::default_listserver(version),
+            secure: None,
             started: Arc::default(),
         }
     }
@@ -183,7 +187,7 @@ impl StartWindow {
             password: self.password.clone(),
             nick: self.nick.clone(),
             language: self.language.clone(),
-            secure: None,
+            secure: self.secure.clone(),
         };
         if self.layout.start_clears_password {
             self.password.clear();
@@ -477,5 +481,22 @@ mod tests {
             ("a", "p", "n")
         );
         assert_eq!(w.password, "");
+    }
+
+    /// Start hands the secure login over with the form, so the list fetch
+    /// and the game login after it use `SEI00001` (squirelworks/seihai#564).
+    #[test]
+    fn start_hands_over_the_secure_login() {
+        use seihai_core::net::SecureLogin;
+        let mut w = StartWindow::new(ClientVersion::V304, "n".into(), "a".into(), "p".into());
+        w.press_start();
+        assert_eq!(w.started.lock().unwrap().as_ref().unwrap().secure, None);
+        let mut w = StartWindow::new(ClientVersion::V304, "n".into(), "a".into(), "p".into());
+        w.secure = Some(SecureLogin::pinned([1; 32]));
+        w.press_start();
+        assert_eq!(
+            w.started.lock().unwrap().as_ref().unwrap().secure,
+            Some(SecureLogin::pinned([1; 32]))
+        );
     }
 }

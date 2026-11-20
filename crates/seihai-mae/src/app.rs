@@ -1119,14 +1119,18 @@ pub fn main(args: Vec<String>) {
         }
     }
     loop {
-        if !cli_mode && in_program {
-            let why = relaunch_to_server_list(gui_error.as_deref());
+        // The shared start window has no secure login, so with
+        // `--secure-login` or `--server-key` Mae's own window is used: it
+        // carries the setting to the list fetch and to a 3.x to 6.x
+        // handoff (squirelworks/seihai#564).
+        if !cli_mode && in_program && secure_login.is_none() {
+            let why = relaunch_to_server_list(gui_error.as_deref(), secure_login.as_ref());
             eprintln!("start window: could not open it ({why}); opening Mae's own");
         }
         if !cli_mode {
             let pick = match gui_error.take() {
-                Some(e) => seihai::gui::run_with_error(e),
-                None => seihai::gui::run(),
+                Some(e) => seihai::gui::run_with_error(e, secure_login.clone()),
+                None => seihai::gui::run(secure_login.clone()),
             };
             let Some(addr) = pick else {
                 // Offline chosen, or the window was closed.
@@ -1304,7 +1308,8 @@ pub fn main(args: Vec<String>) {
                         continue;
                     }
                     if in_program {
-                        let why = relaunch_to_server_list(Some(&e.to_string()));
+                        let why =
+                            relaunch_to_server_list(Some(&e.to_string()), secure_login.as_ref());
                         eprintln!("start window: could not open it ({why})");
                     }
                 }
@@ -5985,13 +5990,14 @@ pub fn main(args: Vec<String>) {
     if back_to_list || (exit_error.is_some() && windowed) {
         // A fresh start of this program with the server list: nothing of
         // this game (connection, window, level, scripts) is carried over.
-        let why = relaunch_to_server_list(exit_error.as_deref());
+        let why = relaunch_to_server_list(exit_error.as_deref(), secure_login.as_ref());
         eprintln!("server list: could not restart Seihai ({why}); opening it here");
         let _ = seihai::gui::run_with_error(
             exit_error.unwrap_or_else(|| format!("could not restart Seihai: {why}")),
+            secure_login.clone(),
         );
     } else if let Some(why) = exit_error {
-        let _ = seihai::gui::run_with_error(why);
+        let _ = seihai::gui::run_with_error(why, secure_login.clone());
     }
 }
 
@@ -6011,12 +6017,16 @@ fn in_seihai_program() -> bool {
 }
 
 /// The arguments that start this program at the server list, with `error`
-/// shown there.
-fn server_list_args(error: Option<&str>) -> Vec<String> {
-    match error {
+/// shown there. A secure login is kept (`--secure-login` or
+/// `--server-key`), so the restart does not fall back to the clear login;
+/// with it the `seihai` program starts Mae, whose own start window has it.
+fn server_list_args(error: Option<&str>, secure: Option<&seihai::net::SecureLogin>) -> Vec<String> {
+    let mut out = match error {
         Some(e) => vec!["--launcher-error".to_string(), e.to_string()],
         None => Vec::new(),
-    }
+    };
+    out.extend(crate::ato::secure_args(secure));
+    out
 }
 
 /// Start this program again at the server list. On Unix the process is
@@ -6026,7 +6036,10 @@ fn server_list_args(error: Option<&str>) -> Vec<String> {
 ///
 /// Inside the `seihai` program (`SEIHAI_LAUNCHER` or `SEIHAI_PROGRAM` set)
 /// that is the program's shared start window, not Mae's own.
-fn relaunch_to_server_list(error: Option<&str>) -> std::io::Error {
+fn relaunch_to_server_list(
+    error: Option<&str>,
+    secure: Option<&seihai::net::SecureLogin>,
+) -> std::io::Error {
     let exe = match seihai_program() {
         Some(p) => p,
         None => match env::current_exe() {
@@ -6035,7 +6048,7 @@ fn relaunch_to_server_list(error: Option<&str>) -> std::io::Error {
         },
     };
     let mut cmd = std::process::Command::new(exe);
-    cmd.args(server_list_args(error));
+    cmd.args(server_list_args(error, secure));
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -6374,10 +6387,32 @@ mod relaunch_tests {
     /// The restart carries no game arguments: only the error line, when there is one.
     #[test]
     fn server_list_restart_args() {
-        assert!(server_list_args(None).is_empty());
+        assert!(server_list_args(None, None).is_empty());
         assert_eq!(
-            server_list_args(Some("disconnected: bye")),
+            server_list_args(Some("disconnected: bye"), None),
             ["--launcher-error", "disconnected: bye"]
+        );
+    }
+
+    /// A restart keeps the secure login, so the next Join is not a clear
+    /// login (squirelworks/seihai#564).
+    #[test]
+    fn server_list_restart_keeps_the_secure_login() {
+        use seihai::net::SecureLogin;
+        assert_eq!(
+            server_list_args(None, Some(&SecureLogin::trust_on_first_use())),
+            ["--secure-login"]
+        );
+        let key = [7u8; 32];
+        let args = server_list_args(Some("bye"), Some(&SecureLogin::pinned(key)));
+        assert_eq!(
+            args,
+            [
+                "--launcher-error".to_string(),
+                "bye".into(),
+                "--server-key".into(),
+                seihai::protocol::seclogin::encode_key(&key),
+            ]
         );
     }
 }

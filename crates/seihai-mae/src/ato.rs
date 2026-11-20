@@ -112,6 +112,26 @@ pub struct Handoff {
     pub password: String,
     /// The asset folder set for this build only, if any.
     pub assets: Option<String>,
+    /// Mae's `--secure-login` or `--server-key`, passed on to Ato and
+    /// Issho so their logins use `SEI00001` and not the clear login
+    /// (squirelworks/seihai#564). Graal3D has its own server and wire,
+    /// with no secure login, so it is not passed there.
+    pub secure: Option<seihai::net::SecureLogin>,
+}
+
+/// The command-line flags for `secure`, as Mae, Ato and Issho read them:
+/// `--server-key KEY` for a pinned key, `--secure-login` for the pin file.
+/// The key is the server's public key, not a secret.
+pub fn secure_args(secure: Option<&seihai::net::SecureLogin>) -> Vec<String> {
+    use seihai::net::PinSource;
+    match secure.map(|s| &s.pin) {
+        None => Vec::new(),
+        Some(PinSource::Key(k)) => vec![
+            "--server-key".to_string(),
+            seihai::protocol::seclogin::encode_key(k),
+        ],
+        Some(PinSource::File(_)) => vec!["--secure-login".to_string()],
+    }
 }
 
 impl Handoff {
@@ -146,6 +166,9 @@ impl Handoff {
             .filter(|d| !d.is_empty())
         {
             out.extend(["--assets".to_string(), dir.to_string()]);
+        }
+        if self.target != Target::Graal3D {
+            out.extend(secure_args(self.secure.as_ref()));
         }
         out
     }
@@ -246,6 +269,7 @@ mod tests {
             account: "guest".into(),
             password: "secret".into(),
             assets: Some(" dir ".into()),
+            secure: None,
         };
         let args = h.args();
         assert_eq!(
@@ -279,6 +303,7 @@ mod tests {
             account: String::new(),
             password: String::new(),
             assets: None,
+            secure: None,
         };
         let cmd = h.command_in(Some(PathBuf::from("/opt/seihai")));
         assert_eq!(cmd.get_program(), "/opt/seihai");
@@ -311,6 +336,7 @@ mod tests {
             account: "a".into(),
             password: "p".into(),
             assets: None,
+            secure: None,
         };
         assert_eq!(
             h.args(),
@@ -337,6 +363,7 @@ mod tests {
             account: String::new(),
             password: String::new(),
             assets: Some(" ".into()),
+            secure: None,
         };
         assert_eq!(h.args(), ["--version", "3.04"]);
         assert_eq!(h.command().get_envs().count(), 0);
@@ -350,6 +377,7 @@ mod tests {
             account: "lab".into(),
             password: "secret".into(),
             assets: Some("g3d".into()),
+            secure: None,
         };
         assert_eq!(
             h.args(),
@@ -377,5 +405,40 @@ mod tests {
             .args()
             .iter()
             .any(|a| a == "--online" || a.contains("secret")));
+    }
+
+    /// Mae's secure login reaches Issho and Ato, so a 6.x or 3.x to 5.x
+    /// Join is not a clear login (squirelworks/seihai#564).
+    #[test]
+    fn a_secure_login_is_passed_on() {
+        use seihai::net::SecureLogin;
+        let issho = Handoff {
+            target: Target::Issho(ClientVersion::V603R7),
+            server: Some("127.0.0.1:14900".into()),
+            account: "a".into(),
+            password: "p".into(),
+            assets: None,
+            secure: Some(SecureLogin::trust_on_first_use()),
+        };
+        assert_eq!(issho.args().last().unwrap(), "--secure-login");
+        let key = [3u8; 32];
+        let ato = Handoff {
+            target: Target::Ato(ClientVersion::V512),
+            secure: Some(SecureLogin::pinned(key)),
+            ..issho.clone()
+        };
+        let args = ato.args();
+        let at = args.iter().position(|a| a == "--server-key").unwrap();
+        assert_eq!(
+            seihai::protocol::seclogin::decode_key(&args[at + 1]),
+            Some(key)
+        );
+        assert!(!args.iter().any(|a| a == "p"));
+        // Graal3D has no secure login: nothing is passed.
+        let g3d = Handoff {
+            target: Target::Graal3D,
+            ..ato
+        };
+        assert!(!g3d.args().iter().any(|a| a.starts_with("--se")));
     }
 }

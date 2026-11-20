@@ -6,6 +6,7 @@
 //!   seihai-ato --version 3.04 --online host:port --account A --password-env VAR
 //!              [--assets DIR] [--no-window] [--first-level]
 //!   seihai-ato --version 5.12 --online host:port --graal3d --no-window ...
+//!   seihai-ato ... [--secure-login | --server-key KEY]
 //!
 //! Start asks the version's listserver (`listserver.graal.in`, or
 //! `--listserver host:port`) for its servers and logs in at the one picked.
@@ -17,6 +18,11 @@
 //! server at the same moment, to its port + 1, and logs its progress with a
 //! `3d:` prefix; a server warp to a `3 ` server opens it too. The single
 //! launcher passes `--graal3d` for a `3 ` server it lists.
+//!
+//! `--secure-login` (trust a server's key on the first visit) or
+//! `--server-key KEY` (only that key) replaces the build's clear login with
+//! the Seihai secure login (`SEI00001`), for the list and every game
+//! server, as in `seihai-mae` and `seihai-issho` (squirelworks/seihai#564).
 //!
 //! `seihai-launcher` starts this binary for a 3.x `--version` and passes the
 //! user's arguments through; flags meant for `seihai-mae` are ignored.
@@ -49,6 +55,13 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         Some(var) => std::env::var(var).unwrap_or_default(),
         None => String::new(),
     };
+    let secure = match args::secure(&a) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("seihai-ato: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let account = a.account.unwrap_or_default();
     let nick = a.nick.unwrap_or_default();
     // `--level` with no server: play the level files offline.
@@ -65,6 +78,7 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         let mut w = start_window::StartWindow::new(version, nick, account, password);
         w.online = a.online.clone();
         w.graal3d = a.graal3d;
+        w.secure = secure.clone();
         let skip_start = game::skips_start(&w);
         w.fill_from(&seihai_play::start::Saved::load());
         if let Some(ls) = a.listserver.clone() {
@@ -98,7 +112,7 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         password,
         nick,
         language: "English".into(),
-        secure: None,
+        secure,
     };
     if a.graal3d {
         if let Err(e) = graal3d::profile(version) {
