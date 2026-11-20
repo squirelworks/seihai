@@ -155,11 +155,12 @@ impl AtoApp {
                     return;
                 };
                 let repaint = ctx.clone();
-                self.list = Some(ServerList::fetch(
+                self.list = Some(ServerList::fetch_secure(
                     self.start.listserver.clone(),
                     self.start.version,
                     login.account,
                     login.password,
+                    login.secure,
                     move || repaint.request_repaint(),
                 ));
             }

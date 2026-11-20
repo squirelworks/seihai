@@ -60,11 +60,29 @@ impl ServerList {
         password: String,
         repaint: impl FnOnce() + Send + 'static,
     ) -> ServerList {
+        Self::fetch_secure(listserver, version, account, password, None, repaint)
+    }
+
+    /// As [`Self::fetch`]; with `secure`, the list login is the Seihai
+    /// secure login (`SEI00001`), so the password is never sent in clear
+    /// (squirelworks/seihai#564).
+    pub fn fetch_secure(
+        listserver: String,
+        version: ClientVersion,
+        account: String,
+        password: String,
+        secure: Option<seihai_core::net::SecureLogin>,
+        repaint: impl FnOnce() + Send + 'static,
+    ) -> ServerList {
         let (tx, rx) = mpsc::channel();
         let addr = listserver.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(Connection::fetch_server_list(
-                &addr, version, &account, &password,
+            let _ = tx.send(Connection::fetch_server_list_secure(
+                &addr,
+                version,
+                &account,
+                &password,
+                secure.as_ref(),
             ));
             repaint();
         });

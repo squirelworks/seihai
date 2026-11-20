@@ -107,6 +107,9 @@ pub struct Launcher {
     /// Set when a 3.x build or Graal3D was picked: the window closes and
     /// Ato or G3D starts.
     ato: Arc<Mutex<Option<crate::ato::Handoff>>>,
+    /// `--secure-login` or `--server-key` from Mae's command line: the list
+    /// fetch here uses it, and a 3.x to 6.x handoff passes it on (#564).
+    secure: Option<seihai::net::SecureLogin>,
 }
 
 impl Launcher {
@@ -144,6 +147,7 @@ impl Launcher {
                 .unwrap_or_else(|| "localhost:14900".into()),
             version_assets: String::new(),
             ato: Arc::default(),
+            secure: None,
         }
         .with_version_assets()
     }
@@ -183,6 +187,7 @@ impl Launcher {
                 account: self.account.clone(),
                 password: self.password.clone(),
                 assets: Some(self.version_assets.clone()),
+                secure: self.secure.clone(),
             });
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
@@ -212,6 +217,7 @@ impl Launcher {
             account: self.account.clone(),
             password: self.password.clone(),
             assets: Some(self.version_assets.clone()),
+            secure: self.secure.clone(),
         });
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
@@ -250,7 +256,13 @@ impl Launcher {
             );
         }
         let addr = self.list.addr(version);
-        match Connection::fetch_server_list(&addr, list_version, &self.account, &self.password) {
+        match Connection::fetch_server_list_secure(
+            &addr,
+            list_version,
+            &self.account,
+            &self.password,
+            self.secure.as_ref(),
+        ) {
             Ok(reply) => {
                 self.servers = reply
                     .servers
@@ -481,15 +493,18 @@ pub fn take_tutorial_pick() -> bool {
     TUTORIAL_PICKED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
-pub fn run() -> Option<String> {
-    run_inner(None)
+pub fn run(secure: Option<seihai::net::SecureLogin>) -> Option<String> {
+    run_inner(None, secure)
 }
 
-pub fn run_with_error(error: String) -> Option<String> {
-    run_inner(Some(error))
+pub fn run_with_error(error: String, secure: Option<seihai::net::SecureLogin>) -> Option<String> {
+    run_inner(Some(error), secure)
 }
 
-fn run_inner(mut error: Option<String>) -> Option<String> {
+fn run_inner(
+    mut error: Option<String>,
+    secure: Option<seihai::net::SecureLogin>,
+) -> Option<String> {
     loop {
         // Clear any previous choice so closing the window does not reconnect.
         let mut s = Settings::load();
@@ -501,12 +516,14 @@ fn run_inner(mut error: Option<String>) -> Option<String> {
         };
         let ato: Arc<Mutex<Option<crate::ato::Handoff>>> = Arc::default();
         let ato2 = ato.clone();
+        let secure2 = secure.clone();
         let _ = seihai_play::window::run_native(
             "Seihai",
             options,
             Box::new(move |_cc| {
                 let mut l = Launcher::with_error(error);
                 l.ato = ato2;
+                l.secure = secure2;
                 Ok(Box::new(l))
             }),
         );

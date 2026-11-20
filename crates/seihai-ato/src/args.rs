@@ -41,6 +41,12 @@ pub struct Args {
     /// `--graal3d`: the `--online` server is a Graal3D server; also open
     /// the Torque UDP link to its port + 1 (5.x builds; `--no-window`).
     pub graal3d: bool,
+    /// `--secure-login`: the Seihai secure login (`SEI00001`) for the list
+    /// and every game server, trusting a server's key on the first visit
+    /// (`known_servers.txt`), as in `seihai-mae` (squirelworks/seihai#564).
+    pub secure_login: bool,
+    /// `--server-key KEY`: the secure login, trusting only that key.
+    pub server_key: Option<String>,
 }
 
 /// Flags that take a value. Unknown flags are skipped on their own, so a
@@ -66,6 +72,8 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
             "--graal3d" => a.graal3d = true,
             "--listserver" => a.listserver = it.next().or(a.listserver),
             "--level" | "-l" => a.level = it.next().or(a.level),
+            "--secure-login" => a.secure_login = true,
+            "--server-key" => a.server_key = it.next().or(a.server_key),
             f if VALUE_FLAGS.contains(&f) => {
                 it.next();
             }
@@ -73,6 +81,20 @@ pub fn parse<I: IntoIterator<Item = String>>(argv: I) -> Args {
         }
     }
     a
+}
+
+/// The secure login `a` asks for: `--server-key` wins over
+/// `--secure-login`; an error when the key does not decode.
+pub fn secure(a: &Args) -> Result<Option<seihai_core::net::SecureLogin>, String> {
+    use seihai_core::net::SecureLogin;
+    if let Some(k) = &a.server_key {
+        return seihai_core::protocol::seclogin::decode_key(k)
+            .map(|k| Some(SecureLogin::pinned(k)))
+            .ok_or_else(|| {
+                "--server-key needs the server's key (43 characters of base64, as the server prints it)".into()
+            });
+    }
+    Ok(a.secure_login.then(SecureLogin::trust_on_first_use))
 }
 
 /// True for a build Ato runs: a `G3D` token from 3.x, 4.x or 5.x. The 1.x
@@ -176,6 +198,29 @@ mod tests {
         let a = p("--version 3.04 --listserver 127.0.0.1:14922 --account a");
         assert_eq!(a.listserver.as_deref(), Some("127.0.0.1:14922"));
         assert_eq!(a.account.as_deref(), Some("a"));
+    }
+
+    /// `--secure-login` and `--server-key` reach Ato, as in Mae and Issho
+    /// (squirelworks/seihai#564).
+    #[test]
+    fn secure_login_flags_are_read() {
+        use seihai_core::net::SecureLogin;
+        assert_eq!(secure(&p("--version 5.12")), Ok(None));
+        assert_eq!(
+            secure(&p("--version 5.12 --secure-login")),
+            Ok(Some(SecureLogin::trust_on_first_use()))
+        );
+        let key = seihai_core::protocol::seclogin::encode_key(&[5; 32]);
+        let a = p(&format!(
+            "--secure-login --server-key {key} --version 4.20r8"
+        ));
+        assert_eq!(
+            a.version.as_deref(),
+            Some("4.20r8"),
+            "the key is not read as a flag"
+        );
+        assert_eq!(secure(&a), Ok(Some(SecureLogin::pinned([5; 32]))));
+        assert!(secure(&p("--server-key nope")).is_err());
     }
 
     #[test]

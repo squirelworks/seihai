@@ -215,6 +215,7 @@ is on, so GServer-v2 and the fork can still register. `seihai_core`'s
 | `seihai` `crates/seihai-core/src/protocol/seclogin.rs` | Messages, crypto, pins, server key file: one definition for client and servers |
 | `seihai` `crates/seihai-core/src/net/mod.rs` | `login_gserver_secure`, `Connection::login_secure_with`, `fetch_server_list_secure` |
 | `seihai` `seihai-mae` | `--secure-login`, `--server-key KEY` |
+| `seihai` `seihai-issho`, `seihai-ato` | The same two flags. Mae's own start window passes them on when it hands a 3.x to 6.x build over, and uses them for its list fetch; the `seihai` program's shared start window has no secure login, so with either flag Mae opens its own (squirelworks/seihai#564). Graal3D (`seihai-g3d`) has its own wire and no secure login |
 | `seihai-listserver` | Secure id 7 on every client port; the encrypted gserver link |
 | `seihai-gserver` | Secure login on the stage-1 login path; the encrypted listserver link (`listlink.rs`) |
 | `seihai-gserver-v2` (GPL fork) | Not yet. Write it from this document with libsodium or OpenSSL, not from the Rust code, so the licences stay apart |
