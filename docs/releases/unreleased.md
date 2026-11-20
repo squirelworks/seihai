@@ -1,3 +1,4 @@
 Notes for the next seihai release. One line per user-visible change, added by the PR that makes it; the release PR moves them into `vX.Y.Z.md` (VERSIONING.md).
 
-- Built on seihai-core v0.7.0 (was main at 738a5dd, v0.6.1 plus GS1 `keypressed`): NewWorld beta 1/2 as real versions, the version-token/profile audit, GS2 reading non-numeric text as -1, and the GS1 fixes from 0.6.2 and 0.6.3.
+- Built on seihai-core `main` (after v0.7.2; was v0.7.0, and before that main at 738a5dd, v0.6.1 plus GS1 `keypressed`). Since v0.7.0: NewWorld COLORS is 8 bytes, the 2.05 and NewWorld file mod time, and GS1 `playeringuild`. From v0.7.0: NewWorld beta 1/2 as real versions, the version-token/profile audit, GS2 reading non-numeric text as -1, and the GS1 fixes from 0.6.2 and 0.6.3.
+- 5th Graal to 1.1.9 read `guildname.code` from the player's install folder for GS1 `playeringuild`. The check is an exact, case-sensitive match on the name; no file, or a damaged one, matches no name, as on the real 1.1 and 1.1.9 (lab, 2026-11-20; squirelworks/seihai-core#63).
