@@ -79,14 +79,19 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   static read behind the protocol 19 lab server: messages, moves, Camera),
   `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
 - `view3d`, `three_ds` and `dts`: the 3D world as the link keeps it, drawn
-  flat shaded by a small software rasteriser. Shapes are `.3ds` and Torque
+  by a small software rasteriser, lit by the Sun's direction, colour and
+  ambient light. Shapes are `.3ds` and Torque
   `.dts` (versions 23 to 25; the rest pose of the first detail level that is
   not a billboard, placed by the nodes' default transforms; skins from their
-  initial vertices). The Sky's six textures (PNG, GIF or BMP) are drawn as a
+  initial vertices). A face whose material names a texture is drawn with it
+  (perspective-correct, nearest texel, repeating) once the file is in; the
+  file is asked for over TCP when the shape arrives, a bare Torque material
+  name as `.png`, then `.gif`, then `.bmp` (`.jpg` is not read yet). Other
+  faces are flat in their material's colour. The Sky's six textures (PNG, GIF or BMP) are drawn as a
   box around the eye, else its solid colour; shapes fade into the fog colour
   from half the visible distance and are not drawn past it. Nicknames (in
   their colour) and chat go over each object, written by the window. Not
-  drawn yet: `.dif` interiors, `.ft` shapes, textures on shapes, and
+  drawn yet: `.dif` interiors, `.ft` shapes, JPEG textures, and
   terrain (no server sends `TerrainBlock` or terrain chunks yet).
 - `start_window`: the 3.x start window, laid out from the clients' own GUI
   files (positions, texts, colours, language list). Start opens the

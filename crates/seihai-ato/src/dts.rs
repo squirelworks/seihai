@@ -13,8 +13,10 @@
 //! Only what the view draws is kept: the first detail level that is not a
 //! billboard, each of its objects' meshes at rest (frame 0) placed by the
 //! nodes' default transforms, as triangles. Skinned meshes are drawn from
-//! their initial vertices, which are already in shape space. Animation,
-//! textures and the other detail levels are not read.
+//! their initial vertices, which are already in shape space. Texture
+//! coordinates are kept, and each triangle names its material's texture
+//! (the material list gives names without an extension). Animation and the
+//! other detail levels are not read.
 
 use crate::three_ds::{Mesh, Model};
 
@@ -137,6 +139,8 @@ struct RawMesh {
     verts: Vec<[f32; 3]>,
     /// Vertices per frame (0: all of them).
     verts_per_frame: usize,
+    /// Texture coordinates, one per vertex of a frame (or none).
+    tverts: Vec<[f32; 2]>,
     /// Triangles as vertex indices, with each one's material.
     triangles: Vec<([u32; 3], Option<u32>)>,
     /// A skin: its vertices are already in shape space.
@@ -220,8 +224,15 @@ fn mesh(p: &mut Parts<'_>, kind: i32, done: &[Option<RawMesh>]) -> Result<RawMes
         parent_mesh.map(|m| m.verts.clone()).unwrap_or_default()
     };
     let tv = p.count("mesh texture vertices")?;
+    let tverts = if own {
+        p.f32s(2 * tv, "mesh texture vertices")?
+            .as_chunks::<2>()
+            .0
+            .to_vec()
+    } else {
+        parent_mesh.map(|m| m.tverts.clone()).unwrap_or_default()
+    };
     if own {
-        p.skip32(2 * tv, "mesh texture vertices")?;
         // Normals, then the encoded normals (one byte each).
         p.skip32(3 * n, "mesh normals")?;
         p.skip8(n, "mesh encoded normals")?;
@@ -289,6 +300,7 @@ fn mesh(p: &mut Parts<'_>, kind: i32, done: &[Option<RawMesh>]) -> Result<RawMes
     }
     Ok(RawMesh {
         verts,
+        tverts,
         verts_per_frame,
         triangles,
         skin,
@@ -512,6 +524,7 @@ pub fn read_with_info(data: &[u8]) -> Result<(Model, Info), Error> {
     }
 
     let materials = materials(tail, version).unwrap_or_default();
+    let materials = &materials;
     let nodes_at = node_transforms(&parents, &rotations, &translations)?;
 
     // The first detail level that is not a billboard.
@@ -560,22 +573,38 @@ pub fn read_with_info(data: &[u8]) -> Result<(Model, Info), Error> {
             if vertices.len() > u16::MAX as usize {
                 continue;
             }
-            let faces: Vec<[u16; 3]> = m
+            let kept: Vec<&([u32; 3], Option<u32>)> = m
                 .triangles
                 .iter()
-                .map(|(t, _)| *t)
-                .filter(|t| t.iter().all(|&i| (i as usize) < vertices.len()))
-                .map(|t| t.map(|i| i as u16))
+                .filter(|(t, _)| t.iter().all(|&i| (i as usize) < vertices.len()))
                 .collect();
-            if faces.is_empty() {
+            if kept.is_empty() {
                 continue;
             }
+            let faces: Vec<[u16; 3]> = kept.iter().map(|(t, _)| t.map(|i| i as u16)).collect();
+            // Torque's texture coordinates run down from the top already.
+            let uvs = if m.tverts.len() >= vertices.len() {
+                m.tverts[..vertices.len()].to_vec()
+            } else {
+                Vec::new()
+            };
+            let face_textures = kept
+                .iter()
+                .map(|(_, mat)| {
+                    mat.filter(|_| !uvs.is_empty())
+                        .and_then(|i| materials.get(i as usize))
+                        .filter(|n| !n.is_empty())
+                        .cloned()
+                })
+                .collect();
             model.meshes.push(Mesh {
                 name: name_list
                     .get(name.max(0) as usize)
                     .cloned()
                     .unwrap_or_default(),
                 face_colours: vec![None; faces.len()],
+                face_textures,
+                uvs,
                 vertices,
                 faces,
             });
@@ -586,7 +615,7 @@ pub fn read_with_info(data: &[u8]) -> Result<(Model, Info), Error> {
         Info {
             version,
             names: name_list,
-            materials,
+            materials: materials.clone(),
         },
     ))
 }
@@ -647,6 +676,14 @@ mod tests {
         assert_eq!(m.meshes.len(), 1);
         assert_eq!(m.meshes[0].name, "octahedron");
         assert_eq!(m.meshes[0].faces.len(), 8);
+        // Its faces carry the material's texture name and coordinates.
+        let mesh = &m.meshes[0];
+        assert_eq!(mesh.uvs.len(), mesh.vertices.len());
+        assert!(mesh
+            .face_textures
+            .iter()
+            .all(|t| t.as_deref() == Some("green")));
+        assert_eq!(m.textures(), ["green"]);
         // Its points sit 0.75 above and below the middle.
         let z: Vec<f32> = m.meshes[0].vertices.iter().map(|v| v[2]).collect();
         let (lo, hi) = z
