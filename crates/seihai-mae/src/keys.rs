@@ -326,10 +326,11 @@ pub fn script_presses(window: &minifb::Window) -> Vec<(u32, String)> {
         .collect()
 }
 
-/// A key as the real 2.31 hands it to `keypressed` with Ctrl or Alt held
-/// (lab key sweep, Graal_analysis `protocol/keysweep`): Ctrl adds 512
-/// (Ctrl+A is 577), except Ctrl+H, I and M, which arrive as their ASCII
-/// control codes 8, 9 and 13. Shift or Alt alone, and Alt with a digit,
+/// A key as the real 2.17.1, 2.22 and 2.31 hand it to `keypressed` with
+/// Ctrl or Alt held (lab key sweep, Graal_analysis `protocol/keysweep`):
+/// Ctrl adds 512 (Ctrl+A is 577), except Ctrl+H, I, M and S, which arrive
+/// as their ASCII control codes 8, 9, 13 and 19, and Ctrl+T, J and U,
+/// which arrive as 145, 228 and 556 on all three builds. Shift or Alt alone, and Alt with a digit,
 /// raise no event.
 pub fn with_modifiers(k: Key, ctrl: bool, alt: bool) -> Option<(u32, String)> {
     let (code, ch) = virtual_key(k)?;
@@ -343,14 +344,18 @@ pub fn with_modifiers(k: Key, ctrl: bool, alt: bool) -> Option<(u32, String)> {
             Key::H => (8, String::new()),
             Key::I => (9, String::new()),
             Key::M => (13, String::new()),
+            Key::S => (19, String::new()),
+            Key::T => (145, String::new()),
+            Key::J => (228, String::new()),
+            Key::U => (556, String::new()),
             _ => (code + 512, ch),
         });
     }
     Some((code, ch))
 }
 
-/// The emoticon Ctrl+letter shows on the real 2.31 (lab key sweep,
-/// Graal_analysis `protocol/keysweep/231.tsv`): one per letter, from the
+/// The emoticon Ctrl+letter shows on the real 2.05r2 to 2.31 (lab key
+/// sweep, Graal_analysis `protocol/keysweep/`): one per letter, from the
 /// `emoticons` folder.
 pub fn emoticon(k: Key) -> Option<&'static str> {
     const NAMES: [&str; 26] = [
@@ -389,7 +394,8 @@ pub fn emoticon(k: Key) -> Option<&'static str> {
     Some(NAMES[(c as u8 - b'A') as usize])
 }
 
-/// The two `PLI_SHOWIMGPLAYER` (24) messages 2.31 sends for an emoticon,
+/// The two `PLI_SHOWIMGPLAYER` (24) messages 2.17.1, 2.22 and 2.31 send
+/// for an emoticon (2.05r2 fetches the file but sends neither),
 /// about 100 ms apart: a full list holding image 0, the emoticon, two
 /// tiles right of and five above the player's x and y (in half tiles),
 /// then image 0 with an empty name (removed). Lab bytes for the player at

@@ -1368,11 +1368,17 @@ impl Game {
         let mut send = self.send.lock().unwrap_or_else(|e| e.into_inner());
         // A right click on the own player's 48-pixel box opens "Profile"
         // and asks for it with PLI 80 and the account, before the trigger
-        // action: the real 4.20r8 did (lab key sweep); 5.24r4 and 6.03r7
-        // sent only the trigger action.
+        // action: the real 4.20r8 and 5.12 did (lab key sweep); 5.24r4 and
+        // 6.03r7 sent only the trigger action.
         let (px, py) = (self.session.player_x, self.session.player_y);
         let on_player = (px..px + 3.0).contains(&x) && (py..py + 3.0).contains(&y);
-        if action == "rightmouse" && on_player && self.life.version == Some(ClientVersion::V420R8) {
+        if action == "rightmouse"
+            && on_player
+            && matches!(
+                self.life.version,
+                Some(ClientVersion::V420R8 | ClientVersion::V512)
+            )
+        {
             if let Some(account) = &self.account {
                 let mut m = vec![80 + 0x20];
                 m.extend_from_slice(account.as_bytes());

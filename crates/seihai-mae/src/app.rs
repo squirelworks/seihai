@@ -3481,15 +3481,19 @@ pub fn main(args: Vec<String>) {
         map_mouse_was_down = mouse_down;
         // Ctrl+letter: an emoticon, sent as image 0 of the player's
         // showimg list and taken off again on the next frame, as the real
-        // 2.31 does (about 100 ms later; lab key sweep). Only 2.31 was
-        // measured.
+        // 2.17.1, 2.22 and 2.31 do (about 100 ms later; lab key sweep).
+        // 2.05r2 sends neither.
         if let Some(c) = conn.as_mut() {
             if let Some(m) = emoticon_remove.take() {
                 if let Err(e) = c.send_messages(&[m]) {
                     eprintln!("send failed: {e}");
                 }
             }
-            if version == ClientVersion::V231 && ctrl && !input.is_open() {
+            let scripted_2x = matches!(
+                version,
+                ClientVersion::V217 | ClientVersion::V222 | ClientVersion::V231
+            );
+            if scripted_2x && ctrl && !input.is_open() {
                 let hit = window
                     .get_keys_pressed(minifb::KeyRepeat::No)
                     .into_iter()
@@ -3505,7 +3509,7 @@ pub fn main(args: Vec<String>) {
             }
         }
         // Clicks in the game window: online each one goes to the server as
-        // a trigger action at the clicked point, as the real 2.31 sends it
+        // a trigger action at the clicked point, as the real 2.17.1, 2.22 and 2.31 send it
         // (`mouse`). Not over the open map, where Ctrl+click is its own.
         let buttons = [
             mouse_down,
@@ -3516,17 +3520,28 @@ pub fn main(args: Vec<String>) {
             .get_mouse_pos(minifb::MouseMode::Discard)
             .map(|(x, y)| (x as i32, y as i32));
         let actions = clicks.update(buttons, at.unwrap_or((-1, -1)), std::time::Instant::now());
+        // 2.05r2 sends no trigger action for a click, only the profile
+        // request below.
+        let clicks_sent = matches!(
+            version,
+            ClientVersion::V217 | ClientVersion::V222 | ClientVersion::V231
+        );
         if let (Some(at), Some(c)) = (at, conn.as_mut()) {
             if !map_screen.open {
                 let cam = seihai::render::camera_origin(&session, view_w, view_h);
                 let (x, y) = seihai::mouse::level_point(at, cam);
                 // A right click on the player's own box asks for its
-                // profile first (2.31 only was measured).
-                let own = version == ClientVersion::V231
-                    && seihai::mouse::on_player(
-                        at,
-                        seihai::render::player_box_origin(&session, view_w, view_h),
-                    );
+                // profile first (2.05r2, 2.17.1, 2.22 and 2.31).
+                let own = matches!(
+                    version,
+                    ClientVersion::V205
+                        | ClientVersion::V217
+                        | ClientVersion::V222
+                        | ClientVersion::V231
+                ) && seihai::mouse::on_player(
+                    at,
+                    seihai::render::player_box_origin(&session, view_w, view_h),
+                );
                 for a in actions {
                     if a == "rightmouse" && own {
                         if let Err(e) =
@@ -3534,6 +3549,9 @@ pub fn main(args: Vec<String>) {
                         {
                             eprintln!("send failed: {e}");
                         }
+                    }
+                    if !clicks_sent {
+                        continue;
                     }
                     if let Err(e) = c.send_trigger_action(x, y, a, "") {
                         eprintln!("send failed: {e}");

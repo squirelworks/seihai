@@ -1,5 +1,5 @@
-//! Mouse clicks as the real 2.31 sends them (lab key sweep, Graal_analysis
-//! `protocol/keysweep/231.tsv`): every left, right and middle click in the
+//! Mouse clicks as the real 2.17.1, 2.22 and 2.31 send them (lab key sweep,
+//! Graal_analysis `protocol/keysweep/`; 2.05r2 sends none): every left, right and middle click in the
 //! game window, on the player, the ground, an NPC or the HUD alike, sends
 //! `PLI_TRIGGERACTION` (38) for NPC 0 at the clicked point with
 //! `leftmouse`, `rightmouse` or `middlemouse`, and draws nothing. A double
