@@ -593,14 +593,36 @@ impl Game {
             .unwrap_or_else(|e| e.into_inner())
             .push(c);
         self.crossings_sent += 1;
+        let left = self.level_here.clone();
         self.level_here = self.session.level_name();
         if let Some(level) = &self.session.current_level {
             render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
         }
-        // The cell left takes its scripts with it; the new cell's start
-        // from what the server sent earlier (it does not send them again).
+        // The cell left keeps its scripts' state while it stays a
+        // neighbour; coming back into a cell picks its scripts up where
+        // they were. A cell never run here starts from what the server
+        // sent earlier (it does not send them again).
+        let neighbours: Vec<String> = self
+            .session
+            .gmap
+            .as_ref()
+            .map(|w| {
+                w.map
+                    .neighbours(w.cell)
+                    .into_iter()
+                    .filter_map(|c| w.map.level_at(c.0, c.1).map(str::to_ascii_lowercase))
+                    .collect()
+            })
+            .unwrap_or_default();
         if let Some(sc) = self.scripts.as_mut() {
-            sc.clear();
+            match &left {
+                Some(l) => sc.park(l),
+                None => sc.clear(),
+            }
+            if let Some(here) = &self.level_here {
+                sc.unpark(&mut self.session, here);
+            }
+            sc.retain_parked(|n| neighbours.iter().any(|k| k == n));
         }
         if let Some(here) = self.level_here.clone() {
             self.start_kept_scripts(&here);
@@ -1365,6 +1387,14 @@ impl Game {
         if self.offline || self.session.current_level.is_none() {
             return false;
         }
+        // GS2: `onMouseDown` on the NPC clicked and on the weapons.
+        if let Some(sc) = self.scripts.as_mut() {
+            let modifier = action.strip_suffix("mouse").unwrap_or(action);
+            if sc.mouse_down(&mut self.session, x, y, modifier) > 0 {
+                self.dirty = true;
+            }
+        }
+        self.after_scripts();
         let mut send = self.send.lock().unwrap_or_else(|e| e.into_inner());
         // A right click on the own player's 48-pixel box opens "Profile"
         // and asks for it with PLI 80 and the account, before the trigger
