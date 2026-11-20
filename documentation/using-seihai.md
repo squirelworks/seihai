@@ -87,7 +87,7 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--level-info FILE` | Print sizes, section offsets and record counts of a binary `.graal` / `.zelda` level (no content); repeat for more files. Exit code 1 if a file does not parse, or if a `Z3-V1` file does not read to its end with no anomaly |
 | `--version-chain` | Print what each client build changed against the build before it (all builds, or the one given with `--version`). `--chain-format text\|md\|tsv` picks the form (`version-chain.md`) |
 | `--receive-build BUILD` | With explicit `--version 2.1`, opt into an exact Windows 2.1 receive table. Login, send and script settings remain the inferred baseline. See [the build labels and limits](graal210-receive-builds.md) |
-| `--version` | Client version (`1.21`, `1.28 beta 2`, `1.3 test`, `1.31`, `1.32`, `1.33`, `1.39`, `2.05`, `2.17`, `2.22`, `2.31`, `3.04`, `3.153`, `4.04r2`, `4.20r6`, `4.20r8`, `5.00r7`, `5.12`, `5.24r4`, `5.30r3`, `5.31r4`, `6.00r2`, `6.015`, `6.034`, `6.03r7`, `6.03r7 Linux`; `1.41r1` is accepted for `1.41`). The 4.x, 5.x and 6.x builds log in to the given address as their `Login` server and play after its server warp (`v4-profiles.md`, `v5v6-profiles.md`). Wins over the version the launcher saved, even when it is the default `2.05`; the saved one applies only when the flag is absent |
+| `--version` | Client version (`graal3d` for Graal3D, or `1.21`, `1.28 beta 2`, `1.3 test`, `1.31`, `1.32`, `1.33`, `1.39`, `2.05`, `2.17`, `2.22`, `2.31`, `3.04`, `3.153`, `4.04r2`, `4.20r6`, `4.20r8`, `5.00r7`, `5.12`, `5.24r4`, `5.30r3`, `5.31r4`, `6.00r2`, `6.015`, `6.034`, `6.03r7`, `6.03r7 Linux`; `1.41r1` is accepted for `1.41`). The 4.x, 5.x and 6.x builds log in to the given address as their `Login` server and play after its server warp (`v4-profiles.md`, `v5v6-profiles.md`). Wins over the version the launcher saved, even when it is the default `2.05`; the saved one applies only when the flag is absent |
 | `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does. If that server answers that the account is still in use, Seihai tries again after 1, 2, 4, 8 and 16 s, which the real client does not |
 | `--serverwarp` | Follow server warps even if the settings file turns them off |
 | `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
@@ -95,6 +95,22 @@ Host names are resolved with the system resolver, and every address it returns i
 | `--sound` | Play sound effects even if the settings file turns them off |
 | `--no-builtin` | Run without the built-in assets, as the real client's clean folder. A GANI or sound found in no other folder is asked for from the server (`walk.gani`, `steps.wav` and `steps2.wav` at the first steps). Needs `--assets` with `pics1.png`. For lab comparisons (`file-cache.md`) |
 | `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the server's cache folder, in the place the real client uses (`file-cache.md`) |
+| `--offline` | Play offline with no start window, as "Play offline" does |
+| `--tutorial` | Play the built-in tutorial offline, as "Play the tutorial" does |
+| `--nick NAME` | The nickname a 4.x build sends in its own props (default: the settings file, else the account) |
+| `--secure-login` | Log in with the Seihai secure login (token `SEI00001`): the account and password go encrypted and the session then runs as `--version`. The server's key is trusted on the first visit and pinned in `known_servers.txt` in the settings folder; a changed key is refused. Only Seihai-stack servers know it |
+| `--server-key KEY` | As `--secure-login`, but trust only this key (43 characters of base64, as the server prints it) |
+| `--bigmap FILE` | The map the M key shows when neither a script, the server nor the gmap names one (otherwise `bigmap.txt` and `map.png`) |
+| `--send-tampercheck` | As 2.17, 2.22 and 2.31 do: send `PLI_TAMPERCHECK` (39) after login and again on the build's period. Off by default; GServer-v2 ignores it |
+| `--send-showimg` | As 2.17, 2.22 and 2.31 do: send `PLI_SHOWIMGPLAYER` (24) = 9 on the build's period. Off by default; what it means is not known |
+| `--dev-repair-hearts` | Developer builds only (`--features dev`): answer a server maximum power of 0 with Seihai's own maximum |
+| `--help`, `-h` | Print the usage and exit |
+
+Two environment variables help when chasing a display problem:
+`SEIHAI_NO_SHM` (any value) turns off the X11 shared-memory path and draws
+the plain way, and `SEIHAI_FRAME_LOG` logs how long each part of a frame took,
+averaged every five seconds. The password variable is whatever you name with
+`--password-env`; the start window uses `SEIHAI_PASSWORD`.
 
 ## Capture viewer
 
