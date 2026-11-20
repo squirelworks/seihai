@@ -90,6 +90,9 @@ pub struct ClientScripts {
     /// name, kept with their state for when it comes back (in the order
     /// of their objects, which core's world parks with them).
     parked: HashMap<String, Vec<Running>>,
+    /// Parked cells that have been out of the neighbour ring since they
+    /// were parked: they owe `onPlayerEnters` when they run again.
+    left_ring: std::collections::HashSet<String>,
     /// Milliseconds not yet counted into a frame.
     acc_ms: u64,
     /// Lines a run logged (calls with no command behind them), for the
@@ -110,6 +113,7 @@ impl ClientScripts {
             host: SessionScripts::new(version),
             running: Vec::new(),
             parked: HashMap::new(),
+            left_ring: std::collections::HashSet::new(),
             acc_ms: 0,
             log: Vec::new(),
             chat: String::new(),
@@ -156,6 +160,7 @@ impl ClientScripts {
         self.running.retain(|r| matches!(r.owner, Owner::Weapon(_)));
         self.host.world.clear_level();
         self.parked.clear();
+        self.left_ring.clear();
         self.host.world.retain_parked(|_| false);
         self.acc_ms = 0;
     }
@@ -177,15 +182,23 @@ impl ClientScripts {
         // Core parks the level's objects in id order; keep the same order.
         npcs.sort_by_key(|r| r.obj);
         self.host.world.park_level(level);
-        self.parked.insert(level.to_ascii_lowercase(), npcs);
+        let key = level.to_ascii_lowercase();
+        self.left_ring.remove(&key);
+        self.parked.insert(key, npcs);
         self.acc_ms = 0;
     }
 
     /// The walk came back into gmap cell `level`: its parked scripts run
-    /// again where they were, and get `onPlayerEnters` (not `onCreated`).
-    /// Returns how many came back.
+    /// again where they were, never with `onCreated`. They get
+    /// `onPlayerEnters` only if the cell left the neighbour ring meanwhile
+    /// ([`ClientScripts::mark_left_ring`]). The real 6.03r7 fires it when
+    /// the cell comes back into the ring, not on entering it; scripts
+    /// parked here do not run until the player is in the cell, so it comes
+    /// then (seihai#497 lab, 2026-11-20). Returns how many came back.
     pub fn unpark(&mut self, session: &mut OfflineSession, level: &str) -> usize {
-        let Some(mut npcs) = self.parked.remove(&level.to_ascii_lowercase()) else {
+        let key = level.to_ascii_lowercase();
+        let enters = self.left_ring.remove(&key);
+        let Some(mut npcs) = self.parked.remove(&key) else {
             return 0;
         };
         let base = self.host.world.len();
@@ -213,7 +226,9 @@ impl ClientScripts {
         for i in first..self.running.len() {
             self.sync(i, session);
             self.seed_flags(i);
-            self.event(i, "PlayerEnters", &[]);
+            if enters {
+                self.event(i, "PlayerEnters", &[]);
+            }
             came_back += 1;
         }
         self.apply(session);
@@ -221,10 +236,24 @@ impl ClientScripts {
     }
 
     /// Keep only the parked cells `keep` says yes to (lower-case names):
-    /// the gmap's neighbours of the player's cell.
+    /// the cells of the player's gmap. The real 6.03r7 keeps a cell's NPC
+    /// state after the player has gone two cells away and back
+    /// (seihai#497 lab, 2026-11-20).
     pub fn retain_parked(&mut self, mut keep: impl FnMut(&str) -> bool) {
         self.parked.retain(|n, _| keep(n));
+        self.left_ring.retain(|n| self.parked.contains_key(n));
         self.host.world.retain_parked(keep);
+    }
+
+    /// Note the parked cells that are not neighbours of the player's cell
+    /// now (`near` says which are, lower-case names): coming back, they
+    /// get `onPlayerEnters`.
+    pub fn mark_left_ring(&mut self, mut near: impl FnMut(&str) -> bool) {
+        for n in self.parked.keys() {
+            if !near(n) {
+                self.left_ring.insert(n.clone());
+            }
+        }
     }
 
     /// The gmap cells with scripts parked, lower-case.
@@ -494,9 +523,11 @@ impl ClientScripts {
     }
 
     /// A mouse click at `(x, y)` in level tiles: `onMouseDown(modifier)`
-    /// (`left`, `right`, `double` or `middle`) on every weapon, and on each
-    /// visible NPC whose touch box holds the point. Returns how many
-    /// scripts got it.
+    /// (`left`, `right`, `double` or `middle`) on every script, NPCs and
+    /// weapons alike, wherever the click lands, with `mousex`/`mousey` at
+    /// the click. The real 6.03r7 passes only the button and gives every
+    /// NPC the click, not only the one under it (seihai#497 lab,
+    /// 2026-11-20; seihai-core#136). Returns how many scripts got it.
     pub fn mouse_down(
         &mut self,
         session: &mut OfflineSession,
@@ -509,26 +540,16 @@ impl ClientScripts {
         }
         self.retag(session);
         self.host.sync_player(session);
-        let (x, y) = (f64::from(x), f64::from(y));
+        let mouse = (f64::from(x), f64::from(y));
         let args = [Val::Str(modifier.to_string())];
-        let mut got = 0;
         for i in 0..self.running.len() {
-            let hit = match self.running[i].owner {
-                Owner::Weapon(_) => true,
-                Owner::Npc(_) => self.host.world.obj(self.running[i].obj).is_some_and(|o| {
-                    let (ox, oy, w, h) = o.rect();
-                    o.visible && x >= ox && x < ox + w && y >= oy && y < oy + h
-                }),
-            };
-            if hit {
-                self.sync(i, session);
-                self.seed_flags(i);
-                self.event(i, "MouseDown", &args);
-                got += 1;
-            }
+            self.running[i].host.mouse = mouse;
+            self.sync(i, session);
+            self.seed_flags(i);
+            self.event(i, "MouseDown", &args);
         }
         self.apply(session);
-        got
+        self.running.len()
     }
 
     /// The player took damage: `onPlayerHurt` on every script.
@@ -1073,20 +1094,29 @@ mod tests {
                    function onPlayerEnters() { this.entries += 1; this.x = 10 + this.entries; }\n";
         sc.start(&mut s, &script(src));
         assert_eq!(npc(&s).x, 11.0);
-        // Out to the next cell and back, twice.
+        // Out to the next cell and back: the cell stayed a neighbour, so
+        // its scripts go on with no onPlayerEnters (6.03r7, A -> B -> A).
+        sc.park("a.nw");
+        assert!(!sc.runs(7));
+        assert_eq!(sc.parked_levels(), ["a.nw"]);
+        sc.mark_left_ring(|n| n == "a.nw");
+        assert_eq!(sc.unpark(&mut s, "A.nw"), 1);
+        assert!(sc.runs(7));
+        assert_eq!(npc(&s).x, 11.0);
+        // Two cells away and back: still the same run, and now one
+        // onPlayerEnters (6.03r7, A -> B -> C -> B -> A).
         for back in [12.0, 13.0] {
             sc.park("a.nw");
-            assert!(!sc.runs(7));
-            assert_eq!(sc.parked_levels(), ["a.nw"]);
-            assert_eq!(sc.unpark(&mut s, "A.nw"), 1);
-            assert!(sc.runs(7));
+            sc.mark_left_ring(|_| false);
+            sc.mark_left_ring(|n| n == "a.nw");
+            assert_eq!(sc.unpark(&mut s, "a.nw"), 1);
             assert_eq!(npc(&s).x, back);
         }
         // Starting the kept scripts again does not start a second run.
         assert_eq!(sc.start(&mut s, &script(src)), 0);
         assert_eq!(sc.len(), 1);
-        // Nothing parked under another name; a cell no longer next to the
-        // player is dropped, and a level change drops them all.
+        // Nothing parked under another name; a cell outside the gmap is
+        // dropped, and a level change drops them all.
         assert_eq!(sc.unpark(&mut s, "b.nw"), 0);
         sc.park("a.nw");
         sc.retain_parked(|n| n == "b.nw");
@@ -1098,22 +1128,23 @@ mod tests {
         assert_eq!(sc.unpark(&mut s, "a.nw"), 0);
     }
 
-    /// A click runs `onMouseDown` on the NPC under it (and on weapons), with
-    /// the button as its modifier.
+    /// A click runs `onMouseDown` on every NPC, wherever it lands, with
+    /// the button as its only parameter and the place in `mousex`/`mousey`
+    /// (6.03r7 lab; seihai-core#136).
     #[test]
-    fn a_click_on_the_npc_runs_on_mouse_down() {
+    fn a_click_runs_on_mouse_down_with_mousex_and_mousey() {
         let mut s = session_with_npc(7);
         let mut sc = ClientScripts::new(V);
-        let src =
-            "function onMouseDown(m) { if (m == \"right\") this.x = 20; else this.x = 15; }\n";
+        let src = "function onMouseDown(m) {\n\
+                     if (m == \"right\") this.x = 20; else this.x = mousex;\n\
+                     this.y = mousey;\n\
+                   }\n";
         sc.start(&mut s, &script(src));
-        // Beside the NPC: nothing.
-        assert_eq!(sc.mouse_down(&mut s, 5.0, 5.0, "left"), 0);
-        assert_eq!(npc(&s).x, 10.0);
-        assert_eq!(sc.mouse_down(&mut s, 10.5, 10.5, "right"), 1);
-        assert_eq!(npc(&s).x, 20.0);
-        assert_eq!(sc.mouse_down(&mut s, 20.5, 10.5, "left"), 1);
-        assert_eq!(npc(&s).x, 15.0);
+        // Far from the NPC: it still gets the click.
+        assert_eq!(sc.mouse_down(&mut s, 47.5, 45.5, "left"), 1);
+        assert_eq!((npc(&s).x, npc(&s).y), (47.5, 45.5));
+        assert_eq!(sc.mouse_down(&mut s, 31.0, 26.5, "right"), 1);
+        assert_eq!((npc(&s).x, npc(&s).y), (20.0, 26.5));
     }
 
     /// When the server deletes the NPC its script stops.

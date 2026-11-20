@@ -598,20 +598,30 @@ impl Game {
         if let Some(level) = &self.session.current_level {
             render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
         }
-        // The cell left keeps its scripts' state while it stays a
-        // neighbour; coming back into a cell picks its scripts up where
-        // they were. A cell never run here starts from what the server
-        // sent earlier (it does not send them again).
-        let neighbours: Vec<String> = self
+        // Every cell of the gmap keeps its scripts' state; coming back
+        // into a cell picks its scripts up where they were, with
+        // onPlayerEnters only if it left the neighbour ring meanwhile
+        // (seihai#497 lab). A cell never run here starts from what the
+        // server sent earlier (it does not send them again).
+        let (neighbours, cells): (Vec<String>, Vec<String>) = self
             .session
             .gmap
             .as_ref()
             .map(|w| {
-                w.map
+                let near = w
+                    .map
                     .neighbours(w.cell)
                     .into_iter()
                     .filter_map(|c| w.map.level_at(c.0, c.1).map(str::to_ascii_lowercase))
-                    .collect()
+                    .collect();
+                let all = w
+                    .map
+                    .names
+                    .iter()
+                    .filter(|n| !n.is_empty())
+                    .map(|n| n.to_ascii_lowercase())
+                    .collect();
+                (near, all)
             })
             .unwrap_or_default();
         if let Some(sc) = self.scripts.as_mut() {
@@ -622,7 +632,8 @@ impl Game {
             if let Some(here) = &self.level_here {
                 sc.unpark(&mut self.session, here);
             }
-            sc.retain_parked(|n| neighbours.iter().any(|k| k == n));
+            sc.retain_parked(|n| cells.iter().any(|k| k == n));
+            sc.mark_left_ring(|n| neighbours.iter().any(|k| k == n));
         }
         if let Some(here) = self.level_here.clone() {
             self.start_kept_scripts(&here);
