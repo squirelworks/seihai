@@ -45,6 +45,27 @@ pub struct View {
     mods: egui::Modifiers,
 }
 
+/// Write a window picture to `screenshots/seihai-<unix ms>.png` in the
+/// working directory, as Mae's F12 does.
+fn save_screenshot(image: &egui::ColorImage) -> std::io::Result<std::path::PathBuf> {
+    let dir = std::path::PathBuf::from("screenshots");
+    std::fs::create_dir_all(&dir)?;
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let path = dir.join(format!("seihai-{ms}.png"));
+    let rgb: Vec<u8> = image
+        .pixels
+        .iter()
+        .flat_map(|c| [c.r(), c.g(), c.b()])
+        .collect();
+    let [w, h] = image.size;
+    let mut out = std::fs::File::create(&path)?;
+    seihai_core::assets::write_png_rgb(&mut out, w as u32, h as u32, &rgb)?;
+    Ok(path)
+}
+
 /// How long a toall, PM or admin line stays on screen.
 pub const CHAT_SHOWN: Duration = Duration::from_secs(10);
 /// How many of those lines show at once.
@@ -129,6 +150,29 @@ impl View {
         if alt_enter && !self.game.version_label().starts_with('6') {
             self.fullscreen = !self.fullscreen;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
+        // Alt+2 saves a screenshot, as on the real 4.20r8 ("Save
+        // Screenshot") and 6.03r7 ("Save As"); here it goes straight to
+        // `screenshots/`. The picture arrives in a later frame.
+        if self.typing.is_none() && ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::Num2))
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+        }
+        let shots: Vec<_> = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                    _ => None,
+                })
+                .collect()
+        });
+        for image in shots {
+            let line = match save_screenshot(&image) {
+                Ok(path) => format!("saved {}", path.display()),
+                Err(e) => format!("screenshot failed: {e}"),
+            };
+            self.game.note(line);
         }
         // P pauses; the next key goes on and does nothing else, as on the
         // real 4.20r8 and 6.03r7.

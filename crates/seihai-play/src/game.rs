@@ -152,6 +152,9 @@ pub struct Game {
     /// ignore the TCP level boards then (the world comes over UDP), so the
     /// flat level is not drawn.
     pub boards_hidden: Arc<std::sync::atomic::AtomicBool>,
+    /// The account logged in with, for the profile a right click on the
+    /// own player asks for (4.20r8).
+    pub account: Option<String>,
     /// What [`Game::boards_hidden`] was on the last tick.
     hidden_drawn: bool,
     /// The server NPCs' GS2 client scripts, once [`Game::set_version`]
@@ -359,6 +362,7 @@ impl Game {
             arrived_sounds: Default::default(),
             resolver: resolver.cloned(),
             npc_images: NpcImages::new(),
+            account: None,
             offline: false,
             world: Default::default(),
             crossings: Default::default(),
@@ -1361,9 +1365,27 @@ impl Game {
         if self.offline || self.session.current_level.is_none() {
             return false;
         }
-        self.send.lock().unwrap_or_else(|e| e.into_inner()).push(
-            seihai_core::net::trigger_action_message(x.max(0.0), y.max(0.0), action, ""),
-        );
+        let mut send = self.send.lock().unwrap_or_else(|e| e.into_inner());
+        // A right click on the own player's 48-pixel box opens "Profile"
+        // and asks for it with PLI 80 and the account, before the trigger
+        // action: the real 4.20r8 did (lab key sweep); 5.24r4 and 6.03r7
+        // sent only the trigger action.
+        let (px, py) = (self.session.player_x, self.session.player_y);
+        let on_player = (px..px + 3.0).contains(&x) && (py..py + 3.0).contains(&y);
+        if action == "rightmouse" && on_player && self.life.version == Some(ClientVersion::V420R8) {
+            if let Some(account) = &self.account {
+                let mut m = vec![80 + 0x20];
+                m.extend_from_slice(account.as_bytes());
+                m.push(b'\n');
+                send.push(m);
+            }
+        }
+        send.push(seihai_core::net::trigger_action_message(
+            x.max(0.0),
+            y.max(0.0),
+            action,
+            "",
+        ));
         true
     }
 
@@ -1403,6 +1425,19 @@ impl Game {
     }
 
     /// The chat lines taken so far, oldest first, with when each came.
+    /// A line from Seihai itself in the chat (a saved screenshot).
+    pub fn note(&mut self, text: String) {
+        self.chat.push((
+            ChatLine {
+                kind: seihai_core::protocol::ChatKind::Admin,
+                from: "Seihai".into(),
+                text,
+                born_ms: 0,
+            },
+            Instant::now(),
+        ));
+    }
+
     pub fn chat(&self) -> &[(ChatLine, Instant)] {
         &self.chat
     }

@@ -628,6 +628,28 @@ mod tests {
         assert_eq!(sent(&g), vec![want]);
     }
 
+    /// A right click on the own player sends PLI 80 with the account first
+    /// on 4.20r8 (`80:p094540` in the lab), and not on 6.03r7.
+    #[test]
+    fn a_right_click_on_the_player_asks_for_the_profile_on_4_20() {
+        let mut g = game_on(ClientVersion::V420R8);
+        g.account = Some("p094540".into());
+        sent(&g);
+        let (x, y) = (g.session.player_x + 1.0, g.session.player_y + 1.0);
+        assert!(g.mouse_click(x, y, "rightmouse"));
+        let out = sent(&g);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], b"pp094540\n");
+        assert!(g.mouse_click(x + 5.0, y, "rightmouse"));
+        assert_eq!(sent(&g).len(), 1);
+        let mut g = game_on(ClientVersion::V603R7);
+        g.account = Some("p094540".into());
+        sent(&g);
+        let (x, y) = (g.session.player_x + 1.0, g.session.player_y + 1.0);
+        assert!(g.mouse_click(x, y, "rightmouse"));
+        assert_eq!(sent(&g).len(), 1);
+    }
+
     /// P and Q send STATUS with the paused bit, and 20 again after, as the
     /// real 4.20r8 and 6.03r7 did (lab key sweep, 2026-11-19).
     #[test]

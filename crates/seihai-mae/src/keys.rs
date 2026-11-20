@@ -316,11 +316,103 @@ pub fn parse_key(name: &str) -> Option<Key> {
 /// the 4.20r8 and 6.03r7 scripts get; whether 2.x adds the modifier
 /// offsets those builds add is not checked, so none are added here.
 pub fn script_presses(window: &minifb::Window) -> Vec<(u32, String)> {
+    let held = |a: Key, b: Key| window.is_key_down(a) || window.is_key_down(b);
+    let ctrl = held(Key::LeftCtrl, Key::RightCtrl);
+    let alt = held(Key::LeftAlt, Key::RightAlt);
     window
         .get_keys_pressed(minifb::KeyRepeat::No)
         .into_iter()
-        .filter_map(virtual_key)
+        .filter_map(|k| with_modifiers(k, ctrl, alt))
         .collect()
+}
+
+/// A key as the real 2.31 hands it to `keypressed` with Ctrl or Alt held
+/// (lab key sweep, Graal_analysis `protocol/keysweep`): Ctrl adds 512
+/// (Ctrl+A is 577), except Ctrl+H, I and M, which arrive as their ASCII
+/// control codes 8, 9 and 13. Shift or Alt alone, and Alt with a digit,
+/// raise no event.
+pub fn with_modifiers(k: Key, ctrl: bool, alt: bool) -> Option<(u32, String)> {
+    let (code, ch) = virtual_key(k)?;
+    match code {
+        160 | 164 => return None,
+        48..=57 if alt => return None,
+        _ => {}
+    }
+    if ctrl && code != 162 {
+        return Some(match k {
+            Key::H => (8, String::new()),
+            Key::I => (9, String::new()),
+            Key::M => (13, String::new()),
+            _ => (code + 512, ch),
+        });
+    }
+    Some((code, ch))
+}
+
+/// The emoticon Ctrl+letter shows on the real 2.31 (lab key sweep,
+/// Graal_analysis `protocol/keysweep/231.tsv`): one per letter, from the
+/// `emoticons` folder.
+pub fn emoticon(k: Key) -> Option<&'static str> {
+    const NAMES: [&str; 26] = [
+        "emoticon_afk_stay.mng",
+        "emoticon_brb_stay.mng",
+        "emoticon_conf.png",
+        "emoticon_dgrin.png",
+        "emoticon_eyes.mng",
+        "emoticon_frown.png",
+        "emoticon_grr.png",
+        "emoticon_heart.png",
+        "emoticon_idea.png",
+        "emoticon_jpm_stay.mng",
+        "emoticon_kitty.png",
+        "emoticon_lol.mng",
+        "emoticon_maybe.png",
+        "emoticon_ncool.png",
+        "emoticon_ohh.png",
+        "emoticon_ptongue.mng",
+        "emoticon_qphone_stay.png",
+        "emoticon_rofl.mng",
+        "emoticon_smile.png",
+        "emoticon_tears.mng",
+        "emoticon_umad.png",
+        "emoticon_vsorry.mng",
+        "emoticon_wink.png",
+        "emoticon_xx.png",
+        "emoticon_yummy.png",
+        "emoticon_zzz_stay.mng",
+    ];
+    let name = format!("{k:?}");
+    let c = name
+        .chars()
+        .next()
+        .filter(|c| name.len() == 1 && c.is_ascii_uppercase())?;
+    Some(NAMES[(c as u8 - b'A') as usize])
+}
+
+/// The two `PLI_SHOWIMGPLAYER` (24) messages 2.31 sends for an emoticon,
+/// about 100 ms apart: a full list holding image 0, the emoticon, two
+/// tiles right of and five above the player's x and y (in half tiles),
+/// then image 0 with an empty name (removed). Lab bytes for the player at
+/// 30, 32.5: `29 2a 20 35 "emoticon_afk_stay.mng" 21 60 22 57`, then
+/// `2a 20 20`.
+pub fn emoticon_messages(name: &str, player_x: f32, player_y: f32) -> [Vec<u8>; 2] {
+    let half = |v: f32| ((v * 2.0) as i32).clamp(0, 223) as u8 + 0x20;
+    let mut add = vec![
+        24 + 0x20,
+        0x29,
+        0x2a,
+        0x20,
+        name.len().min(223) as u8 + 0x20,
+    ];
+    add.extend_from_slice(name.as_bytes());
+    add.extend_from_slice(&[
+        0x21,
+        half(player_x + 2.0),
+        0x22,
+        half(player_y - 5.0),
+        b'\n',
+    ]);
+    [add, vec![24 + 0x20, 0x2a, 0x20, 0x20, b'\n']]
 }
 
 /// (virtual-key code, character) of a key.
@@ -411,6 +503,44 @@ mod tests {
         assert_eq!(virtual_key(Key::Left), Some((37, String::new())));
         assert_eq!(virtual_key(Key::NumPad0), Some((48, "0".into())));
         assert_eq!(virtual_key(Key::F13), None);
+    }
+
+    #[test]
+    fn emoticons_match_the_real_2_31() {
+        assert_eq!(emoticon(Key::A), Some("emoticon_afk_stay.mng"));
+        assert_eq!(emoticon(Key::Z), Some("emoticon_zzz_stay.mng"));
+        assert_eq!(emoticon(Key::Key1), None);
+        let [add, remove] = emoticon_messages("emoticon_afk_stay.mng", 30.0, 32.5);
+        let mut want = vec![0x38, 0x29, 0x2a, 0x20, 0x35];
+        want.extend_from_slice(b"emoticon_afk_stay.mng");
+        want.extend_from_slice(&[0x21, 0x60, 0x22, 0x57, b'\n']);
+        assert_eq!(add, want);
+        assert_eq!(remove, vec![0x38, 0x2a, 0x20, 0x20, b'\n']);
+    }
+
+    #[test]
+    fn modifiers_match_the_real_2_31() {
+        assert_eq!(with_modifiers(Key::A, true, false), Some((577, "a".into())));
+        assert_eq!(
+            with_modifiers(Key::H, true, false),
+            Some((8, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::I, true, false),
+            Some((9, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::M, true, false),
+            Some((13, String::new()))
+        );
+        assert_eq!(
+            with_modifiers(Key::LeftCtrl, true, false),
+            Some((162, String::new()))
+        );
+        assert_eq!(with_modifiers(Key::LeftShift, false, false), None);
+        assert_eq!(with_modifiers(Key::LeftAlt, false, true), None);
+        assert_eq!(with_modifiers(Key::Key2, false, true), None);
+        assert_eq!(with_modifiers(Key::A, false, false), Some((65, "a".into())));
     }
 
     #[test]
