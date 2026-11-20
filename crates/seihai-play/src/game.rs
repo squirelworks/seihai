@@ -598,9 +598,10 @@ impl Game {
         if let Some(level) = &self.session.current_level {
             render::load_npc_images(level, self.resolver.as_ref(), &mut self.npc_images);
         }
-        // The cell left keeps its scripts' state while it stays a
-        // neighbour; coming back into a cell picks its scripts up where
-        // they were. A cell never run here starts from what the server
+        // The cell left keeps its scripts' state for as long as the walk
+        // stays on this gmap; coming back into a cell picks its scripts up
+        // where they were, with onPlayerEnters if it left the neighbour
+        // ring in between (real 6.03r7, seihai#497 lab). A cell never run here starts from what the server
         // sent earlier (it does not send them again).
         let neighbours: Vec<String> = self
             .session
@@ -622,7 +623,7 @@ impl Game {
             if let Some(here) = &self.level_here {
                 sc.unpark(&mut self.session, here);
             }
-            sc.retain_parked(|n| neighbours.iter().any(|k| k == n));
+            sc.mark_out_of_ring(|n| neighbours.iter().any(|k| k == n));
         }
         if let Some(here) = self.level_here.clone() {
             self.start_kept_scripts(&here);
