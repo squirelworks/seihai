@@ -14,6 +14,7 @@ pub use seihai_core::{
 pub mod app;
 pub mod ato;
 pub mod gui;
+pub mod guildcode;
 pub mod help;
 pub mod inventory;
 pub mod keys;

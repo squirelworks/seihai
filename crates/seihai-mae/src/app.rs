@@ -1427,6 +1427,11 @@ pub fn main(args: Vec<String>) {
         .with_cache(cache_dir.clone())
         .with_builtin(builtin_dir)
         .with_builtin_levels(online.is_none());
+    // 5th Graal to 1.1.9: the install's guildname.code for `playeringuild`.
+    scripts.world.core.player.guild = offline_build
+        .filter(|b| crate::guildcode::reads_guild_file(b))
+        .and_then(|_| resolver.user_root())
+        .and_then(|r| crate::guildcode::guild_name(&r.root));
     // What to ask the server for, and where downloads are saved (the cache).
     let mut files = FileSession::new(
         resolver.clone(),
