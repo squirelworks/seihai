@@ -1,75 +1,98 @@
 # Seihai
 
-An open client for Graal Reborn listservers and gservers. It plays offline levels and connects to public servers. Written in Rust.
+Seihai is an open client for Graal, written from scratch in Rust. It plays
+offline levels and connects to Graal Reborn listservers and game servers, as
+the version of the original client you choose. It covers four lines of
+clients:
 
-## First time setup
+- **Mae** for 1.x and 2.x;
+- **Ato** for 3.x to 5.x (it draws the level flat in 2D for now, see
+  `crates/seihai-ato/README.md`);
+- **Issho** for 6.x (`crates/seihai-issho/README.md`);
+- **G3D** for Graal3D, the February 2000 3D client (`documentation/graal3d.md`).
+
+All four are built into one program, `seihai`. It ships with its own small set
+of art, sounds and levels, so it runs with no Graal files at all, and it uses
+your own Graal files when you point it at them.
+
+Seihai is part of a larger project. Its shared library, with the protocol,
+assets, scripting, offline simulation and version profiles, is
+[seihai-core](https://github.com/squirelworks/seihai-core). The servers are
+[seihai-gserver](https://github.com/squirelworks/seihai-gserver),
+[seihai-listserver](https://github.com/squirelworks/seihai-listserver),
+[seihai-npcserver](https://github.com/squirelworks/seihai-npcserver),
+[seihai-rc](https://github.com/squirelworks/seihai-rc) and
+[seihai-servertools](https://github.com/squirelworks/seihai-servertools), plus the
+GPL fork [seihai-gserver-v2](https://github.com/squirelworks/seihai-gserver-v2).
+The research notes behind all of it are in
+[Graal_analysis](https://github.com/squirelworks/Graal_analysis).
+
+## Build and update
 
 1. Install Rust from [rustup.rs](https://rustup.rs/).
-2. Clone the repo:
+2. Clone the repo and build:
 
 ```bash
 git clone https://github.com/squirelworks/seihai.git
 cd seihai
+cargo build --release -p seihai
 ```
 
-You must be inside the `seihai` folder (the one that contains `Cargo.toml` and `.git`) before any of the commands below. If you are in a parent folder, `git` and `cargo` will fail with "not a git repository" and "could not find Cargo.toml".
+Run every command from inside the `seihai` folder, the one with `Cargo.toml` in
+it; from a parent folder, `git` and `cargo` fail with "not a git repository" and
+"could not find Cargo.toml". The program is then at `target/release/seihai`
+(`target\release\seihai.exe` on Windows). `cargo run --release -p seihai`
+builds and starts it in one step.
 
-## From a downloaded zip (fresh install only)
-
-These steps create a new `~/Seihai/seihai`. They delete any folder already at that path, including an assets folder you put there. Do not use them to update an install you already have.
-
-GitHub's "Download ZIP" of the main branch gives `seihai-main.zip`. It extracts to a folder named `seihai-main`. Put the zip in `~/Seihai` and run:
-
-```bash
-mkdir -p ~/Seihai
-cd ~/Seihai
-rm -rf seihai-main
-python3 -m zipfile -e seihai-main.zip ~/Seihai
-rm -rf seihai
-mv seihai-main seihai
-cd seihai
-cargo build --release
-./target/release/seihai
-```
-
-You end up in `~/Seihai/seihai`, which is the folder that contains `Cargo.toml`. You must be inside that folder before `cargo`. A zip has no `.git`.
-
-If `~/Seihai/seihai` already exists and is a git clone, leave it alone and use the update steps below. That keeps your assets and your settings.
-
-On Windows (PowerShell), for a fresh extract only:
-
-```powershell
-cd seihai
-cargo build --release
-.\target\release\seihai.exe
-```
-
-## Update and build (from a git clone)
+To update later:
 
 ```bash
 cd seihai
 git pull origin main
-cargo build --release
+cargo build --release -p seihai
 ```
 
-This creates the binary at:
+On Linux, sound needs the ALSA development files (`libasound2-dev`) to build;
+[documentation/using-seihai.md](documentation/using-seihai.md#settings-file)
+says how to build without sound. If you downloaded a zip of the repository
+instead of cloning it, the same page has steps for a fresh install from it.
 
-- Linux / macOS: `target/release/seihai`
-- Windows: `target\release\seihai.exe`
+A plain `cargo build --release` also builds each client's own development
+binary (`seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d`) and the
+offline level editor in `tools/level-editor`.
 
-`cargo build --release -p seihai` builds `seihai`, the one program that ships: every client (Mae, Ato, Issho and G3D) is linked into it, so the code they share is in it once (about 14 MB, against 57 MB for the five separate programs before). A plain `cargo build --release` also builds each client's own development binary (`seihai-mae`, `seihai-ato`, `seihai-issho`, `seihai-g3d`) and the level editor. `seihai-draw`, the window-less tile and gani painter that tools use, now lives in [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core) beside the core and is tagged with it. The offline level editor stays in `tools/level-editor`.
+## Playing
 
-`seihai` with no arguments opens the start window: one window for every line. Its Version list shows the major versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22, 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7) grouped by client, then Graal3D; "All versions" adds every other build. Fill in the account and password, press "Server list", pick a server and Join: the version's client (Mae for 1.x and 2.x, Ato for 3.x to 5.x, which draws the level flat in 2D for now, see `crates/seihai-ato/README.md`; Issho for 6.x, see `crates/seihai-issho/README.md`; G3D for the February 2000 Graal3D, see `documentation/graal3d.md`) logs in at once. A `3 ` (3D) server joined with a 3.x to 5.x build is joined with `--graal3d`. A lost connection, or closing the game, comes back to the start window; closing the start window ends the program. For a 1.x or 2.x version, "Play offline" and "Play the tutorial" start Mae offline; "All versions" also lists the offline-only builds (betas and test releases), which play offline only. Each version can have its own asset folder (its own install), which wins over the shared one. For Ato and G3D, "Open Ato's own window" starts the client's own start window, the original client's screen. The password is not saved (it is kept for the run, so a lost connection does not ask for it again); the rest of the form is, in `launcher.conf` next to `seihai.conf` (the first start takes Mae's saved form from `seihai.conf`).
+`seihai` with no arguments opens the start window. Its Version list shows the
+main versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22,
+2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7), grouped by client,
+then Graal3D; "All versions" adds every other build, including the betas and
+test releases that only play offline.
 
-Each client also runs on its own: `seihai mae|ato|issho|g3d ARGS...`, or the program copied or linked under the name `seihai-mae` (and so on). `seihai --version V ARGS...` runs the client for that version with every argument passed through, as the separate binaries did: Mae with no `--version` and for 1.x and 2.x, Ato for 3.x to 5.x, Issho for 6.x, G3D for `graal3d`. A 7.x label is rejected. Mae's own settings window is now only the `seihai-mae` development binary's; inside `seihai`, Mae with no arguments and a lost connection both come back to the shared start window. `seihai mae --offline` and `seihai mae --tutorial` play offline with no window first. In Mae's own window, picking a 3.x, 4.x or 5.x build opens Ato's start window with the account and password filled in, "Graal3D" opens G3D's connect window, and joining a server with a 6.x build runs Issho, logged in at that server.
+- **Online:** fill in the account and password, press "Server list", pick a
+  server and Join. The version's client logs in at once. A lost connection, or
+  closing the game, brings you back to the start window.
+- **Offline:** for a 1.x or 2.x version, "Play offline" and "Play the tutorial"
+  start Mae with no server.
 
-`cargo build` only builds. It does not start the program. To build and run in one step:
+Each version can have its own asset folder, which wins over the shared one. The
+password is kept only for the run; the rest of the form is saved in
+`launcher.conf` next to `seihai.conf`.
+
+Each client also runs on its own, from the command line:
+`seihai mae|ato|issho|g3d ARGS...`, or `seihai --version V ARGS...` to pick the
+client by version. For example, to fetch a server list and join from the
+command line, keeping the password in an environment variable:
 
 ```bash
-cargo run --release -p seihai
+export SEIHAI_PASSWORD=...
+./target/release/seihai --online listserver.graal.in:14922 --account NAME \
+  --password-env SEIHAI_PASSWORD --version 2.22
 ```
 
-`cargo run` uses the same `target` folder. On Windows, if you do not see a `target` directory, check that you are in the `seihai` folder (not a parent folder) and that the build finished without errors.
+Every flag, the capture viewer, the chat commands (`/ignore`, `/buddy`, `/mute`)
+and the settings file are described in
+[documentation/using-seihai.md](documentation/using-seihai.md).
 
 ## Assets
 
@@ -93,158 +116,38 @@ Names are matched without regard to case. A file you have not placed keeps the s
 
 Files a server sends are saved in a per-server cache folder (`~/.config/seihai/cache/<host>_<port>~<name>/`), searched before your folder and before the built-in set. They are never written into your folder or the built-in set. See `documentation/file-cache.md`.
 
-## Run
+## What works
 
-From the `seihai` folder:
-
-```bash
-./target/release/seihai
-```
-
-On Windows:
-
-```bash
-target\release\seihai.exe
-```
-
-The start window opens. Pick a version, enter your account, press "Server list" and Join a server. For offline play, pick a 1.x or 2.x version and press "Play offline" or "Play the tutorial".
-
-To skip the start window:
-
-```bash
-./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14923 --account NAME --password PASS --version 2.05
-```
-
-To keep the password off the command line, put it in an environment variable and pass the name:
-
-```bash
-export SEIHAI_PASSWORD=...
-./target/release/seihai --assets /path/to/assets --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22
-```
-
-To see what a listserver offers without logging in to anything:
-
-```bash
-./target/release/seihai --online listserver.graal.in:14922 --account NAME --password-env SEIHAI_PASSWORD --version 2.22 --list-only
-```
-
-The list is fetched as the version you pick, on that version's listserver login: one plain frame for 2.05 to 2.17, a keyed gen-5 login for 2.22 and later. Servers that send the status and URLs in a second frame are handled for both.
-
-Host names are resolved with the system resolver, and every address it returns is tried in turn (5 s each). If your resolver gives wrong or no answers for a name, use the server's IP address in `--online` instead.
-
-| Flag | Meaning |
-|------|---------|
-| `--assets`, `-a` | Your own asset folder (optional). A file it lacks comes from the built-in default set; with no folder the built-in set is all there is |
-| `--cache-dir` | Downloads go to `_cache/<host>_<port>/` next to the program. This names a second cache root that also gets a copy of each download (default `<settings dir>/cache`, which is then only read; settings file `cache_dir=`). Search order: the server's caches, `--assets`, the built-in set |
-| `--level`, `-l` | Level file to load offline |
-| `--online`, `-o` | `host:port` of a listserver or gserver |
-| `--account` | Account name |
-| `--password` | Password (visible in the process list; prefer `--password-env`) |
-| `--password-env` | Name of an environment variable that holds the password. Warns on stderr if it is unset or empty |
-| `--list-only` | With `--online`, fetch and print the server list from a listserver, then exit. Never prompts and never logs in to a gserver. Exit code 1 if the fetch fails |
-| `--check-assets` | Resolve and load the files a version uses from the `--assets` folder (or from the built-in set when none is given) and print what was found (one version with `--version`, else the five main ones). Exit code 1 if a required file is missing or unreadable |
-| `--level-info FILE` | Print sizes, section offsets and record counts of a binary `.graal` / `.zelda` level (no content); repeat for more files. Exit code 1 if a file does not parse, or if a `Z3-V1` file does not read to its end with no anomaly |
-| `--version-chain` | Print what each client build changed against the build before it (all builds, or the one given with `--version`). `--chain-format text\|md\|tsv` picks the form (`documentation/version-chain.md`) |
-| `--receive-build BUILD` | With explicit `--version 2.1`, opt into an exact Windows 2.1 receive table. Login, send and script settings remain the inferred baseline. See [the build labels and limits](documentation/graal210-receive-builds.md) |
-| `--version` | Client version (`1.21`, `1.28 beta 2`, `1.3 test`, `1.31`, `1.32`, `1.33`, `1.39`, `2.05`, `2.17`, `2.22`, `2.31`, `3.04`, `3.153`, `4.04r2`, `4.20r6`, `4.20r8`, `5.00r7`, `5.12`, `5.24r4`, `5.30r3`, `5.31r4`, `6.00r2`, `6.015`, `6.034`, `6.03r7`, `6.03r7 Linux`; `1.41r1` is accepted for `1.41`). The 4.x, 5.x and 6.x builds log in to the given address as their `Login` server and play after its server warp (`documentation/v4-profiles.md`, `documentation/v5v6-profiles.md`). Wins over the version the launcher saved, even when it is the default `2.05`; the saved one applies only when the flag is absent |
-| `--no-serverwarp` | Do not follow a server warp (`PLO_SERVERWARP`, 178). By default Seihai reconnects to the host and port the server names and logs in again with the same account and password, as the real client does. If that server answers that the account is still in use, Seihai tries again after 1, 2, 4, 8 and 16 s, which the real client does not |
-| `--serverwarp` | Follow server warps even if the settings file turns them off |
-| `--no-scripts` | Do not run client-side GS1 scripts (level NPCs, weapons) |
-| `--no-sound` | Do not play sound effects (the `PLAYSOUND` cues of `walk.gani` and `swim.gani`). By default they play from `sounds/` in the server cache, `<assets>` or the built-in set (first that has the file), if a sound device opens. Otherwise sound is silent and everything else runs the same |
-| `--sound` | Play sound effects even if the settings file turns them off |
-| `--no-builtin` | Run without the built-in assets, as the real client's clean folder. A GANI or sound found in no other folder is asked for from the server (`walk.gani`, `steps.wav` and `steps2.wav` at the first steps). Needs `--assets` with `pics1.png`. For lab comparisons (`documentation/file-cache.md`) |
-| `--no-save-downloads` | Keep downloaded files in memory only. By default a file the server sends is also written to the server's cache folder, in the place the real client uses (`documentation/file-cache.md`) |
-
-### Capture viewer
-
-`seihai capture` reads files only (no window, no network). It decodes a lab capture with Seihai's own codecs and prints the messages with their names and field layouts. `documentation/capture-viewer.md` has the details and examples.
-
-| Command | Meaning |
-|---------|---------|
-| `seihai capture show FILE` | Print the messages of a pcap, or of a `difftest trace` file. The version is read from the login token (or the trace header) unless `--version` is given |
-| `seihai capture layout ID\|NAME` | Print one packet's field layout across the version chain, with the fields the tables do not settle marked `?` (unknown) or `~` (partly decoded) |
-| `seihai capture tables` | List the tables in use and check them |
-
-| `show` flag | Meaning |
-|-------------|---------|
-| `--version V` | Client version, for example `2.22` |
-| `--tables DIR` | Read `packet-layouts.tsv` (and `version-chain.tsv`) from `DIR` instead of the built-in tables |
-| `--dir c2s\|s2c`, `--id N,NAME`, `--name NAME`, `--conn gs0` | Keep only that direction, those packets (by id or name, `PLI_`/`PLO_` prefixes pick a direction) or that connection |
-| `--time A..B`, `--frame A..B` | Keep a time range (milliseconds since the connection started) or a range of frame numbers |
-| `--limit N` | Stop after N messages |
-| `--layouts` | Print the table layout under every message |
-| `--raw` | Hex dump of every payload. Undecoded payloads are dumped without this flag |
-| `--format text\|tsv\|json` | Output format (default `text`) |
-| `--out FILE` | Write to `FILE` with mode 600. Refused if `FILE` already exists with a looser mode and the capture contains a login |
-| `--no-mask` | Keep the key, player ids and account name. The password is never shown |
-
-Login frames are redacted by default and their raw bytes are never printed. Keep capture files in a private folder; never commit them.
-
-### Chat commands and list files
-
-In the chat bar (Enter) these are commands, not chat. A name is an account name or a nickname, in any case.
-
-| Command | Effect |
-|---------|--------|
-| `/ignore NAME`, `/unignore NAME` | Hide that player's bubbles, chat, toalls and PMs. Local only: nothing is sent |
-| `/buddy NAME`, `/unbuddy NAME` | Mark the player in the player list (F7). Local only: nothing is sent |
-| `/mute NAME`, `/unmute NAME` | As ignore, and sends `PLI_MUTEPLAYER` (43) for a player in the level. Only on versions that send it (2.17 and later); at most 5 sends per session |
-| `/lists`, `/lists buddy` | Show the lists |
-
-The lists are plain text files in the settings directory (`~/.config/seihai/`, the folder `seihai.conf` is in): `buddyaccounts.txt`, `ignoredaccounts.txt` and `mutedaccounts.txt`. One account name per line; case does not matter; blank lines, `#` comments and any line ending are fine; a name that is already there is kept once. They hold names only, never a password. A file is replaced whole (written aside, then renamed), and removed when its list becomes empty. Edit them by hand while Seihai is not running; they are read when it connects. `buddyaccounts.txt` and `ignoredaccounts.txt` are the real client's names; the mute file is Seihai's own.
-
-### Settings file
-
-Seihai reads plain `key=value` lines (`#` starts a comment) from `~/.config/seihai/seihai.conf` (on Windows `%USERPROFILE%\.seihai\seihai.conf`). The launcher writes most keys itself: `assets`, `cache_dir`, `account`, `password`, `version`, `listserver`, `last_server`, `last_server_name`, `direct_server`, `offline=1` and `assets.<version>`. A command-line flag always overrides the same option in the file.
-
-Three options are meant to be edited by hand:
-
-```
-# Do not follow a server warp (default: 1, follow it)
-follow_serverwarp=0
-# Do not play sound effects (default: 1)
-sound=0
-# Do not write downloaded files to disk (default: 1)
-save_downloads=0
-# Print script diagnostics (default: 0, off)
-debug=1
-```
-
-`follow_serverwarp` accepts `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off`. A missing or unreadable value means follow. Precedence is `--serverwarp` or `--no-serverwarp`, then the file, then the default (on). Following sends your stored account and password to the host the server names, so turn it off if you point Seihai at servers you do not trust.
-
-`debug` takes the same values and defaults to off. With it on, every script message (an ignored command, an unknown function, an unhandled effect, a parse error) is written to `_debug/debug-<YYYYMMDD-HHMMSS>/script.log` in the directory you run Seihai from. The folder is named for the time that process started, and the file is opened once. The file is recreated each run and holds one session. Each time the player enters a level, a `level: <name>` line is written (the server's name for it online; the file, or the gmap cell's level, offline). Each script line starts with `[<level>]`, and a line repeated on the same level is written once. Without it, those lines are silent. F3 still toggles the on-screen debug overlay for the current run.
-
-For 1.38 and later, `keyset_<action>_key0` to `_key2` lines (the `graalconfig.txt` form) or `keyset_<action>=S,Space` rebind the game keys. The defaults are the readme's: arrows or I/J/K/L, A action, S or Space sword, D item, M map, Q item list, Tab chat (F7 shows the player list). See `documentation/keys.md`.
-
-`sound` and `save_downloads` take the same values. Precedence is `--sound` or `--no-sound`, then the file, then the default (on). See `documentation/audio.md` for what plays. Audio is on by default for every client (seihai-core's `audio` feature, which each client's own `audio` feature turns on); on Linux the build needs the ALSA development files (`libasound2-dev`). To build without it: `cargo build --release -p seihai-mae --no-default-features --features dev`. For the whole workspace (as Linux CI builds it): `cargo build --workspace --no-default-features --features seihai-mae/dev,seihai-core/dev`.
-
-## Features
-
-- Offline play with `.nw`, `.graal`, and `.zelda` levels
-- Online play against GServer-RS and lab GServer-v2
-- Listserver login and server list
-- Player sprites, chests, signs, and NPC images (requested if missing)
-- Chat bar, PMs, player list, and debug overlay
-- Chat bubbles that expire (your own line stays until you move), a fading chat overlay (Seihai's own, timings assumed: `documentation/chat-log.md`), and buddy, ignore and mute lists (chat bar commands `/ignore`, `/buddy`, `/mute`, `/lists`)
-- Resizable window, scaled 2× by default
+- Offline play with `.nw`, `.graal` and `.zelda` levels, and a built-in tutorial
+- Online play against Graal Reborn servers, GServer-v2 and seihai-gserver
+- Listserver login and server list, for each client version's own login
+- Player sprites, chests, signs and NPC images (asked for from the server if missing)
+- Client-side scripts in level NPCs and weapons
+- Chat bar, chat bubbles, PMs, the player list, and buddy, ignore and mute lists
+- A resizable window, scaled 2x by default, and a debug overlay (F3)
 
 ## Known issues
 
-- Tiledefs collision is incomplete
-- NPC images arrive after the level loads; a gray placeholder shows until then
-- Some packet ids are decoded but not yet applied to gameplay
+- Tiledefs collision is incomplete.
+- NPC images arrive after the level loads; a gray placeholder shows until then.
+- Some packet ids are decoded but not yet applied to gameplay.
+- Ato draws the 3.x to 5.x clients' levels flat, in 2D.
 
 ## Documentation
 
-The shared library, `seihai-core` (protocol, assets, scripting, the offline simulation, the version profiles and the connection code), lives in its own repo, [squirelworks/seihai-core](https://github.com/squirelworks/seihai-core). The workspace pins it once in the root `Cargo.toml`.
-
-See `documentation/` for the implementation notes, roadmap, and version profiles.
-
-Level-editor expansion notes (fixtures, mask-aware painting, next slices) are in `documentation/level-editor-expansion.md`.
+`documentation/` holds the implementation notes, the roadmap and the version
+profiles. Notes on the level editor's next steps are in
+`documentation/level-editor-expansion.md`.
 
 ## macOS builds
 
 `.github/workflows/macos.yml` builds, tests and lints the workspace on GitHub's hosted macOS 15 runners (Apple silicon and Intel), then runs `tools/launcher-smoke.sh`: the release `seihai` start window joins a loopback stand-in with 2.22, 3.04, 5.12, 6.03r7 and Graal3D, runs each client in the same process and comes back to the start window when the connection drops. It runs on demand, weekly, and on a PR that changes the launcher, the smoke or the workflow; `ci.yml` runs Linux and Windows on every PR, and the same smoke on Linux under Xvfb. The lab's Sequoia VM has no Metal device, so Mae's game window cannot open there.
+
+## Versioning
+
+[VERSIONING.md](VERSIONING.md) explains when a release is made, what the version
+numbers mean and what 1.0.0 needs. [RELEASES.md](RELEASES.md) has the release
+points for each version.
 
 ## Licence
 
@@ -257,7 +160,3 @@ otherwise, a contribution you submit is licensed the same way.
 Seihai is an independent fan project. It is not affiliated with, endorsed by,
 or connected to GraalOnline. "Graal" is used only to identify the games and
 servers Seihai works with.
-
-## Versioning
-
-When a release happens, what the version numbers mean and what 1.0.0 needs: [VERSIONING.md](VERSIONING.md). Release points per version are in [RELEASES.md](RELEASES.md).
