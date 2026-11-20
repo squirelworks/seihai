@@ -514,6 +514,14 @@ impl View {
         // (`Game::mouse_click`); the second click of a double click sends
         // `doublemouse` instead of `leftmouse`, as the real clients do.
         if let Some((origin, scale)) = placed.filter(|(_, sc)| *sc > 0.0) {
+            // GS2's mousex and mousey follow the pointer over the game.
+            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                if egui::Rect::from_min_size(origin, egui::vec2(w, h) * scale).contains(pos) {
+                    let px = (pos - origin) / scale;
+                    let (x, y) = self.game.tile_at_pixel(tiles, px.x, px.y);
+                    self.game.mouse_moved(x, y);
+                }
+            }
             let clicks = ctx.input(|i| {
                 let p = &i.pointer;
                 let pos = p.interact_pos();
