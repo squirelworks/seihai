@@ -10,10 +10,12 @@
 //! 4.04r2 client has been run past the handshake, so what is here is the
 //! part those reads fix:
 //!
-//! - the server's game section, with a `Camera` control object's or
-//!   camera's packet data read ([`CameraPacket`]); any other class's
-//!   packet data (stock `Player`) has no length prefix and is not read
-//!   yet ([`Game19Error::PacketData`]);
+//! - the server's game section, with a `Camera` or `Player` control
+//!   object's or camera's packet data read ([`CameraPacket`],
+//!   [`PlayerPacket`]; the `Player` layout is stock TGE 1.x, not yet
+//!   matched against the 4.04r2 reader); any other class's packet data
+//!   has no length prefix and stops the packet
+//!   ([`Game19Error::PacketData`]);
 //! - the client's game section with moves ([`Move`]): only the walk
 //!   axes are filled, the angles and triggers stay clear;
 //! - `SimDataBlockEvent` headers, each datablock's fields skipped by the
@@ -102,6 +104,142 @@ impl CameraPacket {
         w.f32(self.pitch);
         w.f32(self.yaw);
         w.int(self.mode.min(2), 3);
+    }
+}
+
+/// A stock `Player`'s packet data, as the control object (or the camera)
+/// in the server's game section. This is the open (MIT) TGE 1.x
+/// `Player::writePacketData`; the 4.04r2 binary's own reader has not been
+/// matched against it yet (Graal_analysis `torque/protocol19-server.md`
+/// lists the `Player` layout as unread), so a Graal change here would show
+/// as a packet whose rest does not parse.
+///
+/// ```text
+/// f32 energy, f32 recharge rate   (ShapeBase)
+/// int3 action state
+/// flag → int7 recover ticks
+/// flag → int7 jump delay
+/// flag not mounted → 3 × f32 position, 3 × f32 velocity, int4 ticks since a jump surface
+/// f32 head pitch (head.x), f32 head roll (head.z), f32 yaw (rot.z)
+/// flag → int12 the ghost this player controls, then that ghost's packet data
+/// ```
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PlayerPacket {
+    pub state: u32,
+    pub recover_ticks: Option<u32>,
+    pub jump_delay: Option<u32>,
+    /// `None` while mounted: the position then comes from the mount.
+    pub position: Option<Vec3>,
+    pub velocity: Option<Vec3>,
+    pub jump_surface_last_contact: u32,
+    pub head_pitch: f32,
+    pub head_roll: f32,
+    pub yaw: f32,
+    /// The object this player controls (a vehicle it drives) and that
+    /// object's packet data.
+    pub controlling: Option<(u32, Box<PacketData>)>,
+}
+
+impl PlayerPacket {
+    /// Reads the fields up to the controlled object's ghost index. The
+    /// caller reads that object's packet data, which depends on its class.
+    fn read_own(r: &mut BitReader<'_>) -> Result<(Self, Option<u32>), OutOfBits> {
+        r.f32()?;
+        r.f32()?;
+        let state = r.int(3)?;
+        let recover_ticks = if r.flag()? { Some(r.int(7)?) } else { None };
+        let jump_delay = if r.flag()? { Some(r.int(7)?) } else { None };
+        let (position, velocity, jump_surface_last_contact) = if r.flag()? {
+            let p = read_vec3(r)?;
+            let v = read_vec3(r)?;
+            (Some(p), Some(v), r.int(4)?)
+        } else {
+            (None, None, 0)
+        };
+        let head_pitch = r.f32()?;
+        let head_roll = r.f32()?;
+        let yaw = r.f32()?;
+        let controlling = if r.flag()? { Some(r.int(12)?) } else { None };
+        Ok((
+            PlayerPacket {
+                state,
+                recover_ticks,
+                jump_delay,
+                position,
+                velocity,
+                jump_surface_last_contact,
+                head_pitch,
+                head_roll,
+                yaw,
+                controlling: None,
+            },
+            controlling,
+        ))
+    }
+
+    /// Writes it with zero energy and recharge, for a server or a test.
+    pub fn write(&self, w: &mut BitWriter) {
+        w.f32(0.0);
+        w.f32(0.0);
+        w.int(self.state, 3);
+        if let Some(t) = self.recover_ticks {
+            w.flag(true);
+            w.int(t, 7);
+        } else {
+            w.flag(false);
+        }
+        if let Some(t) = self.jump_delay {
+            w.flag(true);
+            w.int(t, 7);
+        } else {
+            w.flag(false);
+        }
+        if let Some(p) = self.position {
+            w.flag(true);
+            write_vec3(w, p);
+            write_vec3(w, self.velocity.unwrap_or_default());
+            w.int(self.jump_surface_last_contact.min(15), 4);
+        } else {
+            w.flag(false);
+        }
+        w.f32(self.head_pitch);
+        w.f32(self.head_roll);
+        w.f32(self.yaw);
+        if let Some((index, data)) = &self.controlling {
+            w.flag(true);
+            w.int(*index, 12);
+            data.write(w);
+        } else {
+            w.flag(false);
+        }
+    }
+}
+
+/// A ghost's packet data, by its class.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketData {
+    Camera(CameraPacket),
+    Player(PlayerPacket),
+}
+
+impl PacketData {
+    pub fn write(&self, w: &mut BitWriter) {
+        match self {
+            PacketData::Camera(c) => c.write(w),
+            PacketData::Player(p) => p.write(w),
+        }
+    }
+
+    /// Where it puts the view: its position (if not mounted) and yaw.
+    pub fn view(&self) -> Option<(Vec3, f32)> {
+        match self {
+            PacketData::Camera(c) => Some((c.position, c.yaw)),
+            PacketData::Player(p) => match (&p.position, &p.controlling) {
+                (Some(pos), _) => Some((*pos, p.yaw)),
+                (None, Some((_, d))) => d.view().map(|(pos, _)| (pos, p.yaw)),
+                (None, None) => None,
+            },
+        }
     }
 }
 
@@ -293,11 +431,11 @@ pub struct ServerGame19 {
     pub damage_flash: Option<f32>,
     pub white_out: Option<f32>,
     pub control: Control19,
-    /// The control object's packet data, when it is a `Camera`.
-    pub control_camera: Option<CameraPacket>,
+    /// The control object's packet data (a `Camera`'s or a `Player`'s).
+    pub control_data: Option<PacketData>,
     pub camera: Option<u32>,
-    /// The camera's packet data, when sent and the camera is a `Camera`.
-    pub camera_data: Option<CameraPacket>,
+    /// The camera's packet data, when sent.
+    pub camera_data: Option<PacketData>,
     pub field_of_view: Option<u8>,
 }
 
@@ -307,8 +445,9 @@ pub enum Game19Error {
     Short(OutOfBits),
     /// The control object or camera names an index the client lacks.
     UnknownGhost(u32),
-    /// The control object's or camera's own packet data follows. It has no
-    /// length prefix and its layout is not read yet, so the rest of the
+    /// The control object's or camera's own packet data follows, for a
+    /// class other than `Camera` and `Player` (or a `Camera` orbiting a
+    /// point). It has no length prefix, so the rest of the
     /// packet (camera, field of view, events, ghosts) cannot be found.
     /// `game` holds what was read before it.
     PacketData {
@@ -336,24 +475,38 @@ fn class_of(ghosts: &Ghosts, index: u32) -> Result<Option<String>, Game19Error> 
     }
 }
 
-/// Reads a ghost's packet data: a `Camera`'s, or the error that stops
-/// the packet for any other class.
-fn camera_packet(
+/// Reads a ghost's packet data for the classes this module knows
+/// (`Camera`, `Player`), or the error that stops the packet for any other
+/// class. A `Player` that controls another object carries that object's
+/// packet data inside its own.
+fn packet_data(
     r: &mut BitReader<'_>,
+    ghosts: &Ghosts,
     index: u32,
     class: Option<String>,
     g: &ServerGame19,
-) -> Result<Option<CameraPacket>, Game19Error> {
-    if class.as_deref() == Some("Camera") {
-        if let Some(c) = CameraPacket::read(r)? {
-            return Ok(Some(c));
-        }
-    }
-    Err(Game19Error::PacketData {
+) -> Result<PacketData, Game19Error> {
+    let stop = |index: u32, class: Option<String>| Game19Error::PacketData {
         index,
         class,
         game: Box::new(g.clone()),
-    })
+    };
+    match class.as_deref() {
+        Some("Camera") => match CameraPacket::read(r)? {
+            Some(c) => Ok(PacketData::Camera(c)),
+            None => Err(stop(index, class)),
+        },
+        Some("Player") => {
+            let (mut p, controlling) = PlayerPacket::read_own(r)?;
+            if let Some(inner) = controlling {
+                let inner_class = class_of(ghosts, inner)?;
+                let d = packet_data(r, ghosts, inner, inner_class, g)?;
+                p.controlling = Some((inner, Box::new(d)));
+            }
+            Ok(PacketData::Player(p))
+        }
+        _ => Err(stop(index, class)),
+    }
 }
 
 /// Reads the server's game section (§10):
@@ -389,7 +542,7 @@ pub fn read_server_game(
             let class = class_of(ghosts, index)?;
             ghosts.control = Some(index);
             g.control = Control19::Object { server_time, index };
-            g.control_camera = camera_packet(r, index, class, &g)?;
+            g.control_data = Some(packet_data(r, ghosts, index, class, &g)?);
         } else {
             g.control = Control19::CompressionPoint(read_vec3(r)?);
         }
@@ -400,7 +553,7 @@ pub fn read_server_game(
         ghosts.camera = Some(index);
         g.camera = Some(index);
         if r.flag()? {
-            g.camera_data = camera_packet(r, index, class, &g)?;
+            g.camera_data = Some(packet_data(r, ghosts, index, class, &g)?);
         }
     }
     if r.flag()? {
@@ -494,14 +647,14 @@ impl ClientGame19 {
 
 /// Writes a server game section (for a server or a test): the move ack,
 /// no flash, the control part as given, no camera and no field of view.
-/// An [`Control19::Object`] is followed by `data` (a `Camera`'s packet
-/// data); with no data the section stops there, as for a class whose
-/// packet data this module cannot write.
+/// An [`Control19::Object`] is followed by `data` (its packet data); with
+/// no data the section stops there, as for a class whose packet data this
+/// module cannot write.
 pub fn write_server_game(
     w: &mut BitWriter,
     last_move_ack: u32,
     control: Control19,
-    data: Option<&CameraPacket>,
+    data: Option<&PacketData>,
 ) {
     w.u32(last_move_ack);
     w.flag(false);
@@ -602,7 +755,7 @@ mod tests {
                 damage_flash: Some(1.0),
                 white_out: None,
                 control: Control19::CompressionPoint([4.0, 5.0, 6.0]),
-                control_camera: None,
+                control_data: None,
                 camera: None,
                 camera_data: None,
                 field_of_view: Some(75),
@@ -637,10 +790,10 @@ mod tests {
         );
         ghosts
             .ghosts
-            .insert(2, GhostState::Other(Some("Player".into())));
+            .insert(2, GhostState::Other(Some("Item".into())));
         match read_server_game(&mut BitReader::new(&bytes), &mut ghosts) {
             Err(Game19Error::PacketData { index, class, game }) => {
-                assert_eq!((index, class.as_deref()), (2, Some("Player")));
+                assert_eq!((index, class.as_deref()), (2, Some("Item")));
                 assert_eq!(
                     game.control,
                     Control19::Object {
@@ -674,13 +827,13 @@ mod tests {
                 server_time: 7,
                 index: 0,
             },
-            Some(&cam),
+            Some(&PacketData::Camera(cam)),
         );
         w.flag(true); // a marker after the game section
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
         let g = read_server_game(&mut r, &mut ghosts).unwrap();
-        assert_eq!(g.control_camera, Some(cam));
+        assert_eq!(g.control_data, Some(PacketData::Camera(cam)));
         assert_eq!(g.last_move_ack, 4);
         assert!(r.flag().unwrap());
 
@@ -706,6 +859,91 @@ mod tests {
         w.int(4, 3);
         let bytes = w.into_bytes();
         assert_eq!(CameraPacket::read(&mut BitReader::new(&bytes)), Ok(None));
+    }
+
+    #[test]
+    fn a_player_control_object_is_read_and_the_packet_goes_on() {
+        let mut ghosts = Ghosts::opaque();
+        ghosts
+            .ghosts
+            .insert(5, GhostState::Other(Some("Player".into())));
+        let p = PlayerPacket {
+            state: 1,
+            recover_ticks: Some(40),
+            jump_delay: None,
+            position: Some([1.0, 2.0, 3.0]),
+            velocity: Some([0.5, 0.0, -1.0]),
+            jump_surface_last_contact: 15,
+            head_pitch: 0.25,
+            head_roll: 0.0,
+            yaw: 2.0,
+            controlling: None,
+        };
+        let mut w = BitWriter::new();
+        p.write(&mut w);
+        // 64 (ShapeBase) + 3 + 8 + 1 + 1 + 6 × 32 + 4 + 3 × 32 + 1.
+        assert_eq!(w.bit_len(), 64 + 3 + 8 + 1 + 1 + 192 + 4 + 96 + 1);
+
+        let mut w = BitWriter::new();
+        write_server_game(
+            &mut w,
+            6,
+            Control19::Object {
+                server_time: 9,
+                index: 5,
+            },
+            Some(&PacketData::Player(p.clone())),
+        );
+        w.flag(true); // a marker after the game section
+        let bytes = w.into_bytes();
+        let mut r = BitReader::new(&bytes);
+        let g = read_server_game(&mut r, &mut ghosts).unwrap();
+        assert_eq!(g.control_data, Some(PacketData::Player(p)));
+        assert_eq!(g.control_data.unwrap().view(), Some(([1.0, 2.0, 3.0], 2.0)));
+        assert!(r.flag().unwrap());
+    }
+
+    #[test]
+    fn a_mounted_player_carries_the_packet_data_of_what_it_controls() {
+        let mut ghosts = Ghosts::opaque();
+        ghosts
+            .ghosts
+            .insert(5, GhostState::Other(Some("Player".into())));
+        ghosts
+            .ghosts
+            .insert(8, GhostState::Other(Some("Camera".into())));
+        let cam = CameraPacket {
+            position: [7.0, 8.0, 9.0],
+            pitch: 0.0,
+            yaw: 0.0,
+            mode: 1,
+        };
+        let p = PlayerPacket {
+            yaw: -0.5,
+            controlling: Some((8, Box::new(PacketData::Camera(cam)))),
+            ..Default::default()
+        };
+        let mut w = BitWriter::new();
+        PacketData::Player(p.clone()).write(&mut w);
+        w.flag(true);
+        let bytes = w.into_bytes();
+        let mut r = BitReader::new(&bytes);
+        let g = ServerGame19::default();
+        let d = packet_data(&mut r, &ghosts, 5, Some("Player".into()), &g).unwrap();
+        assert_eq!(d, PacketData::Player(p));
+        // Mounted: the view takes the mount's position and the player's yaw.
+        assert_eq!(d.view(), Some(([7.0, 8.0, 9.0], -0.5)));
+        assert!(r.flag().unwrap());
+
+        // A controlled object of a class not read stops the packet there.
+        ghosts
+            .ghosts
+            .insert(8, GhostState::Other(Some("WheeledVehicle".into())));
+        let mut r = BitReader::new(&bytes);
+        assert!(matches!(
+            packet_data(&mut r, &ghosts, 5, Some("Player".into()), &g),
+            Err(Game19Error::PacketData { index: 8, .. })
+        ));
     }
 
     fn cmd(name: &[u8], args: Vec<Arg>) -> Command {

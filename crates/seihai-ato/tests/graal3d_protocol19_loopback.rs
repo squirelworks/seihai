@@ -6,7 +6,7 @@
 //! `torque/udp-session.md` and `torque/protocol19-server.md`) and
 //! follows the order of the protocol 19 lab server: phase 1 and its ack, the datablocks and `DataBlocksDone`,
 //! phase 2 with the ghost-always objects, phase 3 (lighting) and its ack,
-//! then a `Camera` as the control object, whose moves the server takes. The client must answer every step in order,
+//! then a `Camera` (or a stock TGE `Player`) as the control object, whose moves the server takes. The client must answer every step in order,
 //! with 3.153's acks echoing the phase sequence.
 
 #![cfg(not(feature = "era6"))]
@@ -16,7 +16,9 @@ use seihai_ato::torque::net::events::{Arg, ClassTable, Event, Events};
 use seihai_ato::torque::net::handshake::{self, ClassEntry};
 use seihai_ato::torque::net::link::Link;
 use seihai_ato::torque::net::session::{self, Ended, Identity};
-use seihai_ato::torque::net::tge::{self, message, CameraPacket, ClientGame19, Control19, Move};
+use seihai_ato::torque::net::tge::{
+    self, message, CameraPacket, ClientGame19, Control19, Move, PacketData, PlayerPacket,
+};
 use seihai_ato::torque::GRAAL3D_19;
 use seihai_core::protocol::ClientVersion;
 use std::net::UdpSocket;
@@ -38,6 +40,26 @@ const CAMERA: CameraPacket = CameraPacket {
     yaw: 1.5,
     mode: 2,
 };
+
+/// The control player's packet data (stock TGE 1.x layout).
+fn player() -> PlayerPacket {
+    PlayerPacket {
+        state: 1,
+        jump_delay: Some(3),
+        position: Some([12.0, 22.0, 1.0]),
+        velocity: Some([0.0, 1.0, 0.0]),
+        jump_surface_last_contact: 2,
+        yaw: 0.75,
+        ..Default::default()
+    }
+}
+
+/// Which ghost the server makes the control object.
+#[derive(Clone, Copy, PartialEq)]
+enum Controlled {
+    Camera,
+    Player,
+}
 
 /// Object, datablock and event classes, in the server's numbering.
 const CLASSES: &[(u32, u32, &str)] = &[
@@ -115,7 +137,7 @@ fn command(name_tag: u32, name: &str, events: &mut Events) {
     ]));
 }
 
-fn run_against_the_server(version: ClientVersion) -> Seen {
+fn run_against_the_server(version: ClientVersion, controlled: Controlled) -> Seen {
     let server = UdpSocket::bind("127.0.0.1:0").unwrap();
     server
         .set_read_timeout(Some(Duration::from_millis(200)))
@@ -208,7 +230,16 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
         let Some(mut data) = got.data else { continue };
         let game = ClientGame19::read(&mut data.body).unwrap().unwrap();
         if !game.moves.is_empty() {
-            assert_eq!(game.control, Some(3), "moves only for the control object");
+            let index = if controlled == Controlled::Camera {
+                3
+            } else {
+                1
+            };
+            assert_eq!(
+                game.control,
+                Some(index),
+                "moves only for the control object"
+            );
             // Take them all: the ack is the index after the last one.
             move_ack = game.first_move + game.moves.len() as u32;
         }
@@ -272,10 +303,14 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
                 stage = 4;
             }
             4 if has(b"MissionStartPhase3Ack") => {
-                // Camera ghost 3 becomes the control object.
+                // Camera ghost 3, or Player ghost 1, becomes the control object.
                 control = Control19::Object {
                     server_time: 5000,
-                    index: 3,
+                    index: if controlled == Controlled::Camera {
+                        3
+                    } else {
+                        1
+                    },
                 };
                 control_sent = true;
                 stage = 5;
@@ -283,7 +318,11 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
             _ => {}
         }
         let mut w = link.data(None, None).unwrap();
-        tge::write_server_game(&mut w, move_ack, control, Some(&CAMERA));
+        let data = match controlled {
+            Controlled::Camera => PacketData::Camera(CAMERA),
+            Controlled::Player => PacketData::Player(player()),
+        };
+        tge::write_server_game(&mut w, move_ack, control, Some(&data));
         events.write(&mut w, link.last_sent(), &classes, 3200);
         write_ghosts(&mut w, &ghosts);
         server.send_to(w.bytes(), peer).unwrap();
@@ -309,16 +348,21 @@ fn run_against_the_server(version: ClientVersion) -> Seen {
             assert_eq!((m.x, m.y, m.z, m.yaw), (16, 32, 16, None), "a walk forward");
         }
     }
-    assert!(
-        log.contains("3d: control object is ghost 3 Camera"),
-        "{log}"
-    );
+    let expect = match controlled {
+        Controlled::Camera => "3d: control object is ghost 3 Camera",
+        Controlled::Player => "3d: control object is ghost 1 Player",
+    };
+    assert!(log.contains(expect), "{log}");
+    // The control object's packet data is read, so the events and ghosts
+    // after it are too.
+    assert!(!log.contains("packet data not read yet"), "{log}");
     (commands, messages, log)
 }
 
 #[test]
 fn a_3153_client_runs_the_mission_start_and_echoes_the_phase_sequence() {
-    let (commands, messages, log) = run_against_the_server(ClientVersion::V3153);
+    let (commands, messages, log) =
+        run_against_the_server(ClientVersion::V3153, Controlled::Camera);
     let seq = vec![Arg::Int(MISSION)];
     assert_eq!(
         commands,
@@ -370,7 +414,7 @@ fn a_3153_client_runs_the_mission_start_and_echoes_the_phase_sequence() {
 
 #[test]
 fn a_404r2_client_acks_the_phases_bare() {
-    let (commands, _, log) = run_against_the_server(ClientVersion::V404R2);
+    let (commands, _, log) = run_against_the_server(ClientVersion::V404R2, Controlled::Camera);
     let names: Vec<_> = commands.iter().map(|(n, _)| n.clone()).collect();
     assert_eq!(
         names,
@@ -386,4 +430,10 @@ fn a_404r2_client_acks_the_phases_bare() {
         log.contains("3d: control object is ghost 3 Camera"),
         "{log}"
     );
+}
+
+#[test]
+fn a_404r2_client_reads_a_player_control_object_and_walks_it() {
+    let (commands, _, log) = run_against_the_server(ClientVersion::V404R2, Controlled::Player);
+    assert_eq!(commands.len(), 3, "{log}");
 }

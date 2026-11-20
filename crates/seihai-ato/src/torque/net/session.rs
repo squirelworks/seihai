@@ -481,14 +481,23 @@ pub fn run_with_sequence(
                 first_move19 += 1;
             }
             first_move19 = first_move19.max(g.last_move_ack);
-            if let Some(c) = g.control_camera {
-                game19.position = c.position;
+            // A Camera or Player control object places the view; a camera
+            // ghost's own packet data wins over it.
+            let view = g
+                .camera_data
+                .as_ref()
+                .and_then(|d| d.view())
+                .or_else(|| g.control_data.as_ref().and_then(|d| d.view()));
+            if let Some((position, _)) = g.control_data.as_ref().and_then(|d| d.view()) {
+                game19.position = position;
+            }
+            if let Some((position, yaw)) = view {
                 if let Some(w) = world {
                     w.lock().unwrap_or_else(|e| e.into_inner()).camera =
                         Some(crate::view3d::Transform {
-                            position: c.position,
+                            position,
                             axis: [0.0, 0.0, 1.0],
-                            angle: c.yaw,
+                            angle: yaw,
                         });
                 }
             }

@@ -68,11 +68,13 @@ client runs. They share notes, not code. See `src/torque/engine/README.md`.
   mission phases are acked (3.153 echoes the phase sequence, 4.04r2 does
   not), datablocks are counted by class, the stock ghosting and
   datablocks-done connection messages are answered (TGE 1.x numbering,
-  5 and 6), ghosts are kept by class name, a `Camera` control object's
-  packet data is read (it places the view), and the up and down keys go
-  out as moves numbered from the server's move ack. A `Player` control
-  object's packet data is not read yet, so the rest of a packet that
-  carries one is skipped. Source: Graal_analysis `torque/udp-session.md`
+  5 and 6), ghosts are kept by class name, a `Camera` or `Player` control
+  object's packet data is read (it places the view; a `Player` that drives
+  another object carries that object's packet data too), and the up and
+  down keys go out as moves numbered from the server's move ack. The
+  `Player` layout is the open TGE 1.x one and has not been matched
+  against the 4.04r2 reader yet; a class it does not know (a vehicle)
+  still stops the rest of its packet. Source: Graal_analysis `torque/udp-session.md`
   (§10 for protocol 19), `torque/protocol19-server.md` (the 4.04r2
   static read behind the protocol 19 lab server: messages, moves, Camera),
   `graal3d/torque-engine-4x.md` and the open (MIT) Torque net layer.
