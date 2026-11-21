@@ -1,6 +1,6 @@
 # #464: protocol 19 (3.153 / 4.04r2) 3D side: what exists to trace against (2026-11-13)
 
-**No live trace was possible.** No lab server runs the protocol 19 3D side, and no archive on Mirae holds one. This folder records three things:
+**No live trace was possible.** No lab server runs the protocol 19 3D side, and no archive on lab host B holds one. This folder records three things:
 1. why no trace was possible
 2. the archive search for an original 3.x-era Graal3D server
 3. two read-only results from the 3.15x Linux client that the protocol 19 server work can use

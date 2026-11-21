@@ -1,6 +1,6 @@
 # Lab #400: Ato 3.x, 4.x and 5.x builds against the lab server stack (2026-11-13)
 
-This lab ran in Mirae's Linux RE Lab VM, headless, inside a private network namespace with loopback only.
+This lab ran in lab host B's Linux lab VM, headless, inside a private network namespace with loopback only.
 
 **Builds:**
 - `seihai-ato`: seihai main `b31c2d5`, release build.

@@ -36,10 +36,14 @@ jobs:
       # Docs-only leak scrub (#537): no code addresses, decompiler names or
       # public IPv4 literals in documentation/. Linux is enough.
       - name: Documentation leak check
+        env:
+          LAB_LEAK_DENYLIST: ${{ secrets.LAB_LEAK_DENYLIST }}
+          LAB_LEAK_REQUIRE_DENYLIST: ${{ github.event.pull_request.head.repo.fork != true }}
         if: runner.os == 'Linux'
         run: |
           python3 -m pip install --user pytest
           python3 tools/leak-check/check_docs.py
+          python3 .github/scripts/check_lab_leaks.py
           python3 -m pytest tools/leak-check -q
       - uses: dtolnay/rust-toolchain@stable
         with:

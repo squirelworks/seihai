@@ -2,23 +2,23 @@
 
 This lab follows up the 2026-11-13 run (`../2026-11-13-lab466-water-sound/`). That run could not test a level change, because both of its links were crossed between splashes, from water into more water. This lab adds a link from deep water to a dry spot in another level and crosses it while a splash is playing.
 
-I ran it on GwenTea2, natively. Ato and the gserver ran inside a loopback-only network namespace (`ns.sh`: a `bwrap --unshare-net` holder that has only `lo`) on Xvfb `:87`, as the #458 pass 2 run did. I used no VM and opened no windows on the host desktop.
+I ran it on lab host A, natively. Ato and the gserver ran inside a loopback-only network namespace (`ns.sh`: a `bwrap --unshare-net` holder that has only `lo`) on Xvfb `:87`, as the #458 pass 2 run did. I used no VM and opened no windows on the host desktop.
 
 ## Setup
 
-The setup is the same as the Mirae run, adapted to GwenTea2:
+The setup is the same as the lab host B run, adapted to lab host A:
 - **Client:** Ato 3.153 (`--version 3.153`), from seihai main `4d1a28d`, built with default features (audio on). The sha256 is in `sha256-ato.txt`.
 - **Sounds:** the real 3.04 Linux client tree (`--assets`), from a private 3.04 client asset tree. Its `water.wav` has the same sha256 (`eb29d4b3…`) as the 3.04 `setup.data/release/sounds/water.wav`.
   - `water.wav`: 8 kHz, 0.438 s, one-shot. The swim GANI plays it.
   - `steps2.wav`: 0.183 s. The walk GANI plays it.
-- **Server:** seihai-gserver-v2 `c851b4e` (the #458 pass 2 build), serving a copy of the Enigma 12-21-06 world. Its config and folder setup match Mirae's (generation `newmain`, port 14806, the dump's `foldersconfig.txt`, start at `onlinestartlocal.graal` 23.5, 30.5). It ran in localhost mode, so there was no listserver.
+- **Server:** seihai-gserver-v2 `c851b4e` (the #458 pass 2 build), serving a copy of the Enigma 12-21-06 world. Its config and folder setup match lab host B's (generation `newmain`, port 14806, the dump's `foldersconfig.txt`, start at `onlinestartlocal.graal` 23.5, 30.5). It ran in localhost mode, so there was no listserver.
 - **Lab edit, in the copy only:** `oldeg/egk-10.graal` gets one extra link (`egk-10-lab-link.diff`):
 
       LINK onlinestartlocal.graal 4 40 1 10 23.5 30.5
 
   - The link is a 1×10 strip at x = 4 in the deep water on the left of `egk-10`, where the earlier run floated at (7, 45). It leads to the grass start spot of `onlinestartlocal.graal`.
   - I made the edit with `Graal_analysis/tools/level-convert`: GR-V1.03 to `.nw`, add the line, then back to `.graal`. A round trip of the unchanged level gave identical output, and the edited level decodes to the original plus this one line.
-- **Recording:** a PipeWire null sink `lab466null`, created with `pw-cli` (GwenTea2 runs PipeWire and has no `pactl`).
+- **Recording:** a PipeWire null sink `lab466null`, created with `pw-cli` (lab host A runs PipeWire and has no `pactl`).
   - A zero stream (`pw-cat … < /dev/zero`) keeps the sink from suspending.
   - `pw-record` with `stream.capture.sink=true` records the sink's monitor.
   - Ato's ALSA output goes to the sink through `PIPEWIRE_NODE=lab466null`.
@@ -26,7 +26,7 @@ The setup is the same as the Mirae run, adapted to GwenTea2:
 
 ## Route (`run.sh TAG FLOAT`)
 
-The route is the same as Mirae's up to the float:
+The route is the same as lab host B's up to the float:
 1. Down 0.2 s, then Down 3.3 s, into `egk-10`.
 2. Left 0.2 s, then Left 2.5 s on land, then wait 3 s.
 3. Left 1.6 s into deep water, where the player floats at about (8.5, 45).
@@ -37,7 +37,7 @@ I ran it five times, with FLOAT set to 2.0, 1.75, 2.25, 2.5 and 2.75 s, to move 
 
 ## Analysis
 
-- **`analyze.py`:** Mirae's script, with three changes:
+- **`analyze.py`:** Lab host B's script, with three changes:
   - It gets the energy term from a cumulative sum, which is faster and gives the same result.
   - It adds a per-crossing section: whether a splash was in progress at the link and at the level change, and the water and footstep onsets after the link.
   - It adds an envelope check: the recorded RMS divided by (fitted gain × template RMS), in 50 ms bins.

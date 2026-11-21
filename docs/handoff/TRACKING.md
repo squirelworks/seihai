@@ -56,11 +56,11 @@ Do all of these in the same sitting:
 4. **Refresh the local snapshot** from a seihai clone:
 
    ```sh
-   python3 tools/handoff/tracker.py -o ~/Claude/HANDOFF/TRACKER.md
+   python3 tools/handoff/tracker.py -o $SEIHAI_HANDOFF/TRACKER.md
    ```
 
-   On Windows: `py tools\handoff\tracker.py -o %USERPROFILE%\Claude\HANDOFF\TRACKER.md`.
-5. **Add one line** to `~/Claude/HANDOFF/LOG.md`: date, repo, PR, what changed,
+   On Windows: `py tools\handoff\tracker.py -o %SEIHAI_HANDOFF%\TRACKER.md`.
+5. **Add one line** to `$SEIHAI_HANDOFF/LOG.md`: date, repo, PR, what changed,
    what is next.
 
 To catch boxes that were missed, run `python3 tools/handoff/tracker.py --check`.

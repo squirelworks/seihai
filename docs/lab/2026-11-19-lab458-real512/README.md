@@ -18,7 +18,7 @@ The run below confirms it: **once the control object arrives (login step 5), `pl
 
 ## Setup
 
-Everything ran inside the Windows 10 lab VM on Mirae (the clone `Graal RE Lab v7probe2`, headless, NIC cable disconnected, 4 GB). It used loopback only, with no injection into the client.
+Everything ran inside the Windows 10 lab VM on lab host B (a headless clone, NIC cable disconnected, 4 GB). It used loopback only, with no injection into the client.
 
 | Part | Version |
 |---|---|

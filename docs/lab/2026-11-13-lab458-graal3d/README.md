@@ -1,6 +1,6 @@
 # Lab #458: Ato 5.12 Graal3D link against seihai-gserver-v2 (2026-11-13)
 
-Mirae's Linux RE Lab VM, headless. Everything ran inside a private network namespace with loopback only (`unshare -r -n`); nothing reached the network.
+Lab host B's Linux lab VM, headless. Everything ran inside a private network namespace with loopback only (`unshare -r -n`); nothing reached the network.
 
 ## Builds
 

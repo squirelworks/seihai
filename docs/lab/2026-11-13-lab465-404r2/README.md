@@ -1,6 +1,6 @@
 # Lab #465: Ato 4.04r2 on the lab Modern world (2026-11-13)
 
-This is the last open #465 check, the level links. The other four checks are carried over from the earlier #465 runs on 2026-11-12. Everything ran in Mirae's Linux RE Lab VM, headless, on loopback only.
+This is the last open #465 check, the level links. The other four checks are carried over from the earlier #465 runs on 2026-11-12. Everything ran in lab host B's Linux lab VM, headless, on loopback only.
 
 ## The five checks
 
