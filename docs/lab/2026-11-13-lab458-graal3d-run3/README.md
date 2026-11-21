@@ -1,6 +1,6 @@
 # Lab #458 run 3: Ato 5.12 Graal3D link with seihai-core v0.1.5 (2026-11-13)
 
-This rerun of [the first run](../2026-11-13-lab458-graal3d/README.md) uses the core fix that accepts Sky files the server names with no extension. The setup is the same: Mirae's Linux RE Lab VM, headless, in a private loopback-only network namespace. Nothing else ran in that namespace.
+This rerun of [the first run](../2026-11-13-lab458-graal3d/README.md) uses the core fix that accepts Sky files the server names with no extension. The setup is the same: lab host B's Linux lab VM, headless, in a private loopback-only network namespace. Nothing else ran in that namespace.
 
 | Part | Version |
 |---|---|

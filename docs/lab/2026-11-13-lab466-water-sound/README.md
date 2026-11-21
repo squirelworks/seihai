@@ -1,6 +1,6 @@
 # Lab #466: Ato water sound and `--no-sound` (2026-11-13)
 
-This lab is step 6 of the Ato lab plan, run in Mirae's Linux RE Lab VM, headless. It used the same setup as the footsteps check:
+This lab is step 6 of the Ato lab plan, run in lab host B's Linux lab VM, headless. It used the same setup as the footsteps check:
 - **Client:** Ato 3.153, from seihai main `a312be3` built with audio, using the real 3.04 client's sounds (real 3.04 client sound assets via `--assets`).
 - **Server:** the Enigma lab world, served by a seihai-gserver-v2 `101a2cce` gserver plus a listserver, inside a private loopback-only network namespace.
 - **Recording:** a PulseAudio null sink of my own, `lab466null`.

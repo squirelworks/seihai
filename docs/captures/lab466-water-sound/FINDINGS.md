@@ -4,7 +4,7 @@ Sources:
 - the water sound and `--no-sound` runs (6a and 6b, 2026-11-13)
 - five water-to-dry level-change runs (r1 to r5, 2026-11-14)
 
-All of them ran on GwenTea2: Ato 3.153 against seihai-gserver-v2 serving an Enigma copy, with the real 3.04 sounds and a null-sink recording. The setup is in the write-ups under [`docs/lab/`](../README.md).
+All of them ran on lab host A: Ato 3.153 against seihai-gserver-v2 serving an Enigma copy, with the real 3.04 sounds and a null-sink recording. The setup is in the write-ups under [`docs/lab/`](../README.md).
 
 Times are seconds after the 3 kHz start beep. Onsets were found by cross-correlating the recording with the real `water.wav` and `steps2.wav`, and `ncc` is the match score.
 

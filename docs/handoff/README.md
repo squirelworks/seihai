@@ -11,7 +11,7 @@ Read in this order:
 1. This file.
 2. [`TRACKING.md`](TRACKING.md): the roadmaps, the issue rules and the sync process.
 3. The private lab kit, if you are on one of the owner's machines:
-   `~/Claude/HANDOFF/START-HERE.md` (Windows: `%USERPROFILE%\Claude\HANDOFF\START-HERE.md`).
+   `$SEIHAI_HANDOFF/START-HERE.md`, where `$SEIHAI_HANDOFF` is the private hand-off folder on the owner's machines.
    It covers the lab machines, the VMs, the harnesses and the private
    research folders. It never goes in a repo.
 4. The repo you are about to change: `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/NEXT.md`.

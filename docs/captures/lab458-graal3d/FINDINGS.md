@@ -1,6 +1,6 @@
 # #458 captures: Ato 5.12 over Graal3D, the derived data
 
-Sources: runs 1 to 3 (2026-11-13) and pass 2 (2026-11-14) on GwenTea2, Ato against seihai-gserver-v2 with `graal3d = true`, loopback only. The setup is in the write-ups under [`docs/lab/`](../README.md). Times are seconds.
+Sources: runs 1 to 3 (2026-11-13) and pass 2 (2026-11-14) on lab host A, Ato against seihai-gserver-v2 with `graal3d = true`, loopback only. The setup is in the write-ups under [`docs/lab/`](../README.md). Times are seconds.
 
 Most of these are Ato's numbers: they describe what Seihai sends, and what the fork accepts. The `real512-*` table is an unmodified 5.12 in the Windows 10 lab VM (2026-11-19, [write-up](../../lab/2026-11-19-lab458-real512/README.md)). It settles the open question: a real 5.12 sends no velocity and has no walk or turn speed of its own.
 

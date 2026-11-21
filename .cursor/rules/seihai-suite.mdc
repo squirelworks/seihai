@@ -12,7 +12,7 @@ and may still be working in parallel, so keep the shared records current.
 1. Read the suite hand-off: `docs/handoff/README.md` in `squirelworks/seihai`
    (https://github.com/squirelworks/seihai/blob/main/docs/handoff/README.md).
 2. If this machine has the private lab kit, read it too:
-   `~/Claude/HANDOFF/START-HERE.md` (Windows: `%USERPROFILE%\Claude\HANDOFF\START-HERE.md`).
+   `$SEIHAI_HANDOFF/START-HERE.md`, where `$SEIHAI_HANDOFF` is the private hand-off folder on the owner's machines.
    It covers the lab machines, VMs and private research. Never copy anything
    from it into a repo, an issue or a PR.
 3. Then read this repo's own `AGENTS.md` (if any), `docs/ARCHITECTURE.md` and
@@ -48,5 +48,5 @@ and may still be working in parallel, so keep the shared records current.
 2. Tick its line in the repo's roadmap issue (see `docs/handoff/TRACKING.md`)
    and in the umbrella roadmap squirelworks/seihai#353 if it is listed there.
 3. Update the repo's `docs/NEXT.md` in the same PR.
-4. Refresh the local snapshot: `python3 tools/handoff/tracker.py -o ~/Claude/HANDOFF/TRACKER.md`
-   (run from a seihai clone), and add a dated line to `~/Claude/HANDOFF/LOG.md`.
+4. Refresh the local snapshot: `python3 tools/handoff/tracker.py -o $SEIHAI_HANDOFF/TRACKER.md`
+   (run from a seihai clone), and add a dated line to `$SEIHAI_HANDOFF/LOG.md`.
