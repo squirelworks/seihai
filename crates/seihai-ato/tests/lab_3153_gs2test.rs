@@ -118,15 +118,18 @@ fn the_lab_level_is_kept_and_its_fields_logged() {
     );
 }
 
-/// 4.20r8's Torque profile is assumed (its protocol number was not read;
-/// the version profile carries 4.20r6's 21 and says so), and it is a
-/// Graal3D build: its fields are logged like the other Ato builds'.
+/// 4.20r8's Torque profile comes from its version profile, partly assumed
+/// (its class set and file rules were not read), and it is a Graal3D
+/// build: its fields are logged like the other Ato builds'.
 #[test]
 fn a_graal3d_build_with_an_assumed_torque_profile_logs_its_fields() {
     let v = ClientVersion::V420R8;
-    assert_eq!(seihai_ato::torque::of(v).map(|t| t.protocol), Some(21));
     let t = seihai_ato::torque::capabilities(v).unwrap();
-    assert!(!t.confirmed(seihai_core::protocol::three_d::Field::Protocol));
+    assert_eq!(
+        seihai_ato::torque::of(v).map(|p| p.protocol),
+        Some(u32::from(t.protocol))
+    );
+    assert!(!t.confirmed(seihai_core::protocol::three_d::Field::ClassTable));
     let st = SessionState::for_version(v);
     let out = fields::lines(v, &Level::from_board(&[0; 4096]), "x.nw", &st);
     assert!(out[0].starts_with("board: 4096 tiles"), "{out:?}");
