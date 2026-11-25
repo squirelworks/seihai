@@ -253,10 +253,9 @@ mod tests {
         assert!(d.contains("streamed chunks only"), "{d}");
         assert!(d.contains("TorqueScript none"), "{d}");
         assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
-        assert!(
-            d.contains("assumed, not read: dts_max, dif_version"),
-            "{d}"
-        );
+        assert!(d.contains("assumed, not read: none"), "{d}");
+        let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
+        assert!(d.contains("assumed, not read: protocol,"), "{d}");
         let d = describe(&capabilities(ClientVersion::V3153).unwrap());
         assert!(d.contains("local .ter and streamed chunks"), "{d}");
         assert!(d.contains("TorqueScript runs"), "{d}");
