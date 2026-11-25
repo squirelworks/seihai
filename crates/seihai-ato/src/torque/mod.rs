@@ -223,8 +223,6 @@ mod tests {
             (ClientVersion::V404R2, Some(GRAAL3D_19)),
             (ClientVersion::V404R2Mac, Some(GRAAL3D_19)),
             (ClientVersion::V420R6, Some(GRAAL3D_21)),
-            // Assumed: 4.20r8's protocol was never read.
-            (ClientVersion::V420R8, Some(GRAAL3D_21)),
             (ClientVersion::V500R7, Some(GRAAL3D_24)),
             (ClientVersion::V512, Some(GRAAL3D_24)),
             (ClientVersion::V512Mac, Some(GRAAL3D_24)),
@@ -242,10 +240,12 @@ mod tests {
                 assert_eq!(got.tge_game_layer, p.tge_game_layer, "{v:?}");
             }
         }
-        use seihai_core::protocol::three_d::Field;
-        assert!(!capabilities(ClientVersion::V420R8)
-            .unwrap()
-            .confirmed(Field::Protocol));
+        // 4.20r8 follows whatever protocol its version profile carries.
+        let t = capabilities(ClientVersion::V420R8).unwrap();
+        assert_eq!(
+            of(ClientVersion::V420R8).map(|p| p.protocol),
+            by_protocol(u32::from(t.protocol)).map(|p| p.protocol)
+        );
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod tests {
         assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
         assert!(d.contains("assumed, not read: none"), "{d}");
         assert!(d.contains("DTS 17-24, DIF 44"), "{d}");
-        let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
+        let d = describe(&capabilities(ClientVersion::V512Mac).unwrap());
         assert!(d.contains("assumed, not read: protocol,"), "{d}");
         let d = describe(&capabilities(ClientVersion::V3153).unwrap());
         assert!(d.contains("local .ter and streamed chunks"), "{d}");
