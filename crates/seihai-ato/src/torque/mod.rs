@@ -140,6 +140,11 @@ pub fn describe(t: &ThreeD) -> String {
         ChunkCache::Heights => ", cached in levels3d/heights/<server>/",
         ChunkCache::None => "",
     };
+    let untextured = if t.offers_terrain_chunks() && !t.terrain_textures {
+        ", drawn untextured"
+    } else {
+        ""
+    };
     let names = match t.texture_names {
         TextureNames::StripPng => "bare name (.png stripped)",
         TextureNames::AsNamed => "as named",
@@ -147,7 +152,7 @@ pub fn describe(t: &ThreeD) -> String {
     let assumed: Vec<&str> = t.assumed.iter().map(|f| f.key()).collect();
     format!(
         "3d: {} game layer, {} mission phases{}, control {}\n\
-         3d: terrain {terrain}{cache}; TorqueScript {}; Terraformer {:?}; TerrainEditor {}\n\
+         3d: terrain {terrain}{cache}{untextured}; TorqueScript {}; Terraformer {:?}; TerrainEditor {}\n\
          3d: DTS {}-{}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
          3d: Sky {}; drawn on our gserver: {}\n\
          3d: with 2D players: walk moves the 2D player {}, draws them {}, gets their chat {}\n\
@@ -304,6 +309,10 @@ mod tests {
             d.contains("an update to an uncreated ghost is a crash"),
             "{d}"
         );
+        assert!(!d.contains("untextured"), "{d}");
+        let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
+        assert!(d.contains("streamed chunks only"), "{d}");
+        assert!(d.contains("drawn untextured"), "{d}");
     }
 
     #[test]
