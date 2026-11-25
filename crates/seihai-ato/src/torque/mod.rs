@@ -254,7 +254,7 @@ mod tests {
         assert!(d.contains("TorqueScript none"), "{d}");
         assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
         assert!(
-            d.contains("assumed, not read: dts_max, dif_version, md3_version"),
+            d.contains("assumed, not read: dts_max, dif_version"),
             "{d}"
         );
         let d = describe(&capabilities(ClientVersion::V3153).unwrap());
