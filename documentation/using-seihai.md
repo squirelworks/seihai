@@ -48,7 +48,7 @@ On Windows:
 target\release\seihai.exe
 ```
 
-The start window opens. Pick a version, enter your account, press "Server list" and Join a server. For offline play, pick a 1.x or 2.x version and press "Play offline" or "Play the tutorial".
+The start window opens. Enter your account, press "Server list" and Join a server: Seihai picks the version that server takes (consumer mode; see the README). With "Developer mode" ticked you pick the version yourself. For offline play, press "Play offline" or "Play the tutorial" (in developer mode, with a 1.x or 2.x version).
 
 To skip the start window:
 

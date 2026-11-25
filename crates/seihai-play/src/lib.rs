@@ -16,13 +16,15 @@
 //!
 //! [`start`] is the one start window for every line, the `seihai`
 //! command's: pick the version and the server, and hand over to that
-//! line's client.
+//! line's client. In consumer mode ([`consumer`]) it picks the version for
+//! each server itself.
 //!
 //! [`window::run_native`] opens every Seihai window: OpenGL, else wgpu
 //! (Direct3D 12 and its software WARP on Windows).
 
 pub mod baddies;
 pub mod chars;
+pub mod consumer;
 pub mod effects;
 pub mod game;
 pub mod hud;

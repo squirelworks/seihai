@@ -31,7 +31,14 @@
 //! This module holds only the window and the hand-over; the server list
 //! login is core's (`Connection::fetch_server_list`), through
 //! [`crate::servers::ServerList`], which Ato's own list screen shows too.
+//!
+//! In consumer mode (the default for a new `launcher.conf`) there is no
+//! version box: a join picks the version for that server, and a version
+//! refusal brings the client back here to join again as the version the
+//! server takes ([`crate::consumer`]). Developer mode, the default for an
+//! existing `launcher.conf`, keeps the version box.
 
+use crate::consumer::{self, Mode, Next, Pending};
 use crate::servers::ServerList;
 use seihai_core::protocol::offline_builds::{self, OfflineBuild};
 use seihai_core::protocol::{self as proto, ClientVersion, ServerEntry};
@@ -368,6 +375,15 @@ pub struct Saved {
     /// `seihai-mae` saves it: that build's own install.
     pub assets_for: BTreeMap<String, String>,
     pub all_versions: bool,
+    /// `None` in a file saved before consumer mode.
+    pub mode: Option<Mode>,
+    /// The version to join each server as (`picked.<host:port>`).
+    pub picked: BTreeMap<String, String>,
+    /// Each server's last `Allowed:` list (`allowed.<host:port>`).
+    pub allowed: BTreeMap<String, String>,
+    /// The join in progress (`pending`, `pending_3d`, `pending_tried`,
+    /// `pending_refused`).
+    pub pending: Option<Pending>,
 }
 
 impl Saved {
@@ -390,12 +406,42 @@ impl Saved {
                 "direct" => s.direct = v,
                 "assets" => s.assets = v,
                 "all_versions" => s.all_versions = v.as_deref() == Some("1"),
+                "mode" => s.mode = v.as_deref().and_then(Mode::from_key),
+                "pending" => {
+                    if let Some(v) = v {
+                        s.pending.get_or_insert_with(Pending::default).server = v;
+                    }
+                }
+                "pending_3d" => {
+                    s.pending.get_or_insert_with(Pending::default).three_d =
+                        v.as_deref() == Some("1")
+                }
+                "pending_tried" => {
+                    s.pending.get_or_insert_with(Pending::default).tried = v.unwrap_or_default()
+                }
+                "pending_refused" => {
+                    s.pending.get_or_insert_with(Pending::default).refused = v
+                        .unwrap_or_default()
+                        .split(',')
+                        .map(|l| l.trim().to_string())
+                        .filter(|l| !l.is_empty())
+                        .collect()
+                }
                 k => {
-                    if let (Some(label), Some(v)) = (k.strip_prefix("assets."), v) {
+                    let Some(v) = v else { continue };
+                    if let Some(label) = k.strip_prefix("assets.") {
                         s.assets_for.insert(label.to_string(), v);
+                    } else if let Some(server) = k.strip_prefix("picked.") {
+                        s.picked.insert(server.to_string(), v);
+                    } else if let Some(server) = k.strip_prefix("allowed.") {
+                        s.allowed.insert(server.to_string(), v);
                     }
                 }
             }
+        }
+        // A pending join with no server is a broken file.
+        if s.pending.as_ref().is_some_and(|p| p.server.is_empty()) {
+            s.pending = None;
         }
         s
     }
@@ -419,6 +465,27 @@ impl Saved {
         }
         if self.all_versions {
             out.push_str("all_versions=1\n");
+        }
+        if let Some(m) = self.mode {
+            out.push_str(&format!("mode={}\n", m.key()));
+        }
+        for (server, label) in &self.picked {
+            out.push_str(&format!("picked.{server}={label}\n"));
+        }
+        for (server, list) in &self.allowed {
+            out.push_str(&format!("allowed.{server}={list}\n"));
+        }
+        if let Some(p) = &self.pending {
+            out.push_str(&format!("pending={}\n", p.server));
+            if p.three_d {
+                out.push_str("pending_3d=1\n");
+            }
+            if !p.tried.is_empty() {
+                out.push_str(&format!("pending_tried={}\n", p.tried));
+            }
+            if !p.refused.is_empty() {
+                out.push_str(&format!("pending_refused={}\n", p.refused.join(",")));
+            }
         }
         out
     }
@@ -496,7 +563,25 @@ pub struct StartScreen {
     /// The server list and its status line (`seihai_play::servers`, the
     /// same list Ato's own screen shows).
     pub list: ServerList,
+    pub mode: Mode,
+    /// Consumer mode: the version to join each server as.
+    pub picked: BTreeMap<String, String>,
+    /// Consumer mode: each server's last `Allowed:` list.
+    pub allowed: BTreeMap<String, String>,
+    /// Consumer mode: the join in progress.
+    pub pending: Option<Pending>,
+    /// Consumer mode: the question for the player, one version per era.
+    pub ask: Option<Vec<ClientVersion>>,
+    /// Consumer mode: remember the answer to [`Self::ask`] for the server.
+    pub remember: bool,
+    /// Consumer mode: the join to make at once (after a refusal).
+    pub auto_join: Option<Handoff>,
 }
+
+/// The version consumer mode fetches the server list as. The public
+/// listserver answers by login shape, not by version, and 2.05's classic
+/// login on 14923 is the one it answered (seihai-core `list_failure_text`).
+pub const CONSUMER_LIST_VERSION: ClientVersion = ClientVersion::V205;
 
 /// The default listserver box for a pick.
 fn default_listserver(c: Choice) -> String {
@@ -522,7 +607,18 @@ impl StartScreen {
             .and_then(Choice::from_label)
             .unwrap_or(Choice::Version(ClientVersion::V205));
         let listserver_typed = saved.listserver.is_some();
-        StartScreen {
+        // A file saved before consumer mode belongs to a developer who
+        // picked versions; a new one starts in consumer mode.
+        let mode = saved.mode.unwrap_or(if saved.version.is_some() {
+            Mode::Developer
+        } else {
+            Mode::Consumer
+        });
+        let list_choice = match mode {
+            Mode::Consumer => Choice::Version(CONSUMER_LIST_VERSION),
+            Mode::Developer => choice,
+        };
+        let mut screen = StartScreen {
             choice,
             account: saved.account.unwrap_or_default(),
             password: String::new(),
@@ -536,7 +632,7 @@ impl StartScreen {
             assets_for: saved.assets_for,
             listserver: saved
                 .listserver
-                .unwrap_or_else(|| default_listserver(choice)),
+                .unwrap_or_else(|| default_listserver(list_choice)),
             listserver_typed,
             direct: saved.direct.unwrap_or_else(|| default_direct(choice)),
             all_versions: saved.all_versions
@@ -544,6 +640,107 @@ impl StartScreen {
                 || choice.offline_only(),
             error,
             list: ServerList::empty("Ready."),
+            mode,
+            picked: saved.picked,
+            allowed: saved.allowed,
+            pending: saved.pending,
+            ask: None,
+            remember: true,
+            auto_join: None,
+        };
+        screen.came_back();
+        screen
+    }
+
+    /// A join came back with [`Self::error`]: in consumer mode, a version
+    /// refusal joins again or asks; anything else ends the join.
+    fn came_back(&mut self) {
+        let Some(mut p) = self.pending.take() else {
+            return;
+        };
+        if self.mode != Mode::Consumer {
+            return;
+        }
+        let Some(msg) = self.error.clone() else {
+            return;
+        };
+        if let Some(list) = consumer::allowed_text(&msg) {
+            self.allowed.insert(p.server.clone(), list);
+        }
+        match consumer::after_refusal(&mut p, &msg) {
+            Next::Done => {}
+            Next::Join(v) => {
+                let (server, three_d) = (p.server.clone(), p.three_d);
+                self.pending = Some(p);
+                self.auto_join = Some(self.join_as(v, server, three_d));
+            }
+            Next::Ask(options) => {
+                self.error = Some(format!("{} takes more than one kind of client.", p.server));
+                self.pending = Some(p);
+                self.ask = Some(options);
+            }
+            Next::Stop(why) => self.error = Some(why),
+        }
+    }
+
+    /// The version consumer mode would join `server` as now.
+    pub fn planned(&self, server: &str, three_d: bool) -> ClientVersion {
+        consumer::first_version(self.picked.get(server).map(String::as_str), three_d)
+    }
+
+    /// Consumer mode: join `server` as `v`, and note the join so a refusal
+    /// can pick again.
+    pub fn join_as(&mut self, v: ClientVersion, server: String, three_d: bool) -> Handoff {
+        let refused = self
+            .pending
+            .take()
+            .filter(|p| p.server == server)
+            .map(|p| p.refused)
+            .unwrap_or_default();
+        if self.remember {
+            self.picked.insert(server.clone(), v.label().to_string());
+        }
+        self.pending = Some(Pending {
+            server: server.clone(),
+            three_d,
+            tried: v.label().to_string(),
+            refused,
+        });
+        self.ask = None;
+        let some = |s: &str| Some(s.trim().to_string()).filter(|s| !s.is_empty());
+        Handoff {
+            choice: Choice::Version(v),
+            server: Some(server),
+            account: self.account.trim().to_string(),
+            password: self.password.clone(),
+            nick: self.nick.trim().to_string(),
+            assets: self
+                .assets_for
+                .get(v.label())
+                .and_then(|a| some(a))
+                .or_else(|| some(&self.assets)),
+            graal3d: three_d,
+            start: Start::Online,
+        }
+    }
+
+    /// The version the server list is fetched as.
+    pub fn list_choice(&self) -> Choice {
+        match self.mode {
+            Mode::Consumer => Choice::Version(CONSUMER_LIST_VERSION),
+            Mode::Developer => self.choice,
+        }
+    }
+
+    /// Switch between consumer and developer mode.
+    pub fn set_mode(&mut self, mode: Mode) {
+        if mode == self.mode {
+            return;
+        }
+        self.mode = mode;
+        self.ask = None;
+        if !self.listserver_typed {
+            self.listserver = default_listserver(self.list_choice());
         }
     }
 
@@ -562,6 +759,10 @@ impl StartScreen {
             assets: some(&self.assets),
             assets_for: self.assets_for_saved(),
             all_versions: self.all_versions,
+            mode: Some(self.mode),
+            picked: self.picked.clone(),
+            allowed: self.allowed.clone(),
+            pending: self.pending.clone(),
         }
     }
 
@@ -610,21 +811,52 @@ impl StartScreen {
 
     /// Mae offline (`Start::Offline` or `Start::Tutorial`).
     pub fn offline(&self, start: Start) -> Handoff {
-        Handoff {
+        let mut h = Handoff {
             start,
             ..self.handoff(None, false)
+        };
+        // Consumer mode has no version box: Mae plays offline as the
+        // remembered version if it is Mae's, else as 2.05.
+        if self.mode == Mode::Consumer && h.choice.line() != Line::Mae {
+            h.choice = Choice::Version(CONSUMER_LIST_VERSION);
+            h.assets = self
+                .assets_for
+                .get(h.choice.label())
+                .cloned()
+                .filter(|a| !a.trim().is_empty())
+                .or_else(|| Some(self.assets.trim().to_string()).filter(|a| !a.is_empty()));
         }
+        h
     }
 
     /// Join the selected server.
-    pub fn join_selected(&self) -> Option<Handoff> {
+    pub fn join_selected(&mut self) -> Option<Handoff> {
         let s = self.list.picked()?;
-        Some(self.handoff(Some(format!("{}:{}", s.host, s.port)), is_3d_server(s)))
+        let (server, three_d) = (format!("{}:{}", s.host, s.port), is_3d_server(s));
+        Some(match self.mode {
+            Mode::Developer => self.handoff(Some(server), three_d),
+            Mode::Consumer => {
+                let v = self.planned(&server, three_d);
+                self.join_as(v, server, three_d)
+            }
+        })
+    }
+
+    /// Connect to the game server typed in the form.
+    pub fn join_direct(&mut self) -> Handoff {
+        let server = self.direct.trim().to_string();
+        match self.mode {
+            Mode::Developer => self.handoff(Some(server), false),
+            Mode::Consumer => {
+                let v = self.planned(&server, false);
+                self.join_as(v, server, false)
+            }
+        }
     }
 
     /// Ask the listserver for its servers, on a thread.
     pub fn fetch(&mut self, repaint: impl FnOnce() + Send + 'static) {
-        let Choice::Version(v) = self.choice else {
+        let Choice::Version(v) = self.list_choice() else {
             return;
         };
         let addr = v.complete_list_addr(self.listserver.trim());
@@ -644,6 +876,9 @@ impl StartScreen {
     /// Draw the window and take its input. Returns the hand-over once the
     /// player joins a server or opens a client's own window.
     pub fn show(&mut self, ctx: &egui::Context) -> Option<Handoff> {
+        if let Some(h) = self.auto_join.take() {
+            return Some(h);
+        }
         self.poll();
         let mut out = None;
         egui::SidePanel::right("servers")
@@ -661,17 +896,49 @@ impl StartScreen {
                     out = self.join_selected();
                 }
                 ui.separator();
-                let join = ui.add_enabled(self.list.selected.is_some(), egui::Button::new("Join"));
-                if join.clicked() {
-                    out = self.join_selected();
-                }
+                ui.horizontal(|ui| {
+                    let join =
+                        ui.add_enabled(self.list.selected.is_some(), egui::Button::new("Join"));
+                    if join.clicked() {
+                        out = self.join_selected();
+                    }
+                    if self.mode == Mode::Consumer {
+                        if let Some(s) = self.list.picked() {
+                            let server = format!("{}:{}", s.host, s.port);
+                            let v = self.planned(&server, is_3d_server(s));
+                            ui.small(format!("Joins as {}", v.label()));
+                        }
+                    }
+                });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Seihai");
             if let Some(e) = &self.error {
                 ui.colored_label(egui::Color32::RED, e);
             }
+            if let Some(options) = self.ask.clone() {
+                ui.group(|ui| {
+                    ui.label("Which kind of client do you want to play on this server?");
+                    for v in options {
+                        if ui.button(consumer::option_text(v)).clicked() {
+                            if let Some(p) = self.pending.clone() {
+                                out = Some(self.join_as(v, p.server, p.three_d));
+                            }
+                        }
+                    }
+                    ui.checkbox(&mut self.remember, "Remember for this server");
+                });
+            }
+            let mut developer = self.mode == Mode::Developer;
+            if ui
+                .checkbox(&mut developer, "Developer mode")
+                .on_hover_text("Pick the client version yourself. Otherwise Seihai picks the version each server takes.")
+                .changed()
+            {
+                self.set_mode(if developer { Mode::Developer } else { Mode::Consumer });
+            }
             ui.separator();
+            if self.mode == Mode::Developer {
             ui.label("Version");
             let mut picked = self.choice;
             let mut line = None;
@@ -698,6 +965,9 @@ impl StartScreen {
                 "Plays in {}.",
                 self.choice.line().heading()
             ));
+            } else {
+                ui.small("Seihai picks the version each server takes.");
+            }
 
             ui.label("Account");
             ui.text_edit_singleline(&mut self.account);
@@ -707,14 +977,17 @@ impl StartScreen {
             ui.add(egui::TextEdit::singleline(&mut self.nick).hint_text(self.account.as_str()));
             ui.label("Assets folder (optional)");
             ui.text_edit_singleline(&mut self.assets);
-            ui.label(format!("Assets for {} only (optional; its own install)", self.choice.label()));
-            ui.text_edit_singleline(&mut self.version_assets);
+            if self.mode == Mode::Developer {
+                ui.label(format!("Assets for {} only (optional; its own install)", self.choice.label()));
+                ui.text_edit_singleline(&mut self.version_assets);
+            }
             ui.separator();
 
-            if let Some(b) = self.choice.offline_build() {
+            let developer = self.mode == Mode::Developer;
+            if let Some(b) = self.choice.offline_build().filter(|_| developer) {
                 ui.label(b.reason());
                 ui.small(format!("Reads {}; plays offline with the {} rules.", b.levels, b.plays_as.label()));
-            } else if self.choice.direct_only() {
+            } else if developer && self.choice.direct_only() {
                 ui.label("Game server (host:port)");
                 ui.text_edit_singleline(&mut self.direct);
                 if ui.button("Connect").clicked() {
@@ -728,7 +1001,7 @@ impl StartScreen {
                     }
                     if self.listserver_typed && ui.small_button("Default").clicked() {
                         self.listserver_typed = false;
-                        self.listserver = default_listserver(self.choice);
+                        self.listserver = default_listserver(self.list_choice());
                     }
                 });
                 let fetch = ui.add_enabled(!self.waiting(), egui::Button::new("Server list"));
@@ -738,16 +1011,17 @@ impl StartScreen {
                 }
                 egui::CollapsingHeader::new("Or connect to one game server")
                     .id_salt(("direct", self.choice.label()))
-                    .default_open(self.choice.direct_first())
+                    .default_open(developer && self.choice.direct_first())
                     .show(ui, |ui| {
                     ui.text_edit_singleline(&mut self.direct);
                     if ui.button("Connect").clicked() {
-                        out = Some(self.handoff(Some(self.direct.trim().to_string()), false));
+                        out = Some(self.join_direct());
                     }
                 });
             }
             ui.separator();
-            match self.choice.line() {
+            let line = if developer { self.choice.line() } else { Line::Mae };
+            match line {
                 // Mae's offline play and tutorial; its own window is the
                 // development binary's.
                 Line::Mae => {
@@ -837,8 +1111,148 @@ mod tests {
         }
     }
 
+    /// The window in developer mode, as a `launcher.conf` from before
+    /// consumer mode opens it.
     fn screen() -> StartScreen {
-        StartScreen::new(Saved::default(), None)
+        StartScreen::new(
+            Saved {
+                mode: Some(Mode::Developer),
+                ..Saved::default()
+            },
+            None,
+        )
+    }
+
+    fn one_server(s: &mut StartScreen, kind: &str) {
+        s.list.take(Ok(proto::ListReply {
+            servers: vec![ServerEntry {
+                kind: kind.into(),
+                name: "Lab".into(),
+                host: "h".into(),
+                port: 14900,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }));
+        s.list.selected = Some(0);
+    }
+
+    const REFUSAL: &str =
+        "disconnected: Your client version is not allowed on this server.\nAllowed: ";
+
+    #[test]
+    fn a_new_file_is_consumer_mode_and_an_old_one_developer_mode() {
+        assert_eq!(
+            StartScreen::new(Saved::default(), None).mode,
+            Mode::Consumer
+        );
+        let old = Saved::parse("version=2.22\naccount=a\n");
+        assert_eq!(StartScreen::new(old, None).mode, Mode::Developer);
+        let s = StartScreen::new(Saved::parse("version=2.22\nmode=consumer\n"), None);
+        assert_eq!(s.mode, Mode::Consumer);
+        // The list is fetched as 2.05 whatever the saved version.
+        assert_eq!(s.list_choice(), Choice::Version(CONSUMER_LIST_VERSION));
+        assert_eq!(s.listserver, default_listserver(s.list_choice()));
+    }
+
+    /// A refusal brings the client back; the window joins again as the
+    /// version the server takes, and remembers it.
+    #[test]
+    fn consumer_mode_joins_again_after_a_refusal() {
+        let mut s = StartScreen::new(Saved::default(), None);
+        s.account = "a".into();
+        one_server(&mut s, "");
+        let h = s.join_selected().unwrap();
+        assert_eq!(h.choice, Choice::Version(ClientVersion::V603R7));
+        assert_eq!(h.line(), Line::Issho);
+        // As the program saves it before handing over, then starts again
+        // with the refusal.
+        let text = s.saved().text();
+        assert!(text.contains("pending=h:14900"), "{text}");
+        assert!(text.contains("picked.h:14900=6.03r7"), "{text}");
+        let back = StartScreen::new(Saved::parse(&text), Some(format!("{REFUSAL}2.22, 5.07")));
+        let h = back.auto_join.clone().expect("joins again at once");
+        assert_eq!(h.choice, Choice::Version(ClientVersion::V222));
+        assert_eq!(h.server.as_deref(), Some("h:14900"));
+        assert_eq!(h.args()[..4], ["--version", "2.22", "--online", "h:14900"]);
+        assert_eq!(back.picked["h:14900"], "2.22");
+        assert_eq!(back.allowed["h:14900"], "2.22, 5.07");
+        assert_eq!(back.pending.as_ref().unwrap().refused, ["6.03r7"]);
+        // The next join of that server starts at 2.22.
+        let text = back.saved().text();
+        let mut again = StartScreen::new(
+            Saved::parse(&text),
+            Some("The server closed the connection.".into()),
+        );
+        assert!(again.auto_join.is_none());
+        assert!(
+            again.pending.is_none(),
+            "a join that did not come back refused is over"
+        );
+        one_server(&mut again, "");
+        assert_eq!(
+            again.join_selected().unwrap().choice,
+            Choice::Version(ClientVersion::V222)
+        );
+    }
+
+    #[test]
+    fn two_eras_with_a_gap_ask_and_the_answer_joins() {
+        let mut s = StartScreen::new(Saved::default(), None);
+        one_server(&mut s, "");
+        s.join_selected().unwrap();
+        let text = s.saved().text();
+        let mut back = StartScreen::new(
+            Saved::parse(&text),
+            Some(format!("{REFUSAL}1.41r1, 5.12 - 6.037")),
+        );
+        // 6.03r7 was refused already, so 5.31r4 stands for Modern.
+        assert_eq!(
+            back.ask,
+            Some(vec![ClientVersion::V531R4, ClientVersion::V141])
+        );
+        assert!(back.auto_join.is_none());
+        let p = back.pending.clone().unwrap();
+        let h = back.join_as(ClientVersion::V141, p.server, p.three_d);
+        assert_eq!(h.line(), Line::Mae);
+        assert_eq!(back.ask, None);
+        assert_eq!(back.picked["h:14900"], "1.41");
+    }
+
+    #[test]
+    fn developer_mode_only_shows_the_refusal() {
+        let mut s = screen();
+        s.pick(Choice::Version(ClientVersion::V205));
+        one_server(&mut s, "");
+        let h = s.join_selected().unwrap();
+        assert_eq!(h.choice, Choice::Version(ClientVersion::V205));
+        let mut saved = s.saved();
+        saved.pending = Some(Pending {
+            server: "h:14900".into(),
+            tried: "2.05".into(),
+            ..Pending::default()
+        });
+        let back = StartScreen::new(saved, Some(format!("{REFUSAL}2.22")));
+        assert!(back.auto_join.is_none() && back.ask.is_none());
+        assert!(back.error.unwrap().contains("Allowed: 2.22"));
+    }
+
+    #[test]
+    fn a_3d_server_in_consumer_mode_joins_as_a_3d_build() {
+        let mut s = StartScreen::new(Saved::default(), None);
+        one_server(&mut s, "3");
+        let h = s.join_selected().unwrap();
+        assert_eq!(h.line(), Line::Ato);
+        assert!(h.args().ends_with(&["--graal3d".to_string()]));
+    }
+
+    #[test]
+    fn consumer_offline_play_is_mae() {
+        let mut s = StartScreen::new(Saved::default(), None);
+        s.choice = Choice::Version(ClientVersion::V603R7);
+        let h = s.offline(Start::Offline);
+        assert_eq!(h.line(), Line::Mae);
+        assert_eq!(h.args()[..3], ["--version", "2.05", "--offline"]);
     }
 
     #[test]

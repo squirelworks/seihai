@@ -1831,19 +1831,26 @@ pub fn spawn_online_hooked(
             let _ = shown_tx.send(Event::Level(Box::new(l.clone()), a.clone()));
             shown_wake();
         };
+        let mut out = ClosedReason::default();
         let why = match online::run_hooked(
             &addr,
             version,
             &login,
             assets,
             false,
-            &mut std::io::stdout(),
+            &mut out,
             &mut shown,
             Some(net_live),
             &|level, name, st| level_lines(version, level, name, st),
             &hooks,
         ) {
-            Ok(()) => "The server closed the connection.".to_string(),
+            // The server's own reason, as Mae gives it: a version refusal
+            // carries the server's allowed list, which the start window's
+            // consumer mode reads.
+            Ok(()) => match out.reason() {
+                Some(m) => format!("disconnected: {m}"),
+                None => "The server closed the connection.".to_string(),
+            },
             Err(e) => format!("Could not log in: {e}"),
         };
         ended();
@@ -3011,5 +3018,70 @@ mod tests {
         let east = &g.session.gmap.as_ref().unwrap().levels[&(1, 0)];
         assert_eq!(east.tile_id_at(5, 6), Some(0x22));
         assert!(g.board_mods.lock().unwrap().is_empty());
+    }
+}
+
+/// Standard output for the session's log, keeping what follows its last
+/// `connection closed: ` line: core writes the server's `PLO_DISCMESSAGE`
+/// text there when the server closes the connection.
+#[derive(Default)]
+struct ClosedReason {
+    tail: String,
+}
+
+impl ClosedReason {
+    const MARK: &'static str = "connection closed: ";
+    /// Enough for any refusal text; older output is dropped.
+    const KEEP: usize = 4096;
+
+    fn reason(&self) -> Option<String> {
+        let at = self.tail.rfind(Self::MARK)?;
+        let m = self.tail[at + Self::MARK.len()..].trim_end();
+        (!m.is_empty()).then(|| m.to_string())
+    }
+}
+
+impl std::io::Write for ClosedReason {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = std::io::stdout().write(buf)?;
+        self.tail.push_str(&String::from_utf8_lossy(&buf[..n]));
+        if self.tail.len() > 2 * Self::KEEP {
+            let mut cut = self.tail.len() - Self::KEEP;
+            while !self.tail.is_char_boundary(cut) {
+                cut += 1;
+            }
+            self.tail.drain(..cut);
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::stdout().flush()
+    }
+}
+
+#[cfg(test)]
+mod closed_reason_tests {
+    use super::ClosedReason;
+    use std::io::Write;
+
+    #[test]
+    fn the_last_close_reason_is_kept_with_its_line_breaks() {
+        let mut c = ClosedReason::default();
+        assert_eq!(c.reason(), None);
+        writeln!(c, "level onlinestartlocal.nw").unwrap();
+        write!(
+            c,
+            "connection closed: Your client version is not allowed on this server.\nAllowed: 2.22, 5.07\n"
+        )
+        .unwrap();
+        assert_eq!(
+            c.reason().as_deref(),
+            Some("Your client version is not allowed on this server.\nAllowed: 2.22, 5.07")
+        );
+        for _ in 0..100 {
+            writeln!(c, "{}", "x".repeat(100)).unwrap();
+        }
+        assert!(c.tail.len() <= 2 * ClosedReason::KEEP);
     }
 }
