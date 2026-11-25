@@ -21,7 +21,7 @@ FIELDS = [
     'terrain_chunks', 'chunk_cache', 'terrain_texture', 'water', 'torque_script', 'server_scripts', 'terraformer', 'greyscale_rgba32_only',
     'terrain_editor', 'dts_min', 'dts_max', 'dif_version', 'three_ds', 'md3_version', 'texture_names',
     'download_refused', 'bigdata', 'bigdata_chunk_max', 'terrain_chunk_max', 'udp_port_offset',
-    'requires_sky', 'sky_gif', 'drawn', 'mirrors_2d_position', 'sees_2d_players', 'takes_2d_chat', 'drops_unknown_ghost',
+    'requires_sky', 'sky_gif', 'drawn', 'mirrors_2d_position', 'sees_2d_players', 'takes_2d_chat', 'terrain_textures', 'drops_unknown_ghost',
 ]
 CHOICES = {
     'class_table': {0, 3, 2},
@@ -85,7 +85,7 @@ for label, v, assumed in rows:
         ','.join(v['download_refused']) or '-', b(v['bigdata']), str(v['bigdata_chunk_max']),
         str(v['terrain_chunk_max']), str(v['udp_port_offset']),
         b(v['requires_sky']), b(v['sky_gif']), v['drawn'], b(v['mirrors_2d_position']),
-        b(v['sees_2d_players']), b(v['takes_2d_chat']), b(v['drops_unknown_ghost']),
+        b(v['sees_2d_players']), b(v['takes_2d_chat']), b(v['terrain_textures']), b(v['drops_unknown_ghost']),
         'all' if len(assumed) == len(FIELDS) else (','.join(assumed) or '-'),
     ]
     print('\t'.join(cols))
