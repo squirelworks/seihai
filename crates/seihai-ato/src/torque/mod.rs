@@ -10,6 +10,7 @@
 //! The reimplementation for eras 3–5 is `engine`, compiled unless the
 //! `era6` feature is set. This profile table is not that engine.
 
+use seihai_core::protocol::three_d::ThreeD;
 use seihai_core::protocol::ClientVersion;
 
 /// Torque reimplementation for eras 3–5.
@@ -71,7 +72,7 @@ pub const GRAAL3D_19: TorqueProfile = TorqueProfile {
 
 /// 4.20r6 Mac.
 pub const GRAAL3D_21: TorqueProfile = TorqueProfile {
-    builds: "4.20r6",
+    builds: "4.20r6, 4.20r8 (assumed)",
     game: "Graal3D",
     protocol: 21,
     class_table_types: 2,
@@ -82,7 +83,7 @@ pub const GRAAL3D_21: TorqueProfile = TorqueProfile {
 
 /// 5.12 Windows (also 5.00r7's protocol number).
 pub const GRAAL3D_24: TorqueProfile = TorqueProfile {
-    builds: "5.12",
+    builds: "5.00r7, 5.12",
     game: "Graal3D",
     protocol: 24,
     class_table_types: 2,
@@ -98,17 +99,86 @@ pub fn by_protocol(protocol: u32) -> Option<TorqueProfile> {
     ALL.into_iter().find(|p| p.protocol == protocol)
 }
 
-/// The profile of a build Ato runs.
+/// The profile of a build Ato runs, from its version profile's `three_d`
+/// (seihai-core, mirrored from Graal_analysis `version-profiles/three-d.toml`).
+/// `None` for a build with no Torque 3D side (1.x, 2.x, 5.24r4 on).
+///
+/// The row may be partly assumed (4.20r8's protocol, the Mac twins):
+/// [`capabilities`] says which fields were read.
 pub fn of(v: ClientVersion) -> Option<TorqueProfile> {
-    match v {
-        ClientVersion::V304 => Some(TGE_9),
-        ClientVersion::V3153 | ClientVersion::V404R2 => Some(GRAAL3D_19),
-        ClientVersion::V420R6 => Some(GRAAL3D_21),
-        ClientVersion::V500R7 | ClientVersion::V512 => Some(GRAAL3D_24),
-        // 4.20r8's protocol number was not read; 5.24 on and 6.x have no
-        // Graal3D.
-        _ => None,
-    }
+    let t = capabilities(v)?;
+    let base = by_protocol(u32::from(t.protocol))?;
+    Some(TorqueProfile {
+        game: t.game,
+        class_table_types: t.class_table.types(),
+        class_ids_12bit: t.class_ids_12bit,
+        length_prefixes: t.length_prefixes,
+        tge_game_layer: t.has_datablocks(),
+        ..base
+    })
+}
+
+/// The build's whole 3D side: terrain, scripts, tools, formats and file
+/// rules, with the fields that are assumed rather than read.
+pub fn capabilities(v: ClientVersion) -> Option<ThreeD> {
+    v.profile().three_d
+}
+
+/// One line per capability group, for `--print-profile` and the log.
+/// Assumed fields are listed so a reader does not take them as read.
+pub fn describe(t: &ThreeD) -> String {
+    use seihai_core::protocol::three_d::{ChunkCache, TextureNames};
+    let control: Vec<&str> = t.control_objects.iter().map(|c| c.class_name()).collect();
+    let terrain = match (t.terrain.ter_file, t.offers_terrain_chunks()) {
+        (true, true) => "local .ter and streamed chunks",
+        (true, false) => "local .ter only",
+        (false, true) => "streamed chunks only",
+        (false, false) => "none",
+    };
+    let cache = match t.terrain.cache {
+        ChunkCache::Heights => ", cached in levels3d/heights/<server>/",
+        ChunkCache::None => "",
+    };
+    let names = match t.texture_names {
+        TextureNames::StripPng => "bare name (.png stripped)",
+        TextureNames::AsNamed => "as named",
+    };
+    let assumed: Vec<&str> = t.assumed.iter().map(|f| f.key()).collect();
+    format!(
+        "3d: {} game layer, {} mission phases{}, control {}\n\
+         3d: terrain {terrain}{cache}; TorqueScript {}; Terraformer {:?}; TerrainEditor {}\n\
+         3d: DTS <= {}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
+         3d: assumed, not read: {}",
+        if t.has_datablocks() {
+            "TGE"
+        } else {
+            "GameObject"
+        },
+        t.mission_phases,
+        if t.phases_optional { " (optional)" } else { "" },
+        control.join("/"),
+        if t.runs_torque_script() {
+            "runs"
+        } else {
+            "none"
+        },
+        t.terraformer,
+        if t.terrain_editor { "yes" } else { "no" },
+        t.formats.dts_max,
+        t.formats.dif_version,
+        if t.formats.three_ds { "yes" } else { "no" },
+        t.formats.md3_version,
+        if t.download_refused.is_empty() {
+            "-".to_string()
+        } else {
+            t.download_refused.join(" ")
+        },
+        if assumed.is_empty() {
+            "none".to_string()
+        } else {
+            assumed.join(", ")
+        },
+    )
 }
 
 /// The Torque UDP port for a 3D server listed on `listed_port`: the
@@ -140,6 +210,55 @@ mod tests {
         assert_eq!(of(ClientVersion::V304).unwrap().protocol, 9);
         assert_eq!(of(ClientVersion::V3153).unwrap().protocol, 19);
         assert_eq!(of(ClientVersion::V231), None);
+    }
+
+    /// Every build's Torque profile is the one its version profile's
+    /// `three_d` names, and the builds without one have none.
+    #[test]
+    fn profile_follows_the_version_profile() {
+        let want = [
+            (ClientVersion::V304, Some(TGE_9)),
+            (ClientVersion::V3153, Some(GRAAL3D_19)),
+            (ClientVersion::V404R2, Some(GRAAL3D_19)),
+            (ClientVersion::V404R2Mac, Some(GRAAL3D_19)),
+            (ClientVersion::V420R6, Some(GRAAL3D_21)),
+            // Assumed: 4.20r8's protocol was never read.
+            (ClientVersion::V420R8, Some(GRAAL3D_21)),
+            (ClientVersion::V500R7, Some(GRAAL3D_24)),
+            (ClientVersion::V512, Some(GRAAL3D_24)),
+            (ClientVersion::V512Mac, Some(GRAAL3D_24)),
+            (ClientVersion::V524R4, None),
+            (ClientVersion::V603R7, None),
+            (ClientVersion::V222, None),
+        ];
+        for (v, p) in want {
+            assert_eq!(of(v).map(|t| t.protocol), p.map(|t| t.protocol), "{v:?}");
+            if let (Some(got), Some(p)) = (of(v), p) {
+                assert_eq!(got.game, p.game, "{v:?}");
+                assert_eq!(got.class_table_types, p.class_table_types, "{v:?}");
+                assert_eq!(got.class_ids_12bit, p.class_ids_12bit, "{v:?}");
+                assert_eq!(got.length_prefixes, p.length_prefixes, "{v:?}");
+                assert_eq!(got.tge_game_layer, p.tge_game_layer, "{v:?}");
+            }
+        }
+        use seihai_core::protocol::three_d::Field;
+        assert!(!capabilities(ClientVersion::V420R8)
+            .unwrap()
+            .confirmed(Field::Protocol));
+    }
+
+    #[test]
+    fn describe_lists_what_is_assumed() {
+        let d = describe(&capabilities(ClientVersion::V512).unwrap());
+        assert!(d.contains("streamed chunks only"), "{d}");
+        assert!(d.contains("TorqueScript none"), "{d}");
+        assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
+        assert!(d.contains("assumed, not read: none"), "{d}");
+        let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
+        assert!(d.contains("assumed, not read: protocol,"), "{d}");
+        let d = describe(&capabilities(ClientVersion::V3153).unwrap());
+        assert!(d.contains("local .ter and streamed chunks"), "{d}");
+        assert!(d.contains("TorqueScript runs"), "{d}");
     }
 
     #[test]

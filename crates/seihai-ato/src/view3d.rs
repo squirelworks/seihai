@@ -230,10 +230,19 @@ impl World3d {
     /// A shape's texture, by the name its material gives: that file, or
     /// for a name without an extension (Torque's materials) the first of
     /// [`texture_files`] that is in and decoded.
+    ///
+    /// A 5.12-style client stores a `.png` texture under its bare name
+    /// (Graal_analysis `torque/live-512-third-party-session-2026-11-24.md`),
+    /// so the bare name is tried last.
     fn texture(&self, name: &str) -> Option<&Texture> {
         texture_files(name)
             .iter()
             .find_map(|f| self.images.get(&f.to_ascii_lowercase())?.as_deref())
+            .or_else(|| {
+                let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+                let bare = base.rsplit_once('.').map_or(base, |(b, _)| b);
+                self.images.get(&bare.to_ascii_lowercase())?.as_deref()
+            })
     }
 
     /// The Sky's texture for face `i` (front, right, back, left, top,
