@@ -151,6 +151,7 @@ pub fn describe(t: &ThreeD) -> String {
          3d: DTS {}-{}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
          3d: Sky {}; drawn on our gserver: {}\n\
          3d: with 2D players: walk moves the 2D player {}, draws them {}, gets their chat {}\n\
+         3d: an update to an uncreated ghost is {}\n\
          3d: assumed, not read: {}",
         if t.has_datablocks() {
             "TGE"
@@ -191,6 +192,11 @@ pub fn describe(t: &ThreeD) -> String {
         yes_no(t.mirrors_2d_position),
         yes_no(t.sees_2d_players),
         yes_no(t.takes_2d_chat),
+        if t.drops_unknown_ghost {
+            "dropped"
+        } else {
+            "a crash"
+        },
         if assumed.is_empty() {
             "none".to_string()
         } else {
@@ -290,7 +296,12 @@ mod tests {
         assert!(d.contains("local .ter and streamed chunks"), "{d}");
         assert!(d.contains("TorqueScript runs"), "{d}");
         assert!(
-            d.contains("Sky required, textures as .gif; drawn on our gserver: nothing yet"),
+            d.contains("Sky required, textures as .gif; drawn on our gserver: Sky only"),
+            "{d}"
+        );
+        let d = describe(&capabilities(ClientVersion::V404R2).unwrap());
+        assert!(
+            d.contains("an update to an uncreated ghost is a crash"),
             "{d}"
         );
     }
