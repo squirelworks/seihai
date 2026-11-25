@@ -63,14 +63,25 @@ offline level editor in `tools/level-editor`.
 
 ## Playing
 
-`seihai` with no arguments opens the start window. Its Version list shows the
+`seihai` with no arguments opens the start window. For a new install it is in
+**consumer mode**: there is no version box, and Seihai picks the version each
+server takes. A server says which versions it takes only when it turns a login
+away, so Seihai joins with the version it remembers for that server (or 6.03r7,
+or 5.12 for a 3D server), reads the server's "Allowed:" list from the refusal
+and joins again with the right one. It asks only when the server takes two
+kinds of client with nothing between them, such as 1.41 and 5.12 to 6.03r7.
+The choice is remembered per server in `launcher.conf`. The design is
+seihai-core `documentation/auto-version.md`.
+
+Tick **Developer mode** (the default for a `launcher.conf` saved before
+consumer mode) to pick the version yourself. Its Version list shows the
 main versions Graal Reborn's GServer-v2 knows (1.39, 1.41, 2.05, 2.17, 2.22,
 2.31, 3.04, 4.04r2, 4.20r8, 5.00r7, 5.12, 5.31r4 and 6.03r7), grouped by client,
 then Graal3D; "All versions" adds every other build, including the betas and
 test releases that only play offline.
 
 - **Online:** fill in the account and password, press "Server list", pick a
-  server and Join. The version's client logs in at once. A lost connection, or
+  server and Join. The client logs in at once. A lost connection, or
   closing the game, brings you back to the start window.
 - **Offline:** for a 1.x or 2.x version, "Play offline" and "Play the tutorial"
   start Mae with no server.
