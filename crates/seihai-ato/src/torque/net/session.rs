@@ -672,13 +672,18 @@ pub fn run_with_sequence(
                             let _ = writeln!(out, "3d: Sky read again with its textures");
                         }
                     }
+                    let is_sky = matches!(g, GhostState::Sky(_));
                     if let Some(f) = files {
                         for name in files_named(g) {
+                            let name = if is_sky { fetch.sky_name(&name) } else { name };
                             fetch.want(&name, f, out);
                         }
                     }
                     if let GhostState::Sky(sky) = g {
-                        fetch.sky = sky_textures(sky);
+                        fetch.sky = sky_textures(sky)
+                            .iter()
+                            .map(|n| fetch.sky_name(n))
+                            .collect();
                     }
                 }
             }
@@ -694,6 +699,17 @@ pub fn run_with_sequence(
                     "3d: control object is ghost {i} {}",
                     describe(&ghosts, i)
                 );
+                if three_d.is_some_and(|t| t.requires_sky)
+                    && !ghosts
+                        .ghosts
+                        .values()
+                        .any(|g| matches!(g, GhostState::Sky(_)))
+                {
+                    let _ = writeln!(
+                        out,
+                        "3d: no Sky ghosted: the real client of this build crashes without one"
+                    );
+                }
             }
             if game.control != Some(i) {
                 game.control = Some(i);
@@ -746,6 +762,14 @@ impl Fetch {
             three_d,
             ..Fetch::default()
         }
+    }
+
+    /// The name this build asks for when a Sky names the texture `name`:
+    /// 3.153 asks for `.gif` (Graal_analysis
+    /// `torque/live-3153-and-404r2-sessions-2026-11-25.md`).
+    fn sky_name(&self, name: &str) -> String {
+        self.three_d
+            .map_or_else(|| name.to_string(), |t| t.sky_texture_request_name(name))
     }
 
     /// Ask for `name` unless it was asked for already, or the build never
@@ -1034,10 +1058,23 @@ mod tests {
             }
             assert_eq!(asked(&asks), ["tree.dts", "house.3ds"], "{v:?}");
         }
+        // 3.153 compiles its own scripts but never asks for one (lab).
         let asks = FileAsks::default();
         let mut f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V3153));
         f.want("main.cs", &asks, &mut Vec::new());
-        assert_eq!(asked(&asks), ["main.cs"]);
+        f.want("tree.dts", &asks, &mut Vec::new());
+        assert_eq!(asked(&asks), ["tree.dts"]);
+    }
+
+    /// 3.153 asks for a Sky's textures as `.gif` (lab); 5.12 as named.
+    #[test]
+    fn sky_textures_are_named_per_build() {
+        let f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V3153));
+        assert_eq!(f.sky_name("sky/day.png"), "sky/day.gif");
+        assert_eq!(f.sky_name("day"), "day.gif");
+        let f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V512));
+        assert_eq!(f.sky_name("day"), "day");
+        assert_eq!(Fetch::for_build(None).sky_name("day"), "day");
     }
 
     /// 5.12 strips `.png` and asks for the bare name, as the real client

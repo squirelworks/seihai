@@ -127,7 +127,8 @@ pub fn capabilities(v: ClientVersion) -> Option<ThreeD> {
 /// One line per capability group, for `--print-profile` and the log.
 /// Assumed fields are listed so a reader does not take them as read.
 pub fn describe(t: &ThreeD) -> String {
-    use seihai_core::protocol::three_d::{ChunkCache, TextureNames};
+    use seihai_core::protocol::three_d::{ChunkCache, Drawn, TextureNames};
+    let yes_no = |b: bool| if b { "yes" } else { "no" };
     let control: Vec<&str> = t.control_objects.iter().map(|c| c.class_name()).collect();
     let terrain = match (t.terrain.ter_file, t.offers_terrain_chunks()) {
         (true, true) => "local .ter and streamed chunks",
@@ -148,6 +149,8 @@ pub fn describe(t: &ThreeD) -> String {
         "3d: {} game layer, {} mission phases{}, control {}\n\
          3d: terrain {terrain}{cache}; TorqueScript {}; Terraformer {:?}; TerrainEditor {}\n\
          3d: DTS {}-{}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
+         3d: Sky {}; drawn on our gserver: {}\n\
+         3d: with 2D players: walk moves the 2D player {}, draws them {}, gets their chat {}\n\
          3d: assumed, not read: {}",
         if t.has_datablocks() {
             "TGE"
@@ -174,6 +177,20 @@ pub fn describe(t: &ThreeD) -> String {
         } else {
             t.download_refused.join(" ")
         },
+        match (t.requires_sky, t.sky_gif) {
+            (true, true) => "required, textures as .gif",
+            (true, false) => "required",
+            (false, true) => "optional, textures as .gif",
+            (false, false) => "optional",
+        },
+        match t.drawn {
+            Drawn::World => "world",
+            Drawn::SkyOnly => "Sky only",
+            Drawn::Nothing => "nothing yet",
+        },
+        yes_no(t.mirrors_2d_position),
+        yes_no(t.sees_2d_players),
+        yes_no(t.takes_2d_chat),
         if assumed.is_empty() {
             "none".to_string()
         } else {
@@ -254,13 +271,28 @@ mod tests {
         assert!(d.contains("streamed chunks only"), "{d}");
         assert!(d.contains("TorqueScript none"), "{d}");
         assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
-        assert!(d.contains("assumed, not read: none"), "{d}");
+        assert!(
+            d.contains("assumed, not read: requires_sky, sky_gif"),
+            "{d}"
+        );
         assert!(d.contains("DTS 17-24, DIF 44"), "{d}");
+        assert!(
+            d.contains("Sky optional; drawn on our gserver: world"),
+            "{d}"
+        );
+        assert!(
+            d.contains("walk moves the 2D player no, draws them no, gets their chat yes"),
+            "{d}"
+        );
         let d = describe(&capabilities(ClientVersion::V512Mac).unwrap());
         assert!(d.contains("assumed, not read: protocol,"), "{d}");
         let d = describe(&capabilities(ClientVersion::V3153).unwrap());
         assert!(d.contains("local .ter and streamed chunks"), "{d}");
         assert!(d.contains("TorqueScript runs"), "{d}");
+        assert!(
+            d.contains("Sky required, textures as .gif; drawn on our gserver: nothing yet"),
+            "{d}"
+        );
     }
 
     #[test]

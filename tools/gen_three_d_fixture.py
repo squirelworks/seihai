@@ -21,6 +21,7 @@ FIELDS = [
     'terrain_chunks', 'chunk_cache', 'terrain_texture', 'water', 'torque_script', 'server_scripts', 'terraformer', 'greyscale_rgba32_only',
     'terrain_editor', 'dts_min', 'dts_max', 'dif_version', 'three_ds', 'md3_version', 'texture_names',
     'download_refused', 'bigdata', 'bigdata_chunk_max', 'terrain_chunk_max', 'udp_port_offset',
+    'requires_sky', 'sky_gif', 'drawn', 'mirrors_2d_position', 'sees_2d_players', 'takes_2d_chat',
 ]
 CHOICES = {
     'class_table': {0, 3, 2},
@@ -29,6 +30,7 @@ CHOICES = {
     'torque_script': {'compiles', 'none'},
     'terraformer': {'full', 'greyscale', 'none'},
     'texture_names': {'strip_png', 'as_named'},
+    'drawn': {'world', 'sky_only', 'nothing'},
 }
 CONTROL = {'Player', 'Camera', 'GameObject'}
 TAGS = {'bin', 'lab', 'cap'}
@@ -82,6 +84,8 @@ for label, v, assumed in rows:
         str(v['dif_version']), b(v['three_ds']), str(v['md3_version']), v['texture_names'],
         ','.join(v['download_refused']) or '-', b(v['bigdata']), str(v['bigdata_chunk_max']),
         str(v['terrain_chunk_max']), str(v['udp_port_offset']),
+        b(v['requires_sky']), b(v['sky_gif']), v['drawn'], b(v['mirrors_2d_position']),
+        b(v['sees_2d_players']), b(v['takes_2d_chat']),
         'all' if len(assumed) == len(FIELDS) else (','.join(assumed) or '-'),
     ]
     print('\t'.join(cols))
