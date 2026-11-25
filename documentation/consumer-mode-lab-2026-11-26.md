@@ -7,7 +7,7 @@ with no window, and takes the first option when the window would ask.
 
 Setup:
 
-- Mirae's Debian lab VM, everything on 127.0.0.1.
+- The lab's Debian VM, everything on 127.0.0.1.
 - seihai-gserver-v2 main `9c7e8ec` in `localhost` mode, so there was no login
   verification.
 - seihai `72a2907` with seihai-core main `18f9b62`.
