@@ -19,7 +19,7 @@ FIELDS = [
     'protocol', 'game', 'class_table', 'class_ids_12bit', 'length_prefixes', 'game_layer',
     'mission_phases', 'phases_optional', 'client_moves', 'control_objects', 'ter_file', 'ter_max',
     'terrain_chunks', 'chunk_cache', 'terrain_texture', 'water', 'torque_script', 'server_scripts', 'terraformer',
-    'terrain_editor', 'dts_max', 'dif_version', 'three_ds', 'md3_version', 'texture_names',
+    'terrain_editor', 'dts_min', 'dts_max', 'dif_version', 'three_ds', 'md3_version', 'texture_names',
     'download_refused', 'bigdata', 'bigdata_chunk_max', 'terrain_chunk_max', 'udp_port_offset',
 ]
 CHOICES = {
@@ -78,7 +78,7 @@ for label, v, assumed in rows:
         b(v['length_prefixes']), v['game_layer'], str(v['mission_phases']), b(v['phases_optional']),
         b(v['client_moves']), ','.join(v['control_objects']), b(v['ter_file']), str(v['ter_max']),
         b(v['terrain_chunks']), v['chunk_cache'], v['terrain_texture'] or '-', b(v['water']),
-        v['torque_script'], b(v['server_scripts']), v['terraformer'], b(v['terrain_editor']), str(v['dts_max']),
+        v['torque_script'], b(v['server_scripts']), v['terraformer'], b(v['terrain_editor']), str(v['dts_min']), str(v['dts_max']),
         str(v['dif_version']), b(v['three_ds']), str(v['md3_version']), v['texture_names'],
         ','.join(v['download_refused']) or '-', b(v['bigdata']), str(v['bigdata_chunk_max']),
         str(v['terrain_chunk_max']), str(v['udp_port_offset']),

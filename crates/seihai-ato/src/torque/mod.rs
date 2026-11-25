@@ -147,7 +147,7 @@ pub fn describe(t: &ThreeD) -> String {
     format!(
         "3d: {} game layer, {} mission phases{}, control {}\n\
          3d: terrain {terrain}{cache}; TorqueScript {}; Terraformer {:?}; TerrainEditor {}\n\
-         3d: DTS <= {}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
+         3d: DTS {}-{}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
          3d: assumed, not read: {}",
         if t.has_datablocks() {
             "TGE"
@@ -164,6 +164,7 @@ pub fn describe(t: &ThreeD) -> String {
         },
         t.terraformer,
         if t.terrain_editor { "yes" } else { "no" },
+        t.formats.dts_min,
         t.formats.dts_max,
         t.formats.dif_version,
         if t.formats.three_ds { "yes" } else { "no" },
@@ -254,6 +255,7 @@ mod tests {
         assert!(d.contains("TorqueScript none"), "{d}");
         assert!(d.contains("never downloads .dso .cs .ter"), "{d}");
         assert!(d.contains("assumed, not read: none"), "{d}");
+        assert!(d.contains("DTS 17-24, DIF 44"), "{d}");
         let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
         assert!(d.contains("assumed, not read: protocol,"), "{d}");
         let d = describe(&capabilities(ClientVersion::V3153).unwrap());
