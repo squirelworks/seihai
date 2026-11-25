@@ -49,6 +49,9 @@ pub fn main(argv: Vec<String>) -> ExitCode {
                 t.game, t.protocol, t.class_table_types, t.class_ids_12bit, t.length_prefixes
             );
         }
+        if let Some(t) = torque::capabilities(version) {
+            println!("{}", torque::describe(&t));
+        }
         return ExitCode::SUCCESS;
     }
     let password = match a.password_env.as_deref() {
@@ -118,6 +121,16 @@ pub fn main(argv: Vec<String>) -> ExitCode {
         if let Err(e) = graal3d::profile(version) {
             eprintln!("seihai-ato: {e}");
             return ExitCode::from(2);
+        }
+        if let Some(t) = torque::capabilities(version) {
+            use seihai_core::protocol::three_d::Field;
+            if !t.confirmed(Field::Protocol) {
+                eprintln!(
+                    "seihai-ato: {}'s Torque protocol {} is assumed, not read from the client",
+                    version.label(),
+                    t.protocol
+                );
+            }
         }
     }
     // The 3D link follows the session: the first server with `--graal3d`,

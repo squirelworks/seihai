@@ -22,6 +22,7 @@ use super::tge::{self, ClientGame19, Control19, Game19Error, Move, Phase, PhaseA
 use crate::torque::TorqueProfile;
 use crate::view3d::{Shared3d, SharedInput3d};
 use seihai_core::client::FileAsks;
+use seihai_core::protocol::three_d::ThreeD;
 use seihai_core::protocol::ClientVersion;
 use std::collections::{HashMap, VecDeque};
 use std::io::{ErrorKind, Write};
@@ -140,7 +141,10 @@ pub fn run_with_sequence(
         input,
     } = with;
     let tge_layer = profile.tge_game_layer;
-    let phase_acks = if who.version == ClientVersion::V3153 {
+    // A build that runs TorqueScript (3.153) acknowledges the mission
+    // phases from its scripts; 4.04r2, which has no compiler, natively.
+    let three_d = crate::torque::capabilities(who.version);
+    let phase_acks = if three_d.is_some_and(|t| t.runs_torque_script()) {
         PhaseAcks::Scripted
     } else {
         PhaseAcks::Native
@@ -250,7 +254,7 @@ pub fn run_with_sequence(
     let mut last_heard = Instant::now();
     let mut last_acked = Instant::now();
     let mut step = Step::Established;
-    let mut fetch = Fetch::default();
+    let mut fetch = Fetch::for_build(three_d);
     let mut big_data = BigDataAssembler::default();
     // The own object as this client moves it, and the sections it changed
     // since the last packet (#462).
@@ -729,11 +733,34 @@ struct Fetch {
     /// for next if the server has none (`.gif`, then `.bmp`), by the
     /// lower-case name asked.
     fallbacks: HashMap<String, Vec<String>>,
+    /// The build's 3D side, for its file rules: the extensions it never
+    /// downloads and how it names a texture. `None` asks for everything
+    /// as named.
+    three_d: Option<ThreeD>,
 }
 
 impl Fetch {
-    /// Ask for `name` unless it was asked for already.
+    /// A fetch that follows `three_d`'s file rules.
+    fn for_build(three_d: Option<ThreeD>) -> Fetch {
+        Fetch {
+            three_d,
+            ..Fetch::default()
+        }
+    }
+
+    /// Ask for `name` unless it was asked for already, or the build never
+    /// asks the gserver for a file of its kind (`.dso`, `.cs` and `.ter`
+    /// from 4.04r2 on: Graal_analysis `torque/404r2-resource-filter.md`).
     fn want(&mut self, name: &str, asks: &FileAsks, out: &mut impl Write) {
+        if let Some(t) = self.three_d {
+            if !t.requests_download(name) {
+                let _ = writeln!(
+                    out,
+                    "3d: not requesting {name}: this build never downloads it"
+                );
+                return;
+            }
+        }
         let key = name.to_ascii_lowercase();
         if self.files.contains_key(&key)
             || self.pending.iter().any(|p| p.eq_ignore_ascii_case(name))
@@ -751,7 +778,21 @@ impl Fetch {
     /// Ask for a shape's texture: the file it names, or for a bare name
     /// the first of [`crate::view3d::texture_files`], then the next one
     /// each time the server has none.
+    ///
+    /// A build that strips `.png` (5.12) asks for the bare name first, as
+    /// the real client does, then for the name as given.
     fn want_texture(&mut self, name: &str, asks: &FileAsks, out: &mut impl Write) {
+        let bare = self.three_d.map_or(name, |t| t.texture_request_name(name));
+        if bare != name {
+            let base = bare.rsplit(['/', '\\']).next().unwrap_or(bare).to_string();
+            let mut rest = crate::view3d::texture_files(name);
+            rest.retain(|f| !f.eq_ignore_ascii_case(&base));
+            if !rest.is_empty() {
+                self.fallbacks.insert(base.to_ascii_lowercase(), rest);
+            }
+            self.want(&base, asks, out);
+            return;
+        }
         let mut files = crate::view3d::texture_files(name);
         if files.is_empty() {
             return;
@@ -958,4 +999,80 @@ fn connect_sequence() -> u32 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
     (t.subsec_nanos() ^ t.as_secs() as u32) | 1 << 10
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use seihai_core::client::FileAnswer;
+
+    fn asked(asks: &FileAsks) -> Vec<String> {
+        std::mem::take(&mut *asks.wanted.lock().unwrap())
+    }
+
+    /// The fetch follows the version profile's download filter: 4.04r2 on
+    /// never ask the gserver for `.cs`, `.dso` or `.ter`; 3.153, which runs
+    /// TorqueScript, may.
+    #[test]
+    fn refused_extensions_are_not_requested() {
+        for v in [
+            ClientVersion::V404R2,
+            ClientVersion::V420R6,
+            ClientVersion::V512,
+        ] {
+            let asks = FileAsks::default();
+            let mut f = Fetch::for_build(crate::torque::capabilities(v));
+            let mut out = Vec::new();
+            for name in [
+                "main.cs",
+                "main.cs.dso",
+                "world.ter",
+                "tree.dts",
+                "house.3ds",
+            ] {
+                f.want(name, &asks, &mut out);
+            }
+            assert_eq!(asked(&asks), ["tree.dts", "house.3ds"], "{v:?}");
+        }
+        let asks = FileAsks::default();
+        let mut f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V3153));
+        f.want("main.cs", &asks, &mut Vec::new());
+        assert_eq!(asked(&asks), ["main.cs"]);
+    }
+
+    /// 5.12 strips `.png` and asks for the bare name, as the real client
+    /// does; when the server has no bare file Ato falls back to the name
+    /// as given. 4.04r2 asks for the name as given.
+    #[test]
+    fn textures_are_named_per_build() {
+        let asks = FileAsks::default();
+        let mut f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V512));
+        let mut out = Vec::new();
+        f.want_texture("grass.png", &asks, &mut out);
+        assert_eq!(asked(&asks), ["grass"]);
+        asks.answers.lock().unwrap().push(FileAnswer {
+            name: "grass".into(),
+            data: None,
+        });
+        f.take_answers(&asks, None, &mut out);
+        assert_eq!(asked(&asks), ["grass.png"]);
+        // A name without .png is asked for as before.
+        f.want_texture("rock.jpg", &asks, &mut out);
+        assert_eq!(asked(&asks), ["rock.jpg"]);
+
+        let asks = FileAsks::default();
+        let mut f = Fetch::for_build(crate::torque::capabilities(ClientVersion::V404R2));
+        f.want_texture("grass.png", &asks, &mut out);
+        assert_eq!(asked(&asks), ["grass.png"]);
+    }
+
+    /// The phase acknowledgement follows the profile: scripted where the
+    /// build runs TorqueScript.
+    #[test]
+    fn scripted_phase_acks_follow_torque_script() {
+        let scripted = |v| crate::torque::capabilities(v).is_some_and(|t| t.runs_torque_script());
+        assert!(scripted(ClientVersion::V3153));
+        assert!(!scripted(ClientVersion::V404R2));
+        assert!(!scripted(ClientVersion::V512));
+    }
 }
