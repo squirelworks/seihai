@@ -91,7 +91,7 @@ Only pieces that actually touch February 2000 Graal3D:
 | `seihai-gserver` | None on the wire | Keep stages 1–7 2D / gen-5 only; PLAN notes G3D-9 is a sibling host |
 | `seihai-listserver` | Feb 2000 client/server never talk to the list | No work for this era. HQ tag `3 ` / level 4 stays **Torque-era** (with Ato Stage 4), not this milestone |
 | `seihai-rc` / `seihai-npcserver` | No RC/NC and no NPC scripting in either Graal3D binary | No milestone |
-| `seihai-ato` Stage 4 | Different 3D (Torque on UDP port+1) | **Held** as G3D-3 / `documentation/ato-3d-path.md` until a Torque capture exists |
+| `seihai-ato` Stage 4 | Different 3D (Torque on UDP port+1) | Unblocked, not started (G3D-3 / `documentation/ato-3d-path.md`): live 3.153, 4.04r2 and 5.12 Torque sessions now exist against seihai-gserver and the v2 add-on |
 
 ### Held (not February 2000)
 
