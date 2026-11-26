@@ -156,7 +156,7 @@ pub fn describe(t: &ThreeD) -> String {
          3d: DTS {}-{}, DIF {}, 3DS {}, MD3 {}; textures by {names}; never downloads {}\n\
          3d: Sky {}; drawn on our gserver: {}\n\
          3d: with 2D players: walk moves the 2D player {}, draws them {}, gets their chat {}\n\
-         3d: an update to an uncreated ghost is {}\n\
+         3d: ground cover from replicators {}; an update to an uncreated ghost is {}\n\
          3d: assumed, not read: {}",
         if t.has_datablocks() {
             "TGE"
@@ -197,6 +197,7 @@ pub fn describe(t: &ThreeD) -> String {
         yes_no(t.mirrors_2d_position),
         yes_no(t.sees_2d_players),
         yes_no(t.takes_2d_chat),
+        yes_no(t.ground_cover),
         if t.drops_unknown_ghost {
             "dropped"
         } else {
@@ -313,6 +314,9 @@ mod tests {
         let d = describe(&capabilities(ClientVersion::V420R8).unwrap());
         assert!(d.contains("streamed chunks only"), "{d}");
         assert!(d.contains("drawn untextured"), "{d}");
+        assert!(d.contains("ground cover from replicators no"), "{d}");
+        let d = describe(&capabilities(ClientVersion::V512).unwrap());
+        assert!(d.contains("ground cover from replicators yes"), "{d}");
     }
 
     #[test]
