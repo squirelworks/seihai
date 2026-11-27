@@ -96,8 +96,9 @@ below is still one branch and PR. Run `cargo test -p seihai-g3d` and
 - **G3D-2 Camera numbers (M1). Done.** `CameraRig::default()` carries the
   Graal_analysis `graal3d/camera.md` (#163) numbers. Live confirmation
   under Wine still waits on G3D-8.
-- **G3D-3 Torque 3D servers** (not this crate; held): Ato Stage 4, until a
-  capture of a 3.x/4.x Torque connect exists. See
+- **G3D-3 Torque 3D servers** (not this crate): Ato Stage 4. Unblocked
+  since 2026-11-25 (live 3.153 and 4.04r2 sessions against our own servers,
+  the 5.12 wire written up), not started. See
   `documentation/ato-3d-path.md`.
 - **G3D-4 Options windows (M1). Done.** `options.rs`: F1 "Hardware
   options" (fixed UDP port, "Don't use UDP"; `session::Udp`, used from the

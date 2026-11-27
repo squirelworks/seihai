@@ -1,42 +1,58 @@
-# Ato Stage 4: the 3D path, held
+# Ato Stage 4: the 3D path (unblocked, not started)
 
 Date: 2026-10-31. Laundry list item 4.
 
-## Status
+## Status (updated 2026-11-26)
 
-The precondition is met. On 2026-10-31 at 02:19 UTC, Ato 3.153 (main
-`7203690`) logged in to the patched lab GServer-v2 and received
-`gs2test.nw` from the server's board, with NPC 300 and its GS2 script
-(`3x-session.md`, "Lab run, 2026-10-31"). The 3.04 run is still owed.
+**Unblocked, not started.** Both things this page waited for now exist,
+so the 3D path can start whenever it is picked up. Nothing in Ato's code
+has changed: `engine/v5/terrain_chunks.rs` and its siblings are still
+stubs.
 
-The 3D path itself is **not started**, because nothing on the wire backs it.
-The flat path (Stages 2 and 3) is enough for now: it shows that a 3.x login
-and level receive work, and it is what a lab run can check.
+What changed since 2026-10-31:
 
-## Why it waits
+- **A Torque-speaking lab server.** seihai-gserver (`docs/GRAAL3D.md`) and
+  the seihai-gserver-v2 Graal 3D add-on (`bin/docs/graal3d.md`) both speak
+  Torque on the listed port + 1: protocol 19 (3.153, 4.04r2, stock TGE with
+  three mission phases) and protocols 21 and 24 (4.20r6, 4.20r8, 5.x,
+  Graal's `GameObject` model with two phases).
+- **Live sessions, not just binaries.** The real 3.153 and 4.04r2 ran the
+  full mission start against our server and took a control object
+  (Graal_analysis `torque/live-3153-and-404r2-sessions-2026-11-25.md`).
+  5.12 was captured end to end (`torque/udp-session.md`), and its whole
+  packet inventory, UDP framing, ghost lifecycle and class table are written
+  up in `torque/3d-replica-wire-157-160-165-512-2026-11-26.md`
+  (T3D-157 to T3D-165).
+- **The smallest accepted handshake.** A ~400-line synthetic client linked
+  as protocol 24 and was seen by a real 5.12
+  (`torque/3d-min-handshake-164-512-2026-11-26.md`, T3D-164). That is the
+  "connect only first" step below, already done once outside Ato.
+- **Per-build capabilities in the profile.** `VersionProfile::three_d`
+  (seihai-core, from Graal_analysis `version-profiles/three-d.toml`) gives
+  each build's protocol, class table, game layer, mission phases, control
+  objects, terrain and cache rules and ground cover, each tagged with its
+  evidence. Ato's gate should read it, not a table of its own.
+- **A C++ reference engine.** graal-client-repro's
+  `common/cpp/graal3dengine` links to these servers and draws streamed
+  terrain the way 5.12 does (T3D-162).
 
-- **No 3.x Torque capture.** A 3.x client opens Torque only for a server
-  whose listed name starts with `3 `, on UDP at the listed port + 1, beside
-  the Graal TCP session (`torque.rs`, `is_3d_server`, `udp_port`). The only
-  live Torque handshake on record is 5.12's. For 3.04 (TGE protocol 9) and
-  3.153 (Graal3D protocol 19), the connect request, the accept and the
-  class table come from the binaries only.
-- **No server to capture against.** GServer-v2 (the lab server) has no
-  Torque side, so the lab cannot produce a 3.x Torque exchange. A public 3D
-  server would be an outward action, and none is known to answer a 3.x
-  build.
-- The laundry list says not to invent wire bytes. A connect request built
-  from `TorqueProfile` alone would be exactly that.
+Still missing: 3.04 (TGE protocol 9) has not been run against our server,
+so its connect request still comes from the binary only. Start with
+3.153 or 4.04r2.
 
-## What would unblock it
+Findings an Ato 3D client has to honour on 5.x, from the lab:
 
-1. A pcap of a real 3.04 or 3.153 client connecting to a server that
-   speaks Torque on port + 1. Even a refused connect gives the request
-   bytes.
-2. Or a Torque-speaking lab server whose behaviour is itself taken from a
-   capture.
+- 5.x lights the mission when `MissionStartPhase2` arrives. Our servers
+  hold phase 2 until the TerrainBlock, WaterBlock, Sun and terrain chunks
+  are in (T3D-162, seihai-gserver #223, seihai-gserver-v2 #182). A client
+  replica should light at that point too, not before.
+- Terrain chunks are exchanged as `TerrainRequestUpdatesEvent` (256 stamps,
+  one per 16 x 16 chunk) answered by `TerrainChunkEvent`s for the chunks
+  whose stamp differs (`torque/terrain-512.md`). The cache is per server.
+- Grass draws from a texture, not a shape, and radius alone does not decide
+  whether it draws (T3D-048; the radius-8 rule was overstated, cause open).
 
-## The shape, once there is a capture
+## The shape, now that there are captures
 
 - **The gate.** The same one as the Stage 2 fields: `torque::of(version)`.
   It applies only when the listed server is a 3D server. A 2D server keeps
